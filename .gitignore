@@ -6,6 +6,7 @@ __pycache__
 .env*
 !.env.example
 !.env.test.example
+!.env.*.example
 !*.env.example
 
 # Conductor personal/per-machine overrides (settings.toml IS committed)

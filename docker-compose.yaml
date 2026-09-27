@@ -252,6 +252,7 @@ services:
       SERVER_IP: "${SERVER_IP:-}"
 
       OSS_JWT_SECRET: "${OSS_JWT_SECRET:?OSS_JWT_SECRET must be set to a strong secret}"
+      MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
 
       # Telephony media WebSocket capability token. The carrier dials the media
       # socket back, so its URL is caller-visible and the ids in it are otherwise

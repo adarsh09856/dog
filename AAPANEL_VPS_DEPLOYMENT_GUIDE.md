@@ -59,9 +59,10 @@ cd kodewaves
 
 ---
 
-## 5. Step 3: Run the Automated Installer
+## 5. Step 3: Run the Automated Installer (or Manual Config)
 
-We provided a turnkey script `install.sh` that automates Docker installation, configures cryptographic secrets, starts the database, and runs Alembic migrations:
+### Option A: Turnkey Automated Installer (Recommended)
+We provided an automated script `install.sh` that detects Docker, prompts for your domain, generates cryptographic secrets, starts the containers, and runs Alembic migrations:
 
 ```bash
 chmod +x install.sh deploy.sh
@@ -73,6 +74,20 @@ During execution:
 2. It generates secure tokens for JWT, PostgreSQL, Redis, MinIO, and the **AES-256 Fernet Master Credential Key**.
 3. It launches all production containers in the background.
 4. It applies all database tables automatically.
+
+### Option B: Manual Environment Setup (.env)
+If you prefer configuring `.env` manually:
+```bash
+# 1. Copy the production template
+cp .env.production.example .env
+
+# 2. Edit domain and secrets in .env
+nano .env
+
+# 3. Launch containers and run database migrations
+docker compose -f docker-compose.aapanel.yaml up -d --build
+docker exec kodewaves_api python -m alembic upgrade head
+```
 
 ---
 
