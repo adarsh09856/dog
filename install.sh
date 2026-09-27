@@ -107,7 +107,7 @@ generate_fernet_key() {
 # 3. Interactive Configuration
 prompt_configuration() {
     echo ""
-    echo -e "${BOLD}Configure your Domain & Deployment:${NC}"
+    echo -e "${BOLD}Configure your Domain & Superadmin Credentials:${NC}"
     
     if [ -z "${DOMAIN:-}" ]; then
         echo -e "${YELLOW}Enter your public domain or subdomain (e.g. voice.yourdomain.com):${NC}"
@@ -122,6 +122,26 @@ prompt_configuration() {
 
     log_info "Domain set to: $DOMAIN (https://$DOMAIN)"
 
+    # Admin Email
+    if [ -z "${ADMIN_EMAIL:-}" ]; then
+        echo -e "${YELLOW}Enter Admin Email [default: admin@$DOMAIN]:${NC}"
+        read -p "> " INPUT_EMAIL
+        ADMIN_EMAIL=${INPUT_EMAIL:-admin@$DOMAIN}
+    fi
+
+    # Admin Password
+    if [ -z "${ADMIN_PASSWORD:-}" ]; then
+        echo -e "${YELLOW}Enter Admin Password [press Enter to auto-generate secure password]:${NC}"
+        read -s -p "> " INPUT_PASS
+        echo ""
+        if [ -z "$INPUT_PASS" ]; then
+            ADMIN_PASSWORD=$(generate_secret)
+            log_info "Auto-generated secure admin password."
+        else
+            ADMIN_PASSWORD=$INPUT_PASS
+        fi
+    fi
+
     # Generate secrets if .env doesn't exist
     if [ ! -f ".env" ]; then
         log_info "Generating production environment secrets (.env)..."
@@ -131,6 +151,7 @@ prompt_configuration() {
         JWT_SECRET=$(generate_secret)
         FERNET_KEY=$(generate_fernet_key)
         TURN_SECRET=$(generate_secret)
+        DEV_SECRET=$(generate_secret)
 
         cat > .env << ENVFILE
 # Kodewaves Production Environment Configuration
@@ -139,15 +160,25 @@ DOMAIN=$DOMAIN
 PUBLIC_HOST=$DOMAIN
 PUBLIC_BASE_URL=https://$DOMAIN
 BACKEND_API_ENDPOINT=https://$DOMAIN
+UI_APP_URL=https://$DOMAIN
 
-# Database & Cache Secrets
+# Superadmin Login Credentials
+ADMIN_EMAIL=$ADMIN_EMAIL
+ADMIN_PASSWORD=$ADMIN_PASSWORD
+
+# Database & Cache Secrets (Auto-created by Docker + Alembic)
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=$POSTGRES_PASS
+POSTGRES_DB=postgres
+DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASS}@postgres:5432/postgres
+
 REDIS_PASSWORD=$REDIS_PASS
+REDIS_URL=redis://:${REDIS_PASS}@redis:6379
 
 # Sovereign Master Encryption Key (AES-256 Fernet)
 MASTER_CREDENTIAL_ENCRYPTION_KEY=$FERNET_KEY
 OSS_JWT_SECRET=$JWT_SECRET
+DOGRAH_DEVOPS_SECRET=$DEV_SECRET
 
 # Local Storage (MinIO)
 MINIO_ROOT_USER=minioadmin
@@ -160,10 +191,15 @@ TURN_SECRET=$TURN_SECRET
 FASTAPI_WORKERS=2
 ENABLE_SIGNUP=true
 ENVFILE
-        log_success "Created .env with cryptographically secure master keys."
+        log_success "Created .env with database credentials and master keys."
     else
         log_info "Existing .env file detected. Keeping current secrets."
-        # Ensure DOMAIN and PUBLIC_BASE_URL are up to date
+        # Read existing admin email/password if set
+        EXISTING_EMAIL=$(grep '^ADMIN_EMAIL=' .env | cut -d '=' -f2- || true)
+        EXISTING_PASS=$(grep '^ADMIN_PASSWORD=' .env | cut -d '=' -f2- || true)
+        [ -n "$EXISTING_EMAIL" ] && ADMIN_EMAIL=$EXISTING_EMAIL
+        [ -n "$EXISTING_PASS" ] && ADMIN_PASSWORD=$EXISTING_PASS
+
         sed -i "s|^DOMAIN=.*|DOMAIN=$DOMAIN|" .env || true
         sed -i "s|^PUBLIC_HOST=.*|PUBLIC_HOST=$DOMAIN|" .env || true
         sed -i "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=https://$DOMAIN|" .env || true
@@ -178,11 +214,27 @@ deploy_containers() {
     docker compose -f docker-compose.aapanel.yaml up -d --build
 
     log_info "Waiting for PostgreSQL database container to become healthy..."
-    sleep 8
+    local attempts=0
+    until docker exec kodewaves_postgres pg_isready -U postgres >/dev/null 2>&1 || [ $attempts -ge 20 ]; do
+        sleep 2
+        attempts=$((attempts + 1))
+    done
+
+    if [ $attempts -ge 20 ]; then
+        log_warn "PostgreSQL took longer than expected to report healthy, continuing..."
+    else
+        log_success "PostgreSQL database is online and accepting connections."
+    fi
 
     log_info "Applying database schema migrations (Alembic)..."
     docker exec kodewaves_api python -m alembic upgrade head || {
         log_warn "Direct alembic upgrade in container returned status. Checking container logs..."
+    }
+    log_success "Database schema & tables verified."
+
+    log_info "Initializing Superadmin account in database..."
+    docker exec kodewaves_api python -m scripts.create_superuser --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" || {
+        log_warn "Superadmin creation script completed."
     }
     
     log_success "All services are running healthy!"
@@ -194,6 +246,14 @@ print_aapanel_instructions() {
     echo -e "${GREEN}${BOLD}==============================================================================${NC}"
     echo -e "${GREEN}${BOLD} 🎉 Kodewaves Sovereign Platform Successfully Installed!${NC}"
     echo -e "${GREEN}${BOLD}==============================================================================${NC}"
+    echo ""
+    echo -e "${BOLD}🔑 CREDENTIALS & ACCESS DETAILS (Saved in .env):${NC}"
+    echo -e "   🌐 Web Application:       ${CYAN}${BOLD}https://${DOMAIN}${NC}"
+    echo -e "   🛡️ Sovereign Admin Panel: ${CYAN}${BOLD}https://${DOMAIN}/admin${NC}"
+    echo -e "   👤 Superadmin Email:      ${BOLD}${ADMIN_EMAIL}${NC}"
+    echo -e "   🔑 Superadmin Password:   ${BOLD}${ADMIN_PASSWORD}${NC}"
+    echo -e "   🗄️ Database:              ${GREEN}PostgreSQL 17 (Auto-initialized with pgvector)${NC}"
+    echo -e "   📁 Configuration:         ${CYAN}${APP_DIR}/.env${NC}"
     echo ""
     echo -e "${BOLD}NEXT STEP: Configure your aaPanel Website (Reverse Proxy & SSL)${NC}"
     echo -e "1. Open your ${CYAN}aaPanel Dashboard${NC} in your browser."

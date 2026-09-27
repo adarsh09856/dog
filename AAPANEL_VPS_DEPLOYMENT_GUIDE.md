@@ -70,10 +70,11 @@ sudo bash install.sh
 ```
 
 During execution:
-1. It prompts you for your domain name (e.g., `voice.yourdomain.com`).
-2. It generates secure tokens for JWT, PostgreSQL, Redis, MinIO, and the **AES-256 Fernet Master Credential Key**.
-3. It launches all production containers in the background.
-4. It applies all database tables automatically.
+1. It prompts you for your domain name (e.g., `voice.yourdomain.com`) and optional Superadmin email/password.
+2. It auto-generates secure random credentials for PostgreSQL, Redis, MinIO, JWT, and the **AES-256 Fernet Master Key**, writing them directly to `.env`.
+3. It launches the PostgreSQL 17 database container (which auto-initializes the database cluster).
+4. It executes Alembic migrations (`python -m alembic upgrade head`) to auto-create all database tables.
+5. It auto-creates the Superadmin account and prints your Admin login credentials.
 
 ### Option B: Manual Environment Setup (.env)
 If you prefer configuring `.env` manually:
@@ -81,12 +82,17 @@ If you prefer configuring `.env` manually:
 # 1. Copy the production template
 cp .env.production.example .env
 
-# 2. Edit domain and secrets in .env
+# 2. Edit domain, admin credentials, and database password in .env
 nano .env
 
-# 3. Launch containers and run database migrations
+# 3. Launch containers (auto-initializes PostgreSQL)
 docker compose -f docker-compose.aapanel.yaml up -d --build
+
+# 4. Auto-create database tables via Alembic
 docker exec kodewaves_api python -m alembic upgrade head
+
+# 5. Auto-create the Superadmin user account
+docker exec kodewaves_api python -m scripts.create_superuser
 ```
 
 ---

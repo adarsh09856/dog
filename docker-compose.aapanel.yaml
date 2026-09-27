@@ -94,6 +94,8 @@ services:
       # Master Encryption & JWT Secrets
       OSS_JWT_SECRET: "${OSS_JWT_SECRET}"
       MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
 
       # Local Sovereign Storage
       ENABLE_AWS_S3: "false"
@@ -113,6 +115,7 @@ services:
     volumes:
       - ./api:/app/api:ro
       - ./pipecat:/app/pipecat:ro
+      - ./scripts:/app/scripts:ro
     networks:
       - kodewaves-network
 

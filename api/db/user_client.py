@@ -206,14 +206,27 @@ class UserClient(BaseDBClient):
             return result.scalars().first()
 
     async def create_user_with_email(
-        self, email: str, password_hash: str, name: str | None = None
+        self,
+        email: str,
+        password_hash: str,
+        name: str | None = None,
+        is_superuser: bool | None = None,
     ) -> UserModel:
-        """Create a new user with email and password hash."""
+        """Create a new user with email and password hash.
+        If is_superuser is not specified, the first user created in the system
+        is automatically granted superuser status.
+        """
         async with self.async_session() as session:
+            if is_superuser is None:
+                count_res = await session.execute(select(func.count(UserModel.id)))
+                user_count = count_res.scalar_one_or_none() or 0
+                is_superuser = (user_count == 0)
+
             user = UserModel(
                 provider_id=f"oss_{int(datetime.now(timezone.utc).timestamp())}_{uuid.uuid4()}",
                 email=email.lower(),
                 password_hash=password_hash,
+                is_superuser=is_superuser,
             )
             session.add(user)
             await session.commit()
