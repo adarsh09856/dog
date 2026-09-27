@@ -150,7 +150,6 @@ prompt_configuration() {
         MINIO_PASS=$(generate_secret)
         JWT_SECRET=$(generate_secret)
         FERNET_KEY=$(generate_fernet_key)
-        TURN_SECRET=$(generate_secret)
         DEV_SECRET=$(generate_secret)
 
         cat > .env << ENVFILE
@@ -184,8 +183,8 @@ DOGRAH_DEVOPS_SECRET=$DEV_SECRET
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=$MINIO_PASS
 
-# WebRTC STUN/TURN
-TURN_SECRET=$TURN_SECRET
+# Audio Streaming Mode (All audio streams over standard Port 443 WSS)
+ENABLE_COTURN=false
 
 # Workers
 FASTAPI_WORKERS=2
@@ -318,9 +317,8 @@ NGINX_CONF
     echo -e "   👉 Sovereign Admin Panel: ${CYAN}${BOLD}https://${DOMAIN}/admin${NC}"
     echo ""
     echo -e "${BOLD}Firewall Ports to Open in aaPanel (Security tab):${NC}"
-    echo -e "   • Port 80 (TCP) & 443 (TCP) — Web and SSL"
-    echo -e "   • Port 3478 (UDP/TCP) & 5349 (UDP/TCP) — WebRTC STUN/TURN"
-    echo -e "   • Port 49152-49200 (UDP) — WebRTC Media Relays"
+    echo -e "   • Port 80 (TCP) & 443 (TCP) — Standard Web, HTTPS & WebSocket Audio"
+    echo -e "   • ${GREEN}Zero UDP ports required! All telephony and voice audio stream over standard Port 443.${NC}"
     echo ""
 }
 

@@ -30,17 +30,14 @@ In typical deployments, Docker tries to bind directly to ports `80` and `443`. H
 
 ## 3. Step 1: Open Firewall Ports in aaPanel
 
-Log in to your aaPanel dashboard, navigate to the **Security** tab in the left sidebar, and ensure the following ports are open in the firewall:
+Log in to your aaPanel dashboard, navigate to the **Security** tab in the left sidebar, and ensure standard web traffic ports are open:
 
 | Port | Protocol | Purpose |
 | :--- | :--- | :--- |
-| **80** | TCP | HTTP / Let's Encrypt Verification |
-| **443** | TCP | HTTPS Web Traffic |
-| **3478** | UDP & TCP | WebRTC STUN / TURN Server |
-| **5349** | UDP & TCP | WebRTC TLS TURN Server |
-| **49152:49200** | UDP | WebRTC Audio Media Relays |
+| **80** | TCP | Web HTTP / Let's Encrypt SSL Verification |
+| **443** | TCP | Web HTTPS, REST APIs & Live WebSocket Audio Streaming (WSS) |
 
-*(If your VPS also has an external cloud firewall like AWS Security Groups, Hetzner Firewall, or Hostinger Firewall, open the same ports there).*
+> 💡 **Zero UDP Ports Required**: All browser voice audio, telephony webhooks (Twilio, Plivo, Exotel, etc.), and agent signaling run securely over WebSocket (WSS) and HTTPS over standard port 443 through aaPanel Nginx. You do NOT need to open any custom UDP or TURN relay ports!
 
 ---
 
