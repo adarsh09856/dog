@@ -1537,3 +1537,7 @@ class KnowledgeBaseChunkModel(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )
+
+
+# Kodewaves Sovereign Platform & AgentLabs Merged Models
+from api.db.kodewaves_models import *  # noqa: F401, F403

@@ -80,40 +80,23 @@ async def report_workflow_run_platform_usage(workflow_run) -> None:
         return
 
     try:
-        result = await mps_service_key_client.report_platform_usage(
-            organization_id=organization_id,
-            correlation_id=correlation_id,
-            duration_seconds=duration_seconds,
-            workflow_run_id=workflow_run.id,
-            metadata={
-                "source": "workflow_run_completion",
-                "workflow_id": getattr(workflow_run, "workflow_id", None),
-                "duration_source": (
-                    "mps_correlation" if correlation_id else "dograh_usage_info"
-                ),
-            },
-        )
-        logger.info(
-            "Reported platform usage for workflow run {} to MPS: {}",
-            workflow_run.id,
-            result,
-        )
+        # Local Kodewaves Sovereign Wallet Deduction (Replaces api.dograh.com MPS)
+        from api.db.kodewaves_client import kodewaves_db_client
+
+        billable_secs = duration_seconds or 0.0
+        if billable_secs > 0:
+            billable_minutes = max(1, int((billable_secs + 59) // 60))
+            await kodewaves_db_client.deduct_minutes(
+                organization_id=organization_id,
+                minutes=billable_minutes,
+                reason="call_usage",
+                reference_id=str(workflow_run.id),
+            )
+            logger.info(
+                f"[KodewavesBilling] Deducted {billable_minutes} minute(s) for run {workflow_run.id} from org {organization_id}"
+            )
     except Exception as e:
-        if _is_usage_not_ready_error(e):
-            # A run can start and receive an MPS correlation id, then fail or end
-            # before billable STT usage is recorded. MPS returns usage_not_ready
-            # for that no-platform-fee path, so keep it out of error alerts.
-            logger.warning(
-                "Failed to report platform usage for workflow run {}: {}",
-                workflow_run.id,
-                e,
-            )
-        else:
-            logger.error(
-                "Failed to report platform usage for workflow run {}: {}",
-                workflow_run.id,
-                e,
-            )
+        logger.error(f"[KodewavesBilling] Error updating local wallet for run {workflow_run.id}: {e}")
 
 
 async def report_completed_workflow_run_platform_usage(workflow_run_id: int) -> None:

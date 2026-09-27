@@ -78,6 +78,7 @@ async def signup(request: SignupRequest):
             name=request.name,
             organization_id=organization.id,
             provider_id=user.provider_id,
+            is_superuser=bool(user.is_superuser),
         ),
     )
 
@@ -116,6 +117,7 @@ async def login(request: LoginRequest):
             email=user.email,
             organization_id=user.selected_organization_id,
             provider_id=user.provider_id,
+            is_superuser=bool(user.is_superuser),
         ),
     )
 
@@ -127,4 +129,6 @@ async def get_current_user(user: UserModel = Depends(get_user)):
         email=user.email,
         organization_id=user.selected_organization_id,
         provider_id=user.provider_id,
+        is_superuser=bool(user.is_superuser),
     )
+

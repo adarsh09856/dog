@@ -5,19 +5,25 @@ import {
   ArrowUpCircle,
   AudioLines,
   Brain,
+  Calendar,
   ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   Database,
   FileText,
+  Globe,
   Home,
   Key,
+  LayoutList,
   LogOut,
   type LucideIcon,
   Megaphone,
   Phone,
   Settings,
+  ShieldCheck,
+  Sparkles,
   TrendingUp,
+  UserCheck,
   UserRound,
   Workflow,
   Wrench,
@@ -132,6 +138,36 @@ const NAV_SECTIONS: SidebarNavSection[] = [
     ],
   },
   {
+    label: "GROWTH & LEADS",
+    items: [
+      {
+        title: "CRM Leads",
+        url: "/crm",
+        icon: UserCheck,
+      },
+      {
+        title: "Appointments",
+        url: "/appointments",
+        icon: Calendar,
+      },
+      {
+        title: "Voice Forms",
+        url: "/forms",
+        icon: LayoutList,
+      },
+      {
+        title: "Web Widgets",
+        url: "/widgets",
+        icon: Globe,
+      },
+      {
+        title: "Prompt Templates",
+        url: "/prompt-templates",
+        icon: Sparkles,
+      },
+    ],
+  },
+  {
     label: "MANAGE",
     items: [
       {
@@ -140,8 +176,8 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         icon: TrendingUp,
       },
       {
-        title: "Billing",
-        url: "/billing",
+        title: "Sovereign Wallet",
+        url: "/billing-sovereign",
         icon: CircleDollarSign,
       },
       {
@@ -411,6 +447,31 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroup>
         ))}
+
+        {Boolean(user?.is_superuser || (user as any)?.role === 'admin') && (
+          <SidebarGroup className="mt-6">
+            <SidebarGroupLabel
+              className={cn(
+                "notranslate text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400",
+                isCollapsed && "hidden"
+              )}
+              translate="no"
+            >
+              ADMINISTRATION
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarLink
+                  item={{
+                    title: "Sovereign Admin",
+                    url: "/admin",
+                    icon: ShieldCheck,
+                  }}
+                />
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter
@@ -438,6 +499,12 @@ export function AppSidebar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {Boolean(user?.is_superuser || (user as any)?.role === 'admin') && (
+                    <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-purple-600 dark:text-purple-400 font-medium">
+                      <ShieldCheck className="mr-2 h-4 w-4" />
+                      Sovereign Admin
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => router.push("/settings")} className="cursor-pointer">
                     <Settings className="mr-2 h-4 w-4" />
                     Platform Settings
@@ -475,6 +542,12 @@ export function AppSidebar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {Boolean(user?.is_superuser || (user as any)?.role === 'admin') && (
+                    <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-purple-600 dark:text-purple-400 font-medium">
+                      <ShieldCheck className="mr-2 h-4 w-4" />
+                      Sovereign Admin
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => router.push("/handler/account-settings")} className="cursor-pointer">
                     <Settings className="mr-2 h-4 w-4" />
                     Account settings

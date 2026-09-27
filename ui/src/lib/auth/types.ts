@@ -6,6 +6,7 @@ export interface BaseUser {
   email?: string;
   name?: string;
   image?: string;
+  is_superuser?: boolean;
 }
 
 // Local/OSS user type

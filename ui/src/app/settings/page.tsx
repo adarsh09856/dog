@@ -1,11 +1,13 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 import { CallEventsSection } from "@/components/CallEventsSection";
 import { MCPSection } from "@/components/MCPSection";
 import { OrganizationPreferencesSection } from "@/components/OrganizationPreferencesSection";
 import { TelemetrySection } from "@/components/TelemetrySection";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -24,6 +26,27 @@ export default function SettingsPage() {
             Manage your platform configuration and integrations.
           </p>
         </div>
+
+        <Card className="border-primary/40 bg-primary/5">
+          <CardHeader>
+            <CardTitle>Sovereign Voice & Minute Wallet</CardTitle>
+            <CardDescription>
+              View your organization&apos;s local minute balance, upgrade subscription plans, or bring your own API keys.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-3">
+            <Link href="/billing-sovereign">
+              <Button variant="default" className="text-xs">
+                Open Sovereign Wallet & Plans
+              </Button>
+            </Link>
+            <Link href="/model-configurations">
+              <Button variant="outline" className="text-xs">
+                Configure AI Provider Credentials
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

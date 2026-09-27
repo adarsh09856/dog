@@ -1,6 +1,7 @@
 "use client";
 
 import {
+    ArrowRight,
     ChevronLeft,
     ChevronRight,
     CircleDollarSign,
@@ -244,6 +245,18 @@ export default function BillingPage() {
 
     return (
         <div className="container mx-auto p-6 space-y-6">
+            <div className="p-4 rounded-xl border border-primary/40 bg-primary/5 flex items-center justify-between">
+                <div>
+                    <div className="font-bold text-sm text-primary">Kodewaves Sovereign Minute Wallet</div>
+                    <div className="text-xs text-muted-foreground">Manage your local voice minute quotas, top-up packages, and subscription tiers.</div>
+                </div>
+                <Link href="/billing-sovereign">
+                    <Button className="gap-2 text-xs">
+                        Open Sovereign Wallet & Plans <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                </Link>
+            </div>
+
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
                     <h1 className="text-3xl font-bold mb-2">Billing</h1>

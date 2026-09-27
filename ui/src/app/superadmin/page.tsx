@@ -85,6 +85,18 @@ export default function SuperadminPage() {
                     <p className="text-sm text-muted-foreground">Manage users and view system-wide data</p>
                 </div>
 
+                <div className="p-4 rounded-xl border border-primary/40 bg-primary/5 flex items-center justify-between">
+                    <div>
+                        <div className="font-bold text-sm text-primary">New: Kodewaves Sovereign Admin Suite</div>
+                        <div className="text-xs text-muted-foreground">Manage master provider keys, retail margins, credit bundles, live calls, and content moderation.</div>
+                    </div>
+                    <Link href="/admin">
+                        <Button className="gap-2 text-xs">
+                            Open Sovereign Admin <ArrowRight className="h-3.5 w-3.5" />
+                        </Button>
+                    </Link>
+                </div>
+
                 <div className="grid gap-6 md:grid-cols-2">
                         <Card>
                             <CardHeader>

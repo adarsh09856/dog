@@ -21,6 +21,13 @@ from api.routes.public_embed_chat import router as public_embed_chat_router
 from api.routes.reports import router as reports_router
 from api.routes.s3_signed_url import router as s3_router
 from api.routes.service_keys import router as service_keys_router
+from api.routes.admin import admin_router
+from api.routes.appointments import router as appointments_router
+from api.routes.billing_sovereign import router as billing_sovereign_router
+from api.routes.crm import router as crm_router
+from api.routes.forms import router as forms_router
+from api.routes.prompt_templates import router as prompt_templates_router
+from api.routes.widgets import router as widgets_router
 from api.routes.superuser import router as superuser_router
 from api.routes.telephony import router as telephony_router
 from api.routes.tool import router as tool_router
@@ -39,6 +46,13 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+router.include_router(admin_router)
+router.include_router(crm_router)
+router.include_router(appointments_router)
+router.include_router(forms_router)
+router.include_router(widgets_router)
+router.include_router(prompt_templates_router)
+router.include_router(billing_sovereign_router)
 router.include_router(telephony_router)
 router.include_router(superuser_router)
 router.include_router(workflow_router)
