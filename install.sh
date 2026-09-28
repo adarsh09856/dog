@@ -301,10 +301,10 @@ ENVFILE
 
 # 4. Build and Start Docker Containers
 deploy_containers() {
-    log_info "Building and launching Kodewaves production containers..."
-    echo -e "${CYAN}This may take 3-5 minutes on the first build while Python & Next.js compile...${NC}"
+    log_info "Preparing production environment and infrastructure..."
     
-    docker compose -f docker-compose.aapanel.yaml up -d --build
+    # Start infrastructure services first
+    docker compose -f docker-compose.aapanel.yaml up -d postgres redis minio
 
     log_info "Waiting for PostgreSQL database container to become healthy..."
     local attempts=0
@@ -320,26 +320,25 @@ deploy_containers() {
     fi
 
     log_info "Applying database schema migrations (Alembic)..."
-    docker exec kodewaves_api python -m alembic -c api/alembic.ini upgrade head || {
-        log_error "Alembic migrations failed! Check container logs: docker logs kodewaves_api"
+    docker compose -f docker-compose.aapanel.yaml run --rm api python -m alembic -c api/alembic.ini upgrade head || {
+        log_error "Alembic migrations failed! Check database container logs."
         exit 1
     }
     log_success "Database schema & tables verified."
 
-    log_info "Restarting API container to bind migrated database schema..."
-    docker restart kodewaves_api
-    sleep 3
-
     log_info "Initializing Superadmin account in database..."
-    docker exec kodewaves_api python -m scripts.create_superuser --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" || {
+    docker compose -f docker-compose.aapanel.yaml run --rm api python -m scripts.create_superuser --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" || {
         log_warn "Superadmin creation script completed."
     }
 
     log_info "Bootstrapping platform defaults (AI Catalog, SaaS Plans, Settings, Wallets)..."
-    docker exec kodewaves_api python -m scripts.seed_platform || {
-        log_warn "Platform seed bootstrap script completed with notice."
+    docker compose -f docker-compose.aapanel.yaml run --rm api python -m scripts.seed_platform || {
+        log_warn "Platform seed bootstrap completed with notice."
     }
     log_success "Platform defaults, models catalog, plans, and wallets verified."
+
+    log_info "Launching full production application stack (API, UI, Coturn)..."
+    docker compose -f docker-compose.aapanel.yaml up -d --build
     
     log_success "All services are running healthy!"
 }
