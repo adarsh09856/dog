@@ -85,7 +85,7 @@ export default function AdminPlansPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number | string) => {
     if (!confirm("Are you sure you want to delete this subscription plan?")) return;
     try {
       await adminApi.deletePlan(id);

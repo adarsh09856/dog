@@ -96,7 +96,7 @@ export default function AdminModerationPage() {
     }
   };
 
-  const handleDeleteKeyword = async (id: number) => {
+  const handleDeleteKeyword = async (id: number | string) => {
     if (!confirm("Are you sure you want to remove this keyword filter?")) return;
     try {
       await adminApi.deleteBannedWord(id);

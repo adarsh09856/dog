@@ -79,9 +79,15 @@ export interface AdminUserItem {
   id: number;
   email: string;
   name?: string;
+  provider_id?: string;
   is_superuser: boolean;
   is_active: boolean;
-  created_at: string;
+  created_at?: string;
+  organization_id?: number;
+  organization_name?: string;
+  wallet_balance_minutes?: number;
+  plan_name?: string;
+  total_calls?: number;
   organization?: {
     id: number;
     name?: string;
@@ -218,7 +224,35 @@ export const adminApi = {
     }),
 
   // Users
-  getUsers: () => apiFetch<AdminUserItem[]>('/admin/users'),
+  getUsers: (params?: { search?: string; role?: string; status?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.role && params.role !== 'all') q.set('role', params.role);
+    if (params?.status && params.status !== 'all') q.set('status', params.status);
+    const qs = q.toString();
+    return apiFetch<AdminUserItem[]>(`/admin/users${qs ? `?${qs}` : ''}`);
+  },
+  createUser: (data: {
+    email: string;
+    password: string;
+    name?: string;
+    is_superuser?: boolean;
+    plan_code?: string;
+    initial_minutes?: number;
+    is_active?: boolean;
+  }) =>
+    apiFetch<{ message: string; user_id: number; organization_id: number }>('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateUser: (
+    userId: number,
+    data: { is_superuser?: boolean; is_active?: boolean; plan_name?: string; wallet_balance_minutes?: number }
+  ) =>
+    apiFetch<{ message: string }>(`/admin/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
   grantCredits: (userId: number, minutes: number, note?: string) =>
     apiFetch<{ message: string; new_balance: number }>(`/admin/users/${userId}/grant-credits`, {
       method: 'POST',
@@ -228,6 +262,19 @@ export const adminApi = {
     apiFetch<{ message: string }>(`/admin/users/${userId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ is_active: isActive }),
+    }),
+  resetPassword: (userId: number, newPassword: string) =>
+    apiFetch<{ message: string }>(`/admin/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password: newPassword }),
+    }),
+  impersonateUser: (userId: number) =>
+    apiFetch<{ token: string; user_id: number; email: string; redirect_url: string }>(`/admin/users/${userId}/impersonate`, {
+      method: 'POST',
+    }),
+  deleteUser: (userId: number) =>
+    apiFetch<{ message: string }>(`/admin/users/${userId}`, {
+      method: 'DELETE',
     }),
 
   // Plans

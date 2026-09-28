@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import desc, select
@@ -12,12 +12,15 @@ router = APIRouter(prefix="/audit-logs", tags=["admin-audit-logs"])
 
 class AuditLogItem(BaseModel):
     id: str
-    actor_email: str | None = None
+    actor_email: Optional[str] = None
+    user_email: Optional[str] = None
     action: str
     resource_type: str
     resource_id: str
-    changes: dict = {}
-    ip_address: str | None = None
+    target_resource: Optional[str] = None
+    changes: Dict[str, Any] = {}
+    details: Dict[str, Any] = {}
+    ip_address: Optional[str] = None
     created_at: str
 
 
@@ -32,10 +35,13 @@ async def list_audit_logs(limit: int = 100, offset: int = 0, _user=Depends(get_s
             AuditLogItem(
                 id=str(r.id),
                 actor_email=r.actor_email,
+                user_email=r.actor_email,
                 action=r.action,
                 resource_type=r.resource_type,
                 resource_id=r.resource_id,
+                target_resource=f"{r.resource_type}:{r.resource_id}",
                 changes=r.changes or {},
+                details=r.changes or {},
                 ip_address=r.ip_address,
                 created_at=r.created_at.isoformat() if r.created_at else "",
             )

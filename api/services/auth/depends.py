@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, Query, WebSocket
+from fastapi import Cookie, Depends, Header, HTTPException, Query, WebSocket
 from loguru import logger
 
 from api.constants import AUTH_PROVIDER
@@ -33,7 +33,13 @@ async def require_local_auth() -> None:
 async def get_user(
     authorization: Annotated[str | None, Header()] = None,
     x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
+    dograh_auth_token: Annotated[str | None, Cookie()] = None,
+    oss_token: Annotated[str | None, Cookie()] = None,
 ) -> UserModel:
+    # Fallback to session cookies if authorization header is absent
+    if not authorization and (dograh_auth_token or oss_token):
+        token_val = dograh_auth_token or oss_token
+        authorization = f"Bearer {token_val}"
     # ------------------------------------------------------------------
     # Check if API key is provided (takes precedence)
     # ------------------------------------------------------------------
@@ -324,12 +330,19 @@ async def _handle_api_key_auth(api_key: str) -> UserModel:
 async def get_superuser(
     authorization: Annotated[str | None, Header()] = None,
     x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
+    dograh_auth_token: Annotated[str | None, Cookie()] = None,
+    oss_token: Annotated[str | None, Cookie()] = None,
 ) -> UserModel:
     """
     Dependency to check if the authenticated user is a superuser.
     Raises HTTPException if user is not authenticated or not a superuser.
     """
-    user = await get_user(authorization, x_api_key)
+    user = await get_user(authorization, x_api_key, dograh_auth_token, oss_token)
+
+    if hasattr(user, "is_active") and user.is_active is False:
+        raise HTTPException(
+            status_code=403, detail="Account suspended. Access revoked."
+        )
 
     if not user.is_superuser:
         raise HTTPException(

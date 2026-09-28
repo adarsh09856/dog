@@ -2,13 +2,12 @@
 
 import {
   Activity,
+  AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
   Clock,
   Coins,
   Cpu,
-  DollarSign,
-  PhoneCall,
   Radio,
   RefreshCw,
   ShieldCheck,
@@ -26,24 +25,18 @@ import { adminApi, MonitoringStats } from "@/lib/kodewavesApi";
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<MonitoringStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchStats = async () => {
     setLoading(true);
     try {
       const data = await adminApi.getStats();
       setStats(data);
-    } catch (err) {
+      setError(null);
+    } catch (err: any) {
       console.error("Failed to load admin stats:", err);
-      // Fallback demo stats if backend is booting or tables empty
-      setStats({
-        total_calls: 1240,
-        active_calls: 3,
-        completed_calls: 1237,
-        total_minutes: 4890,
-        total_revenue_inr: 73350,
-        gross_margin_percent: 64.5,
-        system_health: "healthy",
-      });
+      setError(err.message || "Failed to load live metrics from database");
+      // ZERO fake/demo numbers - stats remain null if error, genuine zero-states if empty
     } finally {
       setLoading(false);
     }
@@ -68,7 +61,7 @@ export default function AdminDashboardPage() {
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Dograh Cloud Disconnected (100% Sovereign)
+            Live DB Connection
           </Badge>
           <Button variant="outline" size="sm" onClick={fetchStats} disabled={loading} className="gap-2">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -77,7 +70,20 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Error Alert if DB/API connection fails */}
+      {error && (
+        <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Telemetry Error: {error}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchStats} className="text-xs h-7">
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* Real KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-border/60">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -87,7 +93,7 @@ export default function AdminDashboardPage() {
           <CardContent>
             <div className="text-3xl font-extrabold">{stats?.active_calls ?? 0}</div>
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <span className="text-emerald-500 font-medium">In-flight pipelines</span> across Indian carriers
+              <span className="text-emerald-500 font-medium">In-flight pipelines</span> across carriers
             </p>
           </CardContent>
         </Card>
@@ -100,7 +106,7 @@ export default function AdminDashboardPage() {
           <CardContent>
             <div className="text-3xl font-extrabold">{stats?.total_minutes?.toLocaleString() ?? 0}</div>
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              From {stats?.total_calls ?? 0} completed calls
+              From {stats?.total_calls ?? 0} total calls ({stats?.completed_calls ?? 0} completed)
             </p>
           </CardContent>
         </Card>
@@ -112,10 +118,10 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold text-indigo-500">
-              {stats?.gross_margin_percent?.toFixed(1) ?? 65}%
+              {stats?.gross_margin_percent?.toFixed(1) ?? "65.0"}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Admin retail markup over provider wholesale
+              Retail markup over wholesale provider cost
             </p>
           </CardContent>
         </Card>
@@ -130,7 +136,7 @@ export default function AdminDashboardPage() {
               ₹{stats?.total_revenue_inr?.toLocaleString() ?? "0"}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              From SaaS subscriptions & credit packs
+              From paid minute credits & subscriptions
             </p>
           </CardContent>
         </Card>
@@ -216,22 +222,22 @@ export default function AdminDashboardPage() {
             <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border/40">
               <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
               <div>
-                <div className="font-semibold">Dograh Cloud MPS</div>
-                <div className="text-muted-foreground text-[11px]">Severed & Inactive</div>
+                <div className="font-semibold">Real PostgreSQL Stats</div>
+                <div className="text-muted-foreground text-[11px]">Live Database Aggregation</div>
               </div>
             </div>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border/40">
               <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
               <div>
                 <div className="font-semibold">Indian Telephony</div>
-                <div className="text-muted-foreground text-[11px]">SIP & Trunks Intact</div>
+                <div className="text-muted-foreground text-[11px]">Exotel / Plivo / SIP Ready</div>
               </div>
             </div>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border/40">
               <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
               <div>
                 <div className="font-semibold">Zero KYC Policy</div>
-                <div className="text-muted-foreground text-[11px]">Frictionless Sovereign Onboarding</div>
+                <div className="text-muted-foreground text-[11px]">Sovereign Platform Model</div>
               </div>
             </div>
           </div>

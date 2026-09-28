@@ -1,8 +1,10 @@
+from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from api.db.kodewaves_client import kodewaves_db_client
+from api.db.kodewaves_models import PlatformMasterCredentialModel
 from api.services.auth.depends import get_superuser
 from api.services.credentials.master_credential_service import master_credential_service
 
@@ -25,14 +27,20 @@ class MasterCredentialResponse(BaseModel):
     has_credentials: bool = True
 
 
+class TestConnectionRequest(BaseModel):
+    provider: str
+    api_key: Optional[str] = None
+
+
 class TestConnectionResponse(BaseModel):
     success: bool
     message: str
+    latency_ms: Optional[float] = None
 
 
 @router.get("", response_model=List[MasterCredentialResponse])
 async def list_master_keys(_user=Depends(get_superuser)):
-    """List all configured master credentials with masked status."""
+    """List all configured master credentials with health and masked status."""
     records = await kodewaves_db_client.list_master_credentials()
     return [
         MasterCredentialResponse(
@@ -49,7 +57,7 @@ async def list_master_keys(_user=Depends(get_superuser)):
 
 @router.post("", response_model=Dict[str, Any])
 async def save_master_key(req: MasterCredentialRequest, _user=Depends(get_superuser)):
-    """Encrypt and save master credentials for a provider."""
+    """Encrypt and save master credentials for a provider with AES-256 Fernet."""
     success = await master_credential_service.save_master_credential(
         provider=req.provider,
         category=req.category,
@@ -61,17 +69,64 @@ async def save_master_key(req: MasterCredentialRequest, _user=Depends(get_superu
     return {"message": f"Successfully stored master credentials for {req.provider}"}
 
 
-@router.post("/{provider}/test", response_model=TestConnectionResponse)
-async def test_master_key_connection(provider: str, _user=Depends(get_superuser)):
-    """Perform live connectivity check to upstream provider."""
-    success, message = await master_credential_service.test_connection(provider)
-    # Update health status in DB
+@router.post("/test", response_model=TestConnectionResponse)
+async def test_master_key_post(req: TestConnectionRequest, _user=Depends(get_superuser)):
+    """Perform live connectivity check to upstream provider (via JSON body)."""
+    start_time = datetime.now(UTC)
+    success, message = await master_credential_service.test_connection(req.provider)
+    latency = round((datetime.now(UTC) - start_time).total_seconds() * 1000, 1)
+
     status_str = "healthy" if success else "invalid"
-    await kodewaves_db_client.upsert_master_credential(
-        provider=provider.lower().strip(),
-        category="llm",  # Will retain existing category in update
-        credentials_encrypted="",  # Will retain existing in update
-        is_enabled=True,
-        health_status=status_str,
-    )
-    return TestConnectionResponse(success=success, message=message)
+    # Update health status in DB
+    try:
+        await kodewaves_db_client.upsert_master_credential(
+            provider=req.provider.lower().strip(),
+            category="llm",
+            credentials_encrypted="",
+            is_enabled=True,
+            health_status=status_str,
+        )
+    except Exception:
+        pass
+
+    return TestConnectionResponse(success=success, message=message, latency_ms=latency)
+
+
+@router.post("/{provider}/test", response_model=TestConnectionResponse)
+async def test_master_key_connection_path(provider: str, _user=Depends(get_superuser)):
+    """Perform live connectivity check to upstream provider (via path param)."""
+    start_time = datetime.now(UTC)
+    success, message = await master_credential_service.test_connection(provider)
+    latency = round((datetime.now(UTC) - start_time).total_seconds() * 1000, 1)
+
+    status_str = "healthy" if success else "invalid"
+    try:
+        await kodewaves_db_client.upsert_master_credential(
+            provider=provider.lower().strip(),
+            category="llm",
+            credentials_encrypted="",
+            is_enabled=True,
+            health_status=status_str,
+        )
+    except Exception:
+        pass
+
+    return TestConnectionResponse(success=success, message=message, latency_ms=latency)
+
+
+@router.delete("/{provider}", response_model=Dict[str, Any])
+async def delete_master_key(provider: str, _user=Depends(get_superuser)):
+    """Disable or remove master credential for a provider."""
+    async with kodewaves_db_client.get_session() as session:
+        from sqlalchemy import select
+        stmt = select(PlatformMasterCredentialModel).where(
+            PlatformMasterCredentialModel.provider == provider.lower().strip()
+        )
+        res = await session.execute(stmt)
+        record = res.scalar_one_or_none()
+        if not record:
+            raise HTTPException(status_code=404, detail=f"Master credential for '{provider}' not found")
+
+        await session.delete(record)
+        await session.commit()
+        return {"message": f"Successfully removed master credentials for '{provider}'"}

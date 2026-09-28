@@ -80,7 +80,7 @@ export default function AdminCreditPackagesPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number | string) => {
     if (!confirm("Are you sure you want to delete this credit bundle?")) return;
     try {
       await adminApi.deleteCreditPackage(id);

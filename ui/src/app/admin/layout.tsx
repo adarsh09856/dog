@@ -53,6 +53,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
+  // If not authenticated, redirect to login
+  if (!isAuthenticated) {
+    if (typeof window !== 'undefined') {
+      window.location.href = '/auth/login';
+    }
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-foreground">
+        <Activity className="h-6 w-6 animate-spin text-primary" />
+        <span className="ml-2 text-sm text-muted-foreground">Redirecting to login...</span>
+      </div>
+    );
+  }
+
   // If user is authenticated but not superuser, warn them
   if (isAuthenticated && !isSuper) {
     return (

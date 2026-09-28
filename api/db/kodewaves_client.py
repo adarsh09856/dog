@@ -92,7 +92,7 @@ class KodewavesDBClient(BaseDBClient):
             stmt = select(AIModelCatalogModel).where(AIModelCatalogModel.is_active == True)
             if category:
                 stmt = stmt.where(AIModelCatalogModel.category == category)
-            stmt = stmt.order_order_by(AIModelCatalogModel.sort_order)
+            stmt = stmt.order_by(AIModelCatalogModel.sort_order)
             result = await session.execute(stmt)
             return list(result.scalars().all())
 

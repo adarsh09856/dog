@@ -42,15 +42,24 @@ async function fetchAuthProvider(): Promise<string> {
 }
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const token = request.cookies.get(OSS_TOKEN_COOKIE)?.value || request.cookies.get('oss_token')?.value;
+
+  // Strict server-side guard for /admin routes - must have token regardless of provider
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    if (!token) {
+      const loginUrl = new URL('/auth/login', request.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
   const authProvider = await fetchAuthProvider();
 
-  // Only handle OSS mode
+  // Only handle OSS mode for standard user routes
   if (authProvider !== 'local') {
     return NextResponse.next();
   }
-
-  const token = request.cookies.get(OSS_TOKEN_COOKIE)?.value;
-  const { pathname } = request.nextUrl;
 
   // Allow public paths without auth. Match on a path-segment boundary (exact
   // match or a `/`-delimited subpath) rather than a bare prefix, so a public
