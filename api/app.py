@@ -172,6 +172,8 @@ api_router.include_router(main_router)
 
 # main router with api prefix
 app.include_router(api_router, prefix=API_PREFIX)
+# also mount directly without prefix for root routing compatibility
+app.include_router(main_router)
 
 # Mount the MCP server — agents reach it at /api/v1/mcp over Streamable HTTP,
 # authenticating with the same X-API-Key header used by the REST API.

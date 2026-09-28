@@ -2,7 +2,9 @@ import { resolveBrowserBackendUrl } from './apiClient';
 
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const baseUrl = resolveBrowserBackendUrl();
-  const url = `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const apiPath = cleanEndpoint.startsWith('/api/v1') ? cleanEndpoint : `/api/v1${cleanEndpoint}`;
+  const url = `${baseUrl}${apiPath}`;
 
   // Read auth token from cookies if in browser
   let authHeader = '';
