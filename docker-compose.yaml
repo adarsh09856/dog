@@ -57,7 +57,10 @@ services:
       - app-network
 
   minio:
-    image: minio/minio:latest
+    build:
+      context: .
+      dockerfile: deploy/minio/Dockerfile
+    image: dograh-minio:local
     container_name: minio
     command: server /data --console-address ":9001"
     environment:

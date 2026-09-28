@@ -44,7 +44,10 @@ services:
       - kodewaves-network
 
   minio:
-    image: minio/minio:latest
+    build:
+      context: .
+      dockerfile: deploy/minio/Dockerfile
+    image: kodewaves-minio:latest
     container_name: kodewaves_minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
