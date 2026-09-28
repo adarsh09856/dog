@@ -154,46 +154,33 @@ prompt_configuration() {
     echo ""
     echo -e "${BOLD}Configure your Domain & Superadmin Credentials:${NC}"
     
+    # 1. Domain (default: app.kodewaves.in)
     if [ -z "${DOMAIN:-}" ]; then
-        echo -e "${YELLOW}Enter your public domain or subdomain (e.g. voice.yourdomain.com):${NC}"
-        read -p "> " DOMAIN
-        DOMAIN=$(echo "$DOMAIN" | tr -d ' ' | sed -e 's|^https://||' -e 's|^http://||' -e 's|/$||')
+        echo -e "${YELLOW}Enter your public domain [press Enter for default: app.kodewaves.in]:${NC}"
+        read -p "> " INPUT_DOMAIN
+        INPUT_DOMAIN=$(echo "$INPUT_DOMAIN" | tr -d ' ' | sed -e 's|^https://||' -e 's|^http://||' -e 's|/$||')
+        DOMAIN=${INPUT_DOMAIN:-app.kodewaves.in}
     fi
-
-    if [ -z "$DOMAIN" ]; then
-        log_error "Domain cannot be empty!"
-        exit 1
-    fi
-
     log_info "Domain set to: $DOMAIN (https://$DOMAIN)"
 
-    # Admin Email
+    # 2. Admin Email (default: admin@admin.com)
     if [ -z "${ADMIN_EMAIL:-}" ]; then
-        echo -e "${YELLOW}Enter Admin Email [default: admin@$DOMAIN]:${NC}"
+        echo -e "${YELLOW}Enter Admin Email [press Enter for default: admin@admin.com]:${NC}"
         read -p "> " INPUT_EMAIL
         INPUT_EMAIL=$(echo "$INPUT_EMAIL" | tr -d ' ')
-        if [ -z "$INPUT_EMAIL" ]; then
-            ADMIN_EMAIL="admin@$DOMAIN"
-        elif [[ "$INPUT_EMAIL" != *"@"* ]]; then
-            ADMIN_EMAIL="${INPUT_EMAIL}@${DOMAIN}"
-            log_info "Admin email formatted to: $ADMIN_EMAIL"
-        else
-            ADMIN_EMAIL="$INPUT_EMAIL"
-        fi
+        ADMIN_EMAIL=${INPUT_EMAIL:-admin@admin.com}
     fi
+    log_info "Admin email set to: $ADMIN_EMAIL"
 
-    # Admin Password
+    # 3. Admin Password (default: admin)
     if [ -z "${ADMIN_PASSWORD:-}" ]; then
-        echo -e "${YELLOW}Enter Admin Password [press Enter to auto-generate secure password]:${NC}"
+        echo -e "${YELLOW}Enter Admin Password [press Enter for default: admin]:${NC}"
         read -s -p "> " INPUT_PASS
         echo ""
-        if [ -z "$INPUT_PASS" ]; then
-            ADMIN_PASSWORD=$(generate_secret)
-            log_info "Auto-generated secure admin password."
-        else
-            ADMIN_PASSWORD=$INPUT_PASS
-        fi
+        INPUT_PASS=$(echo "$INPUT_PASS" | tr -d ' ')
+        ADMIN_PASSWORD=${INPUT_PASS:-admin}
     fi
+    log_info "Admin password set to: $ADMIN_PASSWORD"
 
     # Check available ports to prevent conflicts with aaPanel / host services
     echo ""
@@ -271,16 +258,26 @@ ENABLE_SIGNUP=true
 ENVFILE
         log_success "Created .env with database credentials, port mappings, and master keys."
     else
-        log_info "Existing .env file detected. Keeping current secrets."
-        # Read existing admin email/password if set
-        EXISTING_EMAIL=$(grep '^ADMIN_EMAIL=' .env | cut -d '=' -f2- || true)
-        EXISTING_PASS=$(grep '^ADMIN_PASSWORD=' .env | cut -d '=' -f2- || true)
-        [ -n "$EXISTING_EMAIL" ] && ADMIN_EMAIL=$EXISTING_EMAIL
-        [ -n "$EXISTING_PASS" ] && ADMIN_PASSWORD=$EXISTING_PASS
+        log_info "Existing .env file detected. Keeping database & token secrets."
 
+        # Ensure domain & admin credentials match the configured values
         sed -i "s|^DOMAIN=.*|DOMAIN=$DOMAIN|" .env || true
         sed -i "s|^PUBLIC_HOST=.*|PUBLIC_HOST=$DOMAIN|" .env || true
         sed -i "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=https://$DOMAIN|" .env || true
+        sed -i "s|^BACKEND_API_ENDPOINT=.*|BACKEND_API_ENDPOINT=https://$DOMAIN|" .env || true
+        sed -i "s|^UI_APP_URL=.*|UI_APP_URL=https://$DOMAIN|" .env || true
+
+        if grep -q '^ADMIN_EMAIL=' .env; then
+            sed -i "s|^ADMIN_EMAIL=.*|ADMIN_EMAIL=$ADMIN_EMAIL|" .env || true
+        else
+            echo "ADMIN_EMAIL=$ADMIN_EMAIL" >> .env
+        fi
+
+        if grep -q '^ADMIN_PASSWORD=' .env; then
+            sed -i "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=$ADMIN_PASSWORD|" .env || true
+        else
+            echo "ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
+        fi
 
         # Ensure collision-free ports are present in existing .env
         grep -q '^UI_PORT=' .env || echo "UI_PORT=$UI_PORT" >> .env
