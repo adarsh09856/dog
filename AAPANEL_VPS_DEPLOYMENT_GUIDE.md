@@ -8,12 +8,10 @@ This guide explains how to install and host **Kodewaves** on your VPS running **
 
 In typical deployments, Docker tries to bind directly to ports `80` and `443`. However, on a VPS with aaPanel:
 1. aaPanel's built-in Nginx already manages ports `80` and `443` for all your websites.
-2. Our **`docker-compose.aapanel.yaml`** binds:
-   - **Frontend UI** to `127.0.0.1:3010`
-   - **Backend API** to `127.0.0.1:8000`
-   - **MinIO Audio Storage** to `127.0.0.1:9000`
-   - **Postgres** to `127.0.0.1:5432`
-   - **Redis** to `127.0.0.1:6379`
+2. Our **Turnkey Installer (`install.sh`)** includes **Automated Port Collision Detection**:
+   - Before binding, it scans `3010` (UI), `8000` (API), `9000` (MinIO), `5432` (PostgreSQL), and `6379` (Redis).
+   - If any port is already in use by another host service (e.g. Redis or MySQL installed via aaPanel), it **automatically detects it and remaps to the next free port** (e.g. `6380`, `8001`, `3011`).
+   - The generated Nginx reverse proxy configuration automatically matches whatever free ports were assigned!
 3. aaPanel manages the **Domain**, **Free Auto-Renewing SSL (Let's Encrypt)**, and **Reverse Proxy** with zero port collisions!
 
 ---

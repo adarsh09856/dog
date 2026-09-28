@@ -104,6 +104,51 @@ generate_fernet_key() {
     fi
 }
 
+# Helper: Check if a port is in use on the host (ignoring existing Kodewaves containers)
+is_port_in_use() {
+    local port=$1
+    if command -v ss >/dev/null 2>&1; then
+        if ss -tuln | grep -E "[: ]${port}[ ]+" >/dev/null 2>&1; then
+            if docker ps --filter "name=kodewaves_" --format '{{.Ports}}' 2>/dev/null | grep -q ":${port}->"; then
+                return 1 # Belongs to existing Kodewaves container
+            fi
+            return 0 # In use by an external host process
+        fi
+    elif command -v netstat >/dev/null 2>&1; then
+        if netstat -tuln | grep -E "[: ]${port}[ ]+" >/dev/null 2>&1; then
+            if docker ps --filter "name=kodewaves_" --format '{{.Ports}}' 2>/dev/null | grep -q ":${port}->"; then
+                return 1
+            fi
+            return 0
+        fi
+    elif command -v lsof >/dev/null 2>&1; then
+        if lsof -i :"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+            if docker ps --filter "name=kodewaves_" --format '{{.Ports}}' 2>/dev/null | grep -q ":${port}->"; then
+                return 1
+            fi
+            return 0
+        fi
+    fi
+    return 1 # Port is completely free
+}
+
+# Helper: Find first available free port starting from base_port
+resolve_free_port() {
+    local base_port=$1
+    local service_name=$2
+    local port=$base_port
+    while is_port_in_use "$port"; do
+        log_warn "Port $port is already occupied by a host service. Trying port $((port + 1))..."
+        port=$((port + 1))
+    done
+    if [ "$port" -ne "$base_port" ]; then
+        log_info "Auto-assigned $service_name to free port: $port (was $base_port)"
+    else
+        log_success "Port $port for $service_name is available."
+    fi
+    echo "$port"
+}
+
 # 3. Interactive Configuration
 prompt_configuration() {
     echo ""
@@ -142,6 +187,16 @@ prompt_configuration() {
         fi
     fi
 
+    # Check available ports to prevent conflicts with aaPanel / host services
+    echo ""
+    log_info "Scanning for available host ports (preventing port collisions)..."
+    UI_PORT=$(resolve_free_port 3010 "Frontend UI")
+    API_PORT=$(resolve_free_port 8000 "Backend API")
+    POSTGRES_PORT=$(resolve_free_port 5432 "PostgreSQL")
+    REDIS_PORT=$(resolve_free_port 6379 "Redis")
+    MINIO_PORT=$(resolve_free_port 9000 "MinIO Storage")
+    MINIO_CONSOLE_PORT=$(resolve_free_port 9001 "MinIO Console")
+
     # Generate secrets if .env doesn't exist
     if [ ! -f ".env" ]; then
         log_info "Generating production environment secrets (.env)..."
@@ -161,6 +216,14 @@ PUBLIC_HOST=$DOMAIN
 PUBLIC_BASE_URL=https://$DOMAIN
 BACKEND_API_ENDPOINT=https://$DOMAIN
 UI_APP_URL=https://$DOMAIN
+
+# Service Port Bindings (Collision-free)
+UI_PORT=$UI_PORT
+API_PORT=$API_PORT
+POSTGRES_PORT=$POSTGRES_PORT
+REDIS_PORT=$REDIS_PORT
+MINIO_PORT=$MINIO_PORT
+MINIO_CONSOLE_PORT=$MINIO_CONSOLE_PORT
 
 # Superadmin Login Credentials
 ADMIN_EMAIL=$ADMIN_EMAIL
@@ -192,7 +255,7 @@ TURN_SECRET=$TURN_SECRET
 FASTAPI_WORKERS=2
 ENABLE_SIGNUP=true
 ENVFILE
-        log_success "Created .env with database credentials and master keys."
+        log_success "Created .env with database credentials, port mappings, and master keys."
     else
         log_info "Existing .env file detected. Keeping current secrets."
         # Read existing admin email/password if set
@@ -243,16 +306,25 @@ deploy_containers() {
 
 # 5. Output aaPanel Nginx Reverse Proxy Instructions
 print_aapanel_instructions() {
+    # Ensure port variables are populated from current environment or .env
+    UI_PORT=${UI_PORT:-$(grep '^UI_PORT=' .env 2>/dev/null | cut -d '=' -f2- || true)}
+    UI_PORT=${UI_PORT:-3010}
+    API_PORT=${API_PORT:-$(grep '^API_PORT=' .env 2>/dev/null | cut -d '=' -f2- || true)}
+    API_PORT=${API_PORT:-8000}
+    MINIO_PORT=${MINIO_PORT:-$(grep '^MINIO_PORT=' .env 2>/dev/null | cut -d '=' -f2- || true)}
+    MINIO_PORT=${MINIO_PORT:-9000}
+
     echo ""
     echo -e "${GREEN}${BOLD}==============================================================================${NC}"
     echo -e "${GREEN}${BOLD} 🎉 Kodewaves Sovereign Platform Successfully Installed!${NC}"
     echo -e "${GREEN}${BOLD}==============================================================================${NC}"
     echo ""
     echo -e "${BOLD}🔑 CREDENTIALS & ACCESS DETAILS (Saved in .env):${NC}"
-    echo -e "   🌐 Web Application:       ${CYAN}${BOLD}https://${DOMAIN}${NC}"
+    echo -e "   🌐 Web Application:       ${CYAN}${BOLD}https://${DOMAIN}${NC} (Local: http://127.0.0.1:${UI_PORT})"
     echo -e "   🛡️ Sovereign Admin Panel: ${CYAN}${BOLD}https://${DOMAIN}/admin${NC}"
     echo -e "   👤 Superadmin Email:      ${BOLD}${ADMIN_EMAIL}${NC}"
     echo -e "   🔑 Superadmin Password:   ${BOLD}${ADMIN_PASSWORD}${NC}"
+    echo -e "   🔌 API Backend Port:      ${BOLD}127.0.0.1:${API_PORT}${NC}"
     echo -e "   🗄️ Database:              ${GREEN}PostgreSQL 17 (Auto-initialized with pgvector)${NC}"
     echo -e "   📁 Configuration:         ${CYAN}${APP_DIR}/.env${NC}"
     echo ""
@@ -274,7 +346,7 @@ print_aapanel_instructions() {
     cat << NGINX_CONF
     # Backend API and WebSockets (Live audio streaming & signaling)
     location /api/ {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:${API_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -290,7 +362,7 @@ print_aapanel_instructions() {
 
     # Sovereign Audio Recordings (MinIO)
     location /voice-audio/ {
-        proxy_pass http://127.0.0.1:9000/voice-audio/;
+        proxy_pass http://127.0.0.1:${MINIO_PORT}/voice-audio/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -301,7 +373,7 @@ print_aapanel_instructions() {
 
     # Frontend UI (Next.js 15)
     location / {
-        proxy_pass http://127.0.0.1:3010;
+        proxy_pass http://127.0.0.1:${UI_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";

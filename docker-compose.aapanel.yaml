@@ -14,7 +14,7 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres_secure_pass}"
       POSTGRES_DB: postgres
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - kodewaves_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -32,7 +32,7 @@ services:
     command: >
       --requirepass ${REDIS_PASSWORD:-redis_secure_pass}
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - kodewaves_redis_data:/data
     healthcheck:
@@ -53,8 +53,8 @@ services:
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minio_secure_pass}"
       MINIO_API_CORS_ALLOW_ORIGIN: "*"
     ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
+      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - kodewaves_minio_data:/data
     healthcheck:
@@ -116,7 +116,7 @@ services:
       TURN_HOST: "${PUBLIC_HOST:-your-domain.com}"
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
       - ./api:/app/api:ro
       - ./pipecat:/app/pipecat:ro
@@ -141,7 +141,7 @@ services:
       NEXT_PUBLIC_BACKEND_URL: "${PUBLIC_BASE_URL:-https://your-domain.com}"
       BACKEND_URL: "http://api:8000"
     ports:
-      - "127.0.0.1:3010:3010"
+      - "127.0.0.1:${UI_PORT:-3010}:3010"
     networks:
       - kodewaves-network
 
