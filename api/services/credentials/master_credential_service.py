@@ -65,16 +65,35 @@ class MasterCredentialService:
             return False
 
     async def get_master_credential(self, provider: str) -> Optional[Dict[str, Any]]:
-        """Retrieve and decrypt credentials dict for a provider."""
-        record = await kodewaves_db_client.get_master_credential(provider.lower().strip())
-        if not record or not record.is_enabled:
-            return None
+        """Retrieve and decrypt credentials dict for a provider, falling back to environment variables."""
+        prov_key = provider.lower().strip()
         try:
-            decrypted_str = self.decrypt(record.credentials_encrypted)
-            return json.loads(decrypted_str)
-        except Exception as e:
-            logger.error(f"[MasterCredentialService] Failed to decrypt credentials for {provider}: {e}")
-            return None
+            record = await kodewaves_db_client.get_master_credential(prov_key)
+            if record and record.is_enabled:
+                try:
+                    decrypted_str = self.decrypt(record.credentials_encrypted)
+                    return json.loads(decrypted_str)
+                except Exception as e:
+                    logger.error(f"[MasterCredentialService] Failed to decrypt credentials for {provider}: {e}")
+        except Exception as db_err:
+            logger.debug(f"[MasterCredentialService] DB lookup for {provider} failed or unavailable: {db_err}")
+
+        # Fallback to environment variables if not configured in DB
+        env_map = {
+            "openai": "OPENAI_API_KEY",
+            "deepgram": "DEEPGRAM_API_KEY",
+            "cartesia": "CARTESIA_API_KEY",
+            "elevenlabs": "ELEVENLABS_API_KEY",
+            "sarvam": "SARVAM_API_KEY",
+            "groq": "GROQ_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "google": "GEMINI_API_KEY",
+        }
+        env_var = env_map.get(prov_key, f"{prov_key.upper()}_API_KEY")
+        val = os.environ.get(env_var) or os.environ.get(f"{prov_key.upper()}_API_KEY")
+        if val:
+            return {"api_key": val}
+        return None
 
     async def test_connection(self, provider: str) -> Tuple[bool, str]:
         """Test active API connectivity to an upstream provider using master credentials."""

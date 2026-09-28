@@ -778,68 +778,36 @@ async def authorize_workflow_run_start(
             workflow_configurations=workflow_configurations,
         )
 
-        if DEPLOYMENT_MODE != "oss":
-            return await _authorize_hosted_workflow_run_start(
-                workflow_owner=workflow_owner,
-                organization_id=organization_id,
-                workflow_id=workflow.id,
-                workflow_run_id=workflow_run_id,
-                user_config=user_config,
-            )
+        # Sovereign Kodewaves Authorization:
+        # Check organization wallet minute balance in local PostgreSQL
+        from api.db.kodewaves_client import kodewaves_db_client
+        wallet = await kodewaves_db_client.get_or_create_wallet(organization_id)
+        total_minutes = wallet.credit_balance_minutes + wallet.bonus_minutes
 
-        dograh_api_keys = _dograh_api_keys(user_config)
-        if workflow_run_id is None or not uses_managed_model_services_v2(user_config):
-            if dograh_api_keys:
-                return await _authorize_oss_dograh_keys(
-                    dograh_api_keys=dograh_api_keys,
-                )
+        is_managed = (
+            uses_managed_model_services_v2(user_config)
+            or bool(_dograh_api_keys(user_config))
+            or getattr(user_config, "is_managed", False)
+        )
+
+        # If using BYOK personal keys, no platform minutes are required
+        # If using Sovereign Platform Managed keys, require > 0 minutes
+        if total_minutes > 0 or not is_managed:
             return QuotaCheckResult(has_quota=True)
 
-        correlation_service_key = get_dograh_service_api_key(user_config)
-        if not correlation_service_key:
-            _log_mps_system_failure(
-                "invalid-service-key",
-                "Managed-v2 workflow configuration has no Dograh service key",
-                organization_id=organization_id,
-                workflow_run_id=workflow_run_id,
-            )
-            return QuotaCheckResult(
-                has_quota=False,
-                error_code="invalid_service_key",
-                error_message=(
-                    "You have invalid keys in your model configuration. "
-                    "Please validate the service keys."
-                ),
-            )
-
-        keys_requiring_legacy_check = dograh_api_keys - {correlation_service_key}
-        if keys_requiring_legacy_check:
-            oss_result = await _authorize_oss_dograh_keys(
-                dograh_api_keys=keys_requiring_legacy_check,
-            )
-            if not oss_result.has_quota:
-                return oss_result
-
-        return await _authorize_oss_managed_v2_run(
-            workflow_id=workflow.id,
-            workflow_run_id=workflow_run_id,
-            service_key=correlation_service_key,
-            user_config=user_config,
+        logger.warning(
+            f"[QuotaService] Org {organization_id} has zero voice minutes ({total_minutes} min remaining)"
+        )
+        return QuotaCheckResult(
+            has_quota=False,
+            error_code="insufficient_quota",
+            error_message="Your organization has zero voice credits. Please purchase a minute top-up package to continue.",
         )
 
     except Exception as e:
-        log_failure(
-            classify_exception(e, source=ErrorSource.PLATFORM),
-            organization_id=organization_id,
-            workflow_run_id=workflow_run_id,
-            workflow_id=workflow_id,
-        )
-        # Only an httpx transport failure raised while calling MPS is allowed to
-        # fail open, and those failures are handled at the MPS call sites above.
-        # Database, configuration, response-validation, and programming errors
-        # all reach this handler and fail closed.
+        logger.error(f"[QuotaService] Error authorizing workflow run: {e}")
         return QuotaCheckResult(
             has_quota=False,
             error_code="quota_check_failed",
-            error_message="Could not verify Dograh credits. Please try again.",
+            error_message="Could not verify organization credits. Please try again.",
         )
