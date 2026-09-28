@@ -50,10 +50,19 @@ class EffectiveAIModelConfiguration(BaseModel):
 
 
 class DograhManagedAIModelConfiguration(BaseModel):
-    api_key: str
+    api_key: str = "sovereign-managed"
     voice: str = DOGRAH_DEFAULT_VOICE
     speed: float = Field(default=1.0, ge=DOGRAH_SPEED_MIN, le=DOGRAH_SPEED_MAX)
     language: str = DOGRAH_DEFAULT_LANGUAGE
+
+    @model_validator(mode="before")
+    @classmethod
+    def default_empty_api_key(cls, data):
+        if isinstance(data, dict):
+            api_key = data.get("api_key")
+            if not api_key or not str(api_key).strip():
+                data["api_key"] = "sovereign-managed"
+        return data
 
 
 class BYOKPipelineAIModelConfiguration(BaseModel):
@@ -154,28 +163,29 @@ def compile_ai_model_configuration_v2(
 def _compile_dograh_configuration(
     configuration: DograhManagedAIModelConfiguration,
 ) -> EffectiveAIModelConfiguration:
+    api_key = configuration.api_key or "sovereign-managed"
     return EffectiveAIModelConfiguration(
         llm=DograhLLMService(
             provider=ServiceProviders.DOGRAH,
-            api_key=configuration.api_key,
+            api_key=api_key,
             model="default",
         ),
         tts=DograhTTSService(
             provider=ServiceProviders.DOGRAH,
-            api_key=configuration.api_key,
+            api_key=api_key,
             model="default",
             voice=configuration.voice,
             speed=configuration.speed,
         ),
         stt=DograhSTTService(
             provider=ServiceProviders.DOGRAH,
-            api_key=configuration.api_key,
+            api_key=api_key,
             model="default",
             language=configuration.language,
         ),
         embeddings=DograhEmbeddingsConfiguration(
             provider=ServiceProviders.DOGRAH,
-            api_key=configuration.api_key,
+            api_key=api_key,
             model="dograh_embedding_v1",
         ),
         is_realtime=False,

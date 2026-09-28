@@ -1,6 +1,6 @@
 "use client";
 
-import { Info, KeyRound, Save } from "lucide-react";
+import { Info, Save, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -398,14 +398,14 @@ export function AIModelConfigurationV2Editor({
                 || dograh.speed > dograhSpeedRange.max
             ) {
                 throw new Error(
-                    `Dograh speed must be between ${dograhSpeedRange.min} and ${dograhSpeedRange.max}.`,
+                    `Voice speed must be between ${dograhSpeedRange.min} and ${dograhSpeedRange.max}.`,
                 );
             }
             await onSave({
                 version: 2,
                 mode: "dograh",
                 dograh: {
-                    api_key: dograh.api_key.trim(),
+                    api_key: (dograh.api_key && dograh.api_key.trim()) || "sovereign-managed",
                     voice: dograh.voice,
                     speed: dograh.speed,
                     language: dograh.language,
@@ -520,7 +520,7 @@ export function AIModelConfigurationV2Editor({
                                     )}
                                 </div>
 
-                                <div className="space-y-2">
+                                <div className="space-y-2 sm:col-span-2">
                                     <Label htmlFor="dograh-speed">Speed</Label>
                                     <Input
                                         id="dograh-speed"
@@ -539,17 +539,15 @@ export function AIModelConfigurationV2Editor({
                                     />
                                 </div>
 
-                                <div className="space-y-2">
-                                    <Label htmlFor="dograh-api-key">API Key</Label>
-                                    <div className="relative">
-                                        <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                        <Input
-                                            id="dograh-api-key"
-                                            className="pl-9"
-                                            value={dograh.api_key}
-                                            onChange={(event) => setDograh({ ...dograh, api_key: event.target.value })}
-                                            placeholder="Enter API key"
-                                        />
+                                <div className="sm:col-span-2 p-4 rounded-xl border border-primary/20 bg-primary/5 flex items-start gap-3">
+                                    <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                    <div className="space-y-1 text-xs">
+                                        <div className="font-semibold text-foreground text-sm">
+                                            Sovereign Platform Managed (Admin Master Keys)
+                                        </div>
+                                        <p className="text-muted-foreground leading-relaxed">
+                                            Voice pipelines run seamlessly using the master provider keys configured in your Admin Panel (OpenAI, Deepgram, Sarvam, Cartesia, ElevenLabs). No API key required. Voice usage is billed in minutes from your organization balance.
+                                        </p>
                                     </div>
                                 </div>
                             </div>
