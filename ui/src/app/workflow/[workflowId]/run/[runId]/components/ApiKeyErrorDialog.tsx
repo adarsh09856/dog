@@ -9,7 +9,6 @@ interface ApiKeyErrorDialogProps {
     error: string | null;
     errorCode: string | null;
     onNavigateToBilling: () => void;
-    onNavigateToDevelopers?: () => void;
     onNavigateToModelConfig: () => void;
 }
 
