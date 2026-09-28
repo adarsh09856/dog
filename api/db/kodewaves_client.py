@@ -33,6 +33,19 @@ from api.db.kodewaves_models import (
 class KodewavesDBClient(BaseDBClient):
     """Database client for Kodewaves sovereign platform and AgentLabs features."""
 
+    def get_session(self):
+        """Context manager returning an active AsyncSession."""
+        return self.async_session()
+
+    async def get_wallet(self, organization_id: int) -> Optional[OrganizationWalletModel]:
+        """Retrieve the wallet record for an organization."""
+        async with self.get_session() as session:
+            stmt = select(OrganizationWalletModel).where(
+                OrganizationWalletModel.organization_id == organization_id
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
     # ------------------------------------------------------------------------
     # Master Credentials
     # ------------------------------------------------------------------------

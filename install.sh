@@ -320,10 +320,15 @@ deploy_containers() {
     fi
 
     log_info "Applying database schema migrations (Alembic)..."
-    docker exec kodewaves_api python -m alembic upgrade head || {
-        log_warn "Direct alembic upgrade in container returned status. Checking container logs..."
+    docker exec kodewaves_api python -m alembic -c api/alembic.ini upgrade head || {
+        log_error "Alembic migrations failed! Check container logs: docker logs kodewaves_api"
+        exit 1
     }
     log_success "Database schema & tables verified."
+
+    log_info "Restarting API container to bind migrated database schema..."
+    docker restart kodewaves_api
+    sleep 3
 
     log_info "Initializing Superadmin account in database..."
     docker exec kodewaves_api python -m scripts.create_superuser --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" || {

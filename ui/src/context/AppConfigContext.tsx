@@ -43,10 +43,8 @@ const defaultConfig: AppConfig = {
     tunnelUrl: null,
     backendApiEndpoint: null,
     backendStatus: 'unreachable',
-    backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL || 'unknown',
-    backendMessage: process.env.NEXT_PUBLIC_BACKEND_URL
-        ? `Unable to verify backend health at ${process.env.NEXT_PUBLIC_BACKEND_URL}.`
-        : 'Unable to verify backend health.',
+    backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : ''),
+    backendMessage: 'Unable to verify backend health. Ensure backend service is running.',
 };
 
 const AppConfigContext = createContext<AppConfigContextType>({

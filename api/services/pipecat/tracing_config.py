@@ -296,9 +296,14 @@ async def load_all_org_langfuse_credentials():
     from api.db import db_client
     from api.enums import OrganizationConfigurationKey
 
-    configs = await db_client.get_all_configurations_by_key(
-        OrganizationConfigurationKey.LANGFUSE_CREDENTIALS.value,
-    )
+    try:
+        configs = await db_client.get_all_configurations_by_key(
+            OrganizationConfigurationKey.LANGFUSE_CREDENTIALS.value,
+        )
+    except Exception as e:
+        logger.warning(f"Could not load Langfuse credentials at startup (database may be unmigrated): {e}")
+        return
+
     for config in configs:
         org_id = config["organization_id"]
         value = config["value"]
