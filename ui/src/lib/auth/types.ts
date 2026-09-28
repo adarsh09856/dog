@@ -18,7 +18,7 @@ export interface LocalUser extends BaseUser {
 }
 
 // Union type for all user types
-export type AuthUser = CurrentUser | LocalUser;
+export type AuthUser = (CurrentUser & { is_superuser?: boolean }) | LocalUser;
 
 
 export interface AuthToken {

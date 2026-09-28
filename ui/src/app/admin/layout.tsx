@@ -42,7 +42,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const { user, logout, isAuthenticated, loading } = useAuth();
 
-  const isSuper = user?.is_superuser || (user as any)?.role === 'admin' || (user as any)?.is_admin;
+  const isSuper = (user as any)?.is_superuser || (user as any)?.role === 'admin' || (user as any)?.is_admin;
 
   if (loading) {
     return (
