@@ -364,7 +364,7 @@ print_aapanel_instructions() {
     echo -e "${YELLOW}------------------- COPY THIS NGINX CONFIG INTO aaPanel -------------------${NC}"
     cat << NGINX_CONF
     # Backend API and WebSockets (Live audio streaming & signaling)
-    location /api/ {
+    location /api/v1/ {
         proxy_pass http://127.0.0.1:${API_PORT};
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
