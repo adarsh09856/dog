@@ -1,11 +1,6 @@
-// Shared dark two-column auth shell, used by BOTH the Stack Auth handler
-// (/handler/[...stack], cloud) and the local/OSS auth pages (/auth/login,
-// /auth/signup). LEFT: a centered card that wraps the auth form (`children`).
-// RIGHT (lg+ only): a brand/value panel with the Dograh logo, proof points, and
-// a Bland-style enterprise CTA block at the bottom (passed in as `enterpriseSlot`).
-// Mobile collapses to the single card column. The form column scrolls and stays
-// centered so tall (sign-up) forms never clip on short viewports. Palette is the
-// app's blacks/greys with one warm CTA accent.
+// Shared dark two-column auth shell for Kodewaves sovereign platform.
+// LEFT: centered card wrapping the auth form.
+// RIGHT: Kodewaves sovereign brand/value panel.
 
 import type { ReactNode } from "react";
 
@@ -13,8 +8,9 @@ import { BrandLogo } from "@/components/BrandLogo";
 
 const HIGHLIGHTS = [
   "Speech-to-speech",
-  "MCP-native",
-  "BYOK - any model",
+  "Sovereign Infrastructure",
+  "Zero Cloud Dependency",
+  "BYOK & Private Telephony",
 ];
 
 export function AuthShell({
@@ -26,9 +22,8 @@ export function AuthShell({
 }) {
   return (
     <div className="grid min-h-screen w-full bg-background lg:grid-cols-[55%_45%]">
-      {/* Form column (LEFT) — scrolls and stays centered so tall forms never
-          clip. Carries the giant faded "dograh" imprint along its bottom. */}
-      <main className="auth-imprint flex min-h-screen flex-col overflow-y-auto">
+      {/* Form column (LEFT) — scrolls and stays centered */}
+      <main className="flex min-h-screen flex-col overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-6 sm:p-10">
           <div className="w-full max-w-md space-y-6 rounded-2xl border border-border/60 bg-card p-6 shadow-lg sm:p-8">
             {/* Mobile-only wordmark (brand panel is hidden) */}
@@ -55,7 +50,7 @@ export function AuthShell({
 
         <div className="relative max-w-md space-y-5">
           <h1 className="text-3xl font-semibold leading-tight tracking-tight text-zinc-50 xl:text-4xl">
-            The open-source voice AI platform.
+            The Sovereign Voice AI Platform.
           </h1>
           <ul className="flex flex-wrap gap-2">
             {HIGHLIGHTS.map((point) => (
@@ -69,15 +64,14 @@ export function AuthShell({
           </ul>
         </div>
 
-        {/* Enterprise CTA block (Bland-style) — bottom margin lifts it off the
-            viewport edge while justify-between keeps the column layout */}
+        {/* Enterprise value block */}
         <div className="relative mb-12 max-w-md space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-5 xl:mb-16">
           <h2 className="text-sm font-semibold text-zinc-100">
-            Need on-prem, data residency &amp; a data perimeter?
+            Enterprise Voice AI &amp; Private Infrastructure
           </h2>
           <p className="text-sm text-zinc-400">
-            We deploy Dograh inside your environment for regulated and
-            high-scale teams.
+            Kodewaves delivers sovereign voice intelligence with ultra-low latency,
+            complete telemetry ownership, and telephony privacy.
           </p>
           {enterpriseSlot}
         </div>

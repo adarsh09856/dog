@@ -1,4 +1,4 @@
-export const DOCS_BASE = "https://docs.dograh.com";
+export const DOCS_BASE = "https://app.kodewaves.in/docs";
 
 export const NODE_DOCUMENTATION_URLS: Record<string, string> = {
     startCall: `${DOCS_BASE}/voice-agent/start-call`,

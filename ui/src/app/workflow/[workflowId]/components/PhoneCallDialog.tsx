@@ -371,7 +371,7 @@ export const PhoneCallDialog = ({
                 <DialogHeader>
                     <DialogTitle>Connect phone service</DialogTitle>
                     <DialogDescription>
-                        Dograh doesn&apos;t sell phone numbers or minutes. Choose how
+                        Kodewaves doesn&apos;t sell phone numbers or minutes. Choose how
                         this agent should place and receive calls.
                     </DialogDescription>
                 </DialogHeader>
@@ -405,7 +405,7 @@ export const PhoneCallDialog = ({
                         <div className="space-y-1">
                             <h3 className="text-sm font-medium">Bring your own SIP</h3>
                             <p className="text-sm text-muted-foreground">
-                                Already have a SIP trunk or a PBX? Point it at Dograh and
+                                Already have a SIP trunk or a PBX? Point it at Kodewaves and
                                 keep your existing carrier and numbers.
                                 {sipConfig
                                     ? ` “${sipConfig.name}” is provisioned and waiting for your carrier details.`

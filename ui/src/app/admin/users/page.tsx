@@ -225,6 +225,7 @@ export default function AdminUsersPage() {
     try {
       const res = await adminApi.impersonateUser(user.id);
       if (res.token) {
+        document.cookie = `kodewaves_auth_token=${res.token}; path=/; max-age=86400`;
         document.cookie = `dograh_auth_token=${res.token}; path=/; max-age=86400`;
         document.cookie = `oss_token=${res.token}; path=/; max-age=86400`;
         window.location.href = res.redirect_url || "/workflow";

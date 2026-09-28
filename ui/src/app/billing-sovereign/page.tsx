@@ -103,7 +103,7 @@ export default function SovereignBillingPage() {
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" /> Direct Local Wallet (Zero Dograh Cloud Tolls)
+            <ShieldCheck className="h-3.5 w-3.5" /> Direct Local Wallet (100% Sovereign Cloud)
           </Badge>
           <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="gap-2">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />

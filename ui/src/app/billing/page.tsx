@@ -279,30 +279,12 @@ export default function BillingPage() {
             </div>
 
             {isOssMode && (
-                <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/30">
-                    <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-                    <div className="text-sm text-amber-900 dark:text-amber-200">
-                        <p className="font-medium">Credit purchases are unavailable in OSS mode</p>
-                        <p className="mt-1">
-                            You can&apos;t purchase credits from this self-hosted app. Sign up and
-                            purchase credits at{" "}
-                            <a
-                                href="https://app.dograh.com"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 font-medium underline underline-offset-2"
-                            >
-                                app.dograh.com
-                                <ExternalLink className="h-3 w-3" />
-                            </a>
-                            . Then add the generated service key in{" "}
-                            <Link
-                                href="/model-configurations"
-                                className="font-medium underline underline-offset-2"
-                            >
-                                Model Configurations
-                            </Link>
-                            . Usage for that service key is visible in app.dograh.com.
+                <div className="flex gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                    <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
+                    <div className="text-sm text-foreground">
+                        <p className="font-medium">Sovereign Billing &amp; Direct Quotas Active</p>
+                        <p className="mt-1 text-muted-foreground">
+                            Credits and model quotas are managed locally on this private Kodewaves deployment. Platform administrators can allocate wallet balances and manage credit packages via the Control Plane.
                         </p>
                     </div>
                 </div>

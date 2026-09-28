@@ -278,7 +278,7 @@ function ThirdPartyProviderNotice() {
             <div>
                 <p className="font-medium">Third-party provider data notice</p>
                 <p className="mt-1 leading-6">
-                    Dograh sends data required by the selected model service. This may include prompts,
+                    Kodewaves sends data required by the selected model service. This may include prompts,
                     transcripts, audio, generated text, tool data, and request metadata depending on the
                     provider and service type. Review the provider&apos;s data and retention policies before
                     using sensitive data.
@@ -337,7 +337,7 @@ function PricingSummary({
                     <MetricPrice label="Platform usage" price={platformPrice} />
                 )}
                 {dograhModelPrice && (
-                    <MetricPrice label="Dograh model usage" price={dograhModelPrice} />
+                    <MetricPrice label="Managed model usage" price={dograhModelPrice} />
                 )}
                 {thirdPartyModels && (
                     <p className="text-muted-foreground">
@@ -460,7 +460,7 @@ export function AIModelConfigurationV2Editor({
             <Tabs value={mode} onValueChange={(value) => setMode(value as ModelMode)} className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="realtime">Speech to Speech</TabsTrigger>
-                    <TabsTrigger value="dograh">Dograh</TabsTrigger>
+                    <TabsTrigger value="dograh">Managed Voice</TabsTrigger>
                     <TabsTrigger value="byok">BYOK</TabsTrigger>
                 </TabsList>
 
@@ -483,17 +483,7 @@ export function AIModelConfigurationV2Editor({
 
                 <TabsContent value="dograh" className="mt-0">
                     <p className="mb-4 text-sm text-muted-foreground">
-                        Dograh provides a managed transcriber, LLM, and voice pipeline. Select a voice and language while Dograh manages the underlying model providers.{" "}
-                        We offer custom pricing and a 15-second pulse with a monthly commitment.{" "}
-                        <a
-                            href="https://www.dograh.com/contact"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline"
-                        >
-                            Contact us
-                        </a>
-                        .
+                        Sovereign managed transcriber, LLM, and voice pipeline. Select a voice and language while Kodewaves manages the underlying model orchestration.
                     </p>
                     <PricingSummary pricing={pricing} includeDograhModel />
                     <Card>

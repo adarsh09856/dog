@@ -177,8 +177,8 @@ export function CallDispositionEditor({
                     </Label>
                     <p className="text-xs text-muted-foreground">
                         {enabled
-                            ? `${rows.length} outcome${rows.length === 1 ? "" : "s"} configured. Dograh will classify the completed conversation into one of them.`
-                            : "Disabled. Dograh will keep the disposition recorded by the call-ending event."}
+                            ? `${rows.length} outcome${rows.length === 1 ? "" : "s"} configured. Kodewaves will classify the completed conversation into one of them.`
+                            : "Disabled. Kodewaves will keep the disposition recorded by the call-ending event."}
                     </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">

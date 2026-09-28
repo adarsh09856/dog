@@ -56,8 +56,19 @@ mcp_app = mcp.http_app(path="/", stateless_http=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with mcp_app.lifespan(app):
-        # warmup arq pool
         await get_arq_redis()
+
+        # Purge any legacy Dograh Cloudonix SIP auto-created configurations
+        try:
+            from sqlalchemy import text
+            from api.db import db_client
+            async with db_client.get_session() as session:
+                await session.execute(
+                    text("DELETE FROM telephony_configurations WHERE name = 'Dograh Cloudonix SIP'")
+                )
+                await session.commit()
+        except Exception:
+            pass
 
         # Pre-register all org-specific Langfuse exporters so they're ready
         # before any pipeline runs, without per-call DB lookups.
@@ -102,13 +113,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Dograh API",
-    description="API for the Dograh app",
+    title="Kodewaves API",
+    description="API for the Kodewaves platform",
     version="1.0.0",
     openapi_url=f"{API_PREFIX}/openapi.json",
     lifespan=lifespan,
     servers=[
-        {"url": "https://app.dograh.com", "description": "Production"},
+        {"url": "https://app.kodewaves.in", "description": "Production"},
         {"url": "http://localhost:8000", "description": "Local development"},
     ],
 )

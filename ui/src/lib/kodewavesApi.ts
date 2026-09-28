@@ -9,7 +9,8 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
   // Read auth token from cookies if in browser
   let authHeader = '';
   if (typeof document !== 'undefined') {
-    const match = document.cookie.match(/(?:^|;\s*)dograh_auth_token=([^;]+)/) ||
+    const match = document.cookie.match(/(?:^|;\s*)kodewaves_auth_token=([^;]+)/) ||
+                  document.cookie.match(/(?:^|;\s*)dograh_auth_token=([^;]+)/) ||
                   document.cookie.match(/(?:^|;\s*)oss_token=([^;]+)/);
     if (match) {
       authHeader = `Bearer ${decodeURIComponent(match[1])}`;

@@ -1,110 +1,121 @@
 "use client";
 
 import Link from 'next/link';
+import { ArrowRight, Bot, Phone, ShieldCheck, Sparkles, Sliders } from 'lucide-react';
 
-import { GitHubStarBadge } from '@/components/layout/GitHubStarBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/lib/auth';
 
 export default function OverviewPage() {
-    const { user, provider } = useAuth();
-    const isOSSMode = provider !== 'stack';
+    const { user } = useAuth();
 
     return (
         <div className="container mx-auto px-4 py-8">
-            <div className="max-w-4xl mx-auto">
-                {/* Welcome Card */}
-                <Card className="mb-8">
-                    <CardHeader>
-                        <CardTitle className="text-3xl">
-                            {isOSSMode ? (
-                                "Welcome to Dograh"
-                            ) : (
-                                `Welcome${user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''}!`
-                            )}
+            <div className="max-w-5xl mx-auto space-y-8">
+                {/* Sovereign Platform Banner */}
+                <Card className="border border-border/70 bg-gradient-to-br from-card to-card/50 shadow-sm">
+                    <CardHeader className="pb-4">
+                        <div className="flex items-center gap-2 text-primary text-sm font-semibold tracking-wide uppercase">
+                            <Sparkles className="h-4 w-4" />
+                            Kodewaves Sovereign Voice AI
+                        </div>
+                        <CardTitle className="text-3xl font-bold tracking-tight">
+                            {user?.displayName ? `Welcome, ${user.displayName.split(' ')[0]}!` : "Welcome to Kodewaves"}
                         </CardTitle>
-                        <CardDescription className="text-lg mt-2">
-                            {isOSSMode ? (
-                                <>
-                                    Open source alternative to Vapi. Help us support the project by giving us a star on GitHub.
-                                </>
-                            ) : (
-                                "Get started with building voice AI workflows"
-                            )}
+                        <CardDescription className="text-base text-muted-foreground mt-2 max-w-2xl">
+                            Enterprise conversational AI platform with sovereign telephony, direct BYOK model pools, and low-latency voice orchestration.
                         </CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        {isOSSMode && (
-                            <div className="mb-6">
-                                <GitHubStarBadge label="Star us on GitHub" showCount source="overview_page" />
-                            </div>
-                        )}
-                    </CardContent>
                 </Card>
 
-                {/* Quick Actions */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card>
+                {/* Quick Actions Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
                         <CardHeader>
-                            <CardTitle>Create and Manage your Voice Agents</CardTitle>
+                            <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-2">
+                                <Bot className="h-5 w-5" />
+                            </div>
+                            <CardTitle className="text-lg">Voice Agents</CardTitle>
                             <CardDescription>
-                                Build powerful AI Voice Agents with our visual editor
+                                Build and deploy interactive conversational workflows with low-latency speech pipelines.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <Button asChild>
+                            <Button asChild className="w-full">
                                 <Link href="/workflow">
-                                    Go to Agents
+                                    Manage Agents <ArrowRight className="ml-2 h-4 w-4" />
                                 </Link>
                             </Button>
                         </CardContent>
                     </Card>
 
-                    <Card>
+                    <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
                         <CardHeader>
-                            <CardTitle>Configure Services</CardTitle>
+                            <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-2">
+                                <Sliders className="h-5 w-5" />
+                            </div>
+                            <CardTitle className="text-lg">Model Providers</CardTitle>
                             <CardDescription>
-                                Set up your AI services like LLM, TTS, and STT providers
+                                Configure LLM, STT, and TTS engines with private API keys or sovereign pools.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <Button asChild variant="outline">
+                            <Button asChild variant="outline" className="w-full">
                                 <Link href="/model-configurations">
-                                    Configure Models
+                                    Configure Models <ArrowRight className="ml-2 h-4 w-4" />
+                                </Link>
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="flex flex-col justify-between hover:border-primary/40 transition-colors">
+                        <CardHeader>
+                            <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary mb-2">
+                                <Phone className="h-5 w-5" />
+                            </div>
+                            <CardTitle className="text-lg">Telephony</CardTitle>
+                            <CardDescription>
+                                Connect SIP trunks, Twilio, Exotel, Plivo, Telnyx, or WebRTC carriers.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Button asChild variant="outline" className="w-full">
+                                <Link href="/telephony-configurations">
+                                    Manage Telephony <ArrowRight className="ml-2 h-4 w-4" />
                                 </Link>
                             </Button>
                         </CardContent>
                     </Card>
                 </div>
 
-                {/* Resources Section */}
-                <Card className="mt-8">
+                {/* Platform Governance & Control Plane */}
+                <Card className="border border-border/60">
                     <CardHeader>
-                        <CardTitle>Resources</CardTitle>
+                        <div className="flex items-center gap-2">
+                            <ShieldCheck className="h-5 w-5 text-emerald-500" />
+                            <CardTitle className="text-lg">Sovereign Control Plane</CardTitle>
+                        </div>
                         <CardDescription>
-                            Get help and learn more about Dograh
+                            Your deployment is 100% self-hosted with local database accounting, direct telephony, and zero external vendor locks.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="flex flex-wrap gap-4">
-                            <Button asChild variant="outline">
-                                <a
-                                    href="https://docs.dograh.com"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    Documentation
-                                </a>
+                            <Button asChild variant="secondary">
+                                <Link href="/admin">
+                                    Admin Control Plane
+                                </Link>
                             </Button>
                             <Button asChild variant="outline">
-                                <a
-                                    href="https://github.com/dograh-hq/dograh/issues"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                >
-                                    Report an Issue
-                                </a>
+                                <Link href="/billing">
+                                    Wallet &amp; Quotas
+                                </Link>
+                            </Button>
+                            <Button asChild variant="outline">
+                                <Link href="/recordings">
+                                    Call Recordings
+                                </Link>
                             </Button>
                         </div>
                     </CardContent>

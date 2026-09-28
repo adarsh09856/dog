@@ -129,7 +129,7 @@ export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
     {
         value: "transfer_agent",
         label: "Transfer To Agent",
-        description: "Hand the live call to another Dograh agent, without dropping the caller",
+        description: "Hand the live call to another Kodewaves agent, without dropping the caller",
         icon: ArrowLeftRight,
         iconName: "arrow-left-right",
         iconColor: "#0EA5E9",

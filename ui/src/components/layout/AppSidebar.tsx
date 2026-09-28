@@ -13,7 +13,6 @@ import {
   FileText,
   Globe,
   Home,
-  Key,
   LayoutList,
   LogOut,
   type LucideIcon,
@@ -129,11 +128,6 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Recordings",
         url: "/recordings",
         icon: AudioLines,
-      },
-      {
-        title: "Developers",
-        url: "/api-keys",
-        icon: Key,
       },
     ],
   },
@@ -376,15 +370,13 @@ export function AppSidebar() {
             {isBehind && latestRelease && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <a
-                    href="https://docs.dograh.com/deployment/update"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <Link
+                    href="/admin"
                     className="inline-flex items-center gap-1 rounded-md border bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-900 transition-opacity hover:opacity-80 dark:bg-amber-950 dark:text-amber-200"
                   >
                     <ArrowUpCircle className="h-3 w-3" />
                     Update
-                  </a>
+                  </Link>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
                   <p>Latest: {latestRelease} - click to see the update guide</p>
