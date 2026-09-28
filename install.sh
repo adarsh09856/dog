@@ -150,6 +150,7 @@ prompt_configuration() {
         MINIO_PASS=$(generate_secret)
         JWT_SECRET=$(generate_secret)
         FERNET_KEY=$(generate_fernet_key)
+        TURN_SECRET=$(generate_secret)
         DEV_SECRET=$(generate_secret)
 
         cat > .env << ENVFILE
@@ -183,8 +184,9 @@ DOGRAH_DEVOPS_SECRET=$DEV_SECRET
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=$MINIO_PASS
 
-# Audio Streaming Mode (All audio streams over standard Port 443 WSS)
-ENABLE_COTURN=false
+# WebRTC Audio Relay (Coturn STUN / TURN)
+ENABLE_COTURN=true
+TURN_SECRET=$TURN_SECRET
 
 # Workers
 FASTAPI_WORKERS=2
@@ -316,9 +318,10 @@ NGINX_CONF
     echo -e "   👉 ${CYAN}${BOLD}https://${DOMAIN}${NC}"
     echo -e "   👉 Sovereign Admin Panel: ${CYAN}${BOLD}https://${DOMAIN}/admin${NC}"
     echo ""
-    echo -e "${BOLD}Firewall Ports to Open in aaPanel (Security tab):${NC}"
-    echo -e "   • Port 80 (TCP) & 443 (TCP) — Standard Web, HTTPS & WebSocket Audio"
-    echo -e "   • ${GREEN}Zero UDP ports required! All telephony and voice audio stream over standard Port 443.${NC}"
+    echo -e "${BOLD}Firewall Ports Configuration (aaPanel Security tab):${NC}"
+    echo -e "   • ${BOLD}80 (TCP) & 443 (TCP)${NC} [MANDATORY] — Web UI, API, and Phone Telephony (Twilio/Plivo/Exotel)"
+    echo -e "   • ${BOLD}3478 (UDP/TCP), 5349 (UDP/TCP), 49152-49200 (UDP)${NC} [OPTIONAL] — WebRTC Coturn"
+    echo -e "     (Only needed if users test voice from browser microphones behind strict corporate firewalls)"
     echo ""
 }
 

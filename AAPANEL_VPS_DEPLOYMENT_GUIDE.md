@@ -30,14 +30,28 @@ In typical deployments, Docker tries to bind directly to ports `80` and `443`. H
 
 ## 3. Step 1: Open Firewall Ports in aaPanel
 
-Log in to your aaPanel dashboard, navigate to the **Security** tab in the left sidebar, and ensure standard web traffic ports are open:
+Log in to your aaPanel dashboard, navigate to the **Security** tab in the left sidebar, and open the relevant ports:
 
-| Port | Protocol | Purpose |
-| :--- | :--- | :--- |
-| **80** | TCP | Web HTTP / Let's Encrypt SSL Verification |
-| **443** | TCP | Web HTTPS, REST APIs & Live WebSocket Audio Streaming (WSS) |
+### A. Mandatory Ports (Web App, API & Phone Telephony)
+These ports are **required** for the application to function:
 
-> 💡 **Zero UDP Ports Required**: All browser voice audio, telephony webhooks (Twilio, Plivo, Exotel, etc.), and agent signaling run securely over WebSocket (WSS) and HTTPS over standard port 443 through aaPanel Nginx. You do NOT need to open any custom UDP or TURN relay ports!
+| Port | Protocol | Purpose | Status |
+| :--- | :--- | :--- | :--- |
+| **80** | TCP | Web HTTP & Let's Encrypt SSL Verification | **Mandatory** |
+| **443** | TCP | Web HTTPS, REST APIs & Telephony WebSockets (Twilio, Plivo, Exotel) | **Mandatory** |
+
+### B. Optional WebRTC Ports (Browser Microphone Testing)
+Used by the built-in **Coturn** server for browser voice testing ("Test Agent" button in dashboard):
+
+| Port | Protocol | Purpose | Status |
+| :--- | :--- | :--- | :--- |
+| **3478** | UDP & TCP | WebRTC STUN / TURN Server | *Optional* |
+| **5349** | UDP & TCP | WebRTC TLS TURN Server | *Optional* |
+| **49152:49200** | UDP | WebRTC Audio Media Relays | *Optional* |
+
+> 💡 **Why are WebRTC ports optional?**
+> - **Phone Calls (Twilio, Plivo, Exotel, Asterisk)**: Run 100% over standard **Port 443** (HTTPS & WSS). They NEVER use UDP or Coturn.
+> - **Browser Testing**: If you open the WebRTC ports, browser mic testing works everywhere (even behind restrictive corporate firewalls with symmetric NAT). If you don't open them, it uses Google's public STUN server, which works on normal open networks.
 
 ---
 

@@ -110,6 +110,11 @@ services:
       FASTAPI_WORKERS: "${FASTAPI_WORKERS:-2}"
       ENABLE_ARI_MANAGER: "true"
       ENABLE_CAMPAIGN_ORCHESTRATOR: "true"
+
+      # WebRTC NAT Traversal (STUN / TURN)
+      ENABLE_COTURN: "${ENABLE_COTURN:-true}"
+      TURN_HOST: "${PUBLIC_HOST:-your-domain.com}"
+      TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -137,6 +142,22 @@ services:
       BACKEND_URL: "http://api:8000"
     ports:
       - "127.0.0.1:3010:3010"
+    networks:
+      - kodewaves-network
+
+  # WebRTC NAT Traversal (STUN / TURN) for browser audio testing behind symmetric NAT
+  coturn:
+    image: coturn/coturn:4.8.0
+    container_name: kodewaves_coturn
+    restart: unless-stopped
+    environment:
+      TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "5349:5349/udp"
+      - "5349:5349/tcp"
+      - "49152-49200:49152-49200/udp"
     networks:
       - kodewaves-network
 
