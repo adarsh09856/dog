@@ -178,3 +178,73 @@ app.include_router(api_router, prefix=API_PREFIX)
 # Mounted under /api/v1 so existing reverse-proxy rules (nginx etc.) route it
 # without any extra configuration.
 app.mount(f"{API_PREFIX}/mcp", mcp_app)
+
+
+# -----------------------------------------------------------------------------
+# Fallback Reverse Proxy for UI internal endpoints (/api/auth/*, /api/config/*)
+# -----------------------------------------------------------------------------
+import os
+import aiohttp
+from fastapi import Response
+
+UI_INTERNAL_URL = os.getenv("UI_INTERNAL_URL", "http://ui:3010")
+
+
+@app.api_route(
+    "/api/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+)
+async def fallback_proxy_to_ui(request: Request, path: str):
+    """Transparently forward Next.js internal API routes (such as /api/auth/session,
+    /api/config/version, /api/auth/oss) to Next.js container (port 3010) when
+    external reverse proxies forward the entire /api path instead of /api/v1/.
+    """
+    if path.startswith("v1/") or path == "v1":
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+
+    target_url = f"{UI_INTERNAL_URL}/api/{path}"
+    if request.url.query:
+        target_url = f"{target_url}?{request.url.query}"
+
+    body = await request.body()
+    forward_headers = {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ("host", "content-length")
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.request(
+                method=request.method,
+                url=target_url,
+                headers=forward_headers,
+                data=body,
+                allow_redirects=False,
+            ) as resp:
+                resp_content = await resp.read()
+                excluded = {
+                    "content-encoding",
+                    "content-length",
+                    "transfer-encoding",
+                    "connection",
+                }
+                response = Response(
+                    content=resp_content,
+                    status_code=resp.status,
+                    media_type=resp.content_type,
+                )
+                for header_key, header_val in resp.raw_headers:
+                    key_str = header_key.decode("latin-1")
+                    if key_str.lower() not in excluded:
+                        response.headers.append(key_str, header_val.decode("latin-1"))
+                return response
+    except Exception as e:
+        logger.error(
+            f"[FallbackProxy] Failed forwarding /api/{path} to {UI_INTERNAL_URL}: {e}"
+        )
+        return JSONResponse(
+            status_code=502,
+            content={"detail": f"Failed to forward request to frontend UI: {str(e)}"},
+        )
+
