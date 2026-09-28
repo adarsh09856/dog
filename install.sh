@@ -19,19 +19,19 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$APP_DIR"
 
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[INFO]${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[SUCCESS]${NC} $1" >&2
 }
 
 log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
+    echo -e "${YELLOW}[WARN]${NC} $1" >&2
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 print_banner() {
@@ -146,7 +146,7 @@ resolve_free_port() {
     else
         log_success "Port $port for $service_name is available."
     fi
-    echo "$port"
+    printf '%s\n' "$port"
 }
 
 # 3. Interactive Configuration
@@ -171,7 +171,15 @@ prompt_configuration() {
     if [ -z "${ADMIN_EMAIL:-}" ]; then
         echo -e "${YELLOW}Enter Admin Email [default: admin@$DOMAIN]:${NC}"
         read -p "> " INPUT_EMAIL
-        ADMIN_EMAIL=${INPUT_EMAIL:-admin@$DOMAIN}
+        INPUT_EMAIL=$(echo "$INPUT_EMAIL" | tr -d ' ')
+        if [ -z "$INPUT_EMAIL" ]; then
+            ADMIN_EMAIL="admin@$DOMAIN"
+        elif [[ "$INPUT_EMAIL" != *"@"* ]]; then
+            ADMIN_EMAIL="${INPUT_EMAIL}@${DOMAIN}"
+            log_info "Admin email formatted to: $ADMIN_EMAIL"
+        else
+            ADMIN_EMAIL="$INPUT_EMAIL"
+        fi
     fi
 
     # Admin Password
@@ -196,6 +204,12 @@ prompt_configuration() {
     REDIS_PORT=$(resolve_free_port 6379 "Redis")
     MINIO_PORT=$(resolve_free_port 9000 "MinIO Storage")
     MINIO_CONSOLE_PORT=$(resolve_free_port 9001 "MinIO Console")
+
+    # Clean up corrupted .env from previous failed run if it contains ANSI escape codes
+    if [ -f ".env" ] && grep -q $'\x1b' .env 2>/dev/null; then
+        log_warn "Detected corrupted .env from previous run (contained ANSI escape sequences). Re-generating clean .env..."
+        rm -f .env
+    fi
 
     # Generate secrets if .env doesn't exist
     if [ ! -f ".env" ]; then
@@ -267,6 +281,14 @@ ENVFILE
         sed -i "s|^DOMAIN=.*|DOMAIN=$DOMAIN|" .env || true
         sed -i "s|^PUBLIC_HOST=.*|PUBLIC_HOST=$DOMAIN|" .env || true
         sed -i "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=https://$DOMAIN|" .env || true
+
+        # Ensure collision-free ports are present in existing .env
+        grep -q '^UI_PORT=' .env || echo "UI_PORT=$UI_PORT" >> .env
+        grep -q '^API_PORT=' .env || echo "API_PORT=$API_PORT" >> .env
+        grep -q '^POSTGRES_PORT=' .env || echo "POSTGRES_PORT=$POSTGRES_PORT" >> .env
+        grep -q '^REDIS_PORT=' .env || echo "REDIS_PORT=$REDIS_PORT" >> .env
+        grep -q '^MINIO_PORT=' .env || echo "MINIO_PORT=$MINIO_PORT" >> .env
+        grep -q '^MINIO_CONSOLE_PORT=' .env || echo "MINIO_CONSOLE_PORT=$MINIO_CONSOLE_PORT" >> .env
     fi
 }
 
