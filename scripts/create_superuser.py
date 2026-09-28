@@ -64,6 +64,21 @@ async def create_or_promote_superuser(
         created_by=user.provider_id,
     )
 
+    # Initialize organization wallet with operational bonus minutes
+    try:
+        from api.db.kodewaves_client import kodewaves_db_client
+        wallet = await kodewaves_db_client.get_wallet(organization.id)
+        if not wallet:
+            await kodewaves_db_client.add_minutes(
+                organization_id=organization.id,
+                minutes=1000,
+                reason="admin_promo",
+                notes="Superadmin initial deployment allocation",
+            )
+            print(f"[SUCCESS] Superadmin wallet initialized with 1,000 minutes.")
+    except Exception as e:
+        print(f"[WARN] Superadmin wallet initialization notice: {e}")
+
     print(f"[SUCCESS] Superadmin account '{email}' created successfully.")
     return user
 

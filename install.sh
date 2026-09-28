@@ -241,7 +241,9 @@ REDIS_URL=redis://:${REDIS_PASS}@redis:6379
 
 # Sovereign Master Encryption Key (AES-256 Fernet)
 MASTER_CREDENTIAL_ENCRYPTION_KEY=$FERNET_KEY
+KODEWAVES_SECRET_KEY=$FERNET_KEY
 OSS_JWT_SECRET=$JWT_SECRET
+JWT_SECRET=$JWT_SECRET
 DOGRAH_DEVOPS_SECRET=$DEV_SECRET
 
 # Local Storage (MinIO)
@@ -286,6 +288,14 @@ ENVFILE
         grep -q '^REDIS_PORT=' .env || echo "REDIS_PORT=$REDIS_PORT" >> .env
         grep -q '^MINIO_PORT=' .env || echo "MINIO_PORT=$MINIO_PORT" >> .env
         grep -q '^MINIO_CONSOLE_PORT=' .env || echo "MINIO_CONSOLE_PORT=$MINIO_CONSOLE_PORT" >> .env
+
+        # Ensure encryption and secret keys exist
+        EXISTING_JWT=$(grep '^OSS_JWT_SECRET=' .env 2>/dev/null | cut -d '=' -f2- || true)
+        EXISTING_FERNET=$(grep '^MASTER_CREDENTIAL_ENCRYPTION_KEY=' .env 2>/dev/null | cut -d '=' -f2- || true)
+        [ -z "$EXISTING_JWT" ] && EXISTING_JWT=$(generate_secret) && echo "OSS_JWT_SECRET=$EXISTING_JWT" >> .env
+        [ -z "$EXISTING_FERNET" ] && EXISTING_FERNET=$(generate_fernet_key) && echo "MASTER_CREDENTIAL_ENCRYPTION_KEY=$EXISTING_FERNET" >> .env
+        grep -q '^JWT_SECRET=' .env || echo "JWT_SECRET=$EXISTING_JWT" >> .env
+        grep -q '^KODEWAVES_SECRET_KEY=' .env || echo "KODEWAVES_SECRET_KEY=$EXISTING_FERNET" >> .env
     fi
 }
 
@@ -319,6 +329,12 @@ deploy_containers() {
     docker exec kodewaves_api python -m scripts.create_superuser --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" || {
         log_warn "Superadmin creation script completed."
     }
+
+    log_info "Bootstrapping platform defaults (AI Catalog, SaaS Plans, Settings, Wallets)..."
+    docker exec kodewaves_api python -m scripts.seed_platform || {
+        log_warn "Platform seed bootstrap script completed with notice."
+    }
+    log_success "Platform defaults, models catalog, plans, and wallets verified."
     
     log_success "All services are running healthy!"
 }

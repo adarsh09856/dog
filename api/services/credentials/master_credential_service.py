@@ -17,9 +17,20 @@ class MasterCredentialService:
 
     def __init__(self):
         # Generate or load a 32-byte URL-safe base64-encoded key for Fernet
-        secret = os.environ.get("KODEWAVES_SECRET_KEY") or os.environ.get("JWT_SECRET") or "kodewaves-master-sovereign-secret-key-32b"
-        key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
-        self._cipher = Fernet(key)
+        raw_secret = (
+            os.environ.get("MASTER_CREDENTIAL_ENCRYPTION_KEY")
+            or os.environ.get("KODEWAVES_SECRET_KEY")
+            or os.environ.get("OSS_JWT_SECRET")
+            or os.environ.get("JWT_SECRET")
+            or "kodewaves-master-sovereign-secret-key-32b"
+        )
+        try:
+            # If already a valid 32-byte urlsafe-base64 Fernet key
+            self._cipher = Fernet(raw_secret.encode())
+        except Exception:
+            # Otherwise derive 32-byte key via SHA-256
+            key = base64.urlsafe_b64encode(hashlib.sha256(raw_secret.encode()).digest())
+            self._cipher = Fernet(key)
 
     def encrypt(self, plain_text: str) -> str:
         """Encrypt plain text to base64 string."""
