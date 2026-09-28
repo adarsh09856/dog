@@ -4,6 +4,7 @@ import { getWorkflowsApiV1WorkflowFetchGet, listFoldersApiV1FolderGet } from '@/
 import type { FolderResponse, WorkflowListResponse } from '@/client/types.gen';
 import { Card, CardContent } from '@/components/ui/card';
 import { CreateWorkflowButton } from "@/components/workflow/CreateWorkflowButton";
+import { EmptyWorkflowState } from '@/components/workflow/EmptyWorkflowState';
 import { AgentFolderView } from '@/components/workflow/folders/AgentFolderView';
 import { CreateFolderButton } from '@/components/workflow/folders/CreateFolderButton';
 import { FolderSection } from '@/components/workflow/folders/FolderSection';
@@ -79,11 +80,7 @@ async function WorkflowList() {
                     {activeWorkflows.length > 0 || folders.length > 0 ? (
                         <AgentFolderView workflows={activeWorkflows} folders={folders} />
                     ) : (
-                        <Card>
-                            <CardContent className="p-8 text-center text-muted-foreground">
-                                No active workflows found. Create your first workflow to get started.
-                            </CardContent>
-                        </Card>
+                        <EmptyWorkflowState />
                     )}
                 </div>
 

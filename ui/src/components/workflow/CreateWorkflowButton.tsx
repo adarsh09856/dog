@@ -1,18 +1,21 @@
 'use client';
 
-import { Bot, ChevronDown, LayoutTemplate, PlusIcon } from 'lucide-react';
+import { Bot, ChevronDown, LayoutTemplate, PlusIcon, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { createWorkflowApiV1WorkflowCreateDefinitionPost } from '@/client/sdk.gen';
+import { Badge } from '@/components/ui/badge';
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { TemplateSelectorModal } from '@/components/workflow/TemplateSelectorModal';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
 import { getRandomId } from '@/lib/utils';
@@ -48,6 +51,7 @@ export function CreateWorkflowButton() {
     const router = useRouter();
     const { user, getAccessToken } = useAuth();
     const [isCreating, setIsCreating] = useState(false);
+    const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
 
     const handleAgentBuilder = () => {
         router.push('/workflow/create');
@@ -59,7 +63,7 @@ export function CreateWorkflowButton() {
 
         try {
             const accessToken = await getAccessToken();
-            const name = `Workflow-${getRandomId()}`;
+            const name = `Agent-${getRandomId()}`;
             const response = await createWorkflowApiV1WorkflowCreateDefinitionPost({
                 body: {
                     name,
@@ -82,30 +86,71 @@ export function CreateWorkflowButton() {
     };
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button disabled={isCreating}>
-                    <PlusIcon className="w-4 h-4" />
-                    {isCreating ? 'Creating...' : 'Create Agent'}
-                    <ChevronDown className="w-4 h-4" />
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleAgentBuilder} className="cursor-pointer">
-                    <Bot className="w-4 h-4 mr-2" />
-                    <div>
-                        <div className="font-medium">Use Agent Builder</div>
-                        <div className="text-xs text-muted-foreground">AI generates a workflow from your description</div>
-                    </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleBlankCanvas} disabled={isCreating} className="cursor-pointer">
-                    <LayoutTemplate className="w-4 h-4 mr-2" />
-                    <div>
-                        <div className="font-medium">Blank Canvas</div>
-                        <div className="text-xs text-muted-foreground">Start from scratch with an empty workflow</div>
-                    </div>
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button disabled={isCreating} className="gap-1.5 shadow-sm">
+                        <PlusIcon className="w-4 h-4" />
+                        {isCreating ? 'Creating...' : 'Create Agent'}
+                        <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64 p-1.5">
+                    <DropdownMenuItem
+                        onClick={() => setIsTemplateModalOpen(true)}
+                        className="cursor-pointer py-2.5 px-3 rounded-md"
+                    >
+                        <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mr-3 shrink-0">
+                            <Sparkles className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1">
+                            <div className="flex items-center gap-1.5 font-medium text-sm">
+                                <span>Browse Templates</span>
+                                <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-primary/10 text-primary border-primary/20">
+                                    Recommended
+                                </Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                                Receptionist, booking, support & more
+                            </div>
+                        </div>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                        onClick={handleAgentBuilder}
+                        className="cursor-pointer py-2 px-3 rounded-md"
+                    >
+                        <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center mr-3 shrink-0 text-muted-foreground">
+                            <Bot className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <div className="font-medium text-sm">Agent Gallery & Builder</div>
+                            <div className="text-xs text-muted-foreground">View full template gallery</div>
+                        </div>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator className="my-1" />
+
+                    <DropdownMenuItem
+                        onClick={handleBlankCanvas}
+                        disabled={isCreating}
+                        className="cursor-pointer py-2 px-3 rounded-md"
+                    >
+                        <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center mr-3 shrink-0 text-muted-foreground">
+                            <LayoutTemplate className="w-4 h-4" />
+                        </div>
+                        <div>
+                            <div className="font-medium text-sm">Blank Canvas</div>
+                            <div className="text-xs text-muted-foreground">Start from scratch</div>
+                        </div>
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <TemplateSelectorModal
+                open={isTemplateModalOpen}
+                onOpenChange={setIsTemplateModalOpen}
+            />
+        </>
     );
 }
