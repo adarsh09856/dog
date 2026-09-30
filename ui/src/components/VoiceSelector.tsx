@@ -147,7 +147,7 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
             if (model) query.model = model;
             if (language) query.language = language;
             const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
-                path: { provider: providerKey },
+                path: { provider: providerKey as any },
                 query: Object.keys(query).length > 0 ? query : undefined,
             });
 

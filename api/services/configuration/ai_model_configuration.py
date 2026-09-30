@@ -70,6 +70,12 @@ async def get_resolved_ai_model_configuration(
             effective.last_validated_at = (
                 organization_configuration_row.last_validated_at
             )
+        from api.services.configuration.kodewaves_resolver import (
+            apply_kodewaves_sovereign_resolution,
+        )
+        effective = await apply_kodewaves_sovereign_resolution(
+            effective, organization_id
+        )
         return ResolvedAIModelConfiguration(
             effective=effective,
             source="organization_v2",

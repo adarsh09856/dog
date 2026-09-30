@@ -347,7 +347,7 @@ class UserConfigurationValidator:
         return True
 
     def _check_dograh_api_key(self, model: str, api_key: str) -> bool:
-        if not api_key or api_key in ("sovereign-managed", "default", "managed", "kodewaves-sovereign"):
+        if not api_key or api_key in ("sovereign-managed", "sovereign-local-cpu", "default", "managed", "kodewaves-sovereign"):
             return True
         if api_key.startswith("dgr"):
             raise ValueError(

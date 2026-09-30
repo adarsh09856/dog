@@ -11156,7 +11156,7 @@ export type GetVoicesApiV1UserConfigurationsVoicesProviderGetData = {
         /**
          * Provider
          */
-        provider: 'elevenlabs' | 'deepgram' | 'sarvam' | 'cartesia' | 'dograh' | 'rime';
+        provider: 'elevenlabs' | 'deepgram' | 'sarvam' | 'cartesia' | 'dograh' | 'rime' | 'kodewaves' | 'speaches' | 'openai' | 'navana' | 'google' | 'gemini' | 'azure' | 'azure_speech' | 'smallest' | 'lmnt' | 'speechify' | 'inworld' | 'camb' | 'minimax' | 'xai' | (string & {});
     };
     query?: {
         /**
