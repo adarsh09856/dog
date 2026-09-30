@@ -266,75 +266,87 @@ async def create_admin_user(req: CreateUserRequest, _user=Depends(get_superuser)
 @router.patch("/{user_id}", response_model=Dict[str, Any])
 async def update_admin_user(user_id: int, req: UpdateUserRequest, _user=Depends(get_superuser)):
     """Update user role, active status, local AI access, or manually set wallet minute balance."""
-    async with kodewaves_db_client.get_session() as session:
-        stmt = select(UserModel).where(UserModel.id == user_id)
-        res = await session.execute(stmt)
-        user = res.scalar_one_or_none()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+    try:
+        selected_org_id = None
+        async with kodewaves_db_client.get_session() as session:
+            stmt = select(UserModel).where(UserModel.id == user_id)
+            res = await session.execute(stmt)
+            user = res.scalar_one_or_none()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
 
-        if req.is_superuser is not None:
-            user.is_superuser = req.is_superuser
-        if req.is_active is not None and hasattr(user, "is_active"):
-            user.is_active = req.is_active
+            selected_org_id = user.selected_organization_id
 
-        await session.commit()
+            if req.is_superuser is not None:
+                user.is_superuser = req.is_superuser
+            if req.is_active is not None and hasattr(user, "is_active"):
+                user.is_active = req.is_active
 
-        # Update local AI engine access if requested
+            # Update wallet balance or freeze status if requested
+            if selected_org_id:
+                wallet_stmt = select(OrganizationWalletModel).where(
+                    OrganizationWalletModel.organization_id == selected_org_id
+                )
+                w_res = await session.execute(wallet_stmt)
+                wallet = w_res.scalar_one_or_none()
+                if wallet:
+                    if req.wallet_balance_minutes is not None:
+                        wallet.credit_balance_minutes = max(0.0, float(req.wallet_balance_minutes))
+                    if req.is_wallet_frozen is not None:
+                        wallet.is_frozen = bool(req.is_wallet_frozen)
+
+            await session.commit()
+
+        # Perform settings updates cleanly outside the UserModel session block
         if req.has_local_ai_access is not None:
             await kodewaves_db_client.set_setting(
                 f"local_ai_user_{user_id}",
-                {"enabled": req.has_local_ai_access},
-                category="local_ai"
+                {"enabled": bool(req.has_local_ai_access)},
+                category="local_ai",
             )
-            if user.selected_organization_id:
+            if selected_org_id:
                 await kodewaves_db_client.set_setting(
-                    f"local_ai_org_{user.selected_organization_id}",
-                    {"enabled": req.has_local_ai_access},
-                    category="local_ai"
+                    f"local_ai_org_{selected_org_id}",
+                    {"enabled": bool(req.has_local_ai_access)},
+                    category="local_ai",
                 )
 
-        # Update wallet balance or freeze status if requested
-        if user.selected_organization_id:
-            wallet_stmt = select(OrganizationWalletModel).where(
-                OrganizationWalletModel.organization_id == user.selected_organization_id
-            )
-            w_res = await session.execute(wallet_stmt)
-            wallet = w_res.scalar_one_or_none()
-            if wallet:
-                if req.wallet_balance_minutes is not None:
-                    wallet.credit_balance_minutes = max(0, req.wallet_balance_minutes)
-                if req.is_wallet_frozen is not None:
-                    wallet.is_frozen = req.is_wallet_frozen
-            await session.commit()
-
-        # Update plan if requested
-        if req.plan_name and user.selected_organization_id:
+        if req.plan_name and selected_org_id:
             clean_plan = req.plan_name.lower().replace(" plan", "").strip()
             await kodewaves_db_client.set_setting(
-                f"org_plan_{user.selected_organization_id}",
+                f"org_plan_{selected_org_id}",
                 {"plan_code": clean_plan, "updated_at": datetime.now(UTC).isoformat()},
                 category="plan",
             )
 
-        # Update organization feature flags if provided
-        if user.selected_organization_id:
-            existing_features = await kodewaves_db_client.get_setting(f"org_features_{user.selected_organization_id}") or {}
+        if selected_org_id:
+            existing_features = await kodewaves_db_client.get_setting(f"org_features_{selected_org_id}") or {}
+            feature_updated = False
             for flag in ["enable_campaigns", "enable_crm", "enable_widgets", "enable_appointments", "enable_forms", "enable_byok"]:
                 val = getattr(req, flag, None)
                 if val is not None:
-                    existing_features[flag] = val
-            await kodewaves_db_client.set_setting(f"org_features_{user.selected_organization_id}", existing_features, category="features")
+                    existing_features[flag] = bool(val)
+                    feature_updated = True
+            if feature_updated:
+                await kodewaves_db_client.set_setting(f"org_features_{selected_org_id}", existing_features, category="features")
 
-            # Update organization resource quotas if provided
-            existing_quotas = await kodewaves_db_client.get_setting(f"org_quotas_{user.selected_organization_id}") or {}
+            existing_quotas = await kodewaves_db_client.get_setting(f"org_quotas_{selected_org_id}") or {}
+            quota_updated = False
             if req.max_concurrent_calls is not None:
-                existing_quotas["max_concurrent_calls"] = req.max_concurrent_calls
+                existing_quotas["max_concurrent_calls"] = int(req.max_concurrent_calls)
+                quota_updated = True
             if req.max_agents is not None:
-                existing_quotas["max_agents"] = req.max_agents
-            await kodewaves_db_client.set_setting(f"org_quotas_{user.selected_organization_id}", existing_quotas, category="quotas")
+                existing_quotas["max_agents"] = int(req.max_agents)
+                quota_updated = True
+            if quota_updated:
+                await kodewaves_db_client.set_setting(f"org_quotas_{selected_org_id}", existing_quotas, category="quotas")
 
         return {"message": f"User #{user_id} updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(f"Failed to update admin user #{user_id}: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to update user #{user_id}: {str(exc)}")
 
 
 

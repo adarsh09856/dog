@@ -50,6 +50,9 @@ from pipecat.services.dograh.flux.stt import DograhFluxSTTService
 from pipecat.services.dograh.llm import DograhLLMService
 from pipecat.services.dograh.stt import DograhSTTService, DograhSTTSettings
 from pipecat.services.dograh.tts import DograhTTSService, DograhTTSSettings
+from pipecat.services.kodewaves.llm import KodewavesLLMService
+from pipecat.services.kodewaves.stt import KodewavesSTTService, KodewavesSTTSettings
+from pipecat.services.kodewaves.tts import KodewavesTTSService, KodewavesTTSSettings
 from pipecat.services.elevenlabs.stt import (
     CommitStrategy,
     ElevenLabsRealtimeSTTService,
@@ -463,11 +466,19 @@ def create_stt_service(
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
-        return DograhSTTService(
+        if getattr(user_config.stt, "api_key", None) == "sovereign-local-cpu":
+            from pipecat.services.speaches.stt import SpeachesSTTService
+            return SpeachesSTTService(
+                base_url="http://localhost:8000/v1",
+                model="Systran/faster-whisper-tiny",
+                sample_rate=audio_config.transport_in_sample_rate,
+            )
+
+        return KodewavesSTTService(
             base_url=base_url,
-            api_key=user_config.stt.api_key,
+            api_key=user_config.stt.api_key or "kodewaves-sovereign-token",
             correlation_id=correlation_id,
-            settings=DograhSTTSettings(
+            settings=KodewavesSTTSettings(
                 model=user_config.stt.model,
                 language=language,
             ),
@@ -814,14 +825,27 @@ def create_tts_service(
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,
         )
-    elif user_config.tts.provider == ServiceProviders.DOGRAH.value:
+    elif user_config.tts.provider in (ServiceProviders.DOGRAH.value, "kodewaves"):
+        if getattr(user_config.tts, "api_key", None) == "sovereign-local-cpu":
+            from pipecat.services.speaches.tts import SpeachesTTSService
+            voice = getattr(user_config.tts, "voice", "af_heart")
+            if voice and voice.startswith("dg_"):
+                voice = "af_heart"
+            return SpeachesTTSService(
+                base_url="http://localhost:8000/v1",
+                voice=voice,
+                text_filters=[xml_function_tag_filter],
+                skip_aggregator_types=["recording_router", "recording"],
+                silence_time_s=1.0,
+            )
+
         # Convert HTTP URL to WebSocket URL for TTS
         base_url = MPS_API_URL.replace("http://", "ws://").replace("https://", "wss://")
-        return DograhTTSService(
+        return KodewavesTTSService(
             base_url=base_url,
-            api_key=user_config.tts.api_key,
+            api_key=user_config.tts.api_key or "kodewaves-sovereign-token",
             correlation_id=correlation_id,
-            settings=DograhTTSSettings(
+            settings=KodewavesTTSSettings(
                 model=user_config.tts.model,
                 voice=user_config.tts.voice,
                 speed=user_config.tts.speed,
@@ -1230,10 +1254,16 @@ def create_llm_service_from_provider(
             endpoint=endpoint,
             settings=AzureLLMSettings(model=model, temperature=0.1),
         )
-    elif provider == ServiceProviders.DOGRAH.value:
-        return DograhLLMService(
+    elif provider in (ServiceProviders.DOGRAH.value, "kodewaves"):
+        if api_key == "sovereign-local-cpu":
+            return KodewavesLLMService(
+                base_url="http://localhost:11434/v1",
+                api_key="sovereign-local-cpu",
+                settings=OpenAILLMSettings(model="qwen2.5:0.5b"),
+            )
+        return KodewavesLLMService(
             base_url=f"{MPS_API_URL}/api/v1/llm",
-            api_key=api_key,
+            api_key=api_key or "kodewaves-sovereign-token",
             correlation_id=correlation_id,
             usage_context=usage_context,
             settings=OpenAILLMSettings(model=model),

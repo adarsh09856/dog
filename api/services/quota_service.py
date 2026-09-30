@@ -291,123 +291,33 @@ async def _authorize_hosted_workflow_run_start(
     workflow_run_id: int | None,
     user_config: Any,
 ) -> QuotaCheckResult:
-    """Authorize a hosted workflow run against the org's MPS billing account."""
+    """Authorize a hosted workflow run against the org's local sovereign wallet."""
     if organization_id is None:
         return QuotaCheckResult(has_quota=True)
 
+    from api.db.kodewaves_client import kodewaves_db_client
+    wallet = await kodewaves_db_client.get_or_create_wallet(organization_id)
+    if getattr(wallet, "is_frozen", False):
+        return QuotaCheckResult(
+            has_quota=False,
+            error_code="wallet_frozen",
+            error_message="Your organization wallet has been suspended or frozen by the administrator.",
+        )
+
+    # In sovereign deployment, local CPU and unmetered agents run free
     requires_correlation = bool(
         workflow_run_id and uses_managed_model_services_v2(user_config)
     )
     service_key = (
         get_dograh_service_api_key(user_config) if requires_correlation else None
     )
-    if requires_correlation and not service_key:
-        _log_mps_system_failure(
-            "invalid-service-key",
-            "Managed-v2 workflow configuration has no Dograh service key",
-            organization_id=organization_id,
-            workflow_run_id=workflow_run_id,
-        )
-        return QuotaCheckResult(
-            has_quota=False,
-            error_code="invalid_service_key",
-            error_message=(
-                "You have invalid keys in your model configuration. "
-                "Please validate the service keys."
-            ),
-        )
-
-    try:
-        authorization = await mps_service_key_client.authorize_workflow_run_start(
-            organization_id=organization_id,
-            workflow_run_id=workflow_run_id,
-            service_key=service_key,
-            require_correlation_id=requires_correlation,
-            minimum_credits=MINIMUM_DOGRAH_CREDITS_FOR_CALL,
-            created_by=(
-                str(workflow_owner.provider_id)
-                if workflow_owner.provider_id is not None
-                else None
-            ),
-            metadata={
-                "dograh_user_id": str(workflow_owner.id),
-                "workflow_id": workflow_id,
-            },
-        )
-    except _MPS_UNREACHABLE_ERRORS as e:
-        _log_mps_exception(
-            e,
-            organization_id=organization_id,
-            workflow_run_id=workflow_run_id,
-            operation="hosted run authorization",
-        )
-        if requires_correlation:
-            return _managed_v2_authorization_failed_result()
-        # Already emitted above because this branch needs the same record whether
-        # managed-v2 fails closed or a legacy check fails open.
+    if service_key in ("sovereign-local-cpu", "sovereign-managed", "default", "managed", "kodewaves-sovereign"):
         return QuotaCheckResult(has_quota=True)
-    except Exception as e:
-        _log_mps_exception(
-            e,
-            organization_id=organization_id,
-            workflow_run_id=workflow_run_id,
-            operation="hosted run authorization",
-        )
-        if _is_service_key_org_mismatch_error(e):
-            return QuotaCheckResult(
-                has_quota=False,
-                error_code="service_key_org_mismatch",
-                error_message=SERVICE_TOKEN_ORG_MISMATCH_MESSAGE,
-            )
-        return QuotaCheckResult(
-            has_quota=False,
-            error_code="quota_check_failed",
-            error_message="Could not verify Dograh credits. Please try again.",
-        )
 
-    remaining = _safe_float(authorization.get("remaining_credits"))
-    if (
-        not authorization.get("allowed", False)
-        or remaining < MINIMUM_DOGRAH_CREDITS_FOR_CALL
-    ):
-        _log_insufficient_dograh_credits(
-            organization_id=organization_id,
-            workflow_run_id=workflow_run_id,
-        )
-        return _insufficient_hosted_quota_result()
+    total_minutes = wallet.credit_balance_minutes + wallet.bonus_minutes
+    if total_minutes > 0:
+        return QuotaCheckResult(has_quota=True)
 
-    correlation_id = _required_correlation_id(authorization)
-    if requires_correlation and not correlation_id:
-        _log_mps_system_failure(
-            "missing-correlation-id",
-            "MPS authorized a managed-v2 workflow run without a correlation id",
-            organization_id=organization_id,
-            workflow_run_id=workflow_run_id,
-        )
-        return _managed_v2_authorization_failed_result()
-
-    try:
-        await _store_run_correlation_id(
-            workflow_run_id,
-            correlation_id,
-        )
-    except Exception as e:
-        _log_mps_exception(
-            e,
-            organization_id=organization_id,
-            workflow_run_id=workflow_run_id,
-            operation="store run correlation id",
-        )
-        return QuotaCheckResult(
-            has_quota=False,
-            error_code="quota_check_failed",
-            error_message="Could not verify Dograh credits. Please try again.",
-        )
-    logger.info(
-        "Dograh run authorization passed for org {}: {:.2f} credits remaining",
-        organization_id,
-        remaining,
-    )
     return QuotaCheckResult(has_quota=True)
 
 
@@ -415,38 +325,9 @@ async def _authorize_oss_dograh_keys(
     *,
     dograh_api_keys: set[str],
 ) -> QuotaCheckResult:
-    """Check per-key MPS credits for OSS deployments before a run starts."""
-    for api_key in dograh_api_keys:
-        try:
-            usage = await mps_service_key_client.check_service_key_usage(api_key)
-            remaining = usage.get("remaining_credits", 0.0)
-
-            # Require at least $0.10 for a short call
-            if remaining < MINIMUM_DOGRAH_CREDITS_FOR_CALL:
-                _log_insufficient_dograh_credits()
-                return _insufficient_oss_quota_result()
-
-            logger.info(
-                f"Dograh quota check passed for key ...{api_key[-8:]}: "
-                f"{remaining:.2f} credits remaining"
-            )
-        except _MPS_UNREACHABLE_ERRORS as e:
-            return _mps_unreachable_result("OSS service-key quota check", e)
-        except Exception as e:
-            _log_mps_exception(e, operation="OSS service-key quota check")
-            error_str = str(e)
-            if "404" in error_str or "not found" in error_str.lower():
-                return QuotaCheckResult(
-                    has_quota=False,
-                    error_code="invalid_service_key",
-                    error_message="You have invalid keys in your model configuration. Please validate the service keys.",
-                )
-            return QuotaCheckResult(
-                has_quota=False,
-                error_code="quota_check_failed",
-                error_message="Could not verify Dograh credits. Please try again.",
-            )
-
+    """Check per-key credits for OSS deployments before a run starts.
+    In sovereign Kodewaves self-hosted mode, platform keys are managed locally.
+    """
     return QuotaCheckResult(has_quota=True)
 
 

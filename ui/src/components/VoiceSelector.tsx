@@ -13,9 +13,53 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
-// Providers that have MPS voice endpoints
-type TTSProviderWithVoices = "elevenlabs" | "deepgram" | "sarvam" | "cartesia" | "dograh" | "rime";
-const MPS_VOICE_PROVIDERS: TTSProviderWithVoices[] = ["elevenlabs", "deepgram", "sarvam", "cartesia", "dograh", "rime"];
+// Providers that have voice endpoints
+type TTSProviderWithVoices =
+    | "kodewaves"
+    | "speaches"
+    | "openai"
+    | "elevenlabs"
+    | "cartesia"
+    | "deepgram"
+    | "sarvam"
+    | "navana"
+    | "google"
+    | "gemini"
+    | "azure"
+    | "azure_speech"
+    | "smallest"
+    | "rime"
+    | "lmnt"
+    | "speechify"
+    | "inworld"
+    | "camb"
+    | "minimax"
+    | "xai"
+    | "dograh";
+
+const MPS_VOICE_PROVIDERS: TTSProviderWithVoices[] = [
+    "kodewaves",
+    "speaches",
+    "openai",
+    "elevenlabs",
+    "cartesia",
+    "deepgram",
+    "sarvam",
+    "navana",
+    "google",
+    "gemini",
+    "azure",
+    "azure_speech",
+    "smallest",
+    "rime",
+    "lmnt",
+    "speechify",
+    "inworld",
+    "camb",
+    "minimax",
+    "xai",
+    "dograh",
+];
 const ALL_FILTER_VALUE = "__all__";
 
 interface VoiceSelectorProps {
@@ -52,22 +96,40 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
     const [playingPreview, setPlayingPreview] = useState<string | null>(null);
     const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
-    // Check if provider has MPS voice endpoint
+    // Check if provider has voice endpoint
     const hasMPSVoiceEndpoint = useCallback((providerName: string): boolean => {
-        return MPS_VOICE_PROVIDERS.includes(providerName.toLowerCase() as TTSProviderWithVoices);
+        if (!providerName) return false;
+        return true;
     }, []);
 
     // Map provider names to API-compatible provider names
     const getProviderKey = useCallback((providerName: string): TTSProviderWithVoices | null => {
+        if (!providerName) return null;
+        const normalized = providerName.toLowerCase().trim();
         const providerMap: Record<string, TTSProviderWithVoices> = {
+            kodewaves: "kodewaves",
+            speaches: "speaches",
+            openai: "openai",
             elevenlabs: "elevenlabs",
+            cartesia: "cartesia",
             deepgram: "deepgram",
             sarvam: "sarvam",
-            cartesia: "cartesia",
-            dograh: "dograh",
+            navana: "navana",
+            google: "google",
+            gemini: "gemini",
+            azure: "azure",
+            azure_speech: "azure_speech",
+            smallest: "smallest",
             rime: "rime",
+            lmnt: "lmnt",
+            speechify: "speechify",
+            inworld: "inworld",
+            camb: "camb",
+            minimax: "minimax",
+            xai: "xai",
+            dograh: "dograh",
         };
-        return providerMap[providerName.toLowerCase()] || null;
+        return providerMap[normalized] || (normalized as TTSProviderWithVoices);
     }, []);
 
     const fetchVoices = useCallback(async () => {

@@ -1,23 +1,25 @@
 export const HEADLESS_CHAT_EXAMPLE = `let chatState = 'idle';
 
-function withDograhWidget(callback) {
-  if (window.DograhWidget) {
-    callback(window.DograhWidget);
+function withKodewavesWidget(callback) {
+  const existing = window.KodewavesWidget || window.DograhWidget;
+  if (existing) {
+    callback(existing);
     return;
   }
 
-  const script = document.getElementById('dograh-widget');
+  const script = document.getElementById('kodewaves-widget') || document.getElementById('dograh-widget');
   if (!script) {
-    console.error('Dograh embed script not found');
+    console.error('Kodewaves embed script not found');
     return;
   }
 
   script.addEventListener('load', () => {
-    if (window.DograhWidget) callback(window.DograhWidget);
+    const loaded = window.KodewavesWidget || window.DograhWidget;
+    if (loaded) callback(loaded);
   }, { once: true });
 }
 
-withDograhWidget((widget) => {
+withKodewavesWidget((widget) => {
   widget.onChatStateChange((state) => {
     chatState = state; // idle | starting | ready | waiting | ended | expired | error
   });

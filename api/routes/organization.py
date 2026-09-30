@@ -83,6 +83,7 @@ from api.services.configuration.registry import (
 )
 from api.services.mps_billing import ensure_hosted_mps_billing_account_v2
 from api.services.mps_service_key_client import mps_service_key_client
+from api.db.kodewaves_client import kodewaves_db_client
 from api.services.observability.call_events.configuration import (
     check_connection,
     resolve_settings,
@@ -483,6 +484,13 @@ async def save_model_configuration_v2(
         organization_id,
         configuration,
     )
+    if configuration.mode == "dograh" and configuration.dograh:
+        is_local_cpu = configuration.dograh.api_key == "sovereign-local-cpu"
+        await kodewaves_db_client.set_setting(
+            f"local_ai_org_{organization_id}",
+            {"enabled": is_local_cpu},
+            category="local_ai",
+        )
     return await _model_configuration_v2_response(
         user=user,
         configuration=configuration,

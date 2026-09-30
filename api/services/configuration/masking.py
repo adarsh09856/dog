@@ -28,13 +28,25 @@ SERVICE_SECRET_FIELDS = (
 )
 MODEL_OVERRIDE_FIELDS = ("llm", "tts", "stt", "realtime")
 
+SENTINEL_UNMASKED_KEYS = frozenset({
+    "sovereign-local-cpu",
+    "sovereign-managed",
+    "managed",
+    "default",
+    "kodewaves-sovereign",
+    "local-cpu-token",
+})
+
 
 def contains_masked_key(value: str | list[str] | None) -> bool:
     """Return True if *value* looks like a masked placeholder."""
     if value is None:
         return False
     keys = value if isinstance(value, list) else [value]
-    return any(MASK_MARKER in k for k in keys)
+    return any(
+        MASK_MARKER in k and k not in SENTINEL_UNMASKED_KEYS and not k.startswith("sovereign-")
+        for k in keys
+    )
 
 
 def check_for_masked_keys(config: "EffectiveAIModelConfiguration") -> None:
@@ -60,12 +72,18 @@ def check_for_masked_keys(config: "EffectiveAIModelConfiguration") -> None:
 def mask_key(real_key: str, visible: int = VISIBLE_CHARS) -> str:
     """Return a masked representation of *real_key*.
 
+    Sentinel system mode keys (e.g. sovereign-local-cpu, sovereign-managed)
+    are returned unmasked so the frontend can reliably deserialize the selected mode.
+
     Example:
         >>> mask_key("sk-1234567890abcdef")
         '****************cdef'
     """
     if real_key is None:
         return ""
+
+    if real_key in SENTINEL_UNMASKED_KEYS or real_key.startswith("sovereign-"):
+        return real_key
 
     if visible <= 0 or visible >= len(real_key):
         # mask entire key or nothing to mask – edge-cases
@@ -83,7 +101,11 @@ def _mask_secret_value(value: str | list[str]) -> str | list[str]:
 
 def is_mask_of(masked: str, real_key: str) -> bool:
     """Return *True* if *masked* equals the mask of *real_key* under the current rules."""
-    return mask_key(real_key) == masked
+    if not masked or not real_key:
+        return False
+    if real_key in SENTINEL_UNMASKED_KEYS or real_key.startswith("sovereign-"):
+        return masked == real_key
+    return masked == mask_key(real_key)
 
 
 def resolve_masked_api_keys(

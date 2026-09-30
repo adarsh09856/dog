@@ -192,7 +192,7 @@ function buildDograhState(
     const configuredDograh = configuration?.mode === "dograh" ? asRecord(configuration.dograh) : null;
     if (configuredDograh) {
         const apiKey = String(configuredDograh.api_key || "");
-        const isLocalCpu = apiKey === "sovereign-local-cpu";
+        const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu");
         return {
             api_key: apiKey,
             voice: String(configuredDograh.voice || fallback.voice),
@@ -207,7 +207,7 @@ function buildDograhState(
         const tts = asRecord(effectiveConfiguration?.tts);
         const stt = asRecord(effectiveConfiguration?.stt);
         const apiKey = firstApiKey(llm?.api_key || tts?.api_key || stt?.api_key);
-        const isLocalCpu = apiKey === "sovereign-local-cpu" || llm?.provider === "speaches";
+        const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu") || llm?.provider === "speaches";
         return {
             api_key: apiKey,
             voice: String(tts?.voice || fallback.voice),

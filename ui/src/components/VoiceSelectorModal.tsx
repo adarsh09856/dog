@@ -21,10 +21,10 @@ import { cn } from "@/lib/utils";
 
 const ALL_FILTER_VALUE = "__all__";
 
-// Defaults so the modal opens on a focused set instead of the full catalog.
-const DEFAULT_GENDER = "female";
-const DEFAULT_ACCENT = "us"; // American
-const DEFAULT_LANGUAGE = "en";
+// Defaults to show all voices across global, Indic, and specialized providers.
+const DEFAULT_GENDER = ALL_FILTER_VALUE;
+const DEFAULT_ACCENT = ALL_FILTER_VALUE;
+const DEFAULT_LANGUAGE = ALL_FILTER_VALUE;
 
 const SEARCH_DEBOUNCE_MS = 300;
 

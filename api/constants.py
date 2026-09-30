@@ -74,7 +74,7 @@ ENABLE_SIGNUP = os.getenv("ENABLE_SIGNUP", "true").lower() == "true"
 STACK_AUTH_PROJECT_ID = os.getenv("STACK_AUTH_PROJECT_ID")
 STACK_PUBLISHABLE_CLIENT_KEY = os.getenv("STACK_PUBLISHABLE_CLIENT_KEY")
 DOGRAH_MPS_SECRET_KEY = os.getenv("DOGRAH_MPS_SECRET_KEY", None)
-MPS_API_URL = os.getenv("MPS_API_URL", "https://services.dograh.com")
+MPS_API_URL = os.getenv("MPS_API_URL", "http://127.0.0.1:8000")
 DOGRAH_DEVOPS_SECRET = os.getenv("DOGRAH_DEVOPS_SECRET") or None
 ENABLE_PROMETHEUS_METRICS = (
     os.getenv("ENABLE_PROMETHEUS_METRICS", "false").lower() == "true"
@@ -156,7 +156,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG").upper()
 LOG_ROTATION_SIZE = os.getenv("LOG_ROTATION_SIZE", "100 MB")
 LOG_RETENTION = os.getenv("LOG_RETENTION", "7 days")
 LOG_COMPRESSION = os.getenv("LOG_COMPRESSION", "gz")
-ENABLE_TELEMETRY = os.getenv("ENABLE_TELEMETRY", "true").lower() == "true"
+ENABLE_TELEMETRY = os.getenv("ENABLE_TELEMETRY", "false").lower() == "true"
 
 
 def _get_version() -> str:

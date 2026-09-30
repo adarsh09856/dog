@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pipecat-ai"
 dynamic = ["version"]
-description = "An open source framework for voice (and multimodal) assistants"
+description = "Kodewaves Sovereign Voice AI Pipeline Engine"
 license = "BSD-2-Clause"
 license-files = ["LICENSE"]
 readme = "README.md"
