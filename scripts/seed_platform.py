@@ -421,7 +421,6 @@ async def seed_prompt_templates():
             ),
             "first_message": "Hello! Thank you for calling {{company_name}}. I can help you find your perfect property. Are you looking to buy or rent?",
             "is_system_template": True,
-            "is_featured": True,
         },
         {
             "category": "Banking & Finance",
@@ -434,7 +433,6 @@ async def seed_prompt_templates():
             ),
             "first_message": "Welcome to {{company_name}} loan services! How can I help you today? Are you interested in a home loan, personal loan, or business loan?",
             "is_system_template": True,
-            "is_featured": True,
         },
         {
             "category": "Healthcare",
@@ -447,7 +445,6 @@ async def seed_prompt_templates():
             ),
             "first_message": "Hello! This is {{company_name}} clinic. I can help you schedule an appointment with one of our doctors. Would you like to book a new appointment?",
             "is_system_template": True,
-            "is_featured": False,
         },
         {
             "category": "Logistics",
@@ -460,7 +457,6 @@ async def seed_prompt_templates():
             ),
             "first_message": "Hi! Thank you for calling {{company_name}} delivery support. Could you please share your order ID or tracking number so I can look up your shipment?",
             "is_system_template": True,
-            "is_featured": False,
         },
     ]
 
@@ -476,20 +472,27 @@ async def seed_prompt_templates():
 
 def seed_local_ai_model():
     """Pre-pull a lightweight LLM model into Ollama so Local CPU AI is ready to use."""
-    import subprocess
+    import json
+    import os
+    import urllib.error
+    import urllib.request
 
-    print("[SEED] Pre-pulling lightweight Ollama LLM model (qwen2.5:0.5b)...")
+    endpoint = os.getenv("OLLAMA_ENDPOINT", "http://ollama:11434")
+    print(f"[SEED] Pre-pulling lightweight Ollama LLM model (qwen2.5:0.5b) via {endpoint}...")
     try:
-        result = subprocess.run(
-            ["docker", "exec", "kodewaves_ollama", "ollama", "pull", "qwen2.5:0.5b"],
-            capture_output=True, text=True, timeout=300,
+        req = urllib.request.Request(
+            f"{endpoint}/api/pull",
+            data=json.dumps({"name": "qwen2.5:0.5b", "stream": False}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
-        if result.returncode == 0:
-            print("[SUCCESS] Ollama qwen2.5:0.5b model ready for Local CPU inference.")
-        else:
-            print(f"[WARN] Ollama model pull notice: {result.stderr.strip()}")
+        with urllib.request.urlopen(req, timeout=180) as response:
+            if response.status == 200:
+                print("[SUCCESS] Ollama qwen2.5:0.5b model ready for Local CPU inference.")
+            else:
+                print(f"[WARN] Ollama model pull returned status {response.status}")
     except Exception as e:
-        print(f"[WARN] Ollama model pull skipped (container may not be running): {e}")
+        print(f"[WARN] Ollama model pull skipped (will download on first user request): {e}")
 
 
 async def main():
