@@ -414,3 +414,30 @@
 [data-event-banner] [class~="min-h-svh"] {
   min-height: calc(100svh - var(--event-banner-h, 0px));
 }
+
+@keyframes tickerLeft {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes tickerRight {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-ticker-left {
+  animation: tickerLeft 35s linear infinite;
+}
+
+.animate-ticker-right {
+  animation: tickerRight 35s linear infinite;
+}
+
+.cursor-blink {
+  animation: cursorBlink 1s infinite;
+}

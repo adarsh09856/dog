@@ -29,8 +29,15 @@ function AppHeader() {
 
 function BackendStatusBanner() {
   const { config, loading, refresh } = useAppConfig();
+  const pathname = usePathname();
 
-  if (!config || config.backendStatus === "reachable") {
+  if (
+    !config ||
+    config.backendStatus === "reachable" ||
+    pathname === "/" ||
+    pathname?.startsWith("/auth") ||
+    pathname?.startsWith("/pricing")
+  ) {
     return null;
   }
 
