@@ -94,6 +94,15 @@ export interface AdminUserItem {
   is_superuser: boolean;
   is_active: boolean;
   has_local_ai_access?: boolean;
+  is_wallet_frozen?: boolean;
+  max_concurrent_calls?: number;
+  max_agents?: number;
+  enable_campaigns?: boolean;
+  enable_crm?: boolean;
+  enable_widgets?: boolean;
+  enable_appointments?: boolean;
+  enable_forms?: boolean;
+  enable_byok?: boolean;
   created_at?: string;
   organization_id?: number;
   organization_name?: string;
@@ -185,6 +194,7 @@ export interface PlatformSettings {
   allow_user_byok: boolean;
   enforce_wallet_balance: boolean;
   enable_local_ai_engine?: boolean;
+  local_ai_access_policy?: 'public' | 'restricted';
   ollama_endpoint?: string;
   speaches_endpoint?: string;
   local_ai_max_concurrency?: number;
@@ -264,7 +274,7 @@ export const adminApi = {
     }),
   updateUser: (
     userId: number,
-    data: { is_superuser?: boolean; is_active?: boolean; plan_name?: string; wallet_balance_minutes?: number }
+    data: Record<string, any>
   ) =>
     apiFetch<{ message: string }>(`/admin/users/${userId}`, {
       method: 'PATCH',

@@ -18,6 +18,7 @@ class PlatformSettingsResponse(BaseModel):
     allow_user_byok: bool = False
     enforce_wallet_balance: bool = True
     enable_local_ai_engine: bool = False
+    local_ai_access_policy: str = "public"  # 'public' (all users) or 'restricted' (per-user grant)
     ollama_endpoint: Optional[str] = "http://ollama:11434"
     speaches_endpoint: Optional[str] = "http://speaches:8000/v1"
     local_ai_max_concurrency: Optional[int] = 2
@@ -53,6 +54,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
             allow_user_byok=byok.get("allow_user_byok", False),
             enforce_wallet_balance=wallet.get("enforce_wallet_balance", True),
             enable_local_ai_engine=local_ai.get("enable_local_ai_engine", local_ai.get("enabled", False)),
+            local_ai_access_policy=local_ai.get("local_ai_access_policy", local_ai.get("access_policy", "public")),
             ollama_endpoint=local_ai.get("ollama_endpoint", local_ai.get("ollama_url", "http://ollama:11434")),
             speaches_endpoint=local_ai.get("speaches_endpoint", local_ai.get("speaches_url", "http://speaches:8000/v1")),
             local_ai_max_concurrency=local_ai.get("local_ai_max_concurrency", 2),
@@ -102,6 +104,7 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
         # 5. Local AI Engine Settings
         local_ai = {
             "enable_local_ai_engine": bool(payload.get("enable_local_ai_engine", False)),
+            "local_ai_access_policy": payload.get("local_ai_access_policy", "public"),
             "ollama_endpoint": payload.get("ollama_endpoint", "http://ollama:11434"),
             "speaches_endpoint": payload.get("speaches_endpoint", "http://speaches:8000/v1"),
             "local_ai_max_concurrency": int(payload.get("local_ai_max_concurrency", 2)),

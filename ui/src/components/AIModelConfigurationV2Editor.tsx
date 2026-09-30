@@ -1,6 +1,6 @@
 "use client";
 
-import { Info, Save, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Cloud, Cpu, Info, Save, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -66,6 +66,7 @@ interface DograhFormState {
     voice: string;
     speed: number;
     language: string;
+    engine_type?: "cloud" | "local_cpu";
 }
 
 interface AIModelConfigurationV2EditorProps {
@@ -98,7 +99,9 @@ function isDograhEffectiveConfig(config: Record<string, unknown> | null | undefi
     const llm = asRecord(config.llm);
     const tts = asRecord(config.tts);
     const stt = asRecord(config.stt);
-    return llm?.provider === "dograh" && tts?.provider === "dograh" && stt?.provider === "dograh";
+    return (llm?.provider === "dograh" || llm?.provider === "speaches") &&
+           (tts?.provider === "dograh" || tts?.provider === "speaches") &&
+           (stt?.provider === "dograh" || stt?.provider === "speaches");
 }
 
 function byokDefaults(defaults: ModelConfigurationDefaultsV2): ServiceConfigurationDefaults {
@@ -188,11 +191,14 @@ function buildDograhState(
     const fallback = defaults.dograh.defaults;
     const configuredDograh = configuration?.mode === "dograh" ? asRecord(configuration.dograh) : null;
     if (configuredDograh) {
+        const apiKey = String(configuredDograh.api_key || "");
+        const isLocalCpu = apiKey === "sovereign-local-cpu";
         return {
-            api_key: String(configuredDograh.api_key || ""),
+            api_key: apiKey,
             voice: String(configuredDograh.voice || fallback.voice),
             speed: numberOrDefault(configuredDograh.speed, fallback.speed),
             language: String(configuredDograh.language || fallback.language),
+            engine_type: isLocalCpu ? "local_cpu" : "cloud",
         };
     }
 
@@ -200,11 +206,14 @@ function buildDograhState(
         const llm = asRecord(effectiveConfiguration?.llm);
         const tts = asRecord(effectiveConfiguration?.tts);
         const stt = asRecord(effectiveConfiguration?.stt);
+        const apiKey = firstApiKey(llm?.api_key || tts?.api_key || stt?.api_key);
+        const isLocalCpu = apiKey === "sovereign-local-cpu" || llm?.provider === "speaches";
         return {
-            api_key: firstApiKey(llm?.api_key || tts?.api_key || stt?.api_key),
+            api_key: apiKey,
             voice: String(tts?.voice || fallback.voice),
             speed: numberOrDefault(tts?.speed, fallback.speed),
             language: String(stt?.language || fallback.language),
+            engine_type: isLocalCpu ? "local_cpu" : "cloud",
         };
     }
 
@@ -213,6 +222,7 @@ function buildDograhState(
         voice: fallback.voice,
         speed: fallback.speed,
         language: fallback.language,
+        engine_type: "cloud",
     };
 }
 
@@ -401,11 +411,12 @@ export function AIModelConfigurationV2Editor({
                     `Voice speed must be between ${dograhSpeedRange.min} and ${dograhSpeedRange.max}.`,
                 );
             }
+            const apiKey = dograh.engine_type === "local_cpu" ? "sovereign-local-cpu" : "sovereign-managed";
             await onSave({
                 version: 2,
                 mode: "dograh",
                 dograh: {
-                    api_key: (dograh.api_key && dograh.api_key.trim()) || "sovereign-managed",
+                    api_key: apiKey,
                     voice: dograh.voice,
                     speed: dograh.speed,
                     language: dograh.language,
@@ -489,10 +500,60 @@ export function AIModelConfigurationV2Editor({
                     <Card>
                         <CardContent className="pt-6">
                             <div className="grid gap-4 sm:grid-cols-2">
+                                {/* AI Engine Infrastructure Selector */}
+                                <div className="space-y-2 sm:col-span-2">
+                                    <Label className="text-xs font-semibold text-foreground">AI Engine Infrastructure</Label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div
+                                            onClick={() => setDograh({ ...dograh, engine_type: "cloud" })}
+                                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                                                dograh.engine_type !== "local_cpu"
+                                                    ? "border-primary bg-primary/10 shadow-sm"
+                                                    : "border-border hover:border-muted-foreground/40 bg-card/50"
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="flex items-center gap-2 font-semibold text-xs text-foreground">
+                                                    <Cloud className="h-4 w-4 text-primary" />
+                                                    Platform Cloud Master Keys
+                                                </div>
+                                                {dograh.engine_type !== "local_cpu" && (
+                                                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                                                )}
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground leading-snug">
+                                                OpenAI, Deepgram, ElevenLabs & Cartesia configured by your platform administrator. Billed in minutes from balance.
+                                            </p>
+                                        </div>
+
+                                        <div
+                                            onClick={() => setDograh({ ...dograh, engine_type: "local_cpu", voice: dograh.voice.startsWith("dg_") ? "af_heart" : dograh.voice })}
+                                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                                                dograh.engine_type === "local_cpu"
+                                                    ? "border-amber-500 bg-amber-500/10 shadow-sm"
+                                                    : "border-border hover:border-muted-foreground/40 bg-card/50"
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="flex items-center gap-2 font-semibold text-xs text-foreground">
+                                                    <Cpu className="h-4 w-4 text-amber-500" />
+                                                    Sovereign Local CPU Stack
+                                                </div>
+                                                {dograh.engine_type === "local_cpu" && (
+                                                    <CheckCircle2 className="h-4 w-4 text-amber-500" />
+                                                )}
+                                            </div>
+                                            <p className="text-[11px] text-muted-foreground leading-snug">
+                                                100% Free & Self-Hosted. Runs local Ollama (Qwen2.5) + Speaches Whisper STT + Kokoro TTS on host CPU.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Voice</Label>
                                     <VoiceSelectorModal
-                                        provider="dograh"
+                                        provider={dograh.engine_type === "local_cpu" ? "speaches" : "dograh"}
                                         value={dograh.voice}
                                         onChange={(voice) => setDograh({ ...dograh, voice })}
                                         allowManualInput={allowCustomVoice}
@@ -539,17 +600,34 @@ export function AIModelConfigurationV2Editor({
                                     />
                                 </div>
 
-                                <div className="sm:col-span-2 p-4 rounded-xl border border-primary/20 bg-primary/5 flex items-start gap-3">
-                                    <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                                    <div className="space-y-1 text-xs">
-                                        <div className="font-semibold text-foreground text-sm">
-                                            Sovereign Platform Managed (Admin Master Keys)
+                                {dograh.engine_type === "local_cpu" ? (
+                                    <div className="sm:col-span-2 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex items-start gap-3">
+                                        <Cpu className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                                        <div className="space-y-1 text-xs">
+                                            <div className="font-semibold text-foreground text-sm flex items-center gap-2">
+                                                Local Sovereign CPU Engine Active
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider">
+                                                    Zero Cloud Keys Required
+                                                </span>
+                                            </div>
+                                            <p className="text-muted-foreground leading-relaxed">
+                                                Voice pipeline calls run exclusively on your server CPU via Ollama (Qwen2.5) and Speaches (Whisper STT & Kokoro TTS). Completely sovereign, reliable, and consumes zero wallet minutes.
+                                            </p>
                                         </div>
-                                        <p className="text-muted-foreground leading-relaxed">
-                                            Voice pipelines run seamlessly using the master provider keys configured in your Admin Panel (OpenAI, Deepgram, Sarvam, Cartesia, ElevenLabs). No API key required. Voice usage is billed in minutes from your organization balance.
-                                        </p>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="sm:col-span-2 p-4 rounded-xl border border-primary/20 bg-primary/5 flex items-start gap-3">
+                                        <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                        <div className="space-y-1 text-xs">
+                                            <div className="font-semibold text-foreground text-sm">
+                                                Sovereign Platform Managed (Admin Master Keys)
+                                            </div>
+                                            <p className="text-muted-foreground leading-relaxed">
+                                                Voice pipelines run seamlessly using the master provider keys configured in your Admin Panel (OpenAI, Deepgram, Sarvam, Cartesia, ElevenLabs). Voice usage is billed in minutes from your organization balance.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <Button type="button" className="mt-6 w-full" onClick={saveDograhConfiguration} disabled={isSavingDograh}>

@@ -23,6 +23,7 @@ class WalletResponse(BaseModel):
 class LedgerItem(BaseModel):
     id: str
     amount_minutes: int
+    delta_minutes: int = 0
     balance_after: int
     reason: str
     reference_id: Optional[str] = None
@@ -76,6 +77,7 @@ async def get_ledger(limit: int = 50, user: UserModel = Depends(get_user)):
             LedgerItem(
                 id=str(r.id),
                 amount_minutes=r.amount_minutes,
+                delta_minutes=r.amount_minutes,
                 balance_after=r.balance_after,
                 reason=r.reason,
                 reference_id=r.reference_id,

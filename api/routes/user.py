@@ -1,5 +1,8 @@
+import logging
 from datetime import datetime, timedelta
 from typing import List, Literal, Optional, TypedDict, Union
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
@@ -449,7 +452,83 @@ async def reactivate_api_key(
 
 
 # Voice Configuration Endpoints
-TTSProvider = Literal["elevenlabs", "deepgram", "sarvam", "cartesia", "dograh", "rime"]
+TTSProvider = Literal["elevenlabs", "deepgram", "sarvam", "cartesia", "dograh", "rime", "speaches"]
+
+
+LOCAL_KOKORO_VOICES = [
+    {
+        "voice_id": "af_heart",
+        "name": "Heart (Warm & Natural)",
+        "description": "Natural sounding American female voice, ideal for general conversational agents.",
+        "gender": "female",
+        "accent": "us",
+        "language": "en",
+        "preview_url": None,
+    },
+    {
+        "voice_id": "am_adam",
+        "name": "Adam (Clear Professional)",
+        "description": "Confident American male voice suitable for business, banking, and professional support.",
+        "gender": "male",
+        "accent": "us",
+        "language": "en",
+        "preview_url": None,
+    },
+    {
+        "voice_id": "bf_emma",
+        "name": "Emma (Expressive British)",
+        "description": "Refined British female voice with excellent diction and expressive warmth.",
+        "gender": "female",
+        "accent": "gb",
+        "language": "en",
+        "preview_url": None,
+    },
+    {
+        "voice_id": "bm_george",
+        "name": "George (Authoritative British)",
+        "description": "Distinguished British male voice for corporate, legal, and authoritative personas.",
+        "gender": "male",
+        "accent": "gb",
+        "language": "en",
+        "preview_url": None,
+    },
+    {
+        "voice_id": "af_nicole",
+        "name": "Nicole (Friendly Guide)",
+        "description": "Engaging, friendly female guide for real estate, onboarding, and appointment booking.",
+        "gender": "female",
+        "accent": "us",
+        "language": "en",
+        "preview_url": None,
+    },
+    {
+        "voice_id": "am_michael",
+        "name": "Michael (Calm Narrator)",
+        "description": "Calm, reassuring American male voice great for healthcare and patient inquiries.",
+        "gender": "male",
+        "accent": "us",
+        "language": "en",
+        "preview_url": None,
+    },
+    {
+        "voice_id": "af_bella",
+        "name": "Bella (Conversational Warmth)",
+        "description": "Bubbly and warm female persona for sales, retail, and casual chat.",
+        "gender": "female",
+        "accent": "us",
+        "language": "en",
+        "preview_url": None,
+    },
+    {
+        "voice_id": "af_sarah",
+        "name": "Sarah (Corporate Support)",
+        "description": "Polite and responsive female voice designed for customer service desks.",
+        "gender": "female",
+        "accent": "us",
+        "language": "en",
+        "preview_url": None,
+    },
+]
 
 
 class VoiceInfo(BaseModel):
@@ -487,6 +566,28 @@ async def get_voices(
     user: UserModel = Depends(get_user),
 ) -> VoicesResponse:
     """Get available voices for a TTS provider."""
+    # 1. Handle local Speaches / Kokoro CPU voices directly (zero cloud API dependency)
+    if provider == "speaches":
+        filtered = LOCAL_KOKORO_VOICES
+        if gender:
+            filtered = [v for v in filtered if v.get("gender") == gender]
+        if accent:
+            filtered = [v for v in filtered if v.get("accent") == accent]
+        if q:
+            ql = q.lower()
+            filtered = [v for v in filtered if ql in v["name"].lower() or ql in v["voice_id"].lower()]
+
+        return VoicesResponse(
+            provider="speaches",
+            voices=[VoiceInfo(**v) for v in filtered],
+            facets=VoiceFacets(
+                genders=["female", "male"],
+                accents=["us", "gb"],
+                languages=["en"],
+            ),
+        )
+
+    # 2. Query cloud MPS voice catalog with defensive fallback to local voices
     try:
         result = await mps_service_key_client.get_voices(
             provider=provider,
@@ -498,28 +599,31 @@ async def get_voices(
             organization_id=user.selected_organization_id,
             created_by=user.provider_id,
         )
+        voices = result.get("voices", [])
+        if not voices and provider in ("dograh", "speaches"):
+            return VoicesResponse(
+                provider=provider,
+                voices=[VoiceInfo(**v) for v in LOCAL_KOKORO_VOICES],
+                facets=VoiceFacets(
+                    genders=["female", "male"],
+                    accents=["us", "gb"],
+                    languages=["en"],
+                ),
+            )
+
         return VoicesResponse(
             provider=result.get("provider", provider),
-            voices=[VoiceInfo(**voice) for voice in result.get("voices", [])],
+            voices=[VoiceInfo(**voice) for voice in voices],
             facets=result.get("facets"),
         )
-    except MPSUnavailableError:
-        # The MPS boundary emitted the classified failure. The app-level handler
-        # converts this typed dependency failure to a customer-safe HTTP 503.
-        raise
-    except Exception as e:
-        log_failure(
-            classify_exception(
-                e,
-                source=ErrorSource.PLATFORM,
-                provider="dograh",
-                error_owner="operator",
+    except (MPSUnavailableError, Exception) as e:
+        logger.warning(f"[Voices] Cloud voice catalog unavailable for {provider} ({e}); providing local fallback voices.")
+        return VoicesResponse(
+            provider=provider,
+            voices=[VoiceInfo(**v) for v in LOCAL_KOKORO_VOICES],
+            facets=VoiceFacets(
+                genders=["female", "male"],
+                accents=["us", "gb"],
+                languages=["en"],
             ),
-            organization_id=user.selected_organization_id,
-            operation="validate_voice_catalog_response",
-            requested_provider=provider,
         )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch voices for {provider}",
-        ) from e

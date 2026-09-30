@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
 import { SidebarTeamSwitcher } from "@/components/layout/SidebarTeamSwitcher";
@@ -209,6 +209,28 @@ export function AppSidebar() {
   );
 
   const isActive = (path: string) => pathname.startsWith(path);
+
+  const [impersonatingEmail, setImpersonatingEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const imp = localStorage.getItem("kodewaves_impersonated_email");
+    const token = localStorage.getItem("kodewaves_impersonator_token");
+    if (imp && token) {
+      setImpersonatingEmail(imp);
+    }
+  }, []);
+
+  const handleExitImpersonation = () => {
+    const token = localStorage.getItem("kodewaves_impersonator_token");
+    if (token) {
+      document.cookie = `kodewaves_auth_token=${token}; path=/; max-age=86400`;
+      document.cookie = `dograh_auth_token=${token}; path=/; max-age=86400`;
+      document.cookie = `oss_token=${token}; path=/; max-age=86400`;
+    }
+    localStorage.removeItem("kodewaves_impersonator_token");
+    localStorage.removeItem("kodewaves_impersonated_email");
+    window.location.href = "/admin/users";
+  };
 
   const handleMobileNavClick = () => {
     if (isMobile) {
@@ -405,6 +427,38 @@ export function AppSidebar() {
             )}
           </SidebarTrigger>
         </div>
+
+        {impersonatingEmail && (
+          <div className={cn("mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs", isCollapsed && "p-1 text-center")}>
+            {isCollapsed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleExitImpersonation}
+                    className="w-full py-1 rounded bg-amber-500 text-white text-[10px] font-bold hover:bg-amber-600 transition-colors"
+                  >
+                    Exit
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>Exit Impersonation ({impersonatingEmail})</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <div className="flex items-center justify-between gap-1.5">
+                <span className="font-semibold text-amber-600 dark:text-amber-400 truncate text-[11px]" title={impersonatingEmail}>
+                  👤 {impersonatingEmail}
+                </span>
+                <button
+                  onClick={handleExitImpersonation}
+                  className="px-2 py-0.5 rounded bg-amber-500 text-white text-[10px] font-bold hover:bg-amber-600 shrink-0 shadow-sm transition-colors"
+                >
+                  Exit
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {provider === "stack" && (
           <div className={cn("mt-3 notranslate", isCollapsed && "hidden")} translate="no">

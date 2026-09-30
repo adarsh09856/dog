@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { adminApi, PlatformSettings } from "@/lib/kodewavesApi";
 
@@ -241,6 +242,31 @@ export default function AdminSettingsPage() {
                 onCheckedChange={(checked) => setSettings({ ...settings, enable_local_ai_engine: checked })}
               />
             </div>
+
+            {settings.enable_local_ai_engine && (
+              <div className="p-4 rounded-xl border border-indigo-500/30 bg-indigo-500/5 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">Local AI Access Policy</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      Choose whether all users get access automatically or only specific users assigned in User Management.
+                    </div>
+                  </div>
+                  <Select
+                    value={settings.local_ai_access_policy || "public"}
+                    onValueChange={(val: any) => setSettings({ ...settings, local_ai_access_policy: val })}
+                  >
+                    <SelectTrigger className="w-56 h-8 text-xs bg-background">
+                      <SelectValue placeholder="Select Policy" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="public">🌐 Public Access (All Users)</SelectItem>
+                      <SelectItem value="restricted">🔒 Restricted (Per-User Opt-in)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1">

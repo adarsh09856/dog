@@ -121,7 +121,7 @@ export default function SovereignBillingPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
-              {wallet?.balance_minutes?.toFixed(1) ?? "0.0"} <span className="text-sm font-semibold">mins</span>
+              {((wallet as any)?.total_available_minutes ?? (wallet as any)?.balance_minutes ?? (wallet as any)?.credit_balance_minutes ?? 0).toFixed(1)} <span className="text-sm font-semibold">mins</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Active voice sessions deduct from this balance per minute
@@ -136,10 +136,10 @@ export default function SovereignBillingPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold capitalize">
-              {wallet?.plan_name || "Starter"}
+              {(wallet as any)?.plan_name || "Starter"}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Includes {wallet?.plan_minutes ?? 500} minutes / month
+              Includes {(wallet as any)?.plan_minutes ?? (wallet as any)?.included_minutes ?? 500} minutes / month
             </p>
           </CardContent>
         </Card>
@@ -151,7 +151,7 @@ export default function SovereignBillingPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold text-amber-500">
-              {wallet?.total_consumed_minutes?.toFixed(1) ?? "0.0"} <span className="text-sm font-semibold">mins</span>
+              {((wallet as any)?.total_consumed_minutes ?? 0).toFixed(1)} <span className="text-sm font-semibold">mins</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Lifetime completed call audio time
@@ -214,7 +214,7 @@ export default function SovereignBillingPage() {
                       </div>
                       <div className="flex items-center justify-between py-1 border-b border-border/40">
                         <span className="text-muted-foreground">Overage Rate:</span>
-                        <span className="font-bold text-foreground font-mono">₹{p.overage_rate_per_minute.toFixed(2)}/min</span>
+                        <span className="font-bold text-foreground font-mono">₹{(p.overage_rate_per_minute ?? 0).toFixed(2)}/min</span>
                       </div>
                       <div className="flex items-center justify-between py-1">
                         <span className="text-muted-foreground">BYOK Key Policy:</span>
@@ -275,31 +275,35 @@ export default function SovereignBillingPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      ledger.map((item) => (
-                        <TableRow key={item.id} className="hover:bg-muted/20">
-                          <TableCell className="text-xs font-mono text-muted-foreground">
-                            {new Date(item.created_at).toLocaleString()}
-                          </TableCell>
-                          <TableCell className="text-xs font-medium">{item.reason}</TableCell>
-                          <TableCell className="text-xs font-mono text-muted-foreground">
-                            {item.reference_id || "—"}
-                          </TableCell>
-                          <TableCell className="text-xs text-right font-mono font-bold">
-                            {item.delta_minutes > 0 ? (
-                              <span className="text-emerald-500 flex items-center justify-end gap-1">
-                                <ArrowUpRight className="h-3.5 w-3.5" /> +{item.delta_minutes.toFixed(1)} m
-                              </span>
-                            ) : (
-                              <span className="text-destructive flex items-center justify-end gap-1">
-                                <ArrowDownRight className="h-3.5 w-3.5" /> {item.delta_minutes.toFixed(1)} m
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-xs text-right font-mono font-bold text-foreground">
-                            {item.balance_after.toFixed(1)} mins
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      ledger.map((item) => {
+                        const delta = (item as any).amount_minutes ?? item.delta_minutes ?? 0;
+                        const bal = (item as any).balance_after ?? 0;
+                        return (
+                          <TableRow key={item.id} className="hover:bg-muted/20">
+                            <TableCell className="text-xs font-mono text-muted-foreground">
+                              {new Date(item.created_at).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-xs font-medium">{item.reason}</TableCell>
+                            <TableCell className="text-xs font-mono text-muted-foreground">
+                              {item.reference_id || "—"}
+                            </TableCell>
+                            <TableCell className="text-xs text-right font-mono font-bold">
+                              {delta >= 0 ? (
+                                <span className="text-emerald-500 flex items-center justify-end gap-1">
+                                  <ArrowUpRight className="h-3.5 w-3.5" /> +{delta.toFixed(1)} m
+                                </span>
+                              ) : (
+                                <span className="text-destructive flex items-center justify-end gap-1">
+                                  <ArrowDownRight className="h-3.5 w-3.5" /> {delta.toFixed(1)} m
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-right font-mono font-bold text-foreground">
+                              {bal.toFixed(1)} mins
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>

@@ -98,6 +98,15 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState({
     is_superuser: false,
     has_local_ai_access: false,
+    is_wallet_frozen: false,
+    max_concurrent_calls: 2,
+    max_agents: 10,
+    enable_campaigns: true,
+    enable_crm: true,
+    enable_widgets: true,
+    enable_appointments: true,
+    enable_forms: true,
+    enable_byok: true,
     plan_name: "Starter",
     wallet_balance_minutes: 0,
   });
@@ -230,6 +239,15 @@ export default function AdminUsersPage() {
     try {
       const res = await adminApi.impersonateUser(user.id);
       if (res.token) {
+        // Preserve admin session so admin can exit impersonation anytime
+        const originalAdminToken = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("kodewaves_auth_token=") || row.startsWith("dograh_auth_token="))
+          ?.split("=")[1];
+        if (originalAdminToken) {
+          localStorage.setItem("kodewaves_impersonator_token", originalAdminToken);
+          localStorage.setItem("kodewaves_impersonated_email", user.email);
+        }
         document.cookie = `kodewaves_auth_token=${res.token}; path=/; max-age=86400`;
         document.cookie = `dograh_auth_token=${res.token}; path=/; max-age=86400`;
         document.cookie = `oss_token=${res.token}; path=/; max-age=86400`;
@@ -441,9 +459,16 @@ export default function AdminUsersPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                            {balance.toFixed(1)} mins
-                          </span>
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                              {balance.toFixed(1)} mins
+                            </span>
+                            {u.is_wallet_frozen && (
+                              <Badge variant="destructive" className="text-[9px] py-0 px-1 leading-tight">
+                                Wallet Frozen
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-center">
                           {u.has_local_ai_access ? (
@@ -492,8 +517,17 @@ export default function AdminUsersPage() {
                                 onClick={() => {
                                   setSelectedUser(u);
                                   setEditForm({
-                                    is_superuser: u.is_superuser,
+                                    is_superuser: Boolean(u.is_superuser),
                                     has_local_ai_access: Boolean(u.has_local_ai_access),
+                                    is_wallet_frozen: Boolean(u.is_wallet_frozen),
+                                    max_concurrent_calls: u.max_concurrent_calls ?? 2,
+                                    max_agents: u.max_agents ?? 10,
+                                    enable_campaigns: u.enable_campaigns ?? true,
+                                    enable_crm: u.enable_crm ?? true,
+                                    enable_widgets: u.enable_widgets ?? true,
+                                    enable_appointments: u.enable_appointments ?? true,
+                                    enable_forms: u.enable_forms ?? true,
+                                    enable_byok: u.enable_byok ?? true,
                                     plan_name: u.plan_name || "Starter",
                                     wallet_balance_minutes: balance,
                                   });
@@ -725,72 +759,228 @@ export default function AdminUsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 3. EDIT USER MODAL */}
+      {/* 3. EDIT USER MODAL - FULL SUPERADMIN WORKSPACE CONTROLS */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
           <form onSubmit={handleEditUser}>
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
+              <DialogTitle className="flex items-center gap-2 text-base font-bold">
                 <Edit className="h-5 w-5 text-primary" />
-                Edit User & Entitlements
+                Superadmin Workspace Control & Entitlements
               </DialogTitle>
-              <DialogDescription>
-                Modify permissions, subscription tier, and minute balance for {selectedUser?.email}.
+              <DialogDescription className="text-xs">
+                Manage quotas, module access, security locks, and billing overrides for <span className="font-semibold text-foreground">{selectedUser?.email}</span>.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4 text-xs">
-              <div className="space-y-1.5">
-                <Label className="text-xs">SaaS Subscription Plan</Label>
-                <Select
-                  value={editForm.plan_name}
-                  onValueChange={(val) => setEditForm({ ...editForm, plan_name: val })}
-                >
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Starter">Starter Plan</SelectItem>
-                    <SelectItem value="Pro">Pro Plan</SelectItem>
-                    <SelectItem value="Enterprise">Enterprise Plan</SelectItem>
-                  </SelectContent>
-                </Select>
+
+            <div className="space-y-5 py-4 text-xs">
+              {/* Emergency Wallet Freeze Switch */}
+              <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="h-4 w-4 text-destructive" />
+                    <span className="font-semibold text-destructive text-xs">Emergency Wallet Freeze</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editForm.is_wallet_frozen}
+                      onChange={(e) => setEditForm({ ...editForm, is_wallet_frozen: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-destructive"></div>
+                  </label>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  When frozen, all outbound telephone calls, web audio runs, and campaigns from this workspace are instantly blocked.
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Wallet Minute Balance (Override)</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={editForm.wallet_balance_minutes}
-                  onChange={(e) => setEditForm({ ...editForm, wallet_balance_minutes: parseInt(e.target.value) || 0 })}
-                />
-                <p className="text-[11px] text-muted-foreground">Directly sets the tenant&apos;s available voice minutes.</p>
+
+              {/* Plan & Minute Overrides */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border bg-muted/20">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">SaaS Subscription Plan</Label>
+                  <Select
+                    value={editForm.plan_name}
+                    onValueChange={(val) => setEditForm({ ...editForm, plan_name: val })}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Starter">Starter Plan</SelectItem>
+                      <SelectItem value="Pro">Pro Plan</SelectItem>
+                      <SelectItem value="Enterprise">Enterprise Plan</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Wallet Minute Balance (Override)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="h-9 text-xs"
+                    value={editForm.wallet_balance_minutes}
+                    onChange={(e) => setEditForm({ ...editForm, wallet_balance_minutes: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
               </div>
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="edit-superadmin"
-                  checked={editForm.is_superuser}
-                  onChange={(e) => setEditForm({ ...editForm, is_superuser: e.target.checked })}
-                  className="rounded border-border text-primary focus:ring-primary"
-                />
-                <Label htmlFor="edit-superadmin" className="text-xs font-medium cursor-pointer">
-                  Superadmin Privileges
-                </Label>
+
+              {/* Resource Quotas */}
+              <div className="p-3 rounded-lg border space-y-3">
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <PhoneCall className="h-3.5 w-3.5 text-primary" />
+                  Tenant Resource Quotas
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-muted-foreground">Max Concurrent Calls</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      className="h-8 text-xs font-mono"
+                      value={editForm.max_concurrent_calls}
+                      onChange={(e) => setEditForm({ ...editForm, max_concurrent_calls: parseInt(e.target.value) || 1 })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] text-muted-foreground">Max Voice Agents</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={200}
+                      className="h-8 text-xs font-mono"
+                      value={editForm.max_agents}
+                      onChange={(e) => setEditForm({ ...editForm, max_agents: parseInt(e.target.value) || 1 })}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="edit-local-ai"
-                  checked={editForm.has_local_ai_access}
-                  onChange={(e) => setEditForm({ ...editForm, has_local_ai_access: e.target.checked })}
-                  className="rounded border-border text-primary focus:ring-primary"
-                />
-                <Label htmlFor="edit-local-ai" className="text-xs font-medium cursor-pointer">
-                  Allow Local AI Access (Self-Hosted CPU Engine)
-                </Label>
+
+              {/* Module Feature Flags */}
+              <div className="p-3 rounded-lg border space-y-3">
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-primary" />
+                  Module Feature Flags & Tenant Permissions
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <label className="flex items-center gap-2 p-2 rounded border bg-card/50 cursor-pointer hover:bg-muted/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editForm.enable_crm}
+                      onChange={(e) => setEditForm({ ...editForm, enable_crm: e.target.checked })}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <div className="font-semibold text-xs">CRM Leads Module</div>
+                      <div className="text-[10px] text-muted-foreground">Contacts & pipeline tracking</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded border bg-card/50 cursor-pointer hover:bg-muted/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editForm.enable_campaigns}
+                      onChange={(e) => setEditForm({ ...editForm, enable_campaigns: e.target.checked })}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <div className="font-semibold text-xs">Outbound Campaigns</div>
+                      <div className="text-[10px] text-muted-foreground">Batch voice calling dialer</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded border bg-card/50 cursor-pointer hover:bg-muted/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editForm.enable_widgets}
+                      onChange={(e) => setEditForm({ ...editForm, enable_widgets: e.target.checked })}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <div className="font-semibold text-xs">Web Call Widgets</div>
+                      <div className="text-[10px] text-muted-foreground">Embeddable website voice button</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded border bg-card/50 cursor-pointer hover:bg-muted/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editForm.enable_appointments}
+                      onChange={(e) => setEditForm({ ...editForm, enable_appointments: e.target.checked })}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <div className="font-semibold text-xs">Appointments Booking</div>
+                      <div className="text-[10px] text-muted-foreground">Calendar integrations</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded border bg-card/50 cursor-pointer hover:bg-muted/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editForm.enable_forms}
+                      onChange={(e) => setEditForm({ ...editForm, enable_forms: e.target.checked })}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <div className="font-semibold text-xs">Dynamic Voice Forms</div>
+                      <div className="text-[10px] text-muted-foreground">Form collection over voice</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded border bg-card/50 cursor-pointer hover:bg-muted/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={editForm.enable_byok}
+                      onChange={(e) => setEditForm({ ...editForm, enable_byok: e.target.checked })}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <div className="font-semibold text-xs">Bring Your Own Key (BYOK)</div>
+                      <div className="text-[10px] text-muted-foreground">Custom provider API keys</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Special Permissions */}
+              <div className="space-y-2 p-3 rounded-lg border bg-muted/10">
+                <h4 className="text-xs font-bold text-foreground">Special Privileges</h4>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      id="edit-superadmin"
+                      checked={editForm.is_superuser}
+                      onChange={(e) => setEditForm({ ...editForm, is_superuser: e.target.checked })}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <span className="text-xs font-semibold">Superadmin Privileges</span>
+                      <p className="text-[10px] text-muted-foreground">Access all tenants, server settings, and master key management.</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      id="edit-local-ai"
+                      checked={editForm.has_local_ai_access}
+                      onChange={(e) => setEditForm({ ...editForm, has_local_ai_access: e.target.checked })}
+                      className="rounded border-border text-primary focus:ring-primary"
+                    />
+                    <div>
+                      <span className="text-xs font-semibold text-amber-500">Allow Local CPU AI Access (Ollama + Speaches)</span>
+                      <p className="text-[10px] text-muted-foreground">Enables 100% free self-hosted sovereign CPU models for this user.</p>
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
-            <DialogFooter>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
               <Button type="button" variant="outline" size="sm" onClick={() => setEditModalOpen(false)}>
                 Cancel
               </Button>
