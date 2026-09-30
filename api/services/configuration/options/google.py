@@ -14,14 +14,25 @@ GOOGLE_VERTEX_DEFAULT_LOCATION = "global"
 GOOGLE_VERTEX_LOCATIONS = (GOOGLE_VERTEX_DEFAULT_LOCATION, "eu", "us")
 
 GOOGLE_MODELS = (
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
 )
 GOOGLE_VERTEX_MODELS = (
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
     "gemini-3.1-flash-lite",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
 )
+
 
 GOOGLE_REALTIME_MODELS = ("gemini-3.1-flash-live-preview",)
 GOOGLE_REALTIME_VOICES = ("Puck", "Charon", "Kore", "Fenrir", "Aoede")

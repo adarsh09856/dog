@@ -120,6 +120,14 @@ services:
       ENABLE_COTURN: "${ENABLE_COTURN:-true}"
       TURN_HOST: "${PUBLIC_HOST:-your-domain.com}"
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
+
+      # Local CPU AI Engine (Ollama + Speaches)
+      OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
+      SPEACHES_ENDPOINT: "${SPEACHES_ENDPOINT:-http://speaches:8000}"
+      ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
+
+      # DevOps / Monitoring Secret
+      DOGRAH_DEVOPS_SECRET: "${DOGRAH_DEVOPS_SECRET:-}"
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
@@ -166,11 +174,55 @@ services:
     networks:
       - kodewaves-network
 
+  # ==============================================================================
+  # Ultra-Lightweight Self-Hosted CPU Local AI Engine (Optional / Admin Opt-In)
+  # Uses CPU-only inference with strict memory limits to protect low-RAM VPS.
+  # ==============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: kodewaves_ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - kodewaves_ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NUM_PARALLEL=2
+    deploy:
+      resources:
+        limits:
+          memory: 2000M
+    networks:
+      - kodewaves-network
+
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: kodewaves_speaches
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8000"
+    volumes:
+      - kodewaves_speaches_cache:/home/ubuntu/.cache/huggingface/hub
+    environment:
+      - WHISPER_MODEL=Systran/faster-whisper-tiny
+      - KOKORO_MODEL=hexgrad/Kokoro-82M
+      - DEFAULT_DEVICE=cpu
+    deploy:
+      resources:
+        limits:
+          memory: 1000M
+    networks:
+      - kodewaves-network
+
 volumes:
   kodewaves_postgres_data:
   kodewaves_redis_data:
   kodewaves_minio_data:
+  kodewaves_ollama_data:
+  kodewaves_speaches_cache:
 
 networks:
   kodewaves-network:
     driver: bridge
+

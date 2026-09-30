@@ -11,7 +11,10 @@ from importlib.metadata import version as lib_version
 
 from loguru import logger
 
-__version__ = lib_version("pipecat-ai")
+try:
+    __version__ = lib_version("pipecat-ai")
+except Exception:
+    __version__ = "0.0.0.dev0"
 
 
 def _should_log_version_banner() -> bool:

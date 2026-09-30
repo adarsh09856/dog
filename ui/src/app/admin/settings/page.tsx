@@ -3,6 +3,7 @@
 import {
   Building2,
   CheckCircle2,
+  Cpu,
   KeyRound,
   Loader2,
   Mail,
@@ -29,6 +30,10 @@ export default function AdminSettingsPage() {
     primary_color: "#6366f1",
     allow_user_byok: false,
     enforce_wallet_balance: true,
+    enable_local_ai_engine: false,
+    ollama_endpoint: "http://ollama:11434",
+    speaches_endpoint: "http://speaches:8000/v1",
+    local_ai_max_concurrency: 2,
     smtp_host: "",
     smtp_port: 587,
     smtp_user: "",
@@ -197,6 +202,80 @@ export default function AdminSettingsPage() {
                   checked={settings.enforce_wallet_balance}
                   onCheckedChange={(checked) => setSettings({ ...settings, enforce_wallet_balance: checked })}
                 />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* LOCAL CPU AI ENGINE SETTINGS */}
+        <Card className="border-border/60 md:col-span-2">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Cpu className="h-5 w-5 text-indigo-500" />
+                  Local AI Engine (Self-Hosted CPU Stack)
+                </CardTitle>
+                <CardDescription>
+                  Host ultra-lightweight LLM, STT, and TTS directly on your VPS (Ollama + Speaches/Whisper/Kokoro) with zero third-party cloud bills.
+                </CardDescription>
+              </div>
+              <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">
+                {settings.enable_local_ai_engine ? "Engine Active" : "Disabled Globally"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="p-4 rounded-xl border border-border/60 bg-muted/20 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-semibold flex items-center gap-1.5">
+                  <Cpu className="h-3.5 w-3.5 text-indigo-500" />
+                  Enable Sovereign Local CPU AI Engine
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  Allows opted-in tenants to run local inference. Access must be granted per-user in User Management to prevent VPS overload.
+                </div>
+              </div>
+              <Switch
+                checked={settings.enable_local_ai_engine}
+                onCheckedChange={(checked) => setSettings({ ...settings, enable_local_ai_engine: checked })}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Ollama LLM Endpoint</Label>
+                <Input
+                  value={settings.ollama_endpoint || ""}
+                  onChange={(e) => setSettings({ ...settings, ollama_endpoint: e.target.value })}
+                  placeholder="http://ollama:11434"
+                  disabled={!settings.enable_local_ai_engine}
+                />
+                <p className="text-[10px] text-muted-foreground">Default internal Docker URL for Qwen2.5-1.5B or Phi-4-mini</p>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Speaches STT/TTS Endpoint</Label>
+                <Input
+                  value={settings.speaches_endpoint || ""}
+                  onChange={(e) => setSettings({ ...settings, speaches_endpoint: e.target.value })}
+                  placeholder="http://speaches:8000/v1"
+                  disabled={!settings.enable_local_ai_engine}
+                />
+                <p className="text-[10px] text-muted-foreground">OpenAI-compatible endpoint for faster-whisper-tiny & Kokoro-82M</p>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Max Concurrent Local Sessions</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={8}
+                  value={settings.local_ai_max_concurrency || 2}
+                  onChange={(e) => setSettings({ ...settings, local_ai_max_concurrency: parseInt(e.target.value) || 1 })}
+                  disabled={!settings.enable_local_ai_engine}
+                />
+                <p className="text-[10px] text-muted-foreground">Recommended: 2 for 2-4GB VPS to prevent CPU starvation</p>
               </div>
             </div>
           </CardContent>

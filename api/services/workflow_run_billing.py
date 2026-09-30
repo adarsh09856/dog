@@ -26,11 +26,26 @@ def _duration_seconds_from_usage_info(workflow_run) -> float | None:
     usage_info: dict[str, Any] = getattr(workflow_run, "usage_info", None) or {}
     duration = usage_info.get("call_duration_seconds")
     try:
-        duration_seconds = float(duration)
+        if duration is not None:
+            duration_seconds = float(duration)
+            if duration_seconds > 0:
+                return duration_seconds
     except (TypeError, ValueError):
-        return None
+        pass
 
-    return duration_seconds if duration_seconds > 0 else None
+    # Fallback to started_at and ended_at timestamps if available
+    started_at = getattr(workflow_run, "started_at", None)
+    ended_at = getattr(workflow_run, "ended_at", None)
+    if started_at and ended_at:
+        try:
+            delta = (ended_at - started_at).total_seconds()
+            if delta > 0:
+                return delta
+        except Exception:
+            pass
+
+    return None
+
 
 
 def _is_usage_not_ready_error(exc: Exception) -> bool:
@@ -41,10 +56,7 @@ def _is_usage_not_ready_error(exc: Exception) -> bool:
 
 
 async def report_workflow_run_platform_usage(workflow_run) -> None:
-    """Report hosted platform usage for a completed workflow run to MPS."""
-    if DEPLOYMENT_MODE == "oss":
-        return
-
+    """Report platform usage for a completed workflow run and deduct minutes from local wallet."""
     if getattr(workflow_run, "mode", None) == WorkflowRunMode.TEXTCHAT.value:
         logger.info(
             "Skipping platform usage report for text chat workflow run {}",
@@ -66,13 +78,8 @@ async def report_workflow_run_platform_usage(workflow_run) -> None:
         )
         return
 
-    correlation_id = get_mps_correlation_id(
-        getattr(workflow_run, "initial_context", None)
-    )
-    duration_seconds = (
-        None if correlation_id else _duration_seconds_from_usage_info(workflow_run)
-    )
-    if not correlation_id and duration_seconds is None:
+    duration_seconds = _duration_seconds_from_usage_info(workflow_run)
+    if duration_seconds is None:
         logger.warning(
             "Skipping platform usage report for workflow run {}: no billable duration",
             workflow_run.id,
@@ -80,7 +87,7 @@ async def report_workflow_run_platform_usage(workflow_run) -> None:
         return
 
     try:
-        # Local Kodewaves Sovereign Wallet Deduction (Replaces api.dograh.com MPS)
+        # Local Kodewaves Sovereign Wallet Deduction
         from api.db.kodewaves_client import kodewaves_db_client
 
         billable_secs = duration_seconds or 0.0
@@ -96,7 +103,9 @@ async def report_workflow_run_platform_usage(workflow_run) -> None:
                 f"[KodewavesBilling] Deducted {billable_minutes} minute(s) for run {workflow_run.id} from org {organization_id}"
             )
     except Exception as e:
-        logger.error(f"[KodewavesBilling] Error updating local wallet for run {workflow_run.id}: {e}")
+        logger.error(
+            f"[KodewavesBilling] Error updating local wallet for run {workflow_run.id}: {e}"
+        )
 
 
 async def report_completed_workflow_run_platform_usage(workflow_run_id: int) -> None:

@@ -67,20 +67,38 @@ class MasterCredentialService:
     async def get_master_credential(self, provider: str) -> Optional[Dict[str, Any]]:
         """Retrieve and decrypt credentials dict for a provider, falling back to environment variables."""
         prov_key = provider.lower().strip()
-        try:
-            record = await kodewaves_db_client.get_master_credential(prov_key)
-            if record and record.is_enabled:
-                try:
-                    decrypted_str = self.decrypt(record.credentials_encrypted)
-                    return json.loads(decrypted_str)
-                except Exception as e:
-                    logger.error(f"[MasterCredentialService] Failed to decrypt credentials for {provider}: {e}")
-        except Exception as db_err:
-            logger.debug(f"[MasterCredentialService] DB lookup for {provider} failed or unavailable: {db_err}")
+        lookup_candidates = [prov_key]
+        if prov_key == "gemini":
+            lookup_candidates.append("google")
+        elif prov_key == "google":
+            lookup_candidates.append("gemini")
+        elif prov_key == "google_realtime":
+            lookup_candidates.extend(["gemini", "google"])
+        elif prov_key == "openai_realtime":
+            lookup_candidates.append("openai")
+        elif prov_key == "azure_realtime":
+            lookup_candidates.append("azure")
+        elif prov_key in ("navana", "bodhi"):
+            lookup_candidates.extend(["navana", "bodhi"])
+
+        for candidate in lookup_candidates:
+            try:
+                record = await kodewaves_db_client.get_master_credential(candidate)
+                if record and record.is_enabled and record.credentials_encrypted:
+                    try:
+                        decrypted_str = self.decrypt(record.credentials_encrypted)
+                        data = json.loads(decrypted_str)
+                        if data and (data.get("api_key") or data.get("account_sid") or data.get("auth_token")):
+                            return data
+                    except Exception as e:
+                        logger.error(f"[MasterCredentialService] Failed to decrypt credentials for {candidate}: {e}")
+            except Exception as db_err:
+                logger.debug(f"[MasterCredentialService] DB lookup for {candidate} failed or unavailable: {db_err}")
 
         # Fallback to environment variables if not configured in DB
         env_map = {
             "openai": "OPENAI_API_KEY",
+            "openai_realtime": "OPENAI_API_KEY",
             "deepgram": "DEEPGRAM_API_KEY",
             "cartesia": "CARTESIA_API_KEY",
             "elevenlabs": "ELEVENLABS_API_KEY",
@@ -88,11 +106,16 @@ class MasterCredentialService:
             "groq": "GROQ_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
             "google": "GEMINI_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+            "google_realtime": "GEMINI_API_KEY",
+            "navana": "BODHI_API_KEY",
+            "bodhi": "BODHI_API_KEY",
         }
-        env_var = env_map.get(prov_key, f"{prov_key.upper()}_API_KEY")
-        val = os.environ.get(env_var) or os.environ.get(f"{prov_key.upper()}_API_KEY")
-        if val:
-            return {"api_key": val}
+        for candidate in lookup_candidates:
+            env_var = env_map.get(candidate, f"{candidate.upper()}_API_KEY")
+            val = os.environ.get(env_var) or os.environ.get(f"{candidate.upper()}_API_KEY")
+            if val:
+                return {"api_key": val}
         return None
 
     async def test_connection(self, provider: str) -> Tuple[bool, str]:
@@ -127,14 +150,25 @@ class MasterCredentialService:
                         return False, f"Anthropic returned HTTP status {resp.status}"
 
                 # 3. Google Gemini
-                elif provider_lower in ("google", "gemini"):
+                elif provider_lower in ("google", "gemini", "google_realtime"):
                     api_key = creds.get("api_key")
                     async with session.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}") as resp:
                         if resp.status == 200:
                             return True, "Successfully connected to Google Gemini API."
                         return False, f"Google Gemini returned HTTP status {resp.status}"
 
-                # 4. Sarvam AI (Indian Models)
+                # 4. Navana.ai (Indic Speech AI)
+                elif provider_lower in ("navana", "bodhi"):
+                    api_key = creds.get("api_key")
+                    async with session.post(
+                        "https://stt.navana.ai/api/transcribe",
+                        headers={"X-Api-Key": api_key},
+                    ) as resp:
+                        if resp.status != 401:
+                            return True, "Successfully connected to Navana.ai API."
+                        return False, "Navana.ai returned 401 Unauthorized (Invalid API key)"
+
+                # 5. Sarvam AI (Indian Models)
                 elif provider_lower == "sarvam":
                     api_key = creds.get("api_key")
                     async with session.get(

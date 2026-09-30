@@ -22,6 +22,7 @@ class UserAdminResponse(BaseModel):
     provider_id: str
     is_superuser: bool
     is_active: bool = True
+    has_local_ai_access: bool = False
     created_at: Optional[str] = None
     organization_id: Optional[int] = None
     organization_name: Optional[str] = None
@@ -35,6 +36,7 @@ class CreateUserRequest(BaseModel):
     password: str
     name: Optional[str] = None
     is_superuser: bool = False
+    has_local_ai_access: bool = False
     plan_code: Optional[str] = "starter"
     initial_minutes: int = 60
     is_active: bool = True
@@ -43,8 +45,10 @@ class CreateUserRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     is_superuser: Optional[bool] = None
     is_active: Optional[bool] = None
+    has_local_ai_access: Optional[bool] = None
     plan_name: Optional[str] = None
     wallet_balance_minutes: Optional[int] = None
+
 
 
 class PromoMinutesRequest(BaseModel):
@@ -129,6 +133,20 @@ async def list_admin_users(
             if status == "suspended" and is_active_val:
                 continue
 
+            # Check if user has admin-granted local AI engine access
+            local_setting = await kodewaves_db_client.get_setting(f"local_ai_user_{u.id}")
+            has_local_ai = bool(local_setting.get("enabled", False)) if local_setting else False
+
+            org_name_val = "Primary Organization"
+            org_plan_val = "Starter Plan"
+            if org:
+                custom_name = await kodewaves_db_client.get_setting(f"org_name_{org.id}")
+                org_name_val = custom_name.get("name") if custom_name and custom_name.get("name") else org.provider_id
+
+                plan_setting = await kodewaves_db_client.get_setting(f"org_plan_{org.id}")
+                if plan_setting and plan_setting.get("plan_code"):
+                    org_plan_val = f"{plan_setting['plan_code'].capitalize()} Plan"
+
             response.append(
                 UserAdminResponse(
                     id=u.id,
@@ -136,16 +154,18 @@ async def list_admin_users(
                     provider_id=u.provider_id,
                     is_superuser=u.is_superuser,
                     is_active=is_active_val,
+                    has_local_ai_access=has_local_ai,
                     created_at=u.created_at.isoformat() if u.created_at else None,
                     organization_id=org.id if org else None,
-                    organization_name=org.provider_id if org else "Primary Organization",
+                    organization_name=org_name_val,
                     wallet_balance_minutes=wallet_mins,
-                    plan_name="Starter Plan",
+                    plan_name=org_plan_val,
                     total_calls=call_count,
                 )
             )
 
         return response
+
 
 
 @router.post("", response_model=Dict[str, Any])
@@ -197,17 +217,23 @@ async def create_admin_user(req: CreateUserRequest, _user=Depends(get_superuser)
             notes=f"Initial minutes granted by superadmin on account provisioning.",
         )
 
+    # Save local AI access if specified
+    if req.has_local_ai_access:
+        await kodewaves_db_client.set_setting(f"local_ai_user_{user.id}", {"enabled": True}, category="local_ai")
+        await kodewaves_db_client.set_setting(f"local_ai_org_{organization.id}", {"enabled": True}, category="local_ai")
+
     return {
         "message": f"Successfully created user {req.email}",
         "user_id": user.id,
         "organization_id": organization.id,
         "initial_minutes": req.initial_minutes,
+        "has_local_ai_access": req.has_local_ai_access,
     }
 
 
 @router.patch("/{user_id}", response_model=Dict[str, Any])
 async def update_admin_user(user_id: int, req: UpdateUserRequest, _user=Depends(get_superuser)):
-    """Update user role, active status, or manually set wallet minute balance."""
+    """Update user role, active status, local AI access, or manually set wallet minute balance."""
     async with kodewaves_db_client.get_session() as session:
         stmt = select(UserModel).where(UserModel.id == user_id)
         res = await session.execute(stmt)
@@ -222,6 +248,20 @@ async def update_admin_user(user_id: int, req: UpdateUserRequest, _user=Depends(
 
         await session.commit()
 
+        # Update local AI engine access if requested
+        if req.has_local_ai_access is not None:
+            await kodewaves_db_client.set_setting(
+                f"local_ai_user_{user_id}",
+                {"enabled": req.has_local_ai_access},
+                category="local_ai"
+            )
+            if user.selected_organization_id:
+                await kodewaves_db_client.set_setting(
+                    f"local_ai_org_{user.selected_organization_id}",
+                    {"enabled": req.has_local_ai_access},
+                    category="local_ai"
+                )
+
         # Update wallet balance if requested
         if req.wallet_balance_minutes is not None and user.selected_organization_id:
             wallet_stmt = select(OrganizationWalletModel).where(
@@ -231,10 +271,17 @@ async def update_admin_user(user_id: int, req: UpdateUserRequest, _user=Depends(
             wallet = w_res.scalar_one_or_none()
             if wallet:
                 wallet.credit_balance_minutes = max(0, req.wallet_balance_minutes)
-                wallet.updated_at = datetime.now(UTC)
-                await session.commit()
+        # Update plan if requested
+        if req.plan_name and user.selected_organization_id:
+            clean_plan = req.plan_name.lower().replace(" plan", "").strip()
+            await kodewaves_db_client.set_setting(
+                f"org_plan_{user.selected_organization_id}",
+                {"plan_code": clean_plan, "updated_at": datetime.now(UTC).isoformat()},
+                category="plan",
+            )
 
         return {"message": f"User #{user_id} updated successfully"}
+
 
 
 @router.post("/{user_id}/grant-credits", response_model=Dict[str, Any])

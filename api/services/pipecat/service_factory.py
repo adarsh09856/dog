@@ -635,6 +635,25 @@ def create_stt_service(
             should_interrupt=False,
             sample_rate=audio_config.transport_in_sample_rate,
         )
+    elif user_config.stt.provider == ServiceProviders.GEMINI.value:
+        return GoogleSTTService(
+            credentials=None,
+            location="global",
+            settings=GoogleSTTSettings(
+                model=getattr(user_config.stt, "model", "latest_long"),
+                language=getattr(user_config.stt, "language", "en-US"),
+            ),
+            sample_rate=audio_config.transport_in_sample_rate,
+        )
+    elif user_config.stt.provider == ServiceProviders.NAVANA.value:
+        from api.services.pipecat.navana_speech import NavanaSTTService
+
+        return NavanaSTTService(
+            api_key=user_config.stt.api_key,
+            model=getattr(user_config.stt, "model", "hi-banking-v2-8khz"),
+            language=getattr(user_config.stt, "language", "hi-IN"),
+            sample_rate=audio_config.transport_in_sample_rate,
+        )
     else:
         raise HTTPException(
             status_code=400, detail=f"Invalid STT provider {user_config.stt.provider}"
@@ -1054,6 +1073,32 @@ def create_tts_service(
                 model=model,
                 language=language,
             ),
+            text_filters=[xml_function_tag_filter],
+            skip_aggregator_types=["recording_router", "recording"],
+            silence_time_s=1.0,
+        )
+    elif user_config.tts.provider == ServiceProviders.GEMINI.value:
+        from api.services.pipecat.gemini_tts import GeminiTTSService
+
+        return GeminiTTSService(
+            api_key=user_config.tts.api_key,
+            model=getattr(user_config.tts, "model", "gemini-2.5-flash-preview-tts"),
+            voice=getattr(user_config.tts, "voice", "Puck"),
+            sample_rate=audio_config.transport_out_sample_rate,
+            text_filters=[xml_function_tag_filter],
+            skip_aggregator_types=["recording_router", "recording"],
+            silence_time_s=1.0,
+        )
+    elif user_config.tts.provider == ServiceProviders.NAVANA.value:
+        from api.services.pipecat.navana_speech import NavanaTTSService
+
+        return NavanaTTSService(
+            api_key=user_config.tts.api_key,
+            model=getattr(user_config.tts, "model", "bodhi-tts-v1"),
+            voice=getattr(user_config.tts, "voice", "default_female"),
+            language=getattr(user_config.tts, "language", "hi-IN"),
+            speed=getattr(user_config.tts, "speed", 1.0),
+            sample_rate=audio_config.transport_out_sample_rate,
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,

@@ -67,6 +67,12 @@ from api.services.configuration.options.google import (
     GOOGLE_VERTEX_LOCATIONS,
     GOOGLE_VERTEX_MODELS,
 )
+from api.services.configuration.options.navana import (
+    NAVANA_LANGUAGES,
+    NAVANA_STT_MODELS,
+    NAVANA_TTS_MODELS,
+    NAVANA_TTS_VOICES,
+)
 
 
 class ServiceType(Enum):
@@ -113,6 +119,8 @@ class ServiceProviders(str, Enum):
     XAI = "xai"
     LMNT = "lmnt"
     SPEECHIFY = "speechify"
+    GEMINI = "gemini"
+    NAVANA = "navana"
 
 
 class BaseServiceConfiguration(BaseModel):
@@ -148,8 +156,10 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.XAI,
         ServiceProviders.LMNT,
         ServiceProviders.SPEECHIFY,
+        ServiceProviders.GEMINI,
+        ServiceProviders.NAVANA,
     ]
-    api_key: str | list[str]
+    api_key: str | list[str] | None = None
 
     @field_validator("api_key")
     @classmethod
@@ -317,8 +327,19 @@ GOOGLE_PROVIDER_MODEL_CONFIG = provider_model_config("Google")
 GROQ_PROVIDER_MODEL_CONFIG = provider_model_config("Groq")
 OPENROUTER_PROVIDER_MODEL_CONFIG = provider_model_config("Open Router")
 AZURE_OPENAI_PROVIDER_MODEL_CONFIG = provider_model_config("Azure OpenAI")
-DOGRAH_PROVIDER_MODEL_CONFIG = provider_model_config("Dograh")
+DOGRAH_PROVIDER_MODEL_CONFIG = provider_model_config("Kodewaves")
 AWS_BEDROCK_PROVIDER_MODEL_CONFIG = provider_model_config("AWS Bedrock")
+MINIMAX_PROVIDER_MODEL_CONFIG = provider_model_config("MiniMax")
+GEMINI_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Google Gemini",
+    description="Google Gemini Direct API (TTS, STT, Embeddings, LLM, Realtime) using AI Studio API keys.",
+    provider_docs_url="https://ai.google.dev",
+)
+NAVANA_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Navana.ai",
+    description="Navana.ai Bodhi Speech platform for Indian languages (STT & TTS).",
+    provider_docs_url="https://docs.dev.navana.ai",
+)
 GOOGLE_VERTEX_PROVIDER_MODEL_CONFIG = provider_model_config("Google Vertex")
 OPENAI_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config("OpenAI")
 GROK_REALTIME_PROVIDER_MODEL_CONFIG = provider_model_config("Grok Realtime")
@@ -352,13 +373,14 @@ SPEECHMATICS_PROVIDER_MODEL_CONFIG = provider_model_config("Speechmatics")
 ASSEMBLYAI_PROVIDER_MODEL_CONFIG = provider_model_config("AssemblyAI")
 GLADIA_PROVIDER_MODEL_CONFIG = provider_model_config("Gladia")
 SPEACHES_PROVIDER_MODEL_CONFIG = provider_model_config(
-    "Local Models (Speaches)",
+    "Kodewaves Local (CPU)",
     description=(
-        "Self-hosted OpenAI-compatible local models. See the Speaches project "
-        "for setup and supported backends."
+        "Self-hosted lightweight local AI models running on VPS CPU (Ollama + Speaches). "
+        "Ultra-low latency, zero external API costs."
     ),
     provider_docs_url="https://github.com/speaches-ai/speaches",
 )
+
 HUGGINGFACE_PROVIDER_MODEL_CONFIG = provider_model_config(
     "Hugging Face",
     description="Hosted Hugging Face Inference Providers API for usage-based inference.",
@@ -595,7 +617,15 @@ class AWSBedrockLLMConfiguration(BaseLLMConfiguration):
     )
 
 
-SPEACHES_LLM_MODELS = ["llama3", "mistral", "phi3", "qwen2", "gemma2", "deepseek-r1"]
+SPEACHES_LLM_MODELS = [
+    "qwen2.5:1.5b",
+    "phi4-mini",
+    "llama3.2:1b",
+    "qwen3:1.7b",
+    "llama3:8b",
+    "mistral:7b",
+    "deepseek-r1",
+]
 
 
 @register_llm
@@ -603,17 +633,18 @@ class SpeachesLLMConfiguration(BaseLLMConfiguration):
     model_config = SPEACHES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
     model: str = Field(
-        default="llama3",
-        description="Model name as exposed by your OpenAI-compatible server.",
+        default="qwen2.5:1.5b",
+        description="Lightweight CPU-friendly model identifier (e.g. qwen2.5:1.5b, phi4-mini).",
         json_schema_extra={
             "examples": SPEACHES_LLM_MODELS,
             "allow_custom_input": True,
         },
     )
     base_url: str = Field(
-        default="http://localhost:11434/v1",
-        description="OpenAI-compatible endpoint (Ollama, vLLM, etc.).",
+        default="http://ollama:11434/v1",
+        description="OpenAI-compatible endpoint (Ollama at http://ollama:11434/v1).",
     )
+
     api_key: str | list[str] | None = Field(
         default=None,
         description="Usually not required for self-hosted endpoints. Leave blank unless your server enforces one.",
@@ -1198,7 +1229,7 @@ class GoogleTTSConfiguration(BaseTTSConfiguration):
     model: str = Field(
         default="chirp_3_hd",
         description=(
-            "Google Cloud low-latency TTS engine. Dograh maps this to Pipecat's "
+            "Google Cloud low-latency TTS engine. Kodewaves maps this to Pipecat's "
             "streaming Google TTS service for Chirp 3 HD and Journey voices."
         ),
         json_schema_extra={
@@ -1441,7 +1472,11 @@ class RimeTTSConfiguration(BaseTTSConfiguration):
     )
 
 
-SPEACHES_TTS_MODELS = ["hexgrad/Kokoro-82M"]
+SPEACHES_TTS_MODELS = [
+    "hexgrad/Kokoro-82M",
+    "piper/en_US-amy-medium",
+    "piper/hi_IN-natasha-medium",
+]
 
 
 @register_tts
@@ -1450,7 +1485,7 @@ class SpeachesTTSConfiguration(BaseTTSConfiguration):
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
     model: str = Field(
         default="kokoro",
-        description="Model name as served by your TTS endpoint (e.g. Kokoro-FastAPI).",
+        description="Model name as served by your TTS endpoint (e.g. kokoro, piper).",
         json_schema_extra={
             "examples": SPEACHES_TTS_MODELS,
             "allow_custom_input": True,
@@ -1459,12 +1494,13 @@ class SpeachesTTSConfiguration(BaseTTSConfiguration):
     voice: str = Field(
         default="af_heart",
         json_schema_extra={"allow_custom_input": True},
-        description="Voice ID for the TTS engine.",
+        description="Voice ID for the TTS engine (e.g. af_heart, af_bella, am_adam).",
     )
     base_url: str = Field(
-        default="http://localhost:8000/v1",
-        description="OpenAI-compatible TTS endpoint (Kokoro-FastAPI, etc.).",
+        default="http://speaches:8000/v1",
+        description="OpenAI-compatible TTS endpoint (Speaches at http://speaches:8000/v1).",
     )
+
     speed: float = Field(
         default=1.0, ge=0.25, le=4.0, description="Speech speed (0.25 to 4.0)."
     )
@@ -1487,6 +1523,7 @@ MINIMAX_TTS_VOICES = [
 
 @register_tts
 class MiniMaxTTSConfiguration(BaseTTSConfiguration):
+    model_config = MINIMAX_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.MINIMAX] = ServiceProviders.MINIMAX
     model: str = Field(
         default="speech-2.8-hd",
@@ -1512,6 +1549,67 @@ class MiniMaxTTSConfiguration(BaseTTSConfiguration):
     )
     group_id: str = Field(
         description="MiniMax Group ID (found in your MiniMax dashboard under Account → Group).",
+    )
+
+
+GEMINI_TTS_MODELS = ["gemini-2.5-flash-preview-tts"]
+GEMINI_TTS_VOICES = [
+    "Puck",
+    "Charon",
+    "Kore",
+    "Fenrir",
+    "Aoede",
+    "Zephyr",
+    "Leda",
+    "Orpheus",
+]
+
+
+@register_tts
+class GoogleGeminiTTSConfiguration(BaseTTSConfiguration):
+    model_config = GEMINI_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.GEMINI] = ServiceProviders.GEMINI
+    model: str = Field(
+        default="gemini-2.5-flash-preview-tts",
+        description="Google Gemini Direct Audio TTS model.",
+        json_schema_extra={"examples": GEMINI_TTS_MODELS, "allow_custom_input": True},
+    )
+    voice: str = Field(
+        default="Puck",
+        description="Gemini voice name.",
+        json_schema_extra={"examples": GEMINI_TTS_VOICES, "allow_custom_input": True},
+    )
+    api_key: str | list[str] | None = Field(
+        default=None,
+        description="Google Gemini API key from Google AI Studio.",
+    )
+
+
+@register_tts
+class NavanaTTSConfiguration(BaseTTSConfiguration):
+    model_config = NAVANA_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.NAVANA] = ServiceProviders.NAVANA
+    model: str = Field(
+        default="bodhi-tts-v1",
+        description="Navana.ai Bodhi speech synthesis model.",
+        json_schema_extra={"examples": list(NAVANA_TTS_MODELS), "allow_custom_input": True},
+    )
+    voice: str = Field(
+        default="default_female",
+        description="Navana.ai voice name (e.g. default_female, default_male, meera, aravind).",
+        json_schema_extra={"examples": list(NAVANA_TTS_VOICES), "allow_custom_input": True},
+    )
+    language: str = Field(
+        default="hi-IN",
+        description="Language code for synthesis (e.g. hi-IN, en-IN, ta-IN, te-IN).",
+        json_schema_extra={"examples": list(NAVANA_LANGUAGES), "allow_custom_input": True},
+    )
+    speed: float = Field(
+        default=1.0, ge=0.5, le=2.0, description="Speech speed multiplier (0.5 to 2.0)."
+    )
+    api_key: str | list[str] | None = Field(
+        default=None,
+        description="Navana.ai Bodhi API key.",
     )
 
 
@@ -1744,6 +1842,8 @@ TTSConfig = Annotated[
         XAITTSConfiguration,
         LmntTTSConfiguration,
         SpeechifyTTSConfiguration,
+        GoogleGeminiTTSConfiguration,
+        NavanaTTSConfiguration,
     ],
     Field(discriminator="provider"),
 ]
@@ -1886,7 +1986,7 @@ class DograhSTTService(BaseSTTConfiguration):
     provider: Literal[ServiceProviders.DOGRAH] = ServiceProviders.DOGRAH
     model: str = Field(
         default="default",
-        description="Dograh STT tier.",
+        description="Kodewaves STT tier.",
         json_schema_extra={"examples": DOGRAH_STT_MODELS},
     )
     language: str = Field(
@@ -1940,10 +2040,12 @@ class SpeechmaticsSTTConfiguration(BaseSTTConfiguration):
 
 
 SPEACHES_STT_MODELS = [
+    "Systran/faster-whisper-tiny",
+    "Systran/faster-whisper-base",
     "Systran/faster-distil-whisper-small.en",
     "Systran/faster-whisper-large-v3",
 ]
-SPEACHES_STT_LANGUAGES = ["en", "ar", "nl", "fr", "de", "hi", "it", "pt", "es"]
+SPEACHES_STT_LANGUAGES = ["en", "hi", "ar", "nl", "fr", "de", "it", "pt", "es"]
 
 
 @register_stt
@@ -1951,8 +2053,8 @@ class SpeachesSTTConfiguration(BaseSTTConfiguration):
     model_config = SPEACHES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
     model: str = Field(
-        default="Systran/faster-distil-whisper-small.en",
-        description="Whisper model identifier as served by your STT endpoint.",
+        default="Systran/faster-whisper-tiny",
+        description="Lightweight Whisper model identifier as served by your STT endpoint.",
         json_schema_extra={
             "examples": SPEACHES_STT_MODELS,
             "allow_custom_input": True,
@@ -1967,9 +2069,10 @@ class SpeachesSTTConfiguration(BaseSTTConfiguration):
         },
     )
     base_url: str = Field(
-        default="http://localhost:8000/v1",
-        description="OpenAI-compatible STT endpoint (Speaches, etc.).",
+        default="http://speaches:8000/v1",
+        description="OpenAI-compatible STT endpoint (Speaches at http://speaches:8000/v1).",
     )
+
     api_key: str | list[str] | None = Field(
         default=None,
         description="Usually not required for self-hosted STT. Leave blank unless enforced.",
@@ -2159,6 +2262,49 @@ class SmallestAISTTConfiguration(BaseSTTConfiguration):
     )
 
 
+GEMINI_STT_MODELS = ["gemini-3.5-transcribe", "gemini-2.5-flash"]
+
+
+@register_stt
+class GoogleGeminiSTTConfiguration(BaseSTTConfiguration):
+    model_config = GEMINI_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.GEMINI] = ServiceProviders.GEMINI
+    model: str = Field(
+        default="gemini-3.5-transcribe",
+        description="Google Gemini Speech-to-Text transcription model.",
+        json_schema_extra={"examples": GEMINI_STT_MODELS, "allow_custom_input": True},
+    )
+    language: str = Field(
+        default="en-US",
+        description="Primary BCP-47 language code for recognition.",
+        json_schema_extra={"allow_custom_input": True},
+    )
+    api_key: str | list[str] | None = Field(
+        default=None,
+        description="Google Gemini API key from Google AI Studio.",
+    )
+
+
+@register_stt
+class NavanaSTTConfiguration(BaseSTTConfiguration):
+    model_config = NAVANA_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.NAVANA] = ServiceProviders.NAVANA
+    model: str = Field(
+        default="hi-banking-v2-8khz",
+        description="Navana.ai Bodhi speech recognition model.",
+        json_schema_extra={"examples": list(NAVANA_STT_MODELS), "allow_custom_input": True},
+    )
+    language: str = Field(
+        default="hi-IN",
+        description="Indian language code for transcription (e.g. hi-IN, en-IN, ta-IN, te-IN).",
+        json_schema_extra={"examples": list(NAVANA_LANGUAGES), "allow_custom_input": True},
+    )
+    api_key: str | list[str] | None = Field(
+        default=None,
+        description="Navana.ai Bodhi API key.",
+    )
+
+
 STTConfig = Annotated[
     Union[
         DeepgramSTTConfiguration,
@@ -2175,6 +2321,8 @@ STTConfig = Annotated[
         AzureSpeechSTTConfiguration,
         SmallestAISTTConfiguration,
         ElevenlabsSTTConfiguration,
+        GoogleGeminiSTTConfiguration,
+        NavanaSTTConfiguration,
     ],
     Field(discriminator="provider"),
 ]
@@ -2247,8 +2395,26 @@ class DograhEmbeddingsConfiguration(BaseEmbeddingsConfiguration):
     provider: Literal[ServiceProviders.DOGRAH] = ServiceProviders.DOGRAH
     model: str = Field(
         default="dograh_embedding_v1",
-        description="Dograh-managed embedding model.",
+        description="Kodewaves-managed embedding model.",
         json_schema_extra={"examples": DOGRAH_EMBEDDING_MODELS},
+    )
+
+
+GEMINI_EMBEDDING_MODELS = ["text-embedding-004"]
+
+
+@register_embeddings
+class GoogleGeminiEmbeddingsConfiguration(BaseEmbeddingsConfiguration):
+    model_config = GEMINI_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.GEMINI] = ServiceProviders.GEMINI
+    model: str = Field(
+        default="text-embedding-004",
+        description="Google Gemini text embedding model.",
+        json_schema_extra={"examples": GEMINI_EMBEDDING_MODELS},
+    )
+    api_key: str | list[str] | None = Field(
+        default=None,
+        description="Google Gemini API key from Google AI Studio.",
     )
 
 
@@ -2258,6 +2424,7 @@ EmbeddingsConfig = Annotated[
         OpenRouterEmbeddingsConfiguration,
         AzureOpenAIEmbeddingsConfiguration,
         DograhEmbeddingsConfiguration,
+        GoogleGeminiEmbeddingsConfiguration,
     ],
     Field(discriminator="provider"),
 ]

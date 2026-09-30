@@ -646,13 +646,21 @@ export function ServiceConfigurationForm({
 
                 {currentProvider && providerSchema && providerSchema.properties.api_key && (
                     <div className="space-y-2">
-                        <Label>{mode === 'override' ? 'API Key (leave empty to use global)' : 'API Key(s)'}</Label>
+                        <div className="flex items-center justify-between">
+                            <Label>{mode === 'override' ? 'API Key (leave empty to use global / managed)' : 'API Key (Optional)'}</Label>
+                            <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2 py-0.5 rounded-full">
+                                Platform Managed Available
+                            </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Leave blank to use Kodewaves Sovereign Platform Managed keys. Enter an API key only if you wish to use your own personal provider account (BYOK).
+                        </p>
                         {renderFieldDescription("api_key", providerSchema)}
                         {apiKeys[service].map((key, index) => (
                             <div key={index} className="flex gap-2">
                                 <Input
                                     type="text"
-                                    placeholder="Enter API key"
+                                    placeholder="Enter custom API key (or leave empty for Managed Voice)"
                                     value={key}
                                     onChange={(e) => {
                                         const newKeys = [...apiKeys[service]];

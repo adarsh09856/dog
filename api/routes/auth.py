@@ -58,6 +58,17 @@ async def signup(request: SignupRequest):
         created_by=user.provider_id,
     )
 
+    # Initialize Kodewaves Sovereign Wallet with free trial credits
+    from api.db.kodewaves_client import kodewaves_db_client
+
+    await kodewaves_db_client.get_or_create_wallet(organization.id)
+    if request.organization_name:
+        await kodewaves_db_client.set_setting(
+            f"org_name_{organization.id}",
+            {"name": request.organization_name},
+            category="organization",
+        )
+
     # Create JWT token
     token = create_jwt_token(user.id, request.email)
 

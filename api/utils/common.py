@@ -131,18 +131,20 @@ def _validate_url(url: str) -> None:
             )
 
 
-async def get_backend_endpoints() -> tuple[str, str]:
+async def get_backend_endpoints(request: object | None = None) -> tuple[str, str]:
     """
     Get the backend endpoint URLs for external access (webhooks, callbacks, WebSocket connections).
 
     Priority:
-        1. BACKEND_API_ENDPOINT environment variable (if set and not localhost)
-        2. Cloudflared Tunnel URLs (fallback for localhost or missing env var)
+        1. Inbound request headers (x-forwarded-host / host) if from an external/public domain
+        2. BACKEND_API_ENDPOINT environment variable (if set and public)
+        3. Cloudflared Tunnel URLs (fallback for localhost or missing env var)
+        4. Local fallback from BACKEND_API_ENDPOINT
 
     Protocol Handling:
         1. If URL has http:// - returns http:// and ws://
         2. If URL has https:// - returns https:// and wss://
-        3. If URL has no protocol - defaults to http:// and ws://
+        3. If URL has no protocol - defaults to http:// and ws:// (or https/wss if public domain)
 
     Returns:
         tuple[str, str]: (backend_endpoint, wss_backend_endpoint)
@@ -151,33 +153,58 @@ async def get_backend_endpoints() -> tuple[str, str]:
         ValueError: If no endpoint URL can be determined or URL is invalid
     """
 
+    # Check incoming request headers if request is provided
+    if request is not None and hasattr(request, "headers"):
+        headers = getattr(request, "headers", {})
+        host = headers.get("x-forwarded-host") or headers.get("host")
+        if host and not host.startswith("localhost") and not host.startswith("127.0.0.1") and not host.startswith("0.0.0.0"):
+            proto = headers.get("x-forwarded-proto") or (
+                "https" if getattr(getattr(request, "url", None), "scheme", None) == "https" else "https"
+            )
+            ws_proto = "wss" if proto == "https" else "ws"
+            http_url = f"{proto}://{host}".rstrip("/")
+            ws_url = f"{ws_proto}://{host}".rstrip("/")
+            logger.debug(f"Resolved public backend endpoints from request headers: {http_url}, {ws_url}")
+            return http_url, ws_url
+
     # If env var is explicitly set (even to empty/whitespace), validate it
     if BACKEND_API_ENDPOINT is not None:
         # Validate - this will raise for empty/whitespace
         _validate_url(BACKEND_API_ENDPOINT)
 
     if BACKEND_API_ENDPOINT:
+        # If public address (not localhost or private IP):
+        if not is_local_or_private_url(BACKEND_API_ENDPOINT):
+            scheme = get_scheme(BACKEND_API_ENDPOINT)
+            if scheme:
+                http_url = BACKEND_API_ENDPOINT.rstrip("/")
+                ws_scheme = {"http": "ws", "https": "wss"}.get(scheme, "wss")
+                ws_url = BACKEND_API_ENDPOINT.rstrip("/").replace(scheme, ws_scheme, 1)
+            else:
+                http_url = "https://" + BACKEND_API_ENDPOINT.rstrip("/")
+                ws_url = "wss://" + BACKEND_API_ENDPOINT.rstrip("/")
+            return http_url, ws_url
+
         # Non-public address (localhost or a private/reserved IP) - the host isn't
         # reachable from the internet, so prefer a running Cloudflare tunnel's URL.
-        if is_local_or_private_url(BACKEND_API_ENDPOINT):
-            logger.debug(
-                f"BACKEND_API_ENDPOINT is not publicly reachable ({BACKEND_API_ENDPOINT}), checking tunnel URL"
-            )
-            try:
-                tunnel_urls = await TunnelURLProvider.get_tunnel_urls()
-                if tunnel_urls:
-                    logger.debug(
-                        f"Tunnel URLs available, using tunnel URLs instead of localhost"
-                    )
-                    return tunnel_urls
-                else:
-                    logger.debug(
-                        f"Tunnel URLs returned None, proceeding with localhost endpoint"
-                    )
-            except Exception as e:
+        logger.debug(
+            f"BACKEND_API_ENDPOINT is not publicly reachable ({BACKEND_API_ENDPOINT}), checking tunnel URL"
+        )
+        try:
+            tunnel_urls = await TunnelURLProvider.get_tunnel_urls()
+            if tunnel_urls:
                 logger.debug(
-                    f"No tunnel URLs available ({e}), proceeding with localhost endpoint"
+                    f"Tunnel URLs available, using tunnel URLs instead of localhost"
                 )
+                return tunnel_urls
+            else:
+                logger.debug(
+                    f"Tunnel URLs returned None, proceeding with localhost endpoint"
+                )
+        except Exception as e:
+            logger.debug(
+                f"No tunnel URLs available ({e}), proceeding with localhost endpoint"
+            )
 
         try:
             # Parse the URL to validate and handle protocol

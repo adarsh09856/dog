@@ -257,6 +257,18 @@ TURN_SECRET=$TURN_SECRET
 # Workers
 FASTAPI_WORKERS=2
 ENABLE_SIGNUP=true
+
+# Local CPU AI Engine (Ollama + Speaches — Admin Opt-In)
+OLLAMA_ENDPOINT=http://ollama:11434
+SPEACHES_ENDPOINT=http://speaches:8000
+ENABLE_LOCAL_AI_ENGINE=true
+
+# Payment Gateways (Configure in Admin Panel → Master Keys)
+# RAZORPAY_KEY_ID=
+# RAZORPAY_KEY_SECRET=
+# STRIPE_SECRET_KEY=
+# STRIPE_PUBLISHABLE_KEY=
+# STRIPE_WEBHOOK_SECRET=
 ENVFILE
         log_success "Created .env with database credentials, port mappings, and master keys."
     else
@@ -296,6 +308,14 @@ ENVFILE
         [ -z "$EXISTING_FERNET" ] && EXISTING_FERNET=$(generate_fernet_key) && echo "MASTER_CREDENTIAL_ENCRYPTION_KEY=$EXISTING_FERNET" >> .env
         grep -q '^JWT_SECRET=' .env || echo "JWT_SECRET=$EXISTING_JWT" >> .env
         grep -q '^KODEWAVES_SECRET_KEY=' .env || echo "KODEWAVES_SECRET_KEY=$EXISTING_FERNET" >> .env
+
+        # Ensure Kodewaves v2 Local AI Engine env vars exist
+        grep -q '^OLLAMA_ENDPOINT=' .env || echo "OLLAMA_ENDPOINT=http://ollama:11434" >> .env
+        grep -q '^SPEACHES_ENDPOINT=' .env || echo "SPEACHES_ENDPOINT=http://speaches:8000" >> .env
+        grep -q '^ENABLE_LOCAL_AI_ENGINE=' .env || echo "ENABLE_LOCAL_AI_ENGINE=true" >> .env
+        grep -q '^DOGRAH_DEVOPS_SECRET=' .env || echo "DOGRAH_DEVOPS_SECRET=$(generate_secret)" >> .env
+
+        log_success "Existing .env updated with Kodewaves v2 configuration."
     fi
 }
 
@@ -303,7 +323,7 @@ ENVFILE
 deploy_containers() {
     log_info "Preparing production environment and infrastructure..."
     
-    # Start infrastructure services first
+    # Start infrastructure services first (database, cache, storage)
     docker compose -f docker-compose.aapanel.yaml up -d postgres redis minio
 
     log_info "Waiting for PostgreSQL database container to become healthy..."
@@ -331,16 +351,25 @@ deploy_containers() {
         log_warn "Superadmin creation script completed."
     }
 
-    log_info "Bootstrapping platform defaults (AI Catalog, SaaS Plans, Settings, Wallets)..."
+    # Start Local AI Engine containers (Ollama + Speaches) before seeding
+    log_info "Starting Local CPU AI Engine (Ollama + Speaches)..."
+    docker compose -f docker-compose.aapanel.yaml up -d ollama speaches || {
+        log_warn "Local AI containers may not be available on this hardware."
+    }
+
+    # Wait briefly for Ollama to initialize
+    sleep 5
+
+    log_info "Bootstrapping platform defaults (AI Catalog, SaaS Plans, Templates, Wallets, Local AI Model)..."
     docker compose -f docker-compose.aapanel.yaml run --rm api python -m scripts.seed_platform || {
         log_warn "Platform seed bootstrap completed with notice."
     }
-    log_success "Platform defaults, models catalog, plans, and wallets verified."
+    log_success "Platform defaults, models catalog, plans, templates, and wallets verified."
 
-    log_info "Launching full production application stack (API, UI, Coturn)..."
+    log_info "Building and launching full production application stack..."
     docker compose -f docker-compose.aapanel.yaml up -d --build
     
-    log_success "All services are running healthy!"
+    log_success "All services are running! (API, UI, Coturn, Ollama, Speaches, PostgreSQL, Redis, MinIO)"
 }
 
 # 5. Output aaPanel Nginx Reverse Proxy Instructions

@@ -13,9 +13,13 @@ router = APIRouter(prefix="/master-keys", tags=["admin-master-keys"])
 
 class MasterCredentialRequest(BaseModel):
     provider: str
-    category: str
-    credentials: Dict[str, Any]
+    category: Optional[str] = "llm"
+    credentials: Optional[Dict[str, Any]] = None
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    display_name: Optional[str] = None
     is_enabled: bool = True
+    is_active: Optional[bool] = None
 
 
 class MasterCredentialResponse(BaseModel):
@@ -58,12 +62,34 @@ async def list_master_keys(_user=Depends(get_superuser)):
 @router.post("", response_model=Dict[str, Any])
 async def save_master_key(req: MasterCredentialRequest, _user=Depends(get_superuser)):
     """Encrypt and save master credentials for a provider with AES-256 Fernet."""
+    creds = dict(req.credentials) if req.credentials else {}
+    if req.api_key:
+        creds["api_key"] = req.api_key.strip()
+    if req.api_secret:
+        creds["api_secret"] = req.api_secret.strip()
+
+    category = req.category or "llm"
+    is_enabled = req.is_enabled if req.is_active is None else req.is_active
+
+    provider_clean = req.provider.lower().strip()
+
     success = await master_credential_service.save_master_credential(
-        provider=req.provider,
-        category=req.category,
-        credentials_dict=req.credentials,
-        is_enabled=req.is_enabled,
+        provider=provider_clean,
+        category=category.lower().strip(),
+        credentials_dict=creds,
+        is_enabled=is_enabled,
     )
+
+    # If saving gemini or google, ensure both aliases resolve seamlessly
+    if provider_clean in ("gemini", "google"):
+        alias = "google" if provider_clean == "gemini" else "gemini"
+        await master_credential_service.save_master_credential(
+            provider=alias,
+            category=category.lower().strip(),
+            credentials_dict=creds,
+            is_enabled=is_enabled,
+        )
+
     if not success:
         raise HTTPException(status_code=500, detail="Failed to encrypt and store master credentials.")
     return {"message": f"Successfully stored master credentials for {req.provider}"}

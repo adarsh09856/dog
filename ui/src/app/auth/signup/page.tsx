@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [orgName, setOrgName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,7 +36,7 @@ export default function SignupPage() {
 
     try {
       const res = await signupApiV1AuthSignupPost({
-        body: { email, password },
+        body: { email, password, name: name || undefined, organization_name: orgName || undefined },
       });
 
       if (res.error || !res.data) {
@@ -66,6 +68,26 @@ export default function SignupPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Full Name</Label>
+          <Input
+            id="name"
+            type="text"
+            placeholder="John Doe"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="orgName">Organization / Company Name</Label>
+          <Input
+            id="orgName"
+            type="text"
+            placeholder="Acme Corp"
+            value={orgName}
+            onChange={(e) => setOrgName(e.target.value)}
+          />
+        </div>
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input

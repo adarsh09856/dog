@@ -17,6 +17,7 @@ import {
   Search,
   Shield,
   ShieldAlert,
+  Sparkles,
   Trash2,
   UserCheck,
   UserMinus,
@@ -82,6 +83,7 @@ export default function AdminUsersPage() {
     password: "",
     name: "",
     is_superuser: false,
+    has_local_ai_access: false,
     plan_code: "starter",
     initial_minutes: 60,
   });
@@ -95,9 +97,11 @@ export default function AdminUsersPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     is_superuser: false,
+    has_local_ai_access: false,
     plan_name: "Starter",
     wallet_balance_minutes: 0,
   });
+
 
   // 4. Reset Password Modal State
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -147,6 +151,7 @@ export default function AdminUsersPage() {
         password: "",
         name: "",
         is_superuser: false,
+        has_local_ai_access: false,
         plan_code: "starter",
         initial_minutes: 60,
       });
@@ -378,6 +383,7 @@ export default function AdminUsersPage() {
                   <TableHead className="text-xs">SaaS Plan</TableHead>
                   <TableHead className="text-xs text-center">Calls Made</TableHead>
                   <TableHead className="text-xs text-right">Wallet Balance</TableHead>
+                  <TableHead className="text-xs text-center">Local CPU AI</TableHead>
                   <TableHead className="text-xs text-center">Status</TableHead>
                   <TableHead className="text-xs text-right">Actions</TableHead>
                 </TableRow>
@@ -385,7 +391,7 @@ export default function AdminUsersPage() {
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-12 text-sm text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-12 text-sm text-muted-foreground">
                       {loading ? (
                         <div className="flex items-center justify-center gap-2">
                           <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -440,6 +446,17 @@ export default function AdminUsersPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-center">
+                          {u.has_local_ai_access ? (
+                            <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px] gap-1 font-semibold">
+                              <Sparkles className="h-2.5 w-2.5 text-amber-500" /> Active
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground opacity-60">
+                              Disabled
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
                           {u.is_active ? (
                             <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] gap-1">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -476,6 +493,7 @@ export default function AdminUsersPage() {
                                   setSelectedUser(u);
                                   setEditForm({
                                     is_superuser: u.is_superuser,
+                                    has_local_ai_access: Boolean(u.has_local_ai_access),
                                     plan_name: u.plan_name || "Starter",
                                     wallet_balance_minutes: balance,
                                   });
@@ -485,6 +503,7 @@ export default function AdminUsersPage() {
                                 <Edit className="h-3.5 w-3.5 mr-2 text-primary" />
                                 Edit User & Plan
                               </DropdownMenuItem>
+
                               <DropdownMenuItem
                                 onClick={() => {
                                   setSelectedUser(u);
@@ -620,6 +639,18 @@ export default function AdminUsersPage() {
                   Grant Superadmin Access
                 </Label>
               </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="create-local-ai"
+                  checked={createForm.has_local_ai_access}
+                  onChange={(e) => setCreateForm({ ...createForm, has_local_ai_access: e.target.checked })}
+                  className="rounded border-border text-primary focus:ring-primary"
+                />
+                <Label htmlFor="create-local-ai" className="text-xs font-medium cursor-pointer">
+                  Allow Local AI Access (Self-Hosted CPU Engine)
+                </Label>
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" size="sm" onClick={() => setCreateModalOpen(false)}>
@@ -744,6 +775,18 @@ export default function AdminUsersPage() {
                 />
                 <Label htmlFor="edit-superadmin" className="text-xs font-medium cursor-pointer">
                   Superadmin Privileges
+                </Label>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="edit-local-ai"
+                  checked={editForm.has_local_ai_access}
+                  onChange={(e) => setEditForm({ ...editForm, has_local_ai_access: e.target.checked })}
+                  className="rounded border-border text-primary focus:ring-primary"
+                />
+                <Label htmlFor="edit-local-ai" className="text-xs font-medium cursor-pointer">
+                  Allow Local AI Access (Self-Hosted CPU Engine)
                 </Label>
               </div>
             </div>

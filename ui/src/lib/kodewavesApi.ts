@@ -33,7 +33,15 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     let errorDetail = response.statusText;
     try {
       const errJson = await response.json();
-      errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
+      if (Array.isArray(errJson.detail)) {
+        errorDetail = errJson.detail
+          .map((d: any) => (typeof d === "string" ? d : d.msg || `${d.loc?.join(".")}: ${d.msg}` || JSON.stringify(d)))
+          .join(", ");
+      } else if (typeof errJson.detail === "object" && errJson.detail !== null) {
+        errorDetail = JSON.stringify(errJson.detail);
+      } else {
+        errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
+      }
     } catch {
       // ignore
     }
@@ -85,6 +93,7 @@ export interface AdminUserItem {
   provider_id?: string;
   is_superuser: boolean;
   is_active: boolean;
+  has_local_ai_access?: boolean;
   created_at?: string;
   organization_id?: number;
   organization_name?: string;
@@ -98,6 +107,7 @@ export interface AdminUserItem {
     current_plan?: string;
   };
 }
+
 
 export interface SaaSPlan {
   id: number;
@@ -174,6 +184,10 @@ export interface PlatformSettings {
   primary_color?: string;
   allow_user_byok: boolean;
   enforce_wallet_balance: boolean;
+  enable_local_ai_engine?: boolean;
+  ollama_endpoint?: string;
+  speaches_endpoint?: string;
+  local_ai_max_concurrency?: number;
   smtp_host?: string;
   smtp_port?: number;
   smtp_user?: string;
@@ -547,3 +561,69 @@ export const sovereignBillingApi = {
       body: JSON.stringify({ plan_id: planId }),
     }),
 };
+
+export const publicApi = {
+  getPublicPlans: () => apiFetch<SaaSPlan[]>('/billing-sovereign/public/plans'),
+  getPublicCreditPackages: () => apiFetch<CreditPackage[]>('/billing-sovereign/public/packages'),
+};
+
+export interface PaymentConfig {
+  razorpay_enabled: boolean;
+  razorpay_key_id?: string;
+  stripe_enabled: boolean;
+  stripe_publishable_key?: string;
+  default_currency: string;
+}
+
+export interface CreateOrderPayload {
+  package_id?: string;
+  plan_id?: string;
+  plan_code?: string;
+  gateway?: 'razorpay' | 'stripe';
+  currency?: string;
+  billing_cycle?: 'monthly' | 'annual';
+}
+
+export interface CreateOrderResult {
+  order_id: string;
+  amount: number;
+  currency: string;
+  gateway: string;
+  key_id?: string;
+  checkout_url?: string;
+  notes?: Record<string, any>;
+}
+
+export interface VerifyPaymentPayload {
+  gateway: string;
+  order_id: string;
+  payment_id: string;
+  signature?: string;
+  package_id?: string;
+  plan_id?: string;
+  plan_code?: string;
+}
+
+export interface VerifyPaymentResult {
+  success: boolean;
+  message: string;
+  minutes_added: number;
+  new_wallet_balance: number;
+  plan_code?: string;
+}
+
+export const paymentsApi = {
+  getConfig: () => apiFetch<PaymentConfig>('/payments/config'),
+  createOrder: (payload: CreateOrderPayload) =>
+    apiFetch<CreateOrderResult>('/payments/create-order', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  verifyPayment: (payload: VerifyPaymentPayload) =>
+    apiFetch<VerifyPaymentResult>('/payments/verify', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+};
+
+

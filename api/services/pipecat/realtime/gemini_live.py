@@ -440,6 +440,19 @@ class DograhGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMService
             # has updated the shared context and that complete history is seeded.
             self._ready_for_realtime_input = False
             await self._maybe_seed_node_transition_context()
+            if not self._ready_for_realtime_input:
+                async def _safety_unlock():
+                    await asyncio.sleep(0.8)
+                    if self._session and not self._ready_for_realtime_input:
+                        logger.warning(
+                            f"{self}: node transition context wait timed out; ensuring audio input gate is open"
+                        )
+                        if self._context and self._awaiting_node_transition_context:
+                            await self._maybe_seed_node_transition_context()
+                        self._ready_for_realtime_input = True
+                        self._awaiting_node_transition_context = False
+
+                self.create_task(_safety_unlock(), name=f"{self}::safety-unlock-audio")
             return
 
         reconnecting_after_error = self._reconnecting_after_error
@@ -480,10 +493,14 @@ class DograhGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMService
     async def _maybe_seed_node_transition_context(self) -> None:
         if (
             not self._awaiting_node_transition_context
-            or not self._node_transition_context_received
             or not self._session
             or self._node_transition_context_seed_started
         ):
+            return
+
+        # If explicit node transition context frame not received yet, but
+        # conversation context already exists on self._context, proceed with seeding
+        if not self._node_transition_context_received and self._context is None:
             return
 
         self._node_transition_context_seed_started = True
@@ -492,5 +509,8 @@ class DograhGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMService
             await self._create_initial_response()
             self._awaiting_node_transition_context = False
             self._node_transition_context_received = False
+        except Exception as e:
+            logger.error(f"{self}: error seeding node transition context: {e}")
         finally:
             self._node_transition_context_seed_started = False
+            self._ready_for_realtime_input = True

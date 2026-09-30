@@ -272,6 +272,81 @@ async def seed_ai_model_catalog():
             "retail_price_cents_per_unit": 0.50,
             "sort_order": 22,
         },
+        # Gemini Models (NEW — Added in Kodewaves v2)
+        {
+            "model_identifier": "gemini-2.5-flash",
+            "display_name": "Gemini 2.5 Flash",
+            "provider": "google",
+            "category": "llm",
+            "base_cost_cents_per_unit": 0.15,
+            "retail_price_cents_per_unit": 0.35,
+            "sort_order": 5,
+        },
+        {
+            "model_identifier": "gemini-2.5-pro",
+            "display_name": "Gemini 2.5 Pro",
+            "provider": "google",
+            "category": "llm",
+            "base_cost_cents_per_unit": 1.25,
+            "retail_price_cents_per_unit": 2.00,
+            "sort_order": 6,
+        },
+        {
+            "model_identifier": "gemini-tts",
+            "display_name": "Gemini AI Studio TTS",
+            "provider": "google_gemini_tts",
+            "category": "tts",
+            "base_cost_cents_per_unit": 0.30,
+            "retail_price_cents_per_unit": 0.60,
+            "sort_order": 23,
+        },
+        # Navana Indic Models (NEW — Added in Kodewaves v2)
+        {
+            "model_identifier": "navana-hi-banking-v2-8khz",
+            "display_name": "Navana Hindi STT (Banking)",
+            "provider": "navana",
+            "category": "stt",
+            "base_cost_cents_per_unit": 0.15,
+            "retail_price_cents_per_unit": 0.40,
+            "sort_order": 12,
+        },
+        {
+            "model_identifier": "navana-hi-tts",
+            "display_name": "Navana Hindi TTS",
+            "provider": "navana",
+            "category": "tts",
+            "base_cost_cents_per_unit": 0.15,
+            "retail_price_cents_per_unit": 0.40,
+            "sort_order": 24,
+        },
+        # Local CPU Models (Speaches + Ollama — Zero Cloud Cost)
+        {
+            "model_identifier": "speaches-whisper-tiny",
+            "display_name": "Speaches Whisper Tiny (Local CPU STT)",
+            "provider": "speaches",
+            "category": "stt",
+            "base_cost_cents_per_unit": 0.00,
+            "retail_price_cents_per_unit": 0.00,
+            "sort_order": 13,
+        },
+        {
+            "model_identifier": "speaches-kokoro-82m",
+            "display_name": "Speaches Kokoro-82M (Local CPU TTS)",
+            "provider": "speaches",
+            "category": "tts",
+            "base_cost_cents_per_unit": 0.00,
+            "retail_price_cents_per_unit": 0.00,
+            "sort_order": 25,
+        },
+        {
+            "model_identifier": "ollama-qwen2.5:0.5b",
+            "display_name": "Ollama Qwen2.5 0.5B (Local CPU LLM)",
+            "provider": "speaches",
+            "category": "llm",
+            "base_cost_cents_per_unit": 0.00,
+            "retail_price_cents_per_unit": 0.00,
+            "sort_order": 7,
+        },
     ]
 
     async with kodewaves_db_client.get_session() as session:
@@ -329,6 +404,94 @@ async def seed_wallets_for_existing_orgs():
             print(f"[SUCCESS] Initialized wallet for org {org.id} with 1,000 minutes.")
 
 
+async def seed_prompt_templates():
+    """Seed industry prompt templates so the gallery is ready on first login."""
+    from api.db.kodewaves_models import PromptTemplateModel
+
+    print("[SEED] Seeding Industry Voice Prompt Templates...")
+    default_templates = [
+        {
+            "category": "Real Estate",
+            "title": "Property Inquiry Handler",
+            "description": "Handles inbound property inquiries, captures lead details, and schedules site visits.",
+            "system_prompt": (
+                "You are a professional real estate assistant for {{company_name}}. "
+                "Help callers with property inquiries, pricing, and schedule site visits. "
+                "Be warm, knowledgeable, and always capture caller name and phone number."
+            ),
+            "first_message": "Hello! Thank you for calling {{company_name}}. I can help you find your perfect property. Are you looking to buy or rent?",
+            "is_system_template": True,
+            "is_featured": True,
+        },
+        {
+            "category": "Banking & Finance",
+            "title": "Loan Inquiry Assistant",
+            "description": "Handles loan inquiries, collects basic financial info, and routes to loan officers.",
+            "system_prompt": (
+                "You are a banking assistant for {{company_name}}. Help callers understand "
+                "loan products, EMI calculations, and eligibility. Never ask for sensitive data "
+                "like Aadhaar, PAN, or bank passwords over the phone. Route complex cases to a human officer."
+            ),
+            "first_message": "Welcome to {{company_name}} loan services! How can I help you today? Are you interested in a home loan, personal loan, or business loan?",
+            "is_system_template": True,
+            "is_featured": True,
+        },
+        {
+            "category": "Healthcare",
+            "title": "Appointment Booking Assistant",
+            "description": "Books doctor appointments, handles rescheduling, and provides clinic information.",
+            "system_prompt": (
+                "You are a medical receptionist for {{company_name}} clinic. Help patients "
+                "book, reschedule, or cancel appointments. Collect patient name, contact, "
+                "and reason for visit. Be empathetic and professional."
+            ),
+            "first_message": "Hello! This is {{company_name}} clinic. I can help you schedule an appointment with one of our doctors. Would you like to book a new appointment?",
+            "is_system_template": True,
+            "is_featured": False,
+        },
+        {
+            "category": "Logistics",
+            "title": "Delivery Status Tracker",
+            "description": "Provides shipment tracking, handles delivery complaints, and reschedules deliveries.",
+            "system_prompt": (
+                "You are a logistics support agent for {{company_name}}. Help callers "
+                "track their shipments, report delivery issues, and reschedule deliveries. "
+                "Always ask for the order ID or tracking number first."
+            ),
+            "first_message": "Hi! Thank you for calling {{company_name}} delivery support. Could you please share your order ID or tracking number so I can look up your shipment?",
+            "is_system_template": True,
+            "is_featured": False,
+        },
+    ]
+
+    async with kodewaves_db_client.get_session() as session:
+        for t in default_templates:
+            stmt = select(PromptTemplateModel).where(PromptTemplateModel.title == t["title"])
+            res = await session.execute(stmt)
+            if not res.scalar_one_or_none():
+                session.add(PromptTemplateModel(**t))
+        await session.commit()
+    print("[SUCCESS] Industry Prompt Templates verified.")
+
+
+def seed_local_ai_model():
+    """Pre-pull a lightweight LLM model into Ollama so Local CPU AI is ready to use."""
+    import subprocess
+
+    print("[SEED] Pre-pulling lightweight Ollama LLM model (qwen2.5:0.5b)...")
+    try:
+        result = subprocess.run(
+            ["docker", "exec", "kodewaves_ollama", "ollama", "pull", "qwen2.5:0.5b"],
+            capture_output=True, text=True, timeout=300,
+        )
+        if result.returncode == 0:
+            print("[SUCCESS] Ollama qwen2.5:0.5b model ready for Local CPU inference.")
+        else:
+            print(f"[WARN] Ollama model pull notice: {result.stderr.strip()}")
+    except Exception as e:
+        print(f"[WARN] Ollama model pull skipped (container may not be running): {e}")
+
+
 async def main():
     print("=================================================================")
     print("🚀 Starting Kodewaves Sovereign Platform Bootstrap Seeder...")
@@ -338,11 +501,16 @@ async def main():
     await seed_credit_packages()
     await seed_ai_model_catalog()
     await seed_banned_words()
+    await seed_prompt_templates()
     await seed_wallets_for_existing_orgs()
+    seed_local_ai_model()
     print("=================================================================")
     print("🎉 Sovereign Platform Bootstrap Completed Successfully!")
+    print("   ✅ Global Settings, Plans, Packages, Models, Templates, Wallets")
+    print("   ✅ Content Moderation, Prompt Gallery, Local AI Engine")
     print("=================================================================")
 
 
 if __name__ == "__main__":
     asyncio.run(main())
+

@@ -56,6 +56,7 @@ import {
 
 const DEFAULT_PROVIDERS = [
   { provider: "sarvam", name: "Sarvam AI (Indian Sovereign AI)", category: "llm", region: "India 🇮🇳" },
+  { provider: "navana", name: "Navana.ai (Indic Speech AI - Hindi, Tamil, Telugu)", category: "tts", region: "India 🇮🇳" },
   { provider: "krutrim", name: "Krutrim Cloud (Indian Indic Models)", category: "llm", region: "India 🇮🇳" },
   { provider: "openai", name: "OpenAI", category: "llm", region: "Global 🌐" },
   { provider: "gemini", name: "Google Gemini", category: "llm", region: "Global 🌐" },
@@ -129,6 +130,10 @@ export default function MasterKeysAndModelsPage() {
         provider: selectedKey.provider,
         category: (selectedKey.category as any) || "llm",
         display_name: selectedKey.display_name || selectedKey.provider,
+        credentials: {
+          api_key: keyInput || undefined,
+          api_secret: secretInput || undefined,
+        },
         api_key: keyInput || undefined,
         api_secret: secretInput || undefined,
         is_active: selectedKey.is_active ?? true,

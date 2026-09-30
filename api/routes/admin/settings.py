@@ -17,6 +17,10 @@ class PlatformSettingsResponse(BaseModel):
     primary_color: Optional[str] = "#4f46e5"
     allow_user_byok: bool = False
     enforce_wallet_balance: bool = True
+    enable_local_ai_engine: bool = False
+    ollama_endpoint: Optional[str] = "http://ollama:11434"
+    speaches_endpoint: Optional[str] = "http://speaches:8000/v1"
+    local_ai_max_concurrency: Optional[int] = 2
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = 587
     smtp_user: Optional[str] = None
@@ -38,6 +42,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
         branding = settings_map.get("branding") or {}
         byok = settings_map.get("byok_policy") or {}
         wallet = settings_map.get("wallet_policy") or {}
+        local_ai = settings_map.get("local_ai") or settings_map.get("local_ai_engine") or {}
         smtp = settings_map.get("smtp") or {}
 
         return PlatformSettingsResponse(
@@ -47,6 +52,10 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
             primary_color=branding.get("primary_color", "#4f46e5"),
             allow_user_byok=byok.get("allow_user_byok", False),
             enforce_wallet_balance=wallet.get("enforce_wallet_balance", True),
+            enable_local_ai_engine=local_ai.get("enable_local_ai_engine", local_ai.get("enabled", False)),
+            ollama_endpoint=local_ai.get("ollama_endpoint", local_ai.get("ollama_url", "http://ollama:11434")),
+            speaches_endpoint=local_ai.get("speaches_endpoint", local_ai.get("speaches_url", "http://speaches:8000/v1")),
+            local_ai_max_concurrency=local_ai.get("local_ai_max_concurrency", 2),
             smtp_host=smtp.get("smtp_host"),
             smtp_port=smtp.get("smtp_port", 587),
             smtp_user=smtp.get("smtp_user"),
@@ -89,6 +98,15 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
                 "smtp_from": payload.get("smtp_from"),
             }
             await kodewaves_db_client.set_setting(key="smtp", value=smtp, category="smtp")
+
+        # 5. Local AI Engine Settings
+        local_ai = {
+            "enable_local_ai_engine": bool(payload.get("enable_local_ai_engine", False)),
+            "ollama_endpoint": payload.get("ollama_endpoint", "http://ollama:11434"),
+            "speaches_endpoint": payload.get("speaches_endpoint", "http://speaches:8000/v1"),
+            "local_ai_max_concurrency": int(payload.get("local_ai_max_concurrency", 2)),
+        }
+        await kodewaves_db_client.set_setting(key="local_ai", value=local_ai, category="local_ai")
 
         return {"message": "Successfully saved sovereign platform settings"}
 

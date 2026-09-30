@@ -974,7 +974,7 @@ async def handle_inbound_run(request: Request):
                     TelephonyError.QUOTA_EXCEEDED
                 )
 
-            backend_endpoint, wss_backend_endpoint = await get_backend_endpoints()
+            backend_endpoint, wss_backend_endpoint = await get_backend_endpoints(request)
             websocket_url = ws_auth.build_media_ws_url(
                 wss_backend_endpoint,
                 workflow_id,
@@ -1150,7 +1150,7 @@ async def handle_inbound_telephony(
                 )
 
             # Generate response URLs
-            backend_endpoint, wss_backend_endpoint = await get_backend_endpoints()
+            backend_endpoint, wss_backend_endpoint = await get_backend_endpoints(request)
             websocket_url = ws_auth.build_media_ws_url(
                 wss_backend_endpoint, workflow_id, organization_id, workflow_run_id
             )
