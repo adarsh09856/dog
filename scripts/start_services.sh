@@ -38,7 +38,7 @@ if [[ -z "$DEVOPS_SECRET" ]]; then
   echo "ERROR: KODEWAVES_DEVOPS_SECRET (or DOGRAH_DEVOPS_SECRET) is not set. Add it to $ENV_FILE before starting production services."
   exit 1
 fi
-if [[ "$DEVOPS_SECRET" == "change-me-dograh-devops-secret" || "$DEVOPS_SECRET" == "change-me-kodewaves-devops-secret" ]]; then
+if [[ "$DEVOPS_SECRET" == "change-me-kodewaves-devops-secret" || "$DEVOPS_SECRET" == "change-me-kodewaves-devops-secret" ]]; then
   echo "ERROR: Devops secret still has an example placeholder value. Replace it in $ENV_FILE."
   exit 1
 fi

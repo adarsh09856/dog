@@ -63,8 +63,8 @@ kodewaves_init_script_path() {
     for candidate in \
         "$project_dir/scripts/run_kodewaves_init.sh" \
         "$KODEWAVES_DEPLOY_REPO_ROOT/scripts/run_kodewaves_init.sh" \
-        "$project_dir/scripts/run_dograh_init.sh" \
-        "$KODEWAVES_DEPLOY_REPO_ROOT/scripts/run_dograh_init.sh"
+        "$project_dir/scripts/run_kodewaves_init.sh" \
+        "$KODEWAVES_DEPLOY_REPO_ROOT/scripts/run_kodewaves_init.sh"
     do
         if [[ -f "$candidate" ]]; then
             printf '%s\n' "$candidate"
@@ -284,7 +284,7 @@ kodewaves_uses_init_compose_layout() {
     local compose_file="$project_dir/docker-compose.yaml"
 
     [[ -f "$compose_file" ]] || return 1
-    grep -q "dograh-init:" "$compose_file" \
+    grep -q "kodewaves-init:" "$compose_file" \
         && grep -q "nginx-generated:/etc/nginx/conf.d:ro" "$compose_file" \
         && grep -q "coturn-generated:/etc/coturn:ro" "$compose_file"
 }
@@ -293,7 +293,7 @@ kodewaves_require_init_compose_layout() {
     local project_dir=${1:-$(kodewaves_project_dir)}
 
     if ! kodewaves_uses_init_compose_layout "$project_dir"; then
-        kodewaves_fail "This install uses the legacy remote compose layout. Run ./update_remote.sh first so Docker uses dograh-init generated config."
+        kodewaves_fail "This install uses the legacy remote compose layout. Run ./update_remote.sh first so Docker uses kodewaves-init generated config."
     fi
 }
 
@@ -316,7 +316,7 @@ kodewaves_render_remote_nginx_conf() {
         done
         echo "    keepalive 32;"
         echo "}"
-        echo "upstream dograh_api {"
+        echo "upstream kodewaves_api {"
         echo "    least_conn;"
         for ((i=0; i<FASTAPI_WORKERS; i++)); do
             printf '    server api:%d max_fails=3 fail_timeout=10s;\n' "$((8000 + i))"
@@ -334,7 +334,7 @@ kodewaves_render_remote_nginx_conf() {
         }
         {
             gsub(/__KODEWAVES_PUBLIC_HOST__/, public_host)
-            gsub(/__DOGRAH_PUBLIC_HOST__/, public_host)
+            gsub(/__KODEWAVES_PUBLIC_HOST__/, public_host)
             if ($0 ~ /__(KODEWAVES|DOGRAH)_UPSTREAM_BLOCK__/) {
                 if (!printed_upstream) {
                     printf "%s", upstream
@@ -364,9 +364,9 @@ kodewaves_render_remote_turn_conf() {
         '
         {
             gsub(/__KODEWAVES_TURN_EXTERNAL_IP__/, external_ip)
-            gsub(/__DOGRAH_TURN_EXTERNAL_IP__/, external_ip)
+            gsub(/__KODEWAVES_TURN_EXTERNAL_IP__/, external_ip)
             gsub(/__KODEWAVES_TURN_SECRET__/, turn_secret)
-            gsub(/__DOGRAH_TURN_SECRET__/, turn_secret)
+            gsub(/__KODEWAVES_TURN_SECRET__/, turn_secret)
             print
         }
     ' "$template" > "$destination"
@@ -397,14 +397,14 @@ kodewaves_preflight_remote_init_render() {
 
     (
         export ENVIRONMENT SERVER_IP PUBLIC_HOST PUBLIC_BASE_URL BACKEND_API_ENDPOINT MINIO_PUBLIC_ENDPOINT TURN_HOST TURN_SECRET FASTAPI_WORKERS
-        export DOGRAH_INIT_WORKSPACE_DIR="$project_dir"
-        export DOGRAH_INIT_OUTPUT_ROOT="$tmp_root"
-        export DOGRAH_INIT_CERTS_DIR="$cert_dir"
+        export KODEWAVES_INIT_WORKSPACE_DIR="$project_dir"
+        export KODEWAVES_INIT_OUTPUT_ROOT="$tmp_root"
+        export KODEWAVES_INIT_CERTS_DIR="$cert_dir"
         bash "$init_script" >/dev/null
     )
 
-    [[ -f "$nginx_conf" ]] || kodewaves_fail "dograh-init did not render nginx config"
-    [[ -f "$turn_conf" ]] || kodewaves_fail "dograh-init did not render coturn config"
+    [[ -f "$nginx_conf" ]] || kodewaves_fail "kodewaves-init did not render nginx config"
+    [[ -f "$turn_conf" ]] || kodewaves_fail "kodewaves-init did not render coturn config"
 
     nginx_workers=$(awk '/^[[:space:]]*server api:[0-9]+/ { count += 1 } END { print count + 0 }' "$nginx_conf")
     [[ "$nginx_workers" -eq "$FASTAPI_WORKERS" ]] || kodewaves_fail "FASTAPI_WORKERS=$FASTAPI_WORKERS but nginx.conf has $nginx_workers upstream servers"
@@ -562,7 +562,7 @@ kodewaves_install_cert_renewal_hook() {
     local project_dir=$1
     local host=$2
     local hook_dir="/etc/letsencrypt/renewal-hooks/deploy"
-    local hook_path="$hook_dir/dograh-reload.sh"
+    local hook_path="$hook_dir/kodewaves-reload.sh"
 
     mkdir -p "$hook_dir"
 
@@ -582,8 +582,8 @@ kodewaves_download_bundle_file_for_ref() {
     local destination=$1
     local remote_path=$2
     local ref=${3:-main}
-    local raw_base="https://raw.githubusercontent.com/dograh-hq/dograh/$ref"
-    local fallback_base="https://raw.githubusercontent.com/dograh-hq/dograh/main"
+    local raw_base="https://raw.githubusercontent.com/kodewaves/kodewaves/$ref"
+    local fallback_base="https://raw.githubusercontent.com/kodewaves/kodewaves/main"
 
     if ! curl -fsSL -o "$destination" "$raw_base/$remote_path"; then
         kodewaves_warn "Warning: '$remote_path' not found at '$ref' - falling back to main"
@@ -599,8 +599,8 @@ kodewaves_download_init_support_bundle() {
 
     mkdir -p "$project_dir/scripts"
     kodewaves_download_bundle_file_for_ref "$project_dir/scripts/lib/setup_common.sh" "scripts/lib/setup_common.sh" "$ref"
-    kodewaves_download_bundle_file_for_ref "$project_dir/scripts/run_dograh_init.sh" "scripts/run_dograh_init.sh" "$ref"
-    chmod +x "$project_dir/scripts/run_dograh_init.sh"
+    kodewaves_download_bundle_file_for_ref "$project_dir/scripts/run_kodewaves_init.sh" "scripts/run_kodewaves_init.sh" "$ref"
+    chmod +x "$project_dir/scripts/run_kodewaves_init.sh"
     kodewaves_download_bundle_file_for_ref "$project_dir/deploy/templates/nginx.remote.conf.template" "deploy/templates/nginx.remote.conf.template" "$ref"
     kodewaves_download_bundle_file_for_ref "$project_dir/deploy/templates/turnserver.remote.conf.template" "deploy/templates/turnserver.remote.conf.template" "$ref"
 }

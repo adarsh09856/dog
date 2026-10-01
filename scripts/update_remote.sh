@@ -28,9 +28,9 @@ cleanup() {
     # invoked sudo; a no-op for unprivileged runs and real root, where SUDO_UID
     # is unset. Runs from the EXIT trap so a mid-update failure also leaves
     # ownership fixed.
-    if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" && -n "${DOGRAH_DEPLOY_PROJECT_DIR:-}" && -d "$DOGRAH_DEPLOY_PROJECT_DIR" ]]; then
-        echo -e "${BLUE}Restoring ownership of $DOGRAH_DEPLOY_PROJECT_DIR to ${SUDO_USER:-uid $SUDO_UID}...${NC}"
-        chown -R "$SUDO_UID:$SUDO_GID" "$DOGRAH_DEPLOY_PROJECT_DIR" || true
+    if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" && -n "${KODEWAVES_DEPLOY_PROJECT_DIR:-}" && -d "$KODEWAVES_DEPLOY_PROJECT_DIR" ]]; then
+        echo -e "${BLUE}Restoring ownership of $KODEWAVES_DEPLOY_PROJECT_DIR to ${SUDO_USER:-uid $SUDO_UID}...${NC}"
+        chown -R "$SUDO_UID:$SUDO_GID" "$KODEWAVES_DEPLOY_PROJECT_DIR" || true
     fi
 }
 trap cleanup EXIT
@@ -88,7 +88,7 @@ fi
 _caller_FASTAPI_WORKERS="${FASTAPI_WORKERS:-}"
 _caller_TARGET_VERSION="${TARGET_VERSION:-}"
 
-DOGRAH_DEPLOY_PROJECT_DIR="$(pwd)"
+KODEWAVES_DEPLOY_PROJECT_DIR="$(pwd)"
 kodewaves_load_env_file .env
 
 [[ -n "${TURN_SECRET:-}" ]] || kodewaves_fail "TURN_SECRET not found in .env"
@@ -206,7 +206,7 @@ echo "  - .env                  (canonical remote keys synchronized)"
 echo "  - legacy nginx.conf / turnserver.conf backups will be kept if those files still exist"
 echo ""
 
-if [[ -t 0 && "${DOGRAH_UPDATE_YES:-}" != "1" ]]; then
+if [[ -t 0 && "${KODEWAVES_UPDATE_YES:-}" != "1" ]]; then
     read -p "Proceed? [y/N]: " confirm
     if ! [[ "$confirm" =~ ^[Yy] ]]; then
         echo -e "${RED}Aborted.${NC}"

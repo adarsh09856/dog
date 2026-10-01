@@ -122,10 +122,10 @@ echo -e "  Telemetry:     ${BLUE}$ENABLE_TELEMETRY${NC}"
 echo -e "  Registry:      ${BLUE}$REGISTRY${NC}"
 echo ""
 
-# Download compose file (skip when DOGRAH_SKIP_DOWNLOAD=1 — e.g. local repo testing).
+# Download compose file (skip when KODEWAVES_SKIP_DOWNLOAD=1 — e.g. local repo testing).
 TOTAL_STEPS=2
 
-if [[ "${DOGRAH_SKIP_DOWNLOAD:-}" != "1" ]]; then
+if [[ "${KODEWAVES_SKIP_DOWNLOAD:-}" != "1" ]]; then
     if [[ "${ENABLE_COTURN:-false}" == "true" ]]; then
         echo -e "${BLUE}[1/$TOTAL_STEPS] Downloading docker-compose.yaml and TURN helper bundle...${NC}"
     else
@@ -141,9 +141,9 @@ else
 fi
 
 if [[ "${ENABLE_COTURN:-false}" == "true" ]]; then
-    [[ -f scripts/run_kodewaves_init.sh ]] || kodewaves_fail "scripts/run_kodewaves_init.sh not found. Re-run setup_local.sh without DOGRAH_SKIP_DOWNLOAD=1, or use a full repo checkout."
-    [[ -f scripts/lib/setup_common.sh ]] || kodewaves_fail "scripts/lib/setup_common.sh not found. Re-run setup_local.sh without DOGRAH_SKIP_DOWNLOAD=1, or use a full repo checkout."
-    [[ -f deploy/templates/turnserver.remote.conf.template ]] || kodewaves_fail "deploy/templates/turnserver.remote.conf.template not found. Re-run setup_local.sh without DOGRAH_SKIP_DOWNLOAD=1, or use a full repo checkout."
+    [[ -f scripts/run_kodewaves_init.sh ]] || kodewaves_fail "scripts/run_kodewaves_init.sh not found. Re-run setup_local.sh without KODEWAVES_SKIP_DOWNLOAD=1, or use a full repo checkout."
+    [[ -f scripts/lib/setup_common.sh ]] || kodewaves_fail "scripts/lib/setup_common.sh not found. Re-run setup_local.sh without KODEWAVES_SKIP_DOWNLOAD=1, or use a full repo checkout."
+    [[ -f deploy/templates/turnserver.remote.conf.template ]] || kodewaves_fail "deploy/templates/turnserver.remote.conf.template not found. Re-run setup_local.sh without KODEWAVES_SKIP_DOWNLOAD=1, or use a full repo checkout."
 fi
 
 # Generate .env

@@ -28,9 +28,9 @@ cleanup() {
     # sudo. SUDO_UID is unset when running as real root (e.g. cloud-init) —
     # root already owns its files, nothing to restore. Runs from the EXIT trap
     # so a mid-setup failure also leaves ownership fixed.
-    if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" && -n "${DOGRAH_DEPLOY_PROJECT_DIR:-}" && -d "$DOGRAH_DEPLOY_PROJECT_DIR" ]]; then
-        echo -e "${BLUE}Restoring ownership of $DOGRAH_DEPLOY_PROJECT_DIR to ${SUDO_USER:-uid $SUDO_UID}...${NC}"
-        chown -R "$SUDO_UID:$SUDO_GID" "$DOGRAH_DEPLOY_PROJECT_DIR" || true
+    if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" && -n "${KODEWAVES_DEPLOY_PROJECT_DIR:-}" && -d "$KODEWAVES_DEPLOY_PROJECT_DIR" ]]; then
+        echo -e "${BLUE}Restoring ownership of $KODEWAVES_DEPLOY_PROJECT_DIR to ${SUDO_USER:-uid $SUDO_UID}...${NC}"
+        chown -R "$SUDO_UID:$SUDO_GID" "$KODEWAVES_DEPLOY_PROJECT_DIR" || true
     fi
 }
 trap cleanup EXIT
@@ -223,7 +223,7 @@ else
     TARGET_DIR="kodewaves"
 fi
 
-if [[ "${DOGRAH_FORCE_OVERWRITE:-}" != "1" && "${DOGRAH_SKIP_DOWNLOAD:-}" != "1" ]]; then
+if [[ "${KODEWAVES_FORCE_OVERWRITE:-}" != "1" && "${KODEWAVES_SKIP_DOWNLOAD:-}" != "1" ]]; then
     if [[ -f "$TARGET_DIR/.env" ]]; then
         if [[ "$TARGET_DIR" == "." ]]; then
             existing_path="$(pwd)/.env"
@@ -243,7 +243,7 @@ if [[ "${DOGRAH_FORCE_OVERWRITE:-}" != "1" && "${DOGRAH_SKIP_DOWNLOAD:-}" != "1"
         echo -e "  ${BLUE}https://docs.kodewaves.com/deployment/update${NC}"
         echo ""
         echo -e "${BLUE}To wipe state and reinstall from scratch, re-run with:${NC}"
-        echo -e "  ${BLUE}DOGRAH_FORCE_OVERWRITE=1 <same command>${NC}"
+        echo -e "  ${BLUE}KODEWAVES_FORCE_OVERWRITE=1 <same command>${NC}"
         echo ""
         exit 1
     fi
@@ -274,7 +274,7 @@ fi
 echo ""
 
 if [[ "$DEPLOY_MODE" == "build" ]]; then
-    if [[ "${DOGRAH_SKIP_DOWNLOAD:-}" == "1" ]]; then
+    if [[ "${KODEWAVES_SKIP_DOWNLOAD:-}" == "1" ]]; then
         echo -e "${BLUE}[1/$TOTAL] Using existing repo in current directory${NC}"
     elif [[ "${REPO_SOURCE:-}" == "clone" ]]; then
         if [[ -e "kodewaves" ]]; then
@@ -288,7 +288,7 @@ if [[ "$DEPLOY_MODE" == "build" ]]; then
         echo -e "${BLUE}[1/$TOTAL] Using existing repo at $(pwd)${NC}"
     fi
 else
-    if [[ "${DOGRAH_SKIP_DOWNLOAD:-}" != "1" ]]; then
+    if [[ "${KODEWAVES_SKIP_DOWNLOAD:-}" != "1" ]]; then
         mkdir -p kodewaves 2>/dev/null || true
         cd kodewaves
 
@@ -301,7 +301,7 @@ else
     fi
 fi
 
-DOGRAH_DEPLOY_PROJECT_DIR="$(pwd)"
+KODEWAVES_DEPLOY_PROJECT_DIR="$(pwd)"
 
 if [[ "$DEPLOY_MODE" != "prebuilt" ]]; then
     chmod +x remote_up.sh
