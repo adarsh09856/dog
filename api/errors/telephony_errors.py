@@ -5,7 +5,7 @@ Centralizes error handling across all telephony providers.
 
 from enum import Enum
 
-from api.errors.failure import DograhFailure, ErrorSource, ErrorType, log_failure
+from api.errors.failure import KodewavesFailure, DograhFailure, ErrorSource, ErrorType, log_failure
 
 
 class TelephonyError(Enum):
@@ -45,7 +45,7 @@ def failure_from_telephony_error(
     error: TelephonyError,
     *,
     provider: str | None = None,
-) -> DograhFailure | None:
+) -> KodewavesFailure | None:
     """Map an inbound validation result onto the stable failure taxonomy."""
 
     if not isinstance(error, TelephonyError):
@@ -53,7 +53,7 @@ def failure_from_telephony_error(
             error = TelephonyError(error)
         except (TypeError, ValueError):
             provider_code = (provider or "telephony").replace("_", "-")
-            return DograhFailure(
+            return KodewavesFailure(
                 source=ErrorSource.TELEPHONY,
                 type=ErrorType.SYSTEM_ERROR,
                 code=f"{provider_code}-unknown-validation-error",
@@ -76,7 +76,7 @@ def failure_from_telephony_error(
     external_message = TELEPHONY_ERROR_MESSAGES.get(
         error, TELEPHONY_ERROR_MESSAGES[TelephonyError.GENERAL_AUTH_FAILED]
     )
-    return DograhFailure(
+    return KodewavesFailure(
         source=ErrorSource.TELEPHONY,
         type=error_type,
         code=f"{provider_code}-{error.value.lower().replace('_', '-')}",

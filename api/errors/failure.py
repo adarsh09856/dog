@@ -271,13 +271,13 @@ def classify_http_response(
     provider_error_code: object | None = None,
     error_owner: ErrorOwner | str | None = None,
     context: dict[str, Any] | None = None,
-) -> DograhFailure:
+) -> KodewavesFailure:
     """Classify an HTTP response at a known external boundary."""
 
     normalized_provider = _normalize_provider(provider)
     internal_message = redact_failure_message(message)
 
-    if normalized_provider == "dograh":
+    if normalized_provider in ("kodewaves", "dograh"):
         if status_code == 402:
             error_type, detail, retryable = (
                 ErrorType.QUOTA_ERROR,
@@ -300,7 +300,7 @@ def classify_http_response(
         detail = str(status_code)
 
     code_provider = normalized_provider or source.value.replace("_", "-")
-    return DograhFailure(
+    return KodewavesFailure(
         source=source,
         type=error_type,
         code=f"{code_provider}-{detail}",
@@ -321,12 +321,12 @@ def classify_message(
     provider: object | None = None,
     error_owner: ErrorOwner | str | None = None,
     context: dict[str, Any] | None = None,
-) -> DograhFailure:
+) -> KodewavesFailure:
     """Classify string-only errors using protocol signals or the safe default."""
 
     internal_message = redact_failure_message(message)
     normalized_provider = _normalize_provider(provider)
-    if normalized_provider == "dograh":
+    if normalized_provider in ("kodewaves", "dograh"):
         error_type, detail, retryable = (
             ErrorType.SYSTEM_ERROR,
             "unknown",
@@ -347,7 +347,7 @@ def classify_message(
         error_type, detail, retryable = ErrorType.SYSTEM_ERROR, "unknown", None
 
     code_provider = normalized_provider or source.value.replace("_", "-")
-    return DograhFailure(
+    return KodewavesFailure(
         source=source,
         type=error_type,
         code=f"{code_provider}-{detail}",
@@ -367,7 +367,7 @@ def classify_exception(
     provider: object | None = None,
     error_owner: ErrorOwner | str | None = None,
     context: dict[str, Any] | None = None,
-) -> DograhFailure:
+) -> KodewavesFailure:
     """Pure exception classifier used by all execution seams."""
 
     failure_context = dict(context or {})
@@ -406,7 +406,7 @@ def classify_exception(
         )
 
     normalized_provider = _normalize_provider(provider)
-    if normalized_provider == "dograh":
+    if normalized_provider in ("kodewaves", "dograh"):
         exception_identity = f"{type(exc).__module__}.{type(exc).__name__}".lower()
         transient = isinstance(
             exc,
@@ -422,13 +422,13 @@ def classify_exception(
             if isinstance(exc, httpx.TimeoutException | TimeoutError)
             else ("connection" if transient else "unknown")
         )
-        return DograhFailure(
+        return KodewavesFailure(
             source=source,
             type=ErrorType.SYSTEM_ERROR,
             code=f"kodewaves-{detail_code}",
             internal_message=internal_message,
             external_message=_external_message(source, ErrorType.SYSTEM_ERROR),
-            provider="dograh",
+            provider="kodewaves",
             provider_error_code=provider_error_code,
             error_owner=ErrorOwner.OPERATOR,
             retryable=True if transient else None,
@@ -466,7 +466,7 @@ def classify_exception(
     detail_code = "connection" if transient_exception else "unknown"
     if isinstance(exc, httpx.TimeoutException | TimeoutError):
         detail_code = "timeout"
-    return DograhFailure(
+    return KodewavesFailure(
         source=source,
         type=error_type,
         code=f"{code_provider}-{detail_code}",
@@ -586,7 +586,7 @@ def failure_metadata_for_processor(processor: object | None) -> ServiceFailureMe
         # path if the configuration registry is unavailable during startup.
         pass
 
-    # A Dograh-prefixed wrapper is not sufficient evidence that the dependency is
+    # A Kodewaves-prefixed wrapper is not sufficient evidence that the dependency is
     # operator-owned; several BYOK adapters use that prefix. Only factory metadata
     # is authoritative for ownership.
     return ServiceFailureMetadata(source, provider, ErrorOwner.OPERATOR)
@@ -609,7 +609,7 @@ def _safe_log_context(context: dict[str, Any]) -> dict[str, Any]:
 
 
 def log_failure(
-    failure: DograhFailure,
+    failure: KodewavesFailure,
     *,
     level: str = "ERROR",
     **extra_context: Any,
