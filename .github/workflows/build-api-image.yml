@@ -4,7 +4,7 @@ name: Build API Image
 # tag derived from the commit. docker-image.yml is the release path — it builds
 # api and ui for amd64 and arm64 and assembles manifest lists in a merge job.
 #
-# The cluster's nodes are x86_64 and app.dograh.com is served by Vercel, so of
+# The cluster's nodes are x86_64 and app.kodewaves.com is served by Vercel, so of
 # the four images a release builds, the cluster pulls one.
 
 on:
@@ -66,13 +66,13 @@ jobs:
           file: api/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/dograh-api:${{ steps.tag.outputs.tag }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/kodewaves-api:${{ steps.tag.outputs.tag }}
           # Same scope as docker-image.yml's amd64 api build, so the two share
           # layers in both directions.
-          cache-from: type=gha,scope=dograh-api-amd64
-          cache-to: type=gha,mode=max,scope=dograh-api-amd64
+          cache-from: type=gha,scope=kodewaves-api-amd64
+          cache-to: type=gha,mode=max,scope=kodewaves-api-amd64
 
       - name: Summary
         run: |
-          echo "\`${{ secrets.DOCKERHUB_USERNAME }}/dograh-api:${{ steps.tag.outputs.tag }}\`" \
+          echo "\`${{ secrets.DOCKERHUB_USERNAME }}/kodewaves-api:${{ steps.tag.outputs.tag }}\`" \
             >> "$GITHUB_STEP_SUMMARY"

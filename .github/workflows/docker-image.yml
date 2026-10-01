@@ -41,6 +41,7 @@ jobs:
 
           if [ "${{ github.event_name }}" = "release" ]; then
             VERSION="${{ github.event.release.tag_name }}"
+            VERSION="${VERSION#kodewaves-}"
             VERSION="${VERSION#dograh-}"
             VERSION="${VERSION#v}"
             PUSH_LATEST="true"
@@ -62,10 +63,10 @@ jobs:
       fail-fast: false
       matrix:
         service:
-          - name: dograh-api
+          - name: kodewaves-api
             dockerfile: api/Dockerfile
             context: .
-          - name: dograh-ui
+          - name: kodewaves-ui
             dockerfile: ui/Dockerfile
             context: .
         platform:
@@ -141,16 +142,16 @@ jobs:
       - name: Download API digests
         uses: actions/download-artifact@v4
         with:
-          pattern: digest-dograh-api-*
+          pattern: digest-kodewaves-api-*
           merge-multiple: true
-          path: /tmp/digests/dograh-api
+          path: /tmp/digests/kodewaves-api
 
       - name: Download UI digests
         uses: actions/download-artifact@v4
         with:
-          pattern: digest-dograh-ui-*
+          pattern: digest-kodewaves-ui-*
           merge-multiple: true
-          path: /tmp/digests/dograh-ui
+          path: /tmp/digests/kodewaves-ui
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -210,10 +211,10 @@ jobs:
             docker buildx imagetools create "${gh_tags[@]}" $gh_refs
           }
 
-          inspect_digests dograh-api
-          inspect_digests dograh-ui
-          create_manifests dograh-api
-          create_manifests dograh-ui
+          inspect_digests kodewaves-api
+          inspect_digests kodewaves-ui
+          create_manifests kodewaves-api
+          create_manifests kodewaves-ui
 
   notify:
     needs:

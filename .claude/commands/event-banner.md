@@ -13,7 +13,7 @@ component `ui/src/components/EventBanner.tsx` is generic: it renders the first
 entry whose `[startsAt, endsAt]` window contains "now". Do not edit the
 component for an ordinary event.
 
-The bar is Dograh Cloud only — `ui/src/app/layout.tsx` mounts it behind
+The bar is Kodewaves Cloud only — `ui/src/app/layout.tsx` mounts it behind
 `NEXT_PUBLIC_EVENT_BANNER === "1"`, which is blank in `ui/.env.example` and
 never set in `ui/Dockerfile`, `deploy/` or the workflows. Self-hosters do not
 see it whatever this config says. Do not add the var to any of those.
@@ -40,7 +40,7 @@ Use AskUserQuestion to confirm, in one round, with your best guess pre-filled:
   component; do not put one in the string.
 
 Derive `id` as `<event>-<YYYY-MM>`, `analyticsId` as a snake_case slug, and
-`storageKey` as `dograh_event_banner_<event>_dismissed`. The storage key MUST
+`storageKey` as `kodewaves_event_banner_<event>_dismissed`. The storage key MUST
 be unique per event, or anyone who dismissed the previous banner never sees
 this one.
 
@@ -60,9 +60,9 @@ to disappear (that is what `brightness-0` fixes at render time) but must not
 show as a solid block — a block means the source has an opaque backdrop, and
 no CSS filter can rescue it. Ask for a white-on-transparent variant.
 
-Also check the aspect ratio; the lockup renders Dograh in a 20px box and the
+Also check the aspect ratio; the lockup renders Kodewaves in a 20px box and the
 partner in a 13.6px one, so a very wide wordmark will still outweigh the
-Dograh mark beside it.
+Kodewaves mark beside it.
 
 ## 4. Add the entry
 

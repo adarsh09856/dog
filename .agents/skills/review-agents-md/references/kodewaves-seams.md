@@ -1,4 +1,4 @@
-# Dograh Seams
+# Kodewaves Seams
 
 Use this file as a starting map, not as source of truth. Verify every claim against the live repo.
 
@@ -18,7 +18,7 @@ The repo root still revolves around these contributor-relevant directories:
 - `ui/`
 - `scripts/`
 - `docs/`
-- `pipecat/`, which is the upstream Pipecat git submodule; Dograh-owned
+- `pipecat/`, which is the upstream Pipecat git submodule; Kodewaves-owned
   adapters around it live under `api/services/pipecat/`
 
 Other top-level subtrees that can matter during hierarchy reviews:
@@ -38,7 +38,7 @@ Root `AGENTS.md` should stay at this level.
 ### Route aggregation
 
 - top-level FastAPI wiring lives in `api/app.py`: it mounts the REST router
-  under `/api/v1` and the Dograh MCP server under `/api/v1/mcp`
+  under `/api/v1` and the Kodewaves MCP server under `/api/v1/mcp`
 - REST routers are aggregated in `api/routes/main.py`.
 - Telephony has its main cross-provider route file at `api/routes/telephony.py`.
 - Integration package routers are mounted through `api.services.integrations.all_routers()`.
@@ -73,7 +73,7 @@ Workflow execution is not a single folder.
 - workflow graph, DTOs, node data, node-spec generation, text-chat execution,
   QA, and tool helpers live under `api/services/workflow/`
 - live pipeline execution lives under `api/services/pipecat/`
-- Dograh-specific realtime provider adapters live under `api/services/pipecat/realtime/`
+- Kodewaves-specific realtime provider adapters live under `api/services/pipecat/realtime/`
 - post-call QA, registered integrations, and webhook execution live in `api/tasks/run_integrations.py`
 
 If `api/AGENTS.md` implies workflow execution lives in only one place, treat that as suspicious.
@@ -87,13 +87,13 @@ If `api/AGENTS.md` implies workflow execution lives in only one place, treat tha
 - `scripts/generate_sdk.sh` reads the in-process node-spec registry for typed
   Python/TypeScript node APIs and a filtered OpenAPI surface for generated SDK
   models and client methods
-- committed language-SDK output lives under `sdk/python/src/dograh_sdk/` and
+- committed language-SDK output lives under `sdk/python/src/kodewaves_sdk/` and
   `sdk/typescript/src/`; the UI client under `ui/src/client/` is generated
   separately with the `ui` package's `generate-client` script
 
-### Dograh MCP server
+### Kodewaves MCP server
 
-Do not confuse the Dograh-hosted MCP API with customer-configured MCP tools used
+Do not confuse the Kodewaves-hosted MCP API with customer-configured MCP tools used
 inside a workflow.
 
 - `api/app.py` mounts the stateless FastMCP application created in
@@ -184,7 +184,7 @@ The live code instead uses provider packages under `providers/<name>/`, registry
 These are review prompts, not frozen conclusions.
 
 - pay extra attention to deep subtrees that define extension contracts, registration points, or multi-file execution paths
-- in Dograh, common examples include telephony, workflow execution, the Dograh
+- in Kodewaves, common examples include telephony, workflow execution, the Kodewaves
   MCP server, generated SDK surfaces, deployment charts, and other service
   subtrees that span many files
 
