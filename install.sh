@@ -254,8 +254,10 @@ MINIO_ROOT_PASSWORD=$MINIO_PASS
 ENABLE_COTURN=true
 TURN_SECRET=$TURN_SECRET
 
-# Workers
-FASTAPI_WORKERS=2
+# Process Workers & Lean Resource Allocation
+FASTAPI_WORKERS=1
+ENABLE_ARI_MANAGER=false
+ENABLE_CAMPAIGN_ORCHESTRATOR=false
 ENABLE_SIGNUP=true
 
 # Local CPU AI Engine (Ollama + Speaches — Admin Opt-In)

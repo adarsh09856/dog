@@ -174,6 +174,15 @@ ENV PYTHONPATH=/app/pipecat/src:/app
 # Disable file logging in Docker - logs go to stdout for docker logs
 ENV LOG_TO_FILE=false
 
+# Clamp OpenMP, PyTorch, BLAS and NumPy CPU thread spinning in container
+ENV OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    VECLIB_MAXIMUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    OMP_WAIT_POLICY=PASSIVE \
+    TORCH_NUM_THREADS=1
+
 USER dograh
 
 # Expose the port FastAPI will run on
