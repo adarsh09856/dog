@@ -15,8 +15,6 @@ __pycache__
 # logs and run directory on production
 /logs/
 /run/
-infrastructure/
-prd/
 .vercel
 
 .devcontainer/install.local.sh
@@ -25,8 +23,8 @@ venv/
 .playwright-mcp
 coturn/
 *.wav
+!pipecat/**/*.wav
 dograh_pcm_cache/
-kodewaves_pcm_cache/
 kodewaves_pcm_cache/
 node_modules/
 
@@ -34,5 +32,7 @@ node_modules/
 .superpowers/
 docs/superpowers/
 .gstack/
+
+# Standalone plugin repositories
 dograh-plugins/
 kodewaves-plugins/

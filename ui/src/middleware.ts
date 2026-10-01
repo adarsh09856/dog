@@ -31,6 +31,7 @@ async function fetchAuthProvider(): Promise<string> {
 }
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
   const token =
     request.cookies.get(OSS_TOKEN_COOKIE)?.value ||
     request.cookies.get(LEGACY_OSS_TOKEN_COOKIE)?.value ||
@@ -43,11 +44,6 @@ export async function middleware(request: NextRequest) {
       loginUrl.searchParams.set('redirect', pathname);
       return NextResponse.redirect(loginUrl);
     }
-  }
-
-  // If logged-in user visits root landing page '/', smoothly direct to their dashboard
-  if (pathname === '/' && token) {
-    return NextResponse.redirect(new URL('/overview', request.url));
   }
 
   const authProvider = await fetchAuthProvider();

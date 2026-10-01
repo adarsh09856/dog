@@ -24,11 +24,21 @@ export function LocalProviderWrapper({ children }: { children: React.ReactNode }
           setUser(data.user);
           logger.info('OSS auth initialized', { user: data.user });
         } else if (response.status === 401) {
-          // No token - redirect to login (but not if already on auth pages)
-          if (!window.location.pathname.startsWith('/auth/')) {
-            window.location.href = '/auth/login';
+          // No token - only redirect if trying to access a protected page
+          const currentPath = window.location.pathname;
+          const isPublic =
+            currentPath === '/' ||
+            currentPath === '/pricing' ||
+            currentPath.startsWith('/auth/') ||
+            currentPath.startsWith('/embed');
+
+          if (!isPublic) {
+            const returnUrl = encodeURIComponent(currentPath + window.location.search);
+            window.location.href = `/auth/login?redirect=${returnUrl}`;
             return;
           }
+          tokenRef.current = null;
+          setUser(null);
         } else {
           logger.error('Failed to initialize OSS auth');
         }
