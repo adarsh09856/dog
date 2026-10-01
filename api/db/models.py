@@ -126,6 +126,14 @@ class OrganizationModel(Base):
         comment="Deprecated. MPS owns quota and credit ledger state.",
         info={"deprecated": True},
     )
+
+    @property
+    def quota_kodewaves_tokens(self):
+        return self.quota_dograh_tokens
+
+    @quota_kodewaves_tokens.setter
+    def quota_kodewaves_tokens(self, val):
+        self.quota_dograh_tokens = val
     quota_reset_day = Column(
         Integer,
         nullable=False,
@@ -280,10 +288,10 @@ class TelephonyTrunkModel(Base):
     single route through that account — a primary carrier, a failover, a second
     region.
 
-    Only providers whose Dograh integration declares ``trunk_settings_cls`` get
+    Only providers whose Kodewaves integration declares ``trunk_settings_cls`` get
     rows here. That is a statement about our integration, not about the vendor:
     Twilio, Plivo and Telnyx all sell SIP trunking and let you assign numbers to
-    a trunk in their own consoles, but Dograh drives them through their
+    a trunk in their own consoles, but Kodewaves drives them through their
     call-control APIs, where the account itself is the only route. Their numbers
     carry a null trunk.
 
@@ -309,8 +317,8 @@ class TelephonyTrunkModel(Base):
     # Provider-specific payload, validated by the provider's trunk settings
     # schema: region and sip_domain for Cloudonix, endpoint details for ARI.
     settings = Column(JSON, nullable=False, default=dict)
-    # The provider's own identifier for this trunk, recorded when Dograh
-    # provisions it remotely. Kept out of ``settings`` because it is Dograh's
+    # The provider's own identifier for this trunk, recorded when Kodewaves
+    # provisions it remotely. Kept out of ``settings`` because it is Kodewaves's
     # bookkeeping rather than operator input, and is stripped from responses.
     external_id = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
@@ -733,6 +741,22 @@ class OrganizationUsageCycleModel(Base):
         info={"deprecated": True},
     )
     used_dograh_tokens = Column(Float, nullable=False, default=0)
+
+    @property
+    def used_kodewaves_tokens(self):
+        return self.used_dograh_tokens
+
+    @used_kodewaves_tokens.setter
+    def used_kodewaves_tokens(self, val):
+        self.used_dograh_tokens = val
+
+    @property
+    def quota_kodewaves_tokens(self):
+        return self.quota_dograh_tokens
+
+    @quota_kodewaves_tokens.setter
+    def quota_kodewaves_tokens(self, val):
+        self.quota_dograh_tokens = val
     total_duration_seconds = Column(
         Integer, nullable=False, default=0, server_default=text("0")
     )
