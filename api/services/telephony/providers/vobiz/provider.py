@@ -251,7 +251,12 @@ class VobizProvider(TelephonyProvider):
         return is_valid
 
     async def get_webhook_response(
-        self, workflow_id: int, organization_id: int, workflow_run_id: int
+        self,
+        workflow_id: int,
+        organization_id: int,
+        workflow_run_id: int,
+        request: Any = None,
+        **kwargs: Any,
     ) -> str:
         """
         Generate Vobiz XML response for starting a call session.
@@ -261,7 +266,7 @@ class VobizProvider(TelephonyProvider):
         - audioTrack: Which audio to stream (inbound, outbound, both)
         - contentType: audio/x-mulaw;rate=8000
         """
-        _, wss_backend_endpoint = await get_backend_endpoints()
+        _, wss_backend_endpoint = await get_backend_endpoints(request=request)
         ws_url = ws_auth.build_media_ws_url(
             wss_backend_endpoint, workflow_id, organization_id, workflow_run_id
         )

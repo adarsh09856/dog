@@ -90,7 +90,9 @@ def _get_execution_user_id(workflow) -> int:
     ),
 )
 async def initiate_call(
-    request: InitiateCallRequest, user: UserModel = Depends(get_user)
+    request: InitiateCallRequest,
+    http_request: Request,
+    user: UserModel = Depends(get_user),
 ):
     """Initiate a call using the configured telephony provider from web browser. This is
     supposed to be a test call method for the draft version of the agent."""
@@ -255,7 +257,7 @@ async def initiate_call(
 
     try:
         # Construct webhook URL based on provider type
-        backend_endpoint, _ = await get_backend_endpoints()
+        backend_endpoint, _ = await get_backend_endpoints(request=http_request)
 
         webhook_endpoint = provider.WEBHOOK_ENDPOINT
 
@@ -277,6 +279,7 @@ async def initiate_call(
             webhook_url=webhook_url,
             workflow_run_id=workflow_run_id,
             from_number=from_number,
+            request=http_request,
             **keywords,
         )
     except Exception as e:

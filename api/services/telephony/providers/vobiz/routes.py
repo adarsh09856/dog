@@ -54,7 +54,7 @@ async def _verify_vobiz_callback(
 
 @router.post("/vobiz-xml", include_in_schema=False)
 async def handle_vobiz_xml_webhook(
-    workflow_id: int, workflow_run_id: int, organization_id: int
+    workflow_id: int, workflow_run_id: int, organization_id: int, request: Request
 ):
     """
     Handle initial webhook from Vobiz when call is answered.
@@ -74,7 +74,7 @@ async def handle_vobiz_xml_webhook(
     logger.debug(f"[run {workflow_run_id}] Using provider: {provider.PROVIDER_NAME}")
 
     response_content = await provider.get_webhook_response(
-        workflow_id, organization_id, workflow_run_id
+        workflow_id, organization_id, workflow_run_id, request=request
     )
 
     logger.debug(

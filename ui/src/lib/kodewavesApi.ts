@@ -201,7 +201,12 @@ export interface PlatformSettings {
   smtp_host?: string;
   smtp_port?: number;
   smtp_user?: string;
+  smtp_password?: string;
   smtp_from?: string;
+  razorpay_key_id?: string;
+  razorpay_key_secret?: string;
+  stripe_publishable_key?: string;
+  stripe_secret_key?: string;
 }
 
 export interface AuditLogItem {
@@ -366,6 +371,24 @@ export const adminApi = {
     apiFetch<{ message: string }>('/admin/settings', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+  testEmail: (recipient_email: string) =>
+    apiFetch<{ success: boolean; message: string }>('/admin/settings/test-email', {
+      method: 'POST',
+      body: JSON.stringify({ recipient_email }),
+    }),
+  getOllamaModels: () =>
+    apiFetch<{ models: Array<{ name: string; size: number; modified_at: string; details?: any }>; endpoint: string; status: string }>(
+      '/admin/settings/ollama/models'
+    ),
+  pullOllamaModel: (model: string) =>
+    apiFetch<{ success: boolean; model: string; result: any }>('/admin/settings/ollama/pull', {
+      method: 'POST',
+      body: JSON.stringify({ model }),
+    }),
+  deleteOllamaModel: (modelName: string) =>
+    apiFetch<{ success: boolean; message: string }>(`/admin/settings/ollama/models/${encodeURIComponent(modelName)}`, {
+      method: 'DELETE',
     }),
 
   // Audit Logs

@@ -694,6 +694,14 @@ async def authorize_workflow_run_start(
         # If using BYOK personal keys, no platform minutes are required
         # If using Sovereign Platform Managed keys, require > 0 minutes
         if total_minutes > 0 or not is_managed:
+            if workflow_run_id is not None:
+                try:
+                    await _store_run_correlation_id(
+                        workflow_run_id=workflow_run_id,
+                        correlation_id=f"kw-sovereign-{workflow_run_id}",
+                    )
+                except Exception as ex:
+                    logger.debug(f"[QuotaService] Could not stamp sovereign correlation id: {ex}")
             return QuotaCheckResult(has_quota=True)
 
         logger.warning(

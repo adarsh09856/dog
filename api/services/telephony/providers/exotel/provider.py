@@ -186,7 +186,8 @@ class ExotelProvider(TelephonyProvider):
         # at https://docs.exotel.com/exotel-agentstream/connect-voice-ai-api.
         caller_id = self._exotel_dial_number(from_number)
 
-        backend_endpoint, wss_backend_endpoint = await get_backend_endpoints()
+        request = kwargs.get("request")
+        backend_endpoint, wss_backend_endpoint = await get_backend_endpoints(request=request)
         stream_url = ws_auth.build_media_ws_url(
             wss_backend_endpoint, workflow_id, organization_id, workflow_run_id
         )

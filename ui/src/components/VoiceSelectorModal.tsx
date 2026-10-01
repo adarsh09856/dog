@@ -36,6 +36,19 @@ interface Facets {
 
 const EMPTY_FACETS: Facets = { genders: [], accents: [], languages: [] };
 
+const PROVIDER_TABS = [
+    { id: "__all__", label: "All Voices (60+)" },
+    { id: "elevenlabs", label: "ElevenLabs" },
+    { id: "cartesia", label: "Cartesia Sonic" },
+    { id: "openai", label: "OpenAI" },
+    { id: "deepgram", label: "Deepgram Aura" },
+    { id: "azure", label: "Azure Neural" },
+    { id: "google", label: "Gemini / Google" },
+    { id: "sarvam", label: "Sarvam Indic" },
+    { id: "navana", label: "Navana Indic" },
+    { id: "speaches", label: "Local Kokoro" },
+];
+
 interface VoiceSelectorModalProps {
     provider: string;
     value: string;
@@ -82,7 +95,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Filters drive a server-side query (we never fetch the whole catalog).
+    const [providerFilter, setProviderFilter] = useState("__all__");
     const [gender, setGender] = useState(DEFAULT_GENDER);
     const [accent, setAccent] = useState(DEFAULT_ACCENT);
     const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
@@ -146,6 +159,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         (async () => {
             const query: Record<string, string> = {};
             if (model) query.model = model;
+            if (providerFilter !== "__all__") (query as any).provider_filter = providerFilter;
             if (gender !== ALL_FILTER_VALUE) query.gender = gender;
             if (accent !== ALL_FILTER_VALUE) query.accent = accent;
             if (language !== ALL_FILTER_VALUE) query.language = language;
@@ -173,7 +187,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             }
             setIsLoading(false);
         })();
-    }, [isOpen, manualMode, provider, model, gender, accent, language, debouncedSearch]);
+    }, [isOpen, manualMode, provider, model, providerFilter, gender, accent, language, debouncedSearch]);
 
     // Stop any preview when the modal closes / unmounts.
     useEffect(() => {
@@ -269,6 +283,25 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                     <DialogHeader className="border-b px-6 py-4">
                         <DialogTitle>Select Voice</DialogTitle>
                     </DialogHeader>
+
+                    {/* Provider Filter Tabs */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/20 px-6 py-2">
+                        {PROVIDER_TABS.map((tab) => (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setProviderFilter(tab.id)}
+                                className={cn(
+                                    "whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                                    providerFilter === tab.id
+                                        ? "bg-primary text-primary-foreground shadow-sm"
+                                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                )}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
 
                     {/* Filter row: Gender · Accent · Language · Search */}
                     <div className="flex flex-wrap items-center gap-2 border-b px-6 py-3">
@@ -395,6 +428,11 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                                             <span className="flex min-w-0 flex-1 flex-col">
                                                 <span className="flex items-center gap-2">
                                                     <span className="truncate text-sm font-medium">{voice.name}</span>
+                                                    {((voice as any).provider) && (
+                                                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                                            {(voice as any).provider}
+                                                        </span>
+                                                    )}
                                                     {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
                                                 </span>
                                                 {voiceTraits(voice) && (

@@ -243,7 +243,12 @@ class TelephonyProvider(ABC):
 
     @abstractmethod
     async def get_webhook_response(
-        self, workflow_id: int, organization_id: int, workflow_run_id: int
+        self,
+        workflow_id: int,
+        organization_id: int,
+        workflow_run_id: int,
+        request: Any = None,
+        **kwargs: Any,
     ) -> str:
         """
         Generate the initial webhook response for starting a call session.

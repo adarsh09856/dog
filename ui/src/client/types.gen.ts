@@ -2488,7 +2488,17 @@ export type DograhManagedAiModelConfiguration = {
      * Language
      */
     language?: string;
+    /**
+     * LLM Model
+     */
+    llm_model?: string;
+    /**
+     * STT Model
+     */
+    stt_model?: string;
 };
+
+export type KodewavesManagedAiModelConfiguration = DograhManagedAiModelConfiguration;
 
 /**
  * Dograh
@@ -4633,7 +4643,8 @@ export type OrganizationAiModelConfigurationV2 = {
     /**
      * Mode
      */
-    mode: 'dograh' | 'byok';
+    mode: 'dograh' | 'kodewaves' | 'byok';
+    kodewaves?: KodewavesManagedAiModelConfiguration | null;
     dograh?: DograhManagedAiModelConfiguration | null;
     byok?: ByokaiModelConfiguration | null;
 };

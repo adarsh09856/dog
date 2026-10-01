@@ -135,7 +135,7 @@ async def handle_plivo_xml_webhook(
         )
 
     response_content = await provider.get_webhook_response(
-        workflow_id, organization_id, workflow_run_id
+        workflow_id, organization_id, workflow_run_id, request=request
     )
     return HTMLResponse(content=response_content, media_type="application/xml")
 

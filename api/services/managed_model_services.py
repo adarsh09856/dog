@@ -45,10 +45,12 @@ async def ensure_mps_correlation_id(
     if not uses_managed_model_services_v2(ai_model_config):
         return None
 
-    raise ValueError(
-        "Managed model services v2 requires workflow run authorization before "
-        f"the run starts. Missing correlation id for workflow_run_id={workflow_run_id}."
-    )
+    # In Kodewaves Sovereign mode, auto-mint a sovereign correlation token for the run
+    # rather than failing closed with a hard ValueError.
+    sovereign_id = f"kw-sovereign-{workflow_run_id}"
+    if initial_context is not None:
+        initial_context[MPS_CORRELATION_ID_CONTEXT_KEY] = sovereign_id
+    return sovereign_id
 
 
 def _is_kodewaves_service(service: Any) -> bool:

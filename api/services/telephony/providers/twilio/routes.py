@@ -49,7 +49,7 @@ async def handle_twiml_webhook(
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     response_content = await provider.get_webhook_response(
-        workflow_id, organization_id, workflow_run_id
+        workflow_id, organization_id, workflow_run_id, request=request
     )
 
     return HTMLResponse(content=response_content, media_type="application/xml")

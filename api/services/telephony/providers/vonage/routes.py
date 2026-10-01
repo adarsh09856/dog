@@ -21,6 +21,7 @@ async def handle_ncco_webhook(
     workflow_id: int,
     workflow_run_id: int,
     organization_id: int,
+    request: Request,
 ):
     """Handle NCCO (Nexmo Call Control Objects) webhook for Vonage.
 
@@ -31,7 +32,7 @@ async def handle_ncco_webhook(
     provider = await get_telephony_provider_for_run(workflow_run, organization_id)
 
     response_content = await provider.get_webhook_response(
-        workflow_id, organization_id, workflow_run_id
+        workflow_id, organization_id, workflow_run_id, request=request
     )
 
     return json.loads(response_content)

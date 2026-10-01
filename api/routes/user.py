@@ -573,12 +573,25 @@ UNIVERSAL_VOICE_CATALOG: dict[str, list[dict]] = {
     ],
 }
 
+# Annotate each voice with its originating provider
+for prov_key, voice_list in UNIVERSAL_VOICE_CATALOG.items():
+    for voice_item in voice_list:
+        if "provider" not in voice_item:
+            voice_item["provider"] = prov_key
+
+# Build the complete universal catalog across all cloud & local providers
+MANAGED_UNIVERSAL_VOICES: list[dict] = []
+for p_key in ["elevenlabs", "cartesia", "openai", "deepgram", "google", "azure", "sarvam", "navana", "speaches", "smallest", "lmnt", "rime"]:
+    if p_key in UNIVERSAL_VOICE_CATALOG:
+        for v in UNIVERSAL_VOICE_CATALOG[p_key]:
+            MANAGED_UNIVERSAL_VOICES.append(v)
+
 # Alias mirror providers to primary catalog entries
 UNIVERSAL_VOICE_CATALOG["gemini"] = UNIVERSAL_VOICE_CATALOG["google"]
 UNIVERSAL_VOICE_CATALOG["azure_speech"] = UNIVERSAL_VOICE_CATALOG["azure"]
-UNIVERSAL_VOICE_CATALOG["kodewaves"] = UNIVERSAL_VOICE_CATALOG["speaches"]
-UNIVERSAL_VOICE_CATALOG["kodewaves"] = UNIVERSAL_VOICE_CATALOG["speaches"]
-UNIVERSAL_VOICE_CATALOG["dograh"] = UNIVERSAL_VOICE_CATALOG["kodewaves"]
+UNIVERSAL_VOICE_CATALOG["kodewaves"] = MANAGED_UNIVERSAL_VOICES
+UNIVERSAL_VOICE_CATALOG["dograh"] = MANAGED_UNIVERSAL_VOICES
+UNIVERSAL_VOICE_CATALOG["all"] = MANAGED_UNIVERSAL_VOICES
 
 
 class VoiceInfo(BaseModel):
@@ -589,6 +602,7 @@ class VoiceInfo(BaseModel):
     gender: Optional[str] = None
     language: Optional[str] = None
     preview_url: Optional[str] = None
+    provider: Optional[str] = None
 
 
 class VoiceFacets(BaseModel):
@@ -597,6 +611,7 @@ class VoiceFacets(BaseModel):
     genders: List[str] = []
     accents: List[str] = []
     languages: List[str] = []
+    providers: List[str] = []
 
 
 class VoicesResponse(BaseModel):
@@ -613,13 +628,16 @@ async def get_voices(
     q: Optional[str] = None,
     gender: Optional[str] = None,
     accent: Optional[str] = None,
+    provider_filter: Optional[str] = None,
     user: UserModel = Depends(get_user),
 ) -> VoicesResponse:
     """Get available voices for a TTS provider with 0ms in-memory latency and zero cloud locks."""
     provider_key = provider.lower()
-    raw_catalog = UNIVERSAL_VOICE_CATALOG.get(provider_key) or UNIVERSAL_VOICE_CATALOG.get("speaches", [])
+    raw_catalog = UNIVERSAL_VOICE_CATALOG.get(provider_key) or MANAGED_UNIVERSAL_VOICES
 
     filtered = raw_catalog
+    if provider_filter and provider_filter != "__all__":
+        filtered = [v for v in filtered if v.get("provider") == provider_filter]
     if gender and gender != "__all__":
         filtered = [v for v in filtered if v.get("gender") == gender]
     if accent and accent != "__all__":
@@ -630,13 +648,17 @@ async def get_voices(
         ql = q.strip().lower()
         filtered = [
             v for v in filtered
-            if ql in v["name"].lower() or ql in v["voice_id"].lower() or ql in (v.get("description") or "").lower()
+            if ql in v["name"].lower()
+            or ql in v["voice_id"].lower()
+            or ql in (v.get("description") or "").lower()
+            or ql in (v.get("provider") or "").lower()
         ]
 
     # Calculate facets dynamically from full provider catalog
     genders = sorted(list({v.get("gender") for v in raw_catalog if v.get("gender")}))
     accents = sorted(list({v.get("accent") for v in raw_catalog if v.get("accent")}))
     languages = sorted(list({v.get("language") for v in raw_catalog if v.get("language")}))
+    providers_list = sorted(list({v.get("provider") for v in raw_catalog if v.get("provider")}))
 
     return VoicesResponse(
         provider=provider,
@@ -645,5 +667,6 @@ async def get_voices(
             genders=genders,
             accents=accents,
             languages=languages,
+            providers=providers_list,
         ),
     )

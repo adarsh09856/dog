@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Cloud, Cpu, Info, Save, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, CheckCircle2, Cloud, Cpu, Info, Mic, Save, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -69,8 +69,44 @@ export interface KodewavesFormState {
     speed: number;
     language: string;
     engine_type?: "cloud" | "local_cpu";
+    llm_model?: string;
+    stt_model?: string;
 }
 export type DograhFormState = KodewavesFormState;
+
+export const CLOUD_LLM_MODELS = [
+    { value: "auto", label: "Auto (Recommended - Best master key)" },
+    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash (Ultra Fast)" },
+    { value: "gemini-2.5-pro", label: "Google Gemini 2.5 Pro (Deep Reasoning)" },
+    { value: "gpt-4o-mini", label: "OpenAI GPT-4o Mini (Fast & Cost-effective)" },
+    { value: "gpt-4o", label: "OpenAI GPT-4o (High Intelligence)" },
+    { value: "claude-3-5-sonnet-latest", label: "Anthropic Claude 3.5 Sonnet (Advanced)" },
+    { value: "llama-3.3-70b-versatile", label: "Groq Llama 3.3 70B (Ultra Low Latency)" },
+    { value: "sarvam-2b", label: "Sarvam Indic 2B (Indian Languages)" },
+];
+
+export const LOCAL_LLM_MODELS = [
+    { value: "qwen2.5:0.5b", label: "Qwen 2.5 0.5B (Ultra-fast CPU, ~350MB RAM)" },
+    { value: "qwen2.5:1.5b", label: "Qwen 2.5 1.5B (Recommended CPU, ~980MB RAM)" },
+    { value: "llama3.2:1b", label: "Llama 3.2 1B (Meta fast CPU, ~1.3GB RAM)" },
+    { value: "llama3.2:3b", label: "Llama 3.2 3B (Meta high-IQ CPU, ~2.0GB RAM)" },
+    { value: "phi4-mini", label: "Microsoft Phi-4 Mini 3.8B (~2.4GB RAM)" },
+    { value: "mistral:7b", label: "Mistral 7B (~4.5GB RAM)" },
+];
+
+export const CLOUD_STT_MODELS = [
+    { value: "auto", label: "Auto (Recommended - Nova-3 / Whisper)" },
+    { value: "deepgram-nova-3", label: "Deepgram Nova-3 (Highest Accuracy & Speed)" },
+    { value: "whisper-1", label: "OpenAI Whisper-1 (Accurate Multilingual)" },
+    { value: "saaras:v2", label: "Sarvam Saaras v2 (High-accuracy Indic Speech)" },
+    { value: "azure-stt", label: "Microsoft Azure Speech" },
+];
+
+export const LOCAL_STT_MODELS = [
+    { value: "Systran/faster-whisper-tiny.en", label: "Whisper Tiny English (Fastest CPU)" },
+    { value: "Systran/faster-whisper-base", label: "Whisper Base Multilingual (Recommended CPU)" },
+    { value: "Systran/faster-whisper-small", label: "Whisper Small Multilingual (High Accuracy CPU)" },
+];
 
 interface AIModelConfigurationV2EditorProps {
     defaults: ModelConfigurationDefaultsV2;
@@ -212,6 +248,8 @@ function buildKodewavesState(
             speed: numberOrDefault(configuredKodewaves.speed, fallback.speed),
             language: String(configuredKodewaves.language || fallback.language),
             engine_type: isLocalCpu ? "local_cpu" : "cloud",
+            llm_model: configuredKodewaves.llm_model ? String(configuredKodewaves.llm_model) : undefined,
+            stt_model: configuredKodewaves.stt_model ? String(configuredKodewaves.stt_model) : undefined,
         };
     }
 
@@ -227,6 +265,8 @@ function buildKodewavesState(
             speed: numberOrDefault(tts?.speed, fallback.speed),
             language: String(stt?.language || fallback.language),
             engine_type: isLocalCpu ? "local_cpu" : "cloud",
+            llm_model: llm?.model ? String(llm.model) : undefined,
+            stt_model: stt?.model ? String(stt.model) : undefined,
         };
     }
 
@@ -236,6 +276,8 @@ function buildKodewavesState(
         speed: fallback.speed,
         language: fallback.language,
         engine_type: "cloud",
+        llm_model: undefined,
+        stt_model: undefined,
     };
 }
 const buildDograhState = buildKodewavesState;
@@ -439,12 +481,16 @@ export function AIModelConfigurationV2Editor({
                     voice: kodewaves.voice,
                     speed: kodewaves.speed,
                     language: kodewaves.language,
+                    llm_model: kodewaves.llm_model || undefined,
+                    stt_model: kodewaves.stt_model || undefined,
                 },
                 dograh: {
                     api_key: apiKey,
                     voice: kodewaves.voice,
                     speed: kodewaves.speed,
                     language: kodewaves.language,
+                    llm_model: kodewaves.llm_model || undefined,
+                    stt_model: kodewaves.stt_model || undefined,
                 },
             });
         } catch (err) {
@@ -576,6 +622,62 @@ export function AIModelConfigurationV2Editor({
                                             </p>
                                         </div>
                                     </div>
+                                </div>
+
+                                {/* LLM Model Selector */}
+                                <div className="space-y-2 sm:col-span-2">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                                            <Bot className="h-4 w-4 text-primary" />
+                                            LLM Model (Intelligence Engine)
+                                        </Label>
+                                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                                            {kodewaves.engine_type === "local_cpu" ? "Local Ollama" : "Cloud Master Keys"}
+                                        </span>
+                                    </div>
+                                    <Select
+                                        value={kodewaves.llm_model || (kodewaves.engine_type === "local_cpu" ? "qwen2.5:1.5b" : "auto")}
+                                        onValueChange={(llm_model) => setKodewaves({ ...kodewaves, llm_model: llm_model === "auto" ? undefined : llm_model })}
+                                    >
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Select LLM model" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {(kodewaves.engine_type === "local_cpu" ? LOCAL_LLM_MODELS : CLOUD_LLM_MODELS).map((m) => (
+                                                <SelectItem key={m.value} value={m.value}>
+                                                    {m.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* STT Model Selector */}
+                                <div className="space-y-2 sm:col-span-2">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                                            <Mic className="h-4 w-4 text-primary" />
+                                            Transcriber (STT) Model
+                                        </Label>
+                                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                                            {kodewaves.engine_type === "local_cpu" ? "Local Whisper" : "Cloud Transcriber"}
+                                        </span>
+                                    </div>
+                                    <Select
+                                        value={kodewaves.stt_model || (kodewaves.engine_type === "local_cpu" ? "Systran/faster-whisper-base" : "auto")}
+                                        onValueChange={(stt_model) => setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" ? undefined : stt_model })}
+                                    >
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Select STT model" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {(kodewaves.engine_type === "local_cpu" ? LOCAL_STT_MODELS : CLOUD_STT_MODELS).map((m) => (
+                                                <SelectItem key={m.value} value={m.value}>
+                                                    {m.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">

@@ -208,13 +208,18 @@ class VonageProvider(TelephonyProvider):
             return False
 
     async def get_webhook_response(
-        self, workflow_id: int, organization_id: int, workflow_run_id: int
+        self,
+        workflow_id: int,
+        organization_id: int,
+        workflow_run_id: int,
+        request: Any = None,
+        **kwargs: Any,
     ) -> str:
         """
         Generate NCCO response for starting a call session.
         NCCO (Nexmo Call Control Objects) is JSON-based, unlike TwiML which is XML.
         """
-        _, wss_backend_endpoint = await get_backend_endpoints()
+        _, wss_backend_endpoint = await get_backend_endpoints(request=request)
         ws_url = ws_auth.build_media_ws_url(
             wss_backend_endpoint, workflow_id, organization_id, workflow_run_id
         )

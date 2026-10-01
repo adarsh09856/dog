@@ -65,6 +65,8 @@ class KodewavesManagedAIModelConfiguration(BaseModel):
     voice: str = KODEWAVES_DEFAULT_VOICE
     speed: float = Field(default=1.0, ge=KODEWAVES_SPEED_MIN, le=KODEWAVES_SPEED_MAX)
     language: str = KODEWAVES_DEFAULT_LANGUAGE
+    llm_model: Optional[str] = None
+    stt_model: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -194,7 +196,7 @@ def _compile_kodewaves_configuration(
         llm=KodewavesLLMService(
             provider=ServiceProviders.KODEWAVES,
             api_key=api_key,
-            model="default",
+            model=configuration.llm_model or "default",
         ),
         tts=KodewavesTTSService(
             provider=ServiceProviders.KODEWAVES,
@@ -206,7 +208,7 @@ def _compile_kodewaves_configuration(
         stt=KodewavesSTTService(
             provider=ServiceProviders.KODEWAVES,
             api_key=api_key,
-            model="default",
+            model=configuration.stt_model or "default",
             language=configuration.language,
         ),
         embeddings=KodewavesEmbeddingsConfiguration(

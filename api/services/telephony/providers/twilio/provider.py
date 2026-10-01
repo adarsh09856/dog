@@ -81,7 +81,7 @@ class TwilioProvider(TelephonyProvider):
 
         # Add status callback if workflow_run_id provided
         if workflow_run_id:
-            backend_endpoint, _ = await get_backend_endpoints()
+            backend_endpoint, _ = await get_backend_endpoints(request=kwargs.get("request"))
             callback_url = f"{backend_endpoint}/api/v1/telephony/twilio/status-callback/{workflow_run_id}"
             data.update(
                 {
@@ -162,12 +162,17 @@ class TwilioProvider(TelephonyProvider):
         return validator.validate(url, params, signature)
 
     async def get_webhook_response(
-        self, workflow_id: int, organization_id: int, workflow_run_id: int
+        self,
+        workflow_id: int,
+        organization_id: int,
+        workflow_run_id: int,
+        request: Any = None,
+        **kwargs: Any,
     ) -> str:
         """
         Generate TwiML response for starting a call session.
         """
-        _, wss_backend_endpoint = await get_backend_endpoints()
+        _, wss_backend_endpoint = await get_backend_endpoints(request=request)
         ws_url = ws_auth.build_media_ws_url(
             wss_backend_endpoint, workflow_id, organization_id, workflow_run_id
         )

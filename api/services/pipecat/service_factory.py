@@ -480,10 +480,15 @@ def create_stt_service(
             )
 
         if getattr(user_config.stt, "api_key", None) == "sovereign-local-cpu":
+            import os
+            speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
+            if not speaches_host.endswith("/v1"):
+                speaches_host = f"{speaches_host.rstrip('/')}/v1"
             from pipecat.services.speaches.stt import SpeachesSTTService
+            stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-tiny"
             return SpeachesSTTService(
-                base_url="http://localhost:8000/v1",
-                model="Systran/faster-whisper-tiny",
+                base_url=speaches_host,
+                model=stt_model,
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
@@ -844,12 +849,16 @@ def create_tts_service(
         "kodewaves",
     ):
         if getattr(user_config.tts, "api_key", None) == "sovereign-local-cpu":
+            import os
+            speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
+            if not speaches_host.endswith("/v1"):
+                speaches_host = f"{speaches_host.rstrip('/')}/v1"
             from pipecat.services.speaches.tts import SpeachesTTSService
             voice = getattr(user_config.tts, "voice", "af_heart")
             if voice and (voice.startswith("dg_") or voice.startswith("kw_")):
                 voice = "af_heart"
             return SpeachesTTSService(
-                base_url="http://localhost:8000/v1",
+                base_url=speaches_host,
                 voice=voice,
                 text_filters=[xml_function_tag_filter],
                 skip_aggregator_types=["recording_router", "recording"],
