@@ -42,23 +42,23 @@ _MPS_UNREACHABLE_ERRORS = (
 
 OSS_QUOTA_EXCEEDED_MESSAGE = (
     "You have exhausted your trial credits. "
-    "Please sign up on app.dograh.com to create a "
-    "new service key and set up in your model configurations."
+    "Please add credits from /billing or set up "
+    "master provider keys in your model configurations."
 )
 
 HOSTED_QUOTA_EXCEEDED_MESSAGE = (
-    "You have exhausted your Dograh credits. "
+    "You have exhausted your Kodewaves credits. "
     "Please purchase more credits from /billing "
     "or change providers in Models configurations."
 )
 
 OSS_HOSTED_KEY_QUOTA_EXCEEDED_MESSAGE = (
-    "The organization linked to this Dograh service key has insufficient credits. "
-    "Please add credits at app.dograh.com or change providers in Models configurations."
+    "The organization has insufficient credits. "
+    "Please add credits from /billing or change providers in Models configurations."
 )
 
 SERVICE_TOKEN_ORG_MISMATCH_MESSAGE = (
-    "The Dograh service token being used is created from another account. "
+    "The Kodewaves service token being used is created from another account. "
     "Please create a new service token from the Developers tab and use it in "
     "your model configuration."
 )
@@ -106,7 +106,7 @@ def _log_mps_system_failure(
             type=ErrorType.SYSTEM_ERROR,
             code=f"dograh-{code}",
             internal_message=message,
-            external_message="Dograh could not verify managed model access.",
+            external_message="Kodewaves could not verify managed model access.",
             provider="dograh",
             error_owner="operator",
             retryable=None,
@@ -126,8 +126,8 @@ def _log_insufficient_dograh_credits(
             source=ErrorSource.PLATFORM,
             type=ErrorType.QUOTA_ERROR,
             code="dograh-insufficient-credits",
-            internal_message="Insufficient Dograh credits",
-            external_message="Your organization has insufficient Dograh credits.",
+            internal_message="Insufficient Kodewaves credits",
+            external_message="Your organization has insufficient Kodewaves credits.",
             provider="dograh",
             error_owner="user",
             retryable=False,
@@ -180,7 +180,7 @@ def _managed_v2_authorization_failed_result() -> QuotaCheckResult:
     return QuotaCheckResult(
         has_quota=False,
         error_code="quota_check_failed",
-        error_message="Could not verify Dograh credits. Please try again.",
+        error_message="Could not verify Kodewaves credits. Please try again.",
     )
 
 
@@ -389,7 +389,7 @@ async def _authorize_oss_managed_v2_correlation(
         return QuotaCheckResult(
             has_quota=False,
             error_code="quota_check_failed",
-            error_message="Could not verify Dograh credits. Please try again.",
+            error_message="Could not verify Kodewaves credits. Please try again.",
         )
 
     return QuotaCheckResult(has_quota=True)
@@ -421,7 +421,7 @@ async def _authorize_oss_managed_v2_run(
             return QuotaCheckResult(
                 has_quota=False,
                 error_code="quota_check_failed",
-                error_message="Could not verify Dograh credits. Please try again.",
+                error_message="Could not verify Kodewaves credits. Please try again.",
             )
 
         logger.info(
@@ -454,7 +454,7 @@ async def _authorize_oss_managed_v2_run(
         return QuotaCheckResult(
             has_quota=False,
             error_code="quota_check_failed",
-            error_message="Could not verify Dograh credits. Please try again.",
+            error_message="Could not verify Kodewaves credits. Please try again.",
         )
 
     remaining = _safe_float(authorization.get("remaining_credits"))
@@ -488,11 +488,11 @@ async def _authorize_oss_managed_v2_run(
         return QuotaCheckResult(
             has_quota=False,
             error_code="quota_check_failed",
-            error_message="Could not verify Dograh credits. Please try again.",
+            error_message="Could not verify Kodewaves credits. Please try again.",
         )
 
     logger.info(
-        "Dograh run authorization passed for key ...{}: {:.2f} credits remaining",
+        "Kodewaves run authorization passed for key ...{}: {:.2f} credits remaining",
         service_key[-8:],
         remaining,
     )

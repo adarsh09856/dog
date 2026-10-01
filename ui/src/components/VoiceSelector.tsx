@@ -127,7 +127,7 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
             camb: "camb",
             minimax: "minimax",
             xai: "xai",
-            dograh: "dograh",
+            dograh: "kodewaves",
         };
         return providerMap[normalized] || (normalized as TTSProviderWithVoices);
     }, []);
