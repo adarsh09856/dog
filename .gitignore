@@ -26,6 +26,7 @@ venv/
 coturn/
 *.wav
 dograh_pcm_cache/
+kodewaves_pcm_cache/
 node_modules/
 
 # Superpowers brainstorm mockups (local only)
@@ -33,3 +34,4 @@ node_modules/
 docs/superpowers/
 .gstack/
 dograh-plugins/
+kodewaves-plugins/
