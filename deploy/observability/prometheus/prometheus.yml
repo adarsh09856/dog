@@ -2,12 +2,12 @@ global:
   scrape_interval: 5s
 
 scrape_configs:
-  - job_name: dograh
+  - job_name: kodewaves
     metrics_path: /api/v1/metrics
     http_headers:
-      X-Dograh-Devops-Secret:
+      X-Kodewaves-Devops-Secret:
         files:
-          - /run/secrets/dograh_devops_secret
+          - /run/secrets/kodewaves_devops_secret
     file_sd_configs:
       - files:
           - /etc/prometheus/targets.json

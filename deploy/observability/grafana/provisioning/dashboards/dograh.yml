@@ -1,7 +1,0 @@
-apiVersion: 1
-providers:
-  - name: Dograh
-    folder: Dograh
-    type: file
-    options:
-      path: /var/lib/grafana/dashboards
