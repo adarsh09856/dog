@@ -82,7 +82,8 @@ lets through.
 ## Environment
 
 ```bash
-DOGRAH_API_URL=http://localhost:8000   # default
+KODEWAVES_API_URL=http://localhost:8000   # default
+# (Legacy fallback: DOGRAH_API_URL is also supported)
 KODEWAVES_API_KEY=sk-...                  # sent as X-API-Key
 ```
 

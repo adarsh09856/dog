@@ -68,8 +68,9 @@ through (compound invariants, cross-field rules).
 ## Environment
 
 ```bash
-DOGRAH_API_URL=http://localhost:8000   # default
-DOGRAH_API_KEY=sk-...                  # sent as X-API-Key
+KODEWAVES_API_URL=http://localhost:8000   # default
+KODEWAVES_API_KEY=sk-...                  # sent as X-API-Key
+# (Legacy fallback: DOGRAH_API_URL and DOGRAH_API_KEY are also supported)
 ```
 
 ## License

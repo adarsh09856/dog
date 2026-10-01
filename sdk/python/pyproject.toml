@@ -37,6 +37,7 @@ Repository = "https://github.com/kodewaves/kodewaves"
 
 [project.scripts]
 kodewaves-sdk-codegen = "kodewaves_sdk.codegen:main"
+kodewaves-sdk-codegen = "kodewaves_sdk.codegen:main"
 dograh-sdk-codegen = "dograh_sdk.codegen:main"
 
 [build-system]
