@@ -8,11 +8,11 @@ BOOTSTRAP_LIB=""
 
 if [[ ! -f "$LIB_PATH" ]]; then
     BOOTSTRAP_LIB="$(mktemp)"
-    curl -fsSL -o "$BOOTSTRAP_LIB" "https://raw.githubusercontent.com/dograh-hq/dograh/main/scripts/lib/setup_common.sh"
+    curl -fsSL -o "$BOOTSTRAP_LIB" "https://raw.githubusercontent.com/kodewaves/kodewaves/main/scripts/lib/setup_common.sh"
     LIB_PATH="$BOOTSTRAP_LIB"
 fi
 
-# The preflight rewrites .env (awk + mv in dograh_set_env_key), so running this
+# The preflight rewrites .env (awk + mv in kodewaves_set_env_key), so running this
 # script via sudo leaves .env root-owned and later sudo-less edits fail. Hand
 # the deploy dir back to the user who invoked sudo; a no-op for unprivileged
 # runs and real root, where SUDO_UID is unset.
@@ -63,10 +63,10 @@ done
 
 cd "$SCRIPT_DIR"
 
-dograh_info "Running Kodewaves remote preflight..."
-dograh_prepare_remote_install "$SCRIPT_DIR"
+kodewaves_info "Running Kodewaves remote preflight..."
+kodewaves_prepare_remote_install "$SCRIPT_DIR"
 docker compose config -q
-dograh_success "✓ kodewaves-init preflight validated"
+kodewaves_success "✓ kodewaves-init preflight validated"
 
 if [[ "$VALIDATE_ONLY" == "1" ]]; then
     exit 0
@@ -81,7 +81,7 @@ fi
 # Reconcile the Postgres role password with .env before starting the API.
 # POSTGRES_PASSWORD only applies on first volume init, so an existing volume can
 # hold a stale password the API would fail to authenticate against. Idempotent.
-dograh_sync_postgres_password "$SCRIPT_DIR" "${COMPOSE_CMD[@]}"
+kodewaves_sync_postgres_password "$SCRIPT_DIR" "${COMPOSE_CMD[@]}"
 
 # When SERVER_IP (sourced from .env above) is a private/reserved address the host
 # has no public IP, so start the cloudflared service (tunnel profile) to make
@@ -89,7 +89,7 @@ dograh_sync_postgres_password "$SCRIPT_DIR" "${COMPOSE_CMD[@]}"
 # the same private-IP classification (api/utils/common.py:is_local_or_private_url),
 # so the two stay in sync. A public-IP install runs nginx only.
 PROFILE_ARGS=(--profile remote)
-if dograh_is_local_ipv4 "${SERVER_IP:-}"; then
+if kodewaves_is_local_ipv4 "${SERVER_IP:-}"; then
     PROFILE_ARGS+=(--profile tunnel)
 fi
 
