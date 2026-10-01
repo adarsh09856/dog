@@ -3076,7 +3076,7 @@ export type GoogleTtsConfiguration = {
     /**
      * Model
      *
-     * Google Cloud low-latency TTS engine. Dograh maps this to Pipecat's streaming Google TTS service for Chirp 3 HD and Journey voices.
+     * Google Cloud low-latency TTS engine. Kodewaves maps this to Pipecat's streaming Google TTS service for Chirp 3 HD and Journey voices.
      */
     model?: string;
     /**
@@ -3382,7 +3382,7 @@ export type HttpApiConfig = {
     /**
      * Preset Parameters
      *
-     * Parameters injected by Dograh from fixed values or workflow context templates.
+     * Parameters injected by Kodewaves from fixed values or workflow context templates.
      */
     preset_parameters?: Array<PresetToolParameter> | null;
     /**
@@ -3490,7 +3490,7 @@ export type HttpTransferResolverConfig = {
     /**
      * Wait Message
      *
-     * Optional short message played while Dograh resolves routing.
+     * Optional short message played while Kodewaves resolves routing.
      */
     wait_message?: string | null;
     /**
@@ -3502,7 +3502,7 @@ export type HttpTransferResolverConfig = {
     /**
      * Preset Parameters
      *
-     * Parameters injected by Dograh from fixed values or workflow context templates.
+     * Parameters injected by Kodewaves from fixed values or workflow context templates.
      */
     preset_parameters?: Array<PresetToolParameter> | null;
 };
@@ -4226,6 +4226,7 @@ export type ModelConfigurationMetricPrice = {
  */
 export type ModelConfigurationPricingResponse = {
     platform_usage?: ModelConfigurationMetricPrice | null;
+    kodewaves_model?: ModelConfigurationMetricPrice | null;
     dograh_model?: ModelConfigurationMetricPrice | null;
 };
 
@@ -4717,7 +4718,7 @@ export type OrganizationPreferences = {
     /**
      * Disposition Mapping
      *
-     * Dograh disposition -> the code this organization uses for it. Applied when writing `gathered_context.mapped_call_disposition`, so webhooks, run filters, reports and external-PBX write-backs all read the organization's own vocabulary. Dispositions absent from the mapping pass through unchanged.
+     * Kodewaves disposition -> the code this organization uses for it. Applied when writing `gathered_context.mapped_call_disposition`, so webhooks, run filters, reports and external-PBX write-backs all read the organization's own vocabulary. Dispositions absent from the mapping pass through unchanged.
      */
     disposition_mapping?: {
         [key: string]: string;
@@ -4748,7 +4749,7 @@ export type OrganizationPreferencesResponse = {
     /**
      * Disposition Mapping
      *
-     * Dograh disposition -> the code this organization uses for it. Applied when writing `gathered_context.mapped_call_disposition`, so webhooks, run filters, reports and external-PBX write-backs all read the organization's own vocabulary. Dispositions absent from the mapping pass through unchanged.
+     * Kodewaves disposition -> the code this organization uses for it. Applied when writing `gathered_context.mapped_call_disposition`, so webhooks, run filters, reports and external-PBX write-backs all read the organization's own vocabulary. Dispositions absent from the mapping pass through unchanged.
      */
     disposition_mapping?: {
         [key: string]: string;
@@ -4956,7 +4957,7 @@ export type PlivoConfigurationRequest = {
 /**
  * PresetToolParameter
  *
- * A parameter injected by Dograh at runtime.
+ * A parameter injected by Kodewaves at runtime.
  */
 export type PresetToolParameter = {
     /**
@@ -7089,7 +7090,7 @@ export type TransferAgentConfig = {
     /**
      * Workflow Id
      *
-     * Id of the Dograh agent to transfer to. Must be in the same organization, and must not be a speech-to-speech agent.
+     * Id of the Kodewaves agent to transfer to. Must be in the same organization, and must not be a speech-to-speech agent.
      */
     workflow_id: number;
     /**
@@ -7175,7 +7176,7 @@ export type TransferCallConfig = {
     /**
      * Call Disposition
      *
-     * Optional disposition to record after a successful transfer. When omitted, Dograh records its provider-specific transfer default.
+     * Optional disposition to record after a successful transfer. When omitted, Kodewaves records its provider-specific transfer default.
      */
     call_disposition?: string | null;
     /**
@@ -7301,7 +7302,7 @@ export type TrunkListResponse = {
  *
  * ``settings`` is the provider's own trunk schema (validated on write against
  * ``ProviderSpec.trunk_settings_cls``). The provider-side identifier is
- * Dograh's bookkeeping and is not exposed.
+ * Kodewaves's bookkeeping and is not exposed.
  */
 export type TrunkResponse = {
     /**
@@ -16616,6 +16617,7 @@ export type ActiveCallsApiV1HealthActiveCallsGetData = {
         /**
          * X-Dograh-Devops-Secret
          */
+        'X-Kodewaves-Devops-Secret'?: string | null;
         'X-Dograh-Devops-Secret'?: string | null;
     };
     path?: never;
@@ -16651,6 +16653,7 @@ export type AutoscaleMetricApiV1HealthAutoscaleMetricGetData = {
         /**
          * X-Dograh-Devops-Secret
          */
+        'X-Kodewaves-Devops-Secret'?: string | null;
         'X-Dograh-Devops-Secret'?: string | null;
     };
     path?: never;
