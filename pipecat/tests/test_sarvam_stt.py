@@ -1201,7 +1201,7 @@ def _capture_class(frames):
 
 
 #
-# Dograh: Indic language coverage for the non-realtime service.
+# Kodewaves: Indic language coverage for the non-realtime service.
 #
 
 

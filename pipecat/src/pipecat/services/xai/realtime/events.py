@@ -109,7 +109,7 @@ class InputAudioTranscription(BaseModel):
         model: Transcription model. Defaults to ``grok-transcribe``: xAI only
             emits input-audio transcription events
             (``conversation.item.input_audio_transcription.updated``) when it is
-            explicitly enabled on the realtime session, and Dograh needs the user
+            explicitly enabled on the realtime session, and Kodewaves needs the user
             transcripts. Pass ``None`` to leave transcription off.
         language_hint: BCP-47 language code to bias ASR.
         keyterms: Domain terms to bias transcription (max 100, ≤50 chars each).
