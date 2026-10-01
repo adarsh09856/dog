@@ -28,9 +28,9 @@ cleanup() {
     # install back to the user who invoked sudo. SUDO_UID is unset when running
     # as real root — nothing to restore then. Runs from the EXIT trap so a
     # mid-setup failure also leaves ownership fixed.
-    if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" && -n "${DOGRAH_DEPLOY_PROJECT_DIR:-}" && -d "$DOGRAH_DEPLOY_PROJECT_DIR" ]]; then
-        echo -e "${BLUE}Restoring ownership of $DOGRAH_DEPLOY_PROJECT_DIR to ${SUDO_USER:-uid $SUDO_UID}...${NC}"
-        chown -R "$SUDO_UID:$SUDO_GID" "$DOGRAH_DEPLOY_PROJECT_DIR" || true
+    if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" && -n "${KODEWAVES_DEPLOY_PROJECT_DIR:-}" && -d "$KODEWAVES_DEPLOY_PROJECT_DIR" ]]; then
+        echo -e "${BLUE}Restoring ownership of $KODEWAVES_DEPLOY_PROJECT_DIR to ${SUDO_USER:-uid $SUDO_UID}...${NC}"
+        chown -R "$SUDO_UID:$SUDO_GID" "$KODEWAVES_DEPLOY_PROJECT_DIR" || true
     fi
 }
 trap cleanup EXIT
@@ -100,8 +100,8 @@ echo -e "${GREEN}✓ Certbot installed${NC}"
 
 echo -e "${BLUE}[3/6] Pointing .env at $DOMAIN_NAME and starting services...${NC}"
 cd kodewaves
-DOGRAH_DEPLOY_PROJECT_DIR="$(pwd)"
-DOGRAH_PATH="$(pwd)"
+KODEWAVES_DEPLOY_PROJECT_DIR="$(pwd)"
+KODEWAVES_PATH="$(pwd)"
 
 if [[ ! -f remote_up.sh || ! -f scripts/lib/setup_common.sh ]]; then
     kodewaves_download_remote_support_bundle "$(pwd)" "main"
@@ -187,8 +187,8 @@ echo ""
 echo -e "  ${BLUE}https://$DOMAIN_NAME${NC}"
 echo ""
 echo -e "${GREEN}SSL Certificate Details:${NC}"
-echo -e "  Certificate: $DOGRAH_PATH/certs/local.crt"
-echo -e "  Private Key: $DOGRAH_PATH/certs/local.key"
+echo -e "  Certificate: $KODEWAVES_PATH/certs/local.crt"
+echo -e "  Private Key: $KODEWAVES_PATH/certs/local.key"
 echo -e "  Auto-renewal: Enabled (certificates renew automatically)"
 echo ""
 echo -e "${YELLOW}Files modified:${NC}"

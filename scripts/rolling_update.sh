@@ -25,11 +25,12 @@ LATEST_LINK="$BASE_LOG_DIR/latest"
 VENV_PATH="$BASE_DIR/venv"
 
 NGINX_UPSTREAM_TEMPLATE="$BASE_DIR/nginx/kodewaves_upstream.conf.template"
-[[ -f "$NGINX_UPSTREAM_TEMPLATE" ]] || NGINX_UPSTREAM_TEMPLATE="$BASE_DIR/nginx/dograh_upstream.conf.template"
+[[ -f "$NGINX_UPSTREAM_TEMPLATE" ]] || NGINX_UPSTREAM_TEMPLATE="$BASE_DIR/nginx/kodewaves_upstream.conf.template"
 NGINX_UPSTREAM_CONF="/etc/nginx/conf.d/kodewaves_upstream.conf"
 
 HEALTH_CHECK_ENDPOINT="/api/v1/health"
 ACTIVE_CALLS_ENDPOINT="/api/v1/health/active-calls"
+KODEWAVES_DEVOPS_SECRET_HEADER="X-Kodewaves-Devops-Secret"
 KODEWAVES_DEVOPS_SECRET_HEADER="X-Kodewaves-Devops-Secret"
 DOGRAH_DEVOPS_SECRET_HEADER="X-Dograh-Devops-Secret"
 
@@ -124,7 +125,7 @@ count_active_calls_on_port() {
   local port=$1
   local response http_code body n
   response=$(curl -sS --max-time 3 \
-    -H "${DOGRAH_DEVOPS_SECRET_HEADER}: ${DOGRAH_DEVOPS_SECRET}" \
+    -H "${KODEWAVES_DEVOPS_SECRET_HEADER}: ${DEVOPS_SECRET}" \
     -w $'\n%{http_code}' \
     "http://127.0.0.1:${port}${ACTIVE_CALLS_ENDPOINT}" 2>/dev/null || true)
   http_code="${response##*$'\n'}"
@@ -136,7 +137,7 @@ count_active_calls_on_port() {
   fi
 
   if [[ "$http_code" != "200" ]]; then
-    log_error "uvicorn_${port} active-calls endpoint returned HTTP ${http_code}. Check DOGRAH_DEVOPS_SECRET in $ENV_FILE."
+    log_error "uvicorn_${port} active-calls endpoint returned HTTP ${http_code}. Check KODEWAVES_DEVOPS_SECRET in $ENV_FILE."
     return 1
   fi
 
