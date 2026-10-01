@@ -15,7 +15,7 @@ from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
 from api.services.configuration.registry import UltravoxRealtimeLLMConfiguration
 from api.services.pipecat.realtime.ultravox_realtime import (
     DograhUltravoxOneShotInputParams,
-    DograhUltravoxRealtimeLLMService,
+    KodewavesUltravoxRealtimeLLMService,
 )
 from api.services.pipecat.service_factory import create_realtime_llm_service
 
@@ -45,14 +45,14 @@ class _MessageSocket:
             raise StopAsyncIteration
 
 
-def _make_service() -> DograhUltravoxRealtimeLLMService:
-    service = DograhUltravoxRealtimeLLMService(
+def _make_service() -> KodewavesUltravoxRealtimeLLMService:
+    service = KodewavesUltravoxRealtimeLLMService(
         params=DograhUltravoxOneShotInputParams(
             api_key="test-key",
             model="ultravox-v0.7",
             output_medium="voice",
         ),
-        settings=DograhUltravoxRealtimeLLMService.Settings(
+        settings=KodewavesUltravoxRealtimeLLMService.Settings(
             model="ultravox-v0.7",
             output_medium="voice",
         ),
@@ -110,7 +110,7 @@ async def test_system_instruction_update_marks_stage_update_required():
     service._socket = object()
 
     changed = await service._update_settings(
-        DograhUltravoxRealtimeLLMService.Settings(system_instruction="new instruction")
+        KodewavesUltravoxRealtimeLLMService.Settings(system_instruction="new instruction")
     )
 
     assert "system_instruction" in changed
@@ -434,7 +434,7 @@ def test_factory_creates_dograh_ultravox_realtime_service():
         audio_config=SimpleNamespace(),
     )
 
-    assert isinstance(service, DograhUltravoxRealtimeLLMService)
+    assert isinstance(service, KodewavesUltravoxRealtimeLLMService)
     assert service._params.voice == "Mark"
 
 

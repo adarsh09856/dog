@@ -6,7 +6,7 @@ from loguru import logger
 
 from api.errors import failure as failure_module
 from api.errors.failure import (
-    DograhFailure,
+    KodewavesFailure,
     ErrorOwner,
     ErrorSource,
     ErrorType,
@@ -75,7 +75,7 @@ def test_classify_http_response_status_bands(status_code, expected_type, retryab
     ],
 )
 def test_failure_resolves_binary_owner(error_type, requested_owner, expected_owner):
-    failure = DograhFailure(
+    failure = KodewavesFailure(
         source=ErrorSource.PLATFORM,
         type=error_type,
         code="test-failure",
@@ -220,7 +220,7 @@ def test_dograh_boundary_changes_attribution():
 
     assert quota.type == ErrorType.QUOTA_ERROR
     assert quota.error_owner == ErrorOwner.USER
-    assert quota.code == "dograh-insufficient-credits"
+    assert quota.code == "kodewaves-insufficient-credits"
     assert managed_key_failure.type == ErrorType.SYSTEM_ERROR
     assert managed_key_failure.error_owner == ErrorOwner.OPERATOR
 
@@ -234,7 +234,7 @@ def test_dograh_credit_prose_does_not_override_safe_default():
 
     assert failure.type == ErrorType.SYSTEM_ERROR
     assert failure.error_owner == ErrorOwner.OPERATOR
-    assert failure.code == "dograh-unknown"
+    assert failure.code == "kodewaves-unknown"
 
 
 def test_dograh_transport_failure_stays_system_error_but_keeps_retry_hint():
@@ -246,7 +246,7 @@ def test_dograh_transport_failure_stays_system_error_but_keeps_retry_hint():
 
     assert failure.type == ErrorType.SYSTEM_ERROR
     assert failure.error_owner == ErrorOwner.OPERATOR
-    assert failure.code == "dograh-connection"
+    assert failure.code == "kodewaves-connection"
     assert failure.retryable is True
 
 
@@ -340,7 +340,7 @@ def test_log_failure_emits_structured_and_inline_classification():
     sink_id = logger.add(lambda message: records.append(message.record))
     try:
         log_failure(
-            DograhFailure(
+            KodewavesFailure(
                 source=ErrorSource.WEBHOOK,
                 type=ErrorType.CONFIG_ERROR,
                 code="webhook-404",
@@ -356,7 +356,7 @@ def test_log_failure_emits_structured_and_inline_classification():
         logger.remove(sink_id)
 
     record = records[-1]
-    assert "DOGRAH_FAILURE [src=webhook type=config_error code=webhook-404]" in str(
+    assert "KODEWAVES_FAILURE [src=webhook type=config_error code=webhook-404]" in str(
         record["message"]
     )
     assert record["extra"]["classified"] is True
@@ -375,7 +375,7 @@ def test_log_failure_does_not_add_a_workflow_run_id_alias():
     sink_id = logger.add(lambda message: records.append(message.record))
     try:
         log_failure(
-            DograhFailure(
+            KodewavesFailure(
                 source=ErrorSource.PLATFORM,
                 type=ErrorType.SYSTEM_ERROR,
                 code="platform-test",
@@ -419,7 +419,7 @@ def test_log_failure_never_raises_when_logger_fails(monkeypatch):
     monkeypatch.setattr(failure_module, "logger", _BrokenLogger())
 
     log_failure(
-        DograhFailure(
+        KodewavesFailure(
             source=ErrorSource.PLATFORM,
             type=ErrorType.SYSTEM_ERROR,
             code="platform-test",

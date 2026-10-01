@@ -3,9 +3,9 @@ import json
 import pytest
 from openai._types import NOT_GIVEN as OPENAI_NOT_GIVEN
 from pipecat.frames.frames import TTSStartedFrame
-from pipecat.services.dograh.llm import DograhLLMService
-from pipecat.services.dograh.stt import DograhSTTService
-from pipecat.services.dograh.tts import DograhTTSService
+from pipecat.services.kodewaves.llm import KodewavesLLMService
+from pipecat.services.kodewaves.stt import KodewavesSTTService
+from pipecat.services.kodewaves.tts import KodewavesTTSService
 from pipecat.services.openai.base_llm import OpenAILLMSettings
 from websockets.protocol import State
 
@@ -36,8 +36,8 @@ class _IterableFakeWebSocket(_FakeWebSocket):
         return self.incoming_messages.pop(0)
 
 
-def test_dograh_llm_uses_explicit_mps_correlation_id():
-    service = DograhLLMService(
+def test_kodewaves_llm_uses_explicit_mps_correlation_id():
+    service = KodewavesLLMService(
         api_key="mps-secret",
         correlation_id="mps-corr-123",
         settings=OpenAILLMSettings(model="default"),
@@ -57,19 +57,19 @@ def test_dograh_llm_uses_explicit_mps_correlation_id():
 
 
 @pytest.mark.asyncio
-async def test_dograh_stt_config_uses_explicit_mps_correlation_id(monkeypatch):
+async def test_kodewaves_stt_config_uses_explicit_mps_correlation_id(monkeypatch):
     fake_ws = _FakeWebSocket()
 
     async def fake_connect(self, url, additional_headers):
         return fake_ws
 
     monkeypatch.setattr(
-        DograhSTTService,
+        KodewavesSTTService,
         "_websocket_connect",
         fake_connect,
     )
 
-    service = DograhSTTService(
+    service = KodewavesSTTService(
         api_key="mps-secret",
         correlation_id="mps-corr-123",
         sample_rate=16000,
@@ -84,19 +84,19 @@ async def test_dograh_stt_config_uses_explicit_mps_correlation_id(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dograh_tts_messages_use_explicit_mps_correlation_id(monkeypatch):
+async def test_kodewaves_tts_messages_use_explicit_mps_correlation_id(monkeypatch):
     fake_ws = _FakeWebSocket()
 
     async def fake_connect(self, url, additional_headers):
         return fake_ws
 
     monkeypatch.setattr(
-        DograhTTSService,
+        KodewavesTTSService,
         "_websocket_connect",
         fake_connect,
     )
 
-    service = DograhTTSService(
+    service = KodewavesTTSService(
         api_key="mps-secret",
         correlation_id="mps-corr-123",
         sample_rate=24000,
@@ -127,8 +127,8 @@ async def test_dograh_tts_messages_use_explicit_mps_correlation_id(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dograh_tts_final_for_missing_context_is_ignored():
-    service = DograhTTSService(api_key="mps-secret")
+async def test_kodewaves_tts_final_for_missing_context_is_ignored():
+    service = KodewavesTTSService(api_key="mps-secret")
     service._websocket = _IterableFakeWebSocket(
         [{"type": "final", "context_id": "ctx-already-removed"}]
     )

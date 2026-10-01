@@ -7,16 +7,16 @@ from pipecat.adapters.services.gemini_live_adapter import GeminiLiveLLMAdapter
 
 from api.services.configuration.registry import ServiceProviders
 from api.services.pipecat.gemini_json_schema_adapter import (
-    DograhGeminiJSONSchemaAdapter,
-    DograhGeminiLiveJSONSchemaAdapter,
+    KodewavesGeminiJSONSchemaAdapter,
+    KodewavesGeminiLiveJSONSchemaAdapter,
 )
-from api.services.pipecat.realtime.gemini_live import DograhGeminiLiveLLMService
+from api.services.pipecat.realtime.gemini_live import KodewavesGeminiLiveLLMService
 from api.services.pipecat.realtime.gemini_live_vertex import (
-    DograhGeminiLiveVertexLLMService,
+    KodewavesGeminiLiveVertexLLMService,
 )
 from api.services.pipecat.service_factory import (
-    DograhGoogleLLMService,
-    DograhGoogleVertexLLMService,
+    KodewavesGoogleLLMService,
+    KodewavesGoogleVertexLLMService,
     create_llm_service_from_provider,
 )
 
@@ -41,7 +41,7 @@ def test_gemini_tools_use_json_schema_parameters_for_external_schemas():
         required=["customerEmail"],
     )
 
-    tools = DograhGeminiJSONSchemaAdapter().to_provider_tools_format(
+    tools = KodewavesGeminiJSONSchemaAdapter().to_provider_tools_format(
         ToolsSchema(standard_tools=[function_schema])
     )
 
@@ -74,7 +74,7 @@ def test_gemini_tools_use_json_schema_parameters_for_no_argument_tools():
         required=[],
     )
 
-    tools = DograhGeminiJSONSchemaAdapter().to_provider_tools_format(
+    tools = KodewavesGeminiJSONSchemaAdapter().to_provider_tools_format(
         ToolsSchema(standard_tools=[function_schema])
     )
 
@@ -90,13 +90,13 @@ def test_gemini_tools_use_json_schema_parameters_for_no_argument_tools():
 
 
 def test_google_service_classes_use_dograh_gemini_adapter_class():
-    assert DograhGoogleLLMService.adapter_class is DograhGeminiJSONSchemaAdapter
-    assert DograhGoogleVertexLLMService.adapter_class is DograhGeminiJSONSchemaAdapter
+    assert KodewavesGoogleLLMService.adapter_class is KodewavesGeminiJSONSchemaAdapter
+    assert KodewavesGoogleVertexLLMService.adapter_class is KodewavesGeminiJSONSchemaAdapter
 
 
 def test_google_llm_service_factory_uses_dograh_service_class():
     with patch(
-        "api.services.pipecat.service_factory.DograhGoogleLLMService",
+        "api.services.pipecat.service_factory.KodewavesGoogleLLMService",
     ) as mock_service:
         result = create_llm_service_from_provider(
             provider=ServiceProviders.GOOGLE.value,
@@ -111,7 +111,7 @@ def test_google_llm_service_factory_uses_dograh_service_class():
 
 def test_google_vertex_llm_service_factory_uses_dograh_service_class():
     with patch(
-        "api.services.pipecat.service_factory.DograhGoogleVertexLLMService",
+        "api.services.pipecat.service_factory.KodewavesGoogleVertexLLMService",
     ) as mock_service:
         result = create_llm_service_from_provider(
             provider=ServiceProviders.GOOGLE_VERTEX.value,
@@ -129,34 +129,34 @@ def test_google_vertex_llm_service_factory_uses_dograh_service_class():
 
 
 def test_gemini_live_service_classes_use_dograh_gemini_adapter_class():
-    assert DograhGeminiLiveLLMService.adapter_class is DograhGeminiLiveJSONSchemaAdapter
-    # Vertex Live inherits adapter_class from DograhGeminiLiveLLMService via MRO.
+    assert KodewavesGeminiLiveLLMService.adapter_class is KodewavesGeminiLiveJSONSchemaAdapter
+    # Vertex Live inherits adapter_class from KodewavesGeminiLiveLLMService via MRO.
     assert (
-        DograhGeminiLiveVertexLLMService.adapter_class
-        is DograhGeminiLiveJSONSchemaAdapter
+        KodewavesGeminiLiveVertexLLMService.adapter_class
+        is KodewavesGeminiLiveJSONSchemaAdapter
     )
     # The Live adapter must keep upstream's tool-call-to-text conversion for
     # seeded contexts (GeminiLiveLLMAdapter) alongside the JSON Schema fix.
-    assert issubclass(DograhGeminiLiveJSONSchemaAdapter, GeminiLiveLLMAdapter)
-    assert issubclass(DograhGeminiLiveJSONSchemaAdapter, DograhGeminiJSONSchemaAdapter)
+    assert issubclass(KodewavesGeminiLiveJSONSchemaAdapter, GeminiLiveLLMAdapter)
+    assert issubclass(KodewavesGeminiLiveJSONSchemaAdapter, KodewavesGeminiJSONSchemaAdapter)
     assert (
-        DograhGeminiLiveJSONSchemaAdapter.to_provider_tools_format
-        is DograhGeminiJSONSchemaAdapter.to_provider_tools_format
+        KodewavesGeminiLiveJSONSchemaAdapter.to_provider_tools_format
+        is KodewavesGeminiJSONSchemaAdapter.to_provider_tools_format
     )
 
 
 def test_vertex_live_inherits_dograh_node_transition_lifecycle():
     assert (
-        DograhGeminiLiveVertexLLMService._requires_node_transition_context_aggregation
-        is DograhGeminiLiveLLMService._requires_node_transition_context_aggregation
+        KodewavesGeminiLiveVertexLLMService._requires_node_transition_context_aggregation
+        is KodewavesGeminiLiveLLMService._requires_node_transition_context_aggregation
     )
     assert (
-        DograhGeminiLiveVertexLLMService._run_or_defer_function_calls
-        is DograhGeminiLiveLLMService._run_or_defer_function_calls
+        KodewavesGeminiLiveVertexLLMService._run_or_defer_function_calls
+        is KodewavesGeminiLiveLLMService._run_or_defer_function_calls
     )
     assert (
-        DograhGeminiLiveVertexLLMService._reconnect_for_node_transition
-        is DograhGeminiLiveLLMService._reconnect_for_node_transition
+        KodewavesGeminiLiveVertexLLMService._reconnect_for_node_transition
+        is KodewavesGeminiLiveLLMService._reconnect_for_node_transition
     )
 
 
@@ -173,7 +173,7 @@ def test_gemini_live_config_accepts_json_schema_tools():
         required=["customerEmail"],
     )
 
-    tools = DograhGeminiJSONSchemaAdapter().to_provider_tools_format(
+    tools = KodewavesGeminiJSONSchemaAdapter().to_provider_tools_format(
         ToolsSchema(standard_tools=[function_schema])
     )
 

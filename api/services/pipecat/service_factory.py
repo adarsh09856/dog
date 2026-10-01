@@ -256,6 +256,9 @@ class KodewavesGoogleLLMService(GoogleLLMService):
 class KodewavesGoogleVertexLLMService(GoogleVertexLLMService):
     adapter_class = KodewavesGeminiJSONSchemaAdapter
 
+DograhGoogleLLMService = KodewavesGoogleLLMService
+DograhGoogleVertexLLMService = KodewavesGoogleVertexLLMService
+
 
 def _validate_runtime_service_url(url: str, field_name: str) -> None:
     try:

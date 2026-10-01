@@ -47,7 +47,7 @@ from api.services.configuration.registry import (
 from api.services.pipecat.pipeline_metrics_aggregator import PipelineMetricsAggregator
 from api.services.pipecat.realtime.openai_live import (
     VOICE_INSTRUCTIONS,
-    DograhOpenAILiveLLMService,
+    KodewavesOpenAILiveLLMService,
 )
 from api.services.pipecat.realtime.openai_realtime import DograhOpenAIRealtimeLLMService
 from api.services.pipecat.run_pipeline import _create_realtime_user_turn_config
@@ -57,7 +57,7 @@ from api.services.workflow.pipecat_engine import PipecatEngine
 
 
 def make_service():
-    service = DograhOpenAILiveLLMService(
+    service = KodewavesOpenAILiveLLMService(
         api_key="test-key", backend_model="gpt-5.4-mini"
     )
     service.send_client_event = AsyncMock()
@@ -96,7 +96,7 @@ async def test_model_dropdown_has_one_openai_provider_with_both_model_families()
 @pytest.mark.parametrize(
     "model,service_type",
     [
-        ("gpt-live-1", DograhOpenAILiveLLMService),
+        ("gpt-live-1", KodewavesOpenAILiveLLMService),
         ("gpt-realtime-2.1", DograhOpenAIRealtimeLLMService),
         ("gpt-realtime-2", DograhOpenAIRealtimeLLMService),
     ],
@@ -311,7 +311,7 @@ async def test_muted_startup_greeting_reaches_playback_and_releases_initial_mute
             pass
 
     socket = ClockedLiveSocket()
-    service = DograhOpenAILiveLLMService(
+    service = KodewavesOpenAILiveLLMService(
         api_key="test-key", backend_model="gpt-5.4-mini"
     )
     context = LLMContext()
@@ -404,7 +404,7 @@ async def test_live_seconds_are_deduplicated_and_backend_tokens_keep_their_model
         value=LLMTokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
     )
     with patch.object(OpenAILiveLLMService, "push_frame", new_callable=AsyncMock):
-        await DograhOpenAILiveLLMService.push_frame(
+        await KodewavesOpenAILiveLLMService.push_frame(
             service, MetricsFrame(data=[tokens])
         )
     assert tokens.model == "gpt-5.4-mini"
@@ -467,7 +467,7 @@ async def test_end_node_keeps_live_open_until_last_audio_reaches_caller(
             pass
 
     socket = ClosingAnnouncementSocket()
-    service = DograhOpenAILiveLLMService(api_key="test", backend_model="gpt-5.4-mini")
+    service = KodewavesOpenAILiveLLMService(api_key="test", backend_model="gpt-5.4-mini")
     context = LLMContext()
     service._context = context
     # Begin in an established conversation, just before the end-node transition.

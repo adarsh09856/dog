@@ -146,7 +146,7 @@ def fake_docs_root(tmp_path: Path) -> Path:
     )
 
     _clear_docs_caches()
-    with patch.dict(os.environ, {"DOGRAH_DOCS_PATH": str(docs_root)}):
+    with patch.dict(os.environ, {"KODEWAVES_DOCS_PATH": str(docs_root)}):
         yield docs_root
     _clear_docs_caches()
 
@@ -222,7 +222,7 @@ def test_resolve_docs_root_honors_env_override(tmp_path: Path):
     docs = tmp_path / "custom_docs"
     docs.mkdir()
     (docs / "docs.json").write_text("{}", encoding="utf-8")
-    with patch.dict(os.environ, {"DOGRAH_DOCS_PATH": str(docs)}):
+    with patch.dict(os.environ, {"KODEWAVES_DOCS_PATH": str(docs)}):
         assert _resolve_docs_root() == docs.resolve()
 
 
@@ -262,7 +262,7 @@ async def test_search_docs_returns_empty_when_no_corpus(
     tmp_path, authed_user, monkeypatch
 ):
     nonexistent = tmp_path / "no-docs-here"
-    monkeypatch.setenv("DOGRAH_DOCS_PATH", str(nonexistent))
+    monkeypatch.setenv("KODEWAVES_DOCS_PATH", str(nonexistent))
     _clear_docs_caches()
     with patch(
         "api.mcp_server.tools.docs_search._resolve_docs_root", return_value=None

@@ -9,7 +9,7 @@ from api.services.configuration.registry import ServiceProviders
 from api.services.pipecat.audio_config import AudioConfig
 from api.services.pipecat.service_factory import (
     create_stt_service,
-    dograh_stt_uses_flux_language,
+    kodewaves_stt_uses_flux_language,
     stt_uses_external_turns,
 )
 
@@ -21,10 +21,10 @@ def _audio_config() -> AudioConfig:
     )
 
 
-def _dograh_config(language: str | None) -> SimpleNamespace:
+def _kodewaves_config(language: str | None) -> SimpleNamespace:
     return SimpleNamespace(
         stt=SimpleNamespace(
-            provider=ServiceProviders.DOGRAH.value,
+            provider=ServiceProviders.KODEWAVES.value,
             api_key="mps-key",
             model="default",
             language=language,
@@ -50,7 +50,7 @@ def _dograh_config(language: str | None) -> SimpleNamespace:
     ],
 )
 def test_dograh_flux_routing_and_turn_strategies_agree(language, uses_flux):
-    assert dograh_stt_uses_flux_language(language) is uses_flux
+    assert kodewaves_stt_uses_flux_language(language) is uses_flux
     assert stt_uses_external_turns(_dograh_config(language)) is uses_flux
 
 

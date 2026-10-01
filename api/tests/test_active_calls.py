@@ -25,8 +25,9 @@ def setup_function():
 
 def _make_active_calls_client(
     monkeypatch,
-    configured_secret: str | None = "test-dograh-devops-secret",
+    configured_secret: str | None = "test-kodewaves-devops-secret",
 ) -> TestClient:
+    monkeypatch.setattr("api.constants.KODEWAVES_DEVOPS_SECRET", configured_secret)
     monkeypatch.setattr("api.constants.DOGRAH_DEVOPS_SECRET", configured_secret)
     app = FastAPI()
     app.add_api_route(
@@ -204,7 +205,7 @@ def test_active_calls_route_requires_configured_secret(monkeypatch):
 
     response = client.get(
         "/api/v1/health/active-calls",
-        headers={"X-Dograh-Devops-Secret": "test-dograh-devops-secret"},
+        headers={"X-Kodewaves-Devops-Secret": "test-kodewaves-devops-secret"},
     )
 
     assert response.status_code == 503
@@ -223,7 +224,7 @@ def test_active_calls_route_rejects_wrong_secret(monkeypatch):
 
     response = client.get(
         "/api/v1/health/active-calls",
-        headers={"X-Dograh-Devops-Secret": "wrong"},
+        headers={"X-Kodewaves-Devops-Secret": "wrong"},
     )
 
     assert response.status_code == 403
@@ -235,7 +236,7 @@ def test_active_calls_route_returns_count_with_secret(monkeypatch):
 
     response = client.get(
         "/api/v1/health/active-calls",
-        headers={"X-Dograh-Devops-Secret": "test-dograh-devops-secret"},
+        headers={"X-Kodewaves-Devops-Secret": "test-kodewaves-devops-secret"},
     )
 
     assert response.status_code == 200
