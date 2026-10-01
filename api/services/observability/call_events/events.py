@@ -66,7 +66,7 @@ def host_name() -> str:
     """
     return (
         os.environ.get("KODEWAVES_INSTANCE")
-        or os.environ.get("DOGRAH_INSTANCE")
+        or os.environ.get("KODEWAVES_INSTANCE") or os.environ.get("DOGRAH_INSTANCE")
         or socket.gethostname()
     )
 
