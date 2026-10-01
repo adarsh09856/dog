@@ -18,6 +18,15 @@ NC='\033[0m'
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$APP_DIR"
 
+RESET_DB=false
+for arg in "$@"; do
+    case "$arg" in
+        --reset-db|--fresh|--wipe-db)
+            RESET_DB=true
+            ;;
+    esac
+done
+
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1" >&2
 }
@@ -277,6 +286,22 @@ ENVFILE
     else
         log_info "Existing .env file detected. Keeping database & token secrets."
 
+        # If --reset-db was not passed on the CLI, prompt the user
+        if [ "$RESET_DB" = false ] && [ -t 0 ]; then
+            echo ""
+            echo -e "${YELLOW}${BOLD}Existing database detected.${NC}"
+            echo -e "Choose deployment mode:"
+            echo -e "  ${BOLD}[1] Keep existing database${NC} (Standard Update — Preserves users, workflows, and call history) [Default]"
+            echo -e "  ${BOLD}[2] Clean database reset${NC} (Wipes old test runs & starts fresh with clean seed data)"
+            read -p "Select [1/2, default 1]: " DB_CHOICE
+            if [ "$DB_CHOICE" = "2" ]; then
+                RESET_DB=true
+                log_warn "Clean database reset selected."
+            else
+                log_info "Keeping existing database."
+            fi
+        fi
+
         # Ensure domain & admin credentials match the configured values
         sed -i "s|^DOMAIN=.*|DOMAIN=$DOMAIN|" .env || true
         sed -i "s|^PUBLIC_HOST=.*|PUBLIC_HOST=$DOMAIN|" .env || true
@@ -327,6 +352,12 @@ ENVFILE
 deploy_containers() {
     log_info "Preparing production environment and infrastructure..."
     
+    if [ "$RESET_DB" = true ]; then
+        log_warn "⚠️ RESETTING DATABASE: Stopping existing containers and wiping database volume..."
+        docker compose -f docker-compose.aapanel.yaml down -v || true
+        log_success "Database volume wiped clean."
+    fi
+
     # Start infrastructure services first (database, cache, storage)
     docker compose -f docker-compose.aapanel.yaml up -d postgres redis minio
 
