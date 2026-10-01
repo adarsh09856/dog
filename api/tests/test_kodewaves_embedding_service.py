@@ -1,16 +1,16 @@
-"""Tests for the Dograh-managed embedding service and its correlation resolver."""
+"""Tests for the Kodewaves-managed embedding service and its correlation resolver."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
-from api.services.gen_ai.embedding.dograh_service import DograhEmbeddingService
+from api.services.gen_ai.embedding.kodewaves_service import KodewavesEmbeddingService
 from api.services.gen_ai.embedding.factory import resolve_embedding_correlation_id
 
 
 def _service_with_fake_client(correlation_id):
-    service = DograhEmbeddingService(
+    service = KodewavesEmbeddingService(
         db_client=None,
         api_key="sk-test",
         model_id="text-embedding-3-small",
@@ -25,7 +25,7 @@ def _service_with_fake_client(correlation_id):
 
 
 @pytest.mark.asyncio
-async def test_dograh_embedding_forwards_v2_protocol_when_correlation_present():
+async def test_kodewaves_embedding_forwards_v2_protocol_when_correlation_present():
     service, create = _service_with_fake_client("corr-123")
 
     await service.embed_texts(["hello"])
@@ -43,7 +43,7 @@ async def test_dograh_embedding_forwards_v2_protocol_when_correlation_present():
 
 
 @pytest.mark.asyncio
-async def test_dograh_embedding_sends_plain_without_correlation():
+async def test_kodewaves_embedding_sends_plain_without_correlation():
     service, create = _service_with_fake_client(None)
 
     await service.embed_texts(["hello"])

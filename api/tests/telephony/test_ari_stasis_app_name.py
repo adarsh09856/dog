@@ -1,7 +1,7 @@
 """Stasis application naming for ARI configurations.
 
 Asterisk hands a Stasis application to whichever ARI WebSocket registered for it
-last and silently stops delivering events to the previous holder. Two Dograh
+last and silently stops delivering events to the previous holder. Two Kodewaves
 configurations naming the same application on one PBX therefore do not both
 work: one goes deaf with no error on either side, and the survivor receives the
 other's calls — stamping its own organization into the media-socket URL, which
@@ -25,9 +25,9 @@ from api.services.telephony.providers.ari.provider import ARIProvider
 
 BASE = {
     "ari_endpoint": "http://pbx.example.com:8088",
-    "app_name": "dograh",
+    "app_name": "kodewaves",
     "app_password": "s3cr3t",
-    "ws_client_name": "dograh",
+    "ws_client_name": "kodewaves",
 }
 
 

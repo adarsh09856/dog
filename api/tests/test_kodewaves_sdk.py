@@ -1,4 +1,4 @@
-"""Tests for the Python runtime SDK (`dograh_sdk`).
+"""Tests for the Python runtime SDK (`kodewaves_sdk`).
 
 Uses a stub client backed by the in-process spec registry rather than
 exercising the HTTP layer — the HTTP client is a thin wrapper that's
@@ -14,16 +14,16 @@ Covers:
 from __future__ import annotations
 
 import pytest
-from dograh_sdk import Workflow
-from dograh_sdk._generated_models import NodeSpec
-from dograh_sdk.errors import ValidationError
+from kodewaves_sdk import Workflow
+from kodewaves_sdk._generated_models import NodeSpec
+from kodewaves_sdk.errors import ValidationError
 
 from api.services.workflow.dto import ReactFlowDTO
 from api.services.workflow.node_specs import all_specs, get_spec
 
 
 class _StubClient:
-    """Stand-in for DograhClient backed by the in-process spec registry.
+    """Stand-in for KodewavesClient backed by the in-process spec registry.
     Matches the real client's contract: `get_node_type(name)` returns a
     `NodeSpec` Pydantic model."""
 
