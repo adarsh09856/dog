@@ -1,2 +1,2 @@
-dograh-sdk
+kodewaves-sdk
 python-dotenv

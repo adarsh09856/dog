@@ -1,21 +1,21 @@
 // Create a new workflow using the TypeScript SDK.
 //
 // Requirements:
-//   npm install @dograh/sdk
+//   npm install @kodewaves/sdk
 //
 // Environment variables:
-//   DOGRAH_API_ENDPOINT  - Dograh API base URL (e.g. http://localhost:8000)
-//   DOGRAH_API_TOKEN     - API token sent as X-API-Key
+//   KODEWAVES_API_ENDPOINT  - Kodewaves API base URL (e.g. http://localhost:8000)
+//   KODEWAVES_API_TOKEN     - API token sent as X-API-Key
 //
 // Run:
 //   npx tsx create_workflow.ts
 
-import { DograhClient } from "@dograh/sdk";
+import { KodewavesClient } from "@kodewaves/sdk";
 
 const WORKFLOW_NAME = "My SDK-created agent";
 
 // A minimal starter agent with a single `startCall` node that greets the user.
-// Open the new agent in the Dograh UI to extend it, or edit this object and
+// Open the new agent in the Kodewaves UI to extend it, or edit this object and
 // re-run to tweak the starting definition.
 const WORKFLOW_DEFINITION = {
     nodes: [
@@ -55,12 +55,12 @@ const WORKFLOW_DEFINITION = {
 };
 
 async function main(): Promise<void> {
-    const apiEndpoint = process.env.DOGRAH_API_ENDPOINT ?? "http://localhost:8000";
-    const apiToken = process.env.DOGRAH_API_TOKEN;
+    const apiEndpoint = process.env.KODEWAVES_API_ENDPOINT ?? "http://localhost:8000";
+    const apiToken = process.env.KODEWAVES_API_TOKEN;
 
-    if (!apiToken) throw new Error("DOGRAH_API_TOKEN is required");
+    if (!apiToken) throw new Error("KODEWAVES_API_TOKEN is required");
 
-    const client = new DograhClient({
+    const client = new KodewavesClient({
         baseUrl: apiEndpoint,
         apiKey: apiToken,
     });

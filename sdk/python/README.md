@@ -1,13 +1,13 @@
-# dograh-sdk
+# kodewaves-sdk
 
-Typed builder for Dograh voice-AI workflows. Fetches the node-spec catalog from
-the Dograh backend at session start, validates every call against it at the
+Typed builder for Kodewaves voice-AI workflows. Fetches the node-spec catalog from
+the Kodewaves backend at session start, validates every call against it at the
 call site, and produces `ReactFlowDTO`-compatible JSON.
 
 ## Install
 
 ```bash
-pip install dograh-sdk
+pip install kodewaves-sdk
 ```
 
 For local development against a checked-out monorepo:
@@ -19,9 +19,9 @@ pip install -e sdk/python/
 ## Usage
 
 ```python
-from dograh_sdk import DograhClient, Workflow
+from kodewaves_sdk import KodewavesClient, Workflow
 
-with DograhClient(base_url="http://localhost:8000", api_key="...") as client:
+with KodewavesClient(base_url="http://localhost:8000", api_key="...") as client:
     wf = Workflow(client=client, name="loan_qualification")
 
     start = wf.add(
