@@ -21,8 +21,8 @@ import math
 
 # Single in-process gauge — exactly the unit (one event loop) we're sizing. A
 # window of recent lag samples is enough for a p95; no metrics library.
-_INTERVAL = 0.1  # seconds between probes
-_WINDOW = 600  # ~60s of samples at 0.1s cadence
+_INTERVAL = 1.0  # seconds between probes
+_WINDOW = 60  # ~60s of samples at 1.0s cadence
 _samples: list[float] = []
 # Strong ref to the monitor task: asyncio keeps only a weak reference, so
 # without this the task can be garbage-collected mid-run and the gauge dies.

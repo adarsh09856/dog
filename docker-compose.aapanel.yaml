@@ -140,6 +140,9 @@ services:
       NUMEXPR_NUM_THREADS: "1"
       OMP_WAIT_POLICY: "PASSIVE"
       TORCH_NUM_THREADS: "1"
+      KMP_BLOCKTIME: "0"
+      GOMP_SPINCOUNT: "0"
+      KMP_AFFINITY: "disabled"
 
       # WebRTC NAT Traversal (STUN / TURN)
       ENABLE_COTURN: "${ENABLE_COTURN:-true}"
