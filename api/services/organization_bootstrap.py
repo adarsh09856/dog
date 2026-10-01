@@ -1,7 +1,7 @@
 """Once-per-organization sovereign provisioning for Kodewaves.
 
 In Kodewaves sovereign mode, organizations operate independently without external
-Dograh MPS (Managed Platform Services) or auto-provisioned Cloudonix SIP.
+Kodewaves MPS (Managed Platform Services) or auto-provisioned Cloudonix SIP.
 Telephony is configured directly by administrators or users (Twilio, Exotel, Plivo,
 Telnyx, Custom SIP Trunks, WebRTC).
 """

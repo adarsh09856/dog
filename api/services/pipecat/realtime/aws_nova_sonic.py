@@ -1,7 +1,7 @@
-"""Dograh integration for Pipecat's AWS Nova 2 Sonic service.
+"""Kodewaves integration for Pipecat's AWS Nova 2 Sonic service.
 
 Nova Sonic owns STT, inference, and speech output. This subclass adapts the
-service to Dograh's workflow lifecycle:
+service to Kodewaves's workflow lifecycle:
 
 - replace muted input audio with silence to keep Nova's stream active;
 - use the engine's initial ``TTSSpeakFrame``/``LLMContextFrame`` as a native
@@ -254,7 +254,7 @@ class KodewavesAWSNovaSonicLLMService(RealtimeConversationMixin, AWSNovaSonicLLM
         await self._flush_pending_text_inputs()
 
     async def _finish_connecting_if_context_available(self):
-        # Upstream assumes this method is invoked once. Dograh can reach it from
+        # Upstream assumes this method is invoked once. Kodewaves can reach it from
         # connection-ready, runtime settings, and the initial response trigger.
         if self._connected_time:
             await self._flush_pending_text_inputs()
@@ -357,7 +357,7 @@ class KodewavesAWSNovaSonicLLMService(RealtimeConversationMixin, AWSNovaSonicLLM
 
         if system_instruction_was_given:
             if self._handled_initial_context:
-                # Each Dograh node supplies its prompt, even if two adjacent
+                # Each Kodewaves node supplies its prompt, even if two adjacent
                 # prompts happen to have identical text. Its tool set may still
                 # have changed, so always refresh the Nova session.
                 self._awaiting_node_transition_context = True
@@ -395,7 +395,7 @@ class KodewavesAWSNovaSonicLLMService(RealtimeConversationMixin, AWSNovaSonicLLM
 
         await self._disconnect()
 
-        # Intentional node changes seed the authoritative Dograh context below.
+        # Intentional node changes seed the authoritative Kodewaves context below.
         # Drop the helper's old provider-native copy so its next timed session
         # continuation cannot replay both histories.
         conversation_history = getattr(self._sc, "_conversation_history", None)

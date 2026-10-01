@@ -50,7 +50,7 @@ async def _preprocess_credentials_on_save(
 
     An update never mints one. A configuration saved before the Stasis name was
     split off ``app_name`` keeps running on ``app_name`` (see
-    ``_config_loader``); generating one here would point Dograh at an
+    ``_config_loader``); generating one here would point Kodewaves at an
     application the customer's dialplan never routes calls into, silently
     breaking a working setup on an unrelated edit.
     """

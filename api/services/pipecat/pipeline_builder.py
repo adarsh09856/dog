@@ -288,7 +288,7 @@ def create_pipeline_task(
         params=pipeline_params,
         # Pipecat 1.8 replaces ErrorFrame.fatal with processor usability plus
         # a worker policy. A voice/text model that is permanently unusable
-        # cannot produce a meaningful Dograh run, so preserve the fork's old
+        # cannot produce a meaningful Kodewaves run, so preserve the fork's old
         # fatal-error cancellation behavior through the supported contract.
         processor_unusable_policy=ProcessorUnusablePolicy.CANCEL,
         enable_tracing=True,

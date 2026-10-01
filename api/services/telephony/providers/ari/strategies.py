@@ -232,7 +232,7 @@ class ARIHangupStrategy(HangupStrategy):
             # The external PBX owns the real customer leg, so it should be the
             # one that ends the call: ask it to hang up, then wait for its BYE.
             # Deleting the channel here instead makes Asterisk originate the
-            # BYE, and the PBX records that as Dograh dropping a call it was
+            # BYE, and the PBX records that as Kodewaves dropping a call it was
             # still running.
             bye_wait_seconds = await self._terminate_external_pbx_if_any(channel_id)
 
@@ -333,7 +333,7 @@ class ARIHangupStrategy(HangupStrategy):
         (Redis ``ari:channel:{id}`` -> run_id -> ``initial_context``).
 
         Returns how long the caller should wait for the PBX to send its own BYE
-        before deleting the channel. Zero whenever Dograh has to end the call
+        before deleting the channel. Zero whenever Kodewaves has to end the call
         itself: no external PBX, a call already transferred away, a rejected
         hangup, or a lookup that failed -- none of those leave a BYE coming.
         """
@@ -357,14 +357,14 @@ class ARIHangupStrategy(HangupStrategy):
             identity = identity or (run.initial_context or {}).get("upstream_pbx")
             # If the call was already transferred to the external PBX, the customer
             # leg has moved on -- do NOT hang it up (that would drop the transferred
-            # customer); just let dograh's own legs tear down below.
+            # customer); just let kodewaves's own legs tear down below.
             transferred = (run.gathered_context or {}).get("external_pbx_transferred")
             transferred = transferred or (run.gathered_context or {}).get(
                 "upstream_transferred"
             )
             if identity and not transferred and self._external_pbx_adapter:
                 # The lead write-back deliberately does not happen here. This
-                # strategy only runs when Dograh ends the call; when the
+                # strategy only runs when Kodewaves ends the call; when the
                 # customer hangs up first Asterisk tears the channel down
                 # through StasisEnd and nothing below executes. Disposition and
                 # lead fields are written from the workflow completion job

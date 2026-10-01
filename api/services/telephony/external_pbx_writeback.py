@@ -1,7 +1,7 @@
 """Record a finished run's outcome on the external PBX's copy of the call.
 
 This runs from workflow completion rather than from the ARI hangup strategy,
-because that strategy only executes when *Dograh* ends the call. When the
+because that strategy only executes when *Kodewaves* ends the call. When the
 customer or the PBX hangs up first, Asterisk tears the channel down through
 StasisEnd and no hangup strategy runs at all -- so a write-back attached there
 silently skips the calls the customer hung up on, which is a large share of
@@ -117,7 +117,7 @@ async def sync_external_pbx_call_record(workflow_run_id: int) -> None:
 
         gathered: dict[str, Any] = run.gathered_context or {}
         # A transferred call already recorded XFER before the handoff, while
-        # Dograh still owned the leg. Writing again now would overwrite whatever
+        # Kodewaves still owned the leg. Writing again now would overwrite whatever
         # the closer has dispositioned in the meantime.
         if gathered.get("external_pbx_transferred") or gathered.get(
             "upstream_transferred"

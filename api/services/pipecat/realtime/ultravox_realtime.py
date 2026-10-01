@@ -1,9 +1,9 @@
-"""Dograh subclass of pipecat's Ultravox realtime LLM service.
+"""Kodewaves subclass of pipecat's Ultravox realtime LLM service.
 
 Ultravox is audio-native and realtime. Its native call stages allow a client
 tool result to atomically change the system prompt and tools while preserving
 the call's server-side conversation history. This wrapper adapts that model to
-the Dograh engine contract by:
+the Kodewaves engine contract by:
 
 - deferring the first call creation until the engine queues the initial node
   opening via ``TTSSpeakFrame`` or ``LLMContextFrame``
@@ -12,7 +12,7 @@ the Dograh engine contract by:
 - updating the next stage's system prompt and selected tools without a
   disconnect/reconnect cycle
 - deferring workflow-control tools until any active Ultravox response ends
-- handling Dograh-only frames such as user mute and idle append prompts
+- handling Kodewaves-only frames such as user mute and idle append prompts
 - tagging user transcripts with ``finalized=True`` for downstream parity
 """
 
@@ -80,7 +80,7 @@ class KodewavesUltravoxRealtimeLLMService(
         self._pending_user_text_messages: list[str] = []
 
     async def start(self, frame):
-        # Dograh defers call creation until the engine queues the node opening.
+        # Kodewaves defers call creation until the engine queues the node opening.
         await LLMService.start(self, frame)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -205,7 +205,7 @@ class KodewavesUltravoxRealtimeLLMService(
         """Commit any received final user transcript before changing stages.
 
         Ultravox preserves its own audio-native history across a stage change,
-        but Dograh's local context still needs the final transcript before the
+        but Kodewaves's local context still needs the final transcript before the
         transition handler updates the workflow node.
         """
         return True

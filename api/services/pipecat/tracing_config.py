@@ -45,6 +45,7 @@ class _OrgAttributeSpanProcessor(SpanProcessor):
         org_id = get_current_org_id()
         if org_id:
             span.set_attribute("kodewaves.org_id", str(org_id))
+            span.set_attribute("kodewaves.org_id", str(org_id))
             span.set_attribute("dograh.org_id", str(org_id))
 
     def on_end(self, span):

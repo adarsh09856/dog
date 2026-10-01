@@ -1,6 +1,6 @@
-"""Dograh subclass of pipecat's OpenAI Realtime LLM service.
+"""Kodewaves subclass of pipecat's OpenAI Realtime LLM service.
 
-Layers Dograh engine integration quirks onto upstream-pristine
+Layers Kodewaves engine integration quirks onto upstream-pristine
 :class:`OpenAIRealtimeLLMService`. Substantially smaller than the Gemini
 subclass because OpenAI Realtime supports runtime ``session.update`` for
 both ``system_instruction`` and tools, so node changes do not require a
@@ -14,7 +14,7 @@ Adds:
 - **Silent session setup after a recorded greeting**, which the engine plays
   straight to the transport instead of routing through the model.
 - **One-off LLMMessagesAppendFrame handling** for ephemeral realtime prompts
-  like user-idle checks, without mutating Dograh's local ``LLMContext``.
+  like user-idle checks, without mutating Kodewaves's local ``LLMContext``.
 - **Workflow-control deferral** so node transitions, call termination, and
   transfers wait for any current bot audio to finish while ordinary tools run
   immediately.

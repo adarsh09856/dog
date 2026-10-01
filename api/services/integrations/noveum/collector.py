@@ -26,7 +26,7 @@ def make_storage_audio_sink(
     manifest: list[dict[str, Any]],
 ) -> Callable[..., Awaitable[bool]]:
     """
-    Build the observer ``audio_sink``: writes each WAV segment to Dograh's
+    Build the observer ``audio_sink``: writes each WAV segment to Kodewaves's
     object store (no Noveum network I/O during the live call) and records a
     manifest entry so the completion phase can upload the bytes to Noveum
     later under the same ``audio_uuid`` the observer stamped on the span.
@@ -99,8 +99,8 @@ def build_deferred_observer(
         deferred=True,
         record_audio=record_audio,
         audio_sink=audio_sink,
-        # Dograh's on_call_finished calls _finish_conversation itself, AFTER
-        # dograh's own on_pipeline_finished handler has run stop_recording()
+        # Kodewaves's on_call_finished calls _finish_conversation itself, AFTER
+        # kodewaves's own on_pipeline_finished handler has run stop_recording()
         # (which flushes the AudioBufferProcessor). The SDK's safety net would
         # fire BEFORE that flush on cancelled calls, finishing the trace with
         # incomplete conversation audio — so it is disabled here.

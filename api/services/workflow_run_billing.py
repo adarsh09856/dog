@@ -1,9 +1,9 @@
 """Workflow-run billing hooks.
 
-Dograh does not rate or deduct credits locally. MPS owns credit accounting.
-For hosted deployments, Dograh reports completed platform usage to MPS.
+Kodewaves does not rate or deduct credits locally. MPS owns credit accounting.
+For hosted deployments, Kodewaves reports completed platform usage to MPS.
 When a server-minted MPS correlation id exists, MPS uses model-service usage
-as the canonical duration. Otherwise Dograh reports the completed run duration.
+as the canonical duration. Otherwise Kodewaves reports the completed run duration.
 """
 
 from typing import Any

@@ -353,7 +353,7 @@ class UserConfigurationValidator:
             return True
         if api_key.startswith("dgr"):
             raise ValueError(
-                "Legacy Dograh API keys are deprecated. Managed voice pipelines use sovereign platform keys."
+                "Legacy managed API keys are deprecated. Managed voice pipelines use sovereign platform keys."
             )
         # In sovereign self-hosted mode, platform keys are administered via Admin Master Keys
         return True

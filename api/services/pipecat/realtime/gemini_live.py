@@ -1,6 +1,6 @@
-"""Dograh subclass of pipecat's Gemini Live LLM service.
+"""Kodewaves subclass of pipecat's Gemini Live LLM service.
 
-Layers Dograh engine integration quirks onto upstream-pristine
+Layers Kodewaves engine integration quirks onto upstream-pristine
 :class:`GeminiLiveLLMService`:
 
 - **Deferred connect.** Connection is held back until ``system_instruction``
@@ -281,10 +281,10 @@ class KodewavesGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMServ
         await super().process_frame(frame, direction)
 
     # ------------------------------------------------------------------
-    # Context lifecycle: Dograh pre-populates self._context via the engine,
+    # Context lifecycle: Kodewaves pre-populates self._context via the engine,
     # so upstream's "first arrival === self._context is None" check doesn't
     # work. We gate on _handled_initial_context instead and skip the
-    # init-instruction reconciliation (Dograh updates system_instruction at
+    # init-instruction reconciliation (Kodewaves updates system_instruction at
     # runtime via _update_settings, not via init).
     # ------------------------------------------------------------------
 
@@ -425,7 +425,7 @@ class KodewavesGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMServ
 
     # ------------------------------------------------------------------
     # Session lifecycle: suppress upstream's automatic initial-context seed,
-    # because Dograh's TTSSpeakFrame is the explicit first-turn trigger. Keep
+    # because Kodewaves's TTSSpeakFrame is the explicit first-turn trigger. Keep
     # upstream's no-handle reconnect seed so transient failures retain history;
     # intentional node transitions still wait for their updated context frame.
     # ------------------------------------------------------------------
@@ -488,7 +488,7 @@ class KodewavesGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMServ
             # IDs again through the live tool-response channel.
             await self._prepare_context_for_fresh_session()
             await self._create_initial_response(for_reconnect=True)
-        # Otherwise this is Dograh's initial, pre-populated connection. Wait
+        # Otherwise this is Kodewaves's initial, pre-populated connection. Wait
         # for its TTSSpeakFrame/context trigger instead of auto-generating.
 
     async def _maybe_seed_node_transition_context(self) -> None:

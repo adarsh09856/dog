@@ -1,4 +1,4 @@
-"""OpenAI Live with Dograh workflow tools and conversation controls."""
+"""OpenAI Live with Kodewaves workflow tools and conversation controls."""
 
 import asyncio
 from collections.abc import Sequence

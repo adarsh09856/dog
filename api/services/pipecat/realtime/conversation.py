@@ -1,4 +1,4 @@
-"""Conversation behavior shared by Dograh's realtime service adapters."""
+"""Conversation behavior shared by Kodewaves's realtime service adapters."""
 
 from dataclasses import replace
 

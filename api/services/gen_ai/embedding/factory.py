@@ -1,6 +1,6 @@
-"""Factory for embedding services, including the Dograh-managed (MPS) path.
+"""Factory for embedding services, including the Kodewaves-managed (MPS) path.
 
-Centralizes the provider branching (Azure BYOK / Dograh-managed / OpenAI-compatible
+Centralizes the provider branching (Azure BYOK / Kodewaves-managed / OpenAI-compatible
 BYOK) that was previously duplicated across document ingestion, the search route,
 and the RAG tool, and resolves the MPS correlation id the same way the voice
 path does.
@@ -69,9 +69,9 @@ async def build_embedding_service(
 
     Args:
         correlation_id: A correlation id already available in context (e.g. the
-            running workflow's MPS correlation id). Used for the Dograh provider.
+            running workflow's MPS correlation id). Used for the Kodewaves provider.
         resolve_correlation: When True and no ``correlation_id`` is supplied, resolve
-            one for the Dograh provider via ``resolve_embedding_correlation_id``
+            one for the Kodewaves provider via ``resolve_embedding_correlation_id``
             (for calls made outside a workflow run: ingestion, manual search).
     """
     from api.services.configuration.registry import ServiceProviders
