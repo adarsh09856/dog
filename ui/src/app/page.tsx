@@ -132,7 +132,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#1c1b1d] text-[#cecbc6] selection:bg-[#e5a84b]/30 selection:text-[#f3f1ed] relative overflow-x-hidden font-sans">
-      {/* Film grain noise texture overlay matching Dograh brand aesthetic */}
+      {/* Film grain noise texture overlay matching Kodewaves brand aesthetic */}
       <div
         aria-hidden="true"
         className="pointer-events-none fixed inset-0 z-[60] opacity-[0.16] mix-blend-overlay"

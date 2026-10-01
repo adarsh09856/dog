@@ -24,11 +24,13 @@ BASE_LOG_DIR="$BASE_DIR/logs"
 LATEST_LINK="$BASE_LOG_DIR/latest"
 VENV_PATH="$BASE_DIR/venv"
 
-NGINX_UPSTREAM_TEMPLATE="$BASE_DIR/nginx/dograh_upstream.conf.template"
-NGINX_UPSTREAM_CONF="/etc/nginx/conf.d/dograh_upstream.conf"
+NGINX_UPSTREAM_TEMPLATE="$BASE_DIR/nginx/kodewaves_upstream.conf.template"
+[[ -f "$NGINX_UPSTREAM_TEMPLATE" ]] || NGINX_UPSTREAM_TEMPLATE="$BASE_DIR/nginx/dograh_upstream.conf.template"
+NGINX_UPSTREAM_CONF="/etc/nginx/conf.d/kodewaves_upstream.conf"
 
 HEALTH_CHECK_ENDPOINT="/api/v1/health"
 ACTIVE_CALLS_ENDPOINT="/api/v1/health/active-calls"
+KODEWAVES_DEVOPS_SECRET_HEADER="X-Kodewaves-Devops-Secret"
 DOGRAH_DEVOPS_SECRET_HEADER="X-Dograh-Devops-Secret"
 
 # Load environment
@@ -62,12 +64,13 @@ log_info()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] INFO:  $*"; }
 log_warn()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARN:  $*"; }
 log_error() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2; }
 
-if [[ -z "${DOGRAH_DEVOPS_SECRET:-}" ]]; then
-  log_error "DOGRAH_DEVOPS_SECRET is not set. Add it to $ENV_FILE before running rolling_update.sh."
+DEVOPS_SECRET="${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
+if [[ -z "$DEVOPS_SECRET" ]]; then
+  log_error "KODEWAVES_DEVOPS_SECRET (or DOGRAH_DEVOPS_SECRET) is not set. Add it to $ENV_FILE before running rolling_update.sh."
   exit 1
 fi
-if [[ "$DOGRAH_DEVOPS_SECRET" == "change-me-dograh-devops-secret" ]]; then
-  log_error "DOGRAH_DEVOPS_SECRET still has the example placeholder value. Replace it in $ENV_FILE."
+if [[ "$DEVOPS_SECRET" == "change-me-dograh-devops-secret" || "$DEVOPS_SECRET" == "change-me-kodewaves-devops-secret" ]]; then
+  log_error "Devops secret still has an example placeholder value. Replace it in $ENV_FILE."
   exit 1
 fi
 

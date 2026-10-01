@@ -24,19 +24,21 @@ sleep "$INITIAL_DELAY"
 
 # Without the devops secret we cannot read the count — fall back to the old
 # fixed-sleep behavior rather than block the full grace window on every stop.
-if [ -z "${DOGRAH_DEVOPS_SECRET:-}" ]; then
-  echo "drain: DOGRAH_DEVOPS_SECRET unset — skipping active-call drain (sleep-only)"
+DEVOPS_SECRET="${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
+if [ -z "$DEVOPS_SECRET" ]; then
+  echo "drain: KODEWAVES_DEVOPS_SECRET unset — skipping active-call drain (sleep-only)"
   exit 0
 fi
 
 deadline=$(( $(date +%s) + MAX_WAIT ))
 while [ "$(date +%s)" -lt "$deadline" ]; do
-  count=$(WEB_PORT="$PORT" python - <<'PY' || echo ERR
+  count=$(WEB_PORT="$PORT" KODEWAVES_DEVOPS_SECRET="$DEVOPS_SECRET" python - <<'PY' || echo ERR
 import json, os, urllib.request
 port = os.environ.get("WEB_PORT", "8000")
+secret = os.environ.get("KODEWAVES_DEVOPS_SECRET", "")
 req = urllib.request.Request(
     f"http://127.0.0.1:{port}/api/v1/health/active-calls",
-    headers={"X-Dograh-Devops-Secret": os.environ.get("DOGRAH_DEVOPS_SECRET", "")},
+    headers={"X-Kodewaves-Devops-Secret": secret, "X-Dograh-Devops-Secret": secret},
 )
 with urllib.request.urlopen(req, timeout=3) as r:
     print(json.load(r)["active_calls"])

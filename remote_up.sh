@@ -17,8 +17,9 @@ fi
 # the deploy dir back to the user who invoked sudo; a no-op for unprivileged
 # runs and real root, where SUDO_UID is unset.
 restore_ownership() {
-    if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" && -n "${DOGRAH_DEPLOY_PROJECT_DIR:-}" && -d "$DOGRAH_DEPLOY_PROJECT_DIR" ]]; then
-        chown -R "$SUDO_UID:$SUDO_GID" "$DOGRAH_DEPLOY_PROJECT_DIR" || true
+    local target_dir="${KODEWAVES_DEPLOY_PROJECT_DIR:-${DOGRAH_DEPLOY_PROJECT_DIR:-}}"
+    if [[ -n "${SUDO_UID:-}" && -n "${SUDO_GID:-}" && -n "$target_dir" && -d "$target_dir" ]]; then
+        chown -R "$SUDO_UID:$SUDO_GID" "$target_dir" || true
     fi
 }
 
@@ -33,6 +34,7 @@ trap cleanup EXIT
 # shellcheck disable=SC1090
 . "$LIB_PATH"
 
+KODEWAVES_DEPLOY_PROJECT_DIR="$SCRIPT_DIR"
 DOGRAH_DEPLOY_PROJECT_DIR="$SCRIPT_DIR"
 
 VALIDATE_ONLY=0
@@ -61,10 +63,10 @@ done
 
 cd "$SCRIPT_DIR"
 
-dograh_info "Running Dograh remote preflight..."
+dograh_info "Running Kodewaves remote preflight..."
 dograh_prepare_remote_install "$SCRIPT_DIR"
 docker compose config -q
-dograh_success "✓ dograh-init preflight validated"
+dograh_success "✓ kodewaves-init preflight validated"
 
 if [[ "$VALIDATE_ONLY" == "1" ]]; then
     exit 0
