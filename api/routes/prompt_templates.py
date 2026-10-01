@@ -1,5 +1,6 @@
+import uuid
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -17,15 +18,28 @@ class PromptTemplateItem(BaseModel):
     description: str
     system_prompt: str
     first_message: str
-    recommended_tools: List[str]
+    recommended_tools: List[str] = []
+    tags: List[str] = []
+    is_featured: bool = True
+
+
+class PromptTemplateCreateRequest(BaseModel):
+    category: str = "General"
+    title: str
+    description: str
+    system_prompt: str
+    first_message: str
+    recommended_tools: List[str] = []
+    tags: List[str] = []
+    is_featured: bool = False
 
 
 @router.get("", response_model=List[PromptTemplateItem])
 async def list_templates(category: Optional[str] = None, _user=Depends(get_user)):
     """List pre-configured voice agent prompt templates."""
     async with kodewaves_db_client.get_session() as session:
-        stmt = select(PromptTemplateModel).where(PromptTemplateModel.is_system_template == True)
-        if category:
+        stmt = select(PromptTemplateModel)
+        if category and category.lower() != "all":
             stmt = stmt.where(PromptTemplateModel.category == category)
         result = await session.execute(stmt)
         records = result.scalars().all()
@@ -50,7 +64,7 @@ async def list_templates(category: Optional[str] = None, _user=Depends(get_user)
                     recommended_tools=["google_calendar"],
                 ),
                 PromptTemplateModel(
-                    category="Banking & Collections",
+                    category="Banking & Finance",
                     title="EMI Reminder & Payment Confirmation",
                     description="Politely reminds customers of upcoming loan/credit card EMI payment due dates and offers instant payment links.",
                     system_prompt="You are a respectful customer service agent from Apex Financial Services. Remind the customer about their upcoming EMI payment date, confirm if they need any assistance, and offer to send an instant UPI payment link via SMS/WhatsApp.",
@@ -58,7 +72,7 @@ async def list_templates(category: Optional[str] = None, _user=Depends(get_user)
                     recommended_tools=["crm_lead"],
                 ),
                 PromptTemplateModel(
-                    category="E-commerce",
+                    category="Logistics",
                     title="Order Confirmation & Return Assistant",
                     description="Confirms cash-on-delivery (COD) orders, verifies shipping address, and assists with return requests.",
                     system_prompt="You are an enthusiastic e-commerce logistics representative. Confirm delivery addresses for Cash-on-Delivery orders to avoid RTO returns. Speak clearly and politely.",
@@ -70,7 +84,7 @@ async def list_templates(category: Optional[str] = None, _user=Depends(get_user)
                 session.add(t)
             await session.commit()
 
-            stmt = select(PromptTemplateModel).where(PromptTemplateModel.is_system_template == True)
+            stmt = select(PromptTemplateModel)
             result = await session.execute(stmt)
             records = result.scalars().all()
 
@@ -83,6 +97,47 @@ async def list_templates(category: Optional[str] = None, _user=Depends(get_user)
                 system_prompt=r.system_prompt,
                 first_message=r.first_message,
                 recommended_tools=r.recommended_tools or [],
+                tags=[r.category] + (r.recommended_tools or []),
+                is_featured=r.is_system_template,
             )
             for r in records
         ]
+
+
+@router.post("", response_model=Dict[str, Any])
+async def create_template(req: PromptTemplateCreateRequest, _user=Depends(get_user)):
+    """Create a new prompt template."""
+    async with kodewaves_db_client.get_session() as session:
+        t = PromptTemplateModel(
+            category=req.category,
+            title=req.title,
+            description=req.description,
+            system_prompt=req.system_prompt,
+            first_message=req.first_message,
+            recommended_tools=req.recommended_tools,
+            is_system_template=False,
+        )
+        session.add(t)
+        await session.commit()
+        await session.refresh(t)
+        return {"id": str(t.id), "title": t.title, "message": "Prompt template created successfully"}
+
+
+@router.delete("/{template_id}", response_model=Dict[str, Any])
+async def delete_template(template_id: str, _user=Depends(get_user)):
+    """Delete a prompt template."""
+    async with kodewaves_db_client.get_session() as session:
+        try:
+            t_uuid = uuid.UUID(template_id)
+            stmt = select(PromptTemplateModel).where(PromptTemplateModel.id == t_uuid)
+        except ValueError:
+            stmt = select(PromptTemplateModel).where(PromptTemplateModel.title == template_id)
+
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if not record:
+            raise HTTPException(status_code=404, detail="Template not found")
+
+        await session.delete(record)
+        await session.commit()
+        return {"message": "Prompt template deleted successfully"}

@@ -151,7 +151,7 @@ services:
 
       # Local CPU AI Engine (Ollama + Speaches)
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
-      SPEACHES_ENDPOINT: "${SPEACHES_ENDPOINT:-http://speaches:8000}"
+      SPEACHES_ENDPOINT: "${SPEACHES_ENDPOINT:-http://speaches:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
 
       # DevOps / Monitoring Secret

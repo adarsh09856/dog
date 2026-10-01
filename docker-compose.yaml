@@ -256,7 +256,12 @@ services:
       SERVER_IP: "${SERVER_IP:-}"
 
       OSS_JWT_SECRET: "${OSS_JWT_SECRET:?OSS_JWT_SECRET must be set to a strong secret}"
+      JWT_SECRET: "${OSS_JWT_SECRET}"
       MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
+      KODEWAVES_SECRET_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
+      OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
+      SPEACHES_ENDPOINT: "${SPEACHES_ENDPOINT:-http://speaches:8000/v1}"
+      ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
 
       # Telephony media WebSocket capability token. The carrier dials the media
       # socket back, so its URL is caller-visible and the ids in it are otherwise
@@ -360,6 +365,53 @@ services:
     networks:
       - app-network
 
+  # ==============================================================================
+  # Ultra-Lightweight Self-Hosted CPU Local AI Engine (Optional / Admin Opt-In)
+  # ==============================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: kodewaves_ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NUM_PARALLEL=2
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2000M
+    networks:
+      - app-network
+
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: kodewaves_speaches
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8765:8000"
+    volumes:
+      - speaches_cache:/home/ubuntu/.cache/huggingface/hub
+    environment:
+      - WHISPER_MODEL=Systran/faster-whisper-tiny
+      - KOKORO_MODEL=hexgrad/Kokoro-82M
+      - DEFAULT_DEVICE=cpu
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - VECLIB_MAXIMUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1000M
+    networks:
+      - app-network
+
 volumes:
   postgres_data:
   redis_data:
@@ -368,6 +420,10 @@ volumes:
   nginx-generated:
     driver: local
   coturn-generated:
+    driver: local
+  ollama_data:
+    driver: local
+  speaches_cache:
     driver: local
 
 networks:

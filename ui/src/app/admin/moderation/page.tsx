@@ -206,7 +206,7 @@ export default function AdminModerationPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-xs text-right text-muted-foreground">
-                            {new Date(w.created_at).toLocaleDateString()}
+                            {w.created_at ? new Date(w.created_at).toLocaleDateString() : "—"}
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
@@ -270,7 +270,7 @@ export default function AdminModerationPage() {
                           <TableCell className="text-xs font-mono text-destructive">{v.matched_text}</TableCell>
                           <TableCell className="text-xs font-semibold">{v.action_taken}</TableCell>
                           <TableCell className="text-xs text-right text-muted-foreground">
-                            {new Date(v.created_at).toLocaleString()}
+                            {v.created_at ? new Date(v.created_at).toLocaleString() : "—"}
                           </TableCell>
                         </TableRow>
                       ))

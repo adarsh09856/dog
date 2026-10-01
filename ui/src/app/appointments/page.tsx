@@ -91,7 +91,7 @@ export default function AppointmentsPage() {
     }
   };
 
-  const handleDeleteAppointment = async (id: number) => {
+  const handleDeleteAppointment = async (id: string | number) => {
     if (!confirm("Are you sure you want to cancel this booking?")) return;
     try {
       await appointmentsApi.deleteAppointment(id);

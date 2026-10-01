@@ -58,7 +58,7 @@ export default function FormsPage() {
   // Submissions Modal
   const [submissionsOpen, setSubmissionsOpen] = useState(false);
   const [selectedFormTitle, setSelectedFormTitle] = useState("");
-  const [submissions, setSubmissions] = useState<Array<{ id: number; data: Record<string, any>; created_at: string }>>([]);
+  const [submissions, setSubmissions] = useState<Array<{ id: number | string; data: Record<string, any>; created_at: string }>>([]);
   const [loadingSubs, setLoadingSubs] = useState(false);
 
   const fetchForms = async () => {
@@ -99,7 +99,7 @@ export default function FormsPage() {
     }
   };
 
-  const handleDeleteForm = async (id: number) => {
+  const handleDeleteForm = async (id: number | string) => {
     if (!confirm("Are you sure you want to delete this form and all its submissions?")) return;
     try {
       await formsApi.deleteForm(id);

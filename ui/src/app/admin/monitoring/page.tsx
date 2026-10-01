@@ -146,7 +146,7 @@ export default function AdminMonitoringPage() {
                       </TableCell>
                       <TableCell className="text-xs font-semibold uppercase">{c.telecom_carrier}</TableCell>
                       <TableCell className="font-mono text-xs font-bold text-primary flex items-center gap-1">
-                        <Clock className="h-3 w-3" /> {formatDuration(c.duration_seconds)}
+                        <Clock className="h-3 w-3" /> {formatDuration(c.duration_seconds || 0)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge className="bg-emerald-500/10 text-emerald-600 text-[10px] gap-1 hover:bg-emerald-500/20">

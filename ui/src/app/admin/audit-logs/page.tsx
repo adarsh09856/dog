@@ -46,8 +46,8 @@ export default function AdminAuditLogsPage() {
 
   const filteredLogs = logs.filter(
     (l) =>
-      l.action.toLowerCase().includes(search.toLowerCase()) ||
-      l.target_resource.toLowerCase().includes(search.toLowerCase()) ||
+      (l.action || "").toLowerCase().includes(search.toLowerCase()) ||
+      (l.target_resource || "").toLowerCase().includes(search.toLowerCase()) ||
       (l.user_email && l.user_email.toLowerCase().includes(search.toLowerCase()))
   );
 
@@ -114,7 +114,7 @@ export default function AdminAuditLogsPage() {
                   filteredLogs.map((l) => (
                     <TableRow key={l.id} className="hover:bg-muted/20">
                       <TableCell className="text-xs text-muted-foreground font-mono">
-                        {new Date(l.created_at).toLocaleString()}
+                        {l.created_at ? new Date(l.created_at).toLocaleString() : "—"}
                       </TableCell>
                       <TableCell className="text-xs font-medium">{l.user_email || "System"}</TableCell>
                       <TableCell>

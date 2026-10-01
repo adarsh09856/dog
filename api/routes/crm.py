@@ -109,6 +109,32 @@ async def list_contacts(user: UserModel = Depends(get_user)):
         ]
 
 
+class StageCreateRequest(BaseModel):
+    name: str
+    color: str = "#3b82f6"
+    order_index: int = 0
+
+
+@router.post("/stages", response_model=Dict[str, Any])
+async def create_stage(req: StageCreateRequest, user: UserModel = Depends(get_user)):
+    """Add a custom pipeline lead stage."""
+    org_id = user.selected_organization_id
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Organization required")
+
+    async with kodewaves_db_client.get_session() as session:
+        stage = LeadStageModel(
+            organization_id=org_id,
+            name=req.name,
+            color=req.color,
+            order_index=req.order_index,
+        )
+        session.add(stage)
+        await session.commit()
+        await session.refresh(stage)
+        return {"id": str(stage.id), "name": stage.name, "message": "Stage created successfully"}
+
+
 @router.post("/contacts", response_model=Dict[str, Any])
 async def create_contact(req: ContactCreateRequest, user: UserModel = Depends(get_user)):
     """Create a new contact."""
@@ -132,3 +158,70 @@ async def create_contact(req: ContactCreateRequest, user: UserModel = Depends(ge
         await session.commit()
         await session.refresh(contact)
         return {"id": str(contact.id), "phone": contact.phone, "message": "Contact created successfully"}
+
+
+@router.put("/contacts/{contact_id}", response_model=Dict[str, Any])
+async def update_contact(contact_id: str, req: ContactCreateRequest, user: UserModel = Depends(get_user)):
+    """Update an existing contact."""
+    org_id = user.selected_organization_id
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Organization required")
+
+    async with kodewaves_db_client.get_session() as session:
+        try:
+            c_uuid = uuid.UUID(contact_id)
+            stmt = select(ContactModel).where(ContactModel.id == c_uuid, ContactModel.organization_id == org_id)
+        except ValueError:
+            stmt = select(ContactModel).where(ContactModel.phone == contact_id, ContactModel.organization_id == org_id)
+
+        result = await session.execute(stmt)
+        contact = result.scalar_one_or_none()
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+
+        if req.first_name is not None:
+            contact.first_name = req.first_name
+        if req.last_name is not None:
+            contact.last_name = req.last_name
+        if req.phone:
+            contact.phone = req.phone
+        if req.email is not None:
+            contact.email = req.email
+        if req.company is not None:
+            contact.company = req.company
+        if req.stage_id:
+            try:
+                contact.stage_id = uuid.UUID(req.stage_id)
+            except ValueError:
+                pass
+        if req.tags:
+            contact.tags = req.tags
+        if req.custom_fields:
+            contact.custom_fields = req.custom_fields
+
+        await session.commit()
+        return {"id": str(contact.id), "message": "Contact updated successfully"}
+
+
+@router.delete("/contacts/{contact_id}", response_model=Dict[str, Any])
+async def delete_contact(contact_id: str, user: UserModel = Depends(get_user)):
+    """Delete a contact."""
+    org_id = user.selected_organization_id
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Organization required")
+
+    async with kodewaves_db_client.get_session() as session:
+        try:
+            c_uuid = uuid.UUID(contact_id)
+            stmt = select(ContactModel).where(ContactModel.id == c_uuid, ContactModel.organization_id == org_id)
+        except ValueError:
+            stmt = select(ContactModel).where(ContactModel.phone == contact_id, ContactModel.organization_id == org_id)
+
+        result = await session.execute(stmt)
+        contact = result.scalar_one_or_none()
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found")
+
+        await session.delete(contact)
+        await session.commit()
+        return {"message": "Contact deleted successfully"}

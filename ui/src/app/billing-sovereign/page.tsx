@@ -46,7 +46,7 @@ export default function SovereignBillingPage() {
   const [ledger, setLedger] = useState<WalletLedgerItem[]>([]);
   const [plans, setPlans] = useState<SaaSPlan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [subscribingId, setSubscribingId] = useState<number | null>(null);
+  const [subscribingId, setSubscribingId] = useState<number | string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);

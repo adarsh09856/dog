@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
@@ -12,6 +13,8 @@ from api.db.models import OrganizationModel, UserModel, WorkflowRunModel
 from api.services.auth.depends import get_superuser
 from api.services.organization_bootstrap import ensure_organization_bootstrapped
 from api.utils.auth import create_jwt_token, hash_password
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["admin-users"])
 

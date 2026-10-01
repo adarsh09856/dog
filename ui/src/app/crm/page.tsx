@@ -112,7 +112,7 @@ export default function CRMPage() {
     }
   };
 
-  const handleDeleteContact = async (id: number) => {
+  const handleDeleteContact = async (id: string | number) => {
     if (!confirm("Are you sure you want to delete this contact?")) return;
     try {
       await crmApi.deleteContact(id);

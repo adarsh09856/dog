@@ -174,7 +174,7 @@ export default function MasterKeysAndModelsPage() {
     }
   };
 
-  const handleDeleteModel = async (id: number) => {
+  const handleDeleteModel = async (id: string | number) => {
     if (!confirm("Are you sure you want to remove this model from the sovereign catalog?")) return;
     try {
       await adminApi.deleteModel(id);
@@ -248,10 +248,10 @@ export default function MasterKeysAndModelsPage() {
                           <Badge variant="outline" className="uppercase text-[10px]">
                             {item.category}
                           </Badge>
-                          {saved?.api_key_masked ? (
+                          {saved?.api_key_masked || (saved as any)?.has_credentials ? (
                             <span className="text-emerald-500 flex items-center gap-1 font-mono text-[11px]">
                               <CheckCircle2 className="h-3 w-3" />
-                              {saved.api_key_masked}
+                              {saved.api_key_masked || "•••••••• (configured)"}
                             </span>
                           ) : (
                             <span className="text-amber-500 flex items-center gap-1 text-[11px]">
@@ -293,13 +293,13 @@ export default function MasterKeysAndModelsPage() {
                           }}
                         >
                           <Edit className="h-3 w-3" />
-                          {saved?.api_key_masked ? "Update Key" : "Configure Key"}
+                          {saved?.api_key_masked || (saved as any)?.has_credentials ? "Update Key" : "Configure Key"}
                         </Button>
                         <Button
                           variant="secondary"
                           size="sm"
                           className="h-8 text-xs gap-1"
-                          disabled={!saved?.api_key_masked || isTesting}
+                          disabled={(!saved?.api_key_masked && !(saved as any)?.has_credentials) || isTesting}
                           onClick={() => handleTestKey(item.provider)}
                         >
                           {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}

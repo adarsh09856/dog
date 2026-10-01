@@ -33,7 +33,7 @@ const ADMIN_NAV = [
   { title: "SaaS Plans", href: "/admin/plans", icon: FileSpreadsheet },
   { title: "Credit Bundles", href: "/admin/credit-packages", icon: Coins },
   { title: "Live Call Monitor", href: "/admin/monitoring", icon: Radio },
-  { title: "Global Call History", href: "/superuser/workflow-runs", icon: PhoneCall },
+  { title: "Global Call History", href: "/superadmin/runs", icon: PhoneCall },
   { title: "Content Moderation", href: "/admin/moderation", icon: ShieldAlert },
   { title: "Platform Settings", href: "/admin/settings", icon: Settings },
   { title: "Audit Trail", href: "/admin/audit-logs", icon: FileText },

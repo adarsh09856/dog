@@ -71,7 +71,7 @@ export interface MasterCredential {
 }
 
 export interface ModelCatalogEntry {
-  id: number;
+  id: string | number;
   provider: string;
   model_id: string;
   display_name: string;
@@ -119,7 +119,7 @@ export interface AdminUserItem {
 
 
 export interface SaaSPlan {
-  id: number;
+  id: string | number;
   name: string;
   code: string;
   description?: string;
@@ -135,7 +135,7 @@ export interface SaaSPlan {
 }
 
 export interface CreditPackage {
-  id: number;
+  id: string | number;
   name: string;
   minutes: number;
   price_inr: number;
@@ -169,21 +169,21 @@ export interface LiveCallItem {
 }
 
 export interface BannedWord {
-  id: number;
+  id: string | number;
   keyword: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   action: 'flag' | 'terminate' | 'alert_admin';
-  created_at: string;
+  created_at?: string;
 }
 
 export interface FlaggedViolation {
-  id: number;
+  id: string | number;
   workflow_run_id: number;
   organization_id: number;
   violation_type: string;
   matched_text: string;
   action_taken: string;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface PlatformSettings {
@@ -210,13 +210,13 @@ export interface PlatformSettings {
 }
 
 export interface AuditLogItem {
-  id: number;
+  id: string | number;
   user_email?: string;
   action: string;
   target_resource: string;
   details?: Record<string, any>;
   ip_address?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 export const adminApi = {
@@ -245,12 +245,12 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updateModel: (id: number, data: Partial<ModelCatalogEntry>) =>
+  updateModel: (id: string | number, data: Partial<ModelCatalogEntry>) =>
     apiFetch<ModelCatalogEntry>(`/admin/models/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  deleteModel: (id: number) =>
+  deleteModel: (id: string | number) =>
     apiFetch<{ message: string }>(`/admin/models/${id}`, {
       method: 'DELETE',
     }),
@@ -316,12 +316,12 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updatePlan: (id: number, data: Partial<SaaSPlan>) =>
+  updatePlan: (id: string | number, data: Partial<SaaSPlan>) =>
     apiFetch<SaaSPlan>(`/admin/plans/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  deletePlan: (id: number) =>
+  deletePlan: (id: string | number) =>
     apiFetch<{ message: string }>(`/admin/plans/${id}`, {
       method: 'DELETE',
     }),
@@ -333,12 +333,12 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updateCreditPackage: (id: number, data: Partial<CreditPackage>) =>
+  updateCreditPackage: (id: string | number, data: Partial<CreditPackage>) =>
     apiFetch<CreditPackage>(`/admin/credit-packages/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  deleteCreditPackage: (id: number) =>
+  deleteCreditPackage: (id: string | number) =>
     apiFetch<{ message: string }>(`/admin/credit-packages/${id}`, {
       method: 'DELETE',
     }),
@@ -359,7 +359,7 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  deleteBannedWord: (id: number) =>
+  deleteBannedWord: (id: string | number) =>
     apiFetch<{ message: string }>(`/admin/moderation/banned-words/${id}`, {
       method: 'DELETE',
     }),
@@ -400,73 +400,81 @@ export const adminApi = {
 // ---------------------------------------------------------------------------
 
 export interface Contact {
-  id: number;
+  id: string | number;
   first_name: string;
   last_name?: string;
   phone: string;
   email?: string;
   company?: string;
-  stage_id?: number;
+  stage_id?: string | number;
   notes?: string;
   custom_fields?: Record<string, any>;
-  created_at: string;
+  created_at?: string;
 }
 
 export interface LeadStage {
-  id: number;
+  id: string | number;
   name: string;
-  order: number;
+  order?: number;
+  order_index?: number;
   color?: string;
 }
 
 export interface Appointment {
-  id: number;
+  id: string | number;
   title: string;
-  customer_name: string;
-  customer_phone: string;
+  customer_name?: string;
+  customer_phone?: string;
   customer_email?: string;
   start_time: string;
   end_time: string;
-  status: 'confirmed' | 'pending' | 'cancelled' | 'completed';
+  status: 'confirmed' | 'pending' | 'cancelled' | 'completed' | string;
   notes?: string;
 }
 
 export interface DynamicForm {
-  id: number;
+  id: string | number;
   title: string;
-  slug: string;
+  slug?: string;
+  name?: string;
   description?: string;
-  fields: Array<{
+  fields?: Array<{
     name: string;
     label: string;
-    type: 'text' | 'number' | 'email' | 'phone' | 'select' | 'checkbox';
+    type: 'text' | 'number' | 'email' | 'phone' | 'select' | 'checkbox' | string;
     required: boolean;
     options?: string[];
   }>;
+  fields_schema?: any[];
   is_active: boolean;
   submission_count: number;
   created_at: string;
 }
 
 export interface WebsiteWidget {
-  id: number;
+  id: string | number;
   name: string;
+  widget_name?: string;
   agent_id?: number;
+  workflow_id?: number;
   primary_color: string;
-  position: 'bottom-right' | 'bottom-left';
-  welcome_message: string;
+  position: 'bottom-right' | 'bottom-left' | string;
+  welcome_message?: string;
+  bubble_title?: string;
   is_active: boolean;
   embed_code?: string;
+  embed_snippet?: string;
 }
 
 export interface PromptTemplate {
-  id: number;
+  id: string | number;
   title: string;
   category: string;
   description?: string;
   system_prompt: string;
   first_message?: string;
   tags?: string[];
+  recommended_tools?: string[];
   is_featured: boolean;
 }
 
@@ -495,12 +503,12 @@ export const crmApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updateContact: (id: number, data: Partial<Contact>) =>
+  updateContact: (id: string | number, data: Partial<Contact>) =>
     apiFetch<Contact>(`/crm/contacts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  deleteContact: (id: number) =>
+  deleteContact: (id: string | number) =>
     apiFetch<{ message: string }>(`/crm/contacts/${id}`, {
       method: 'DELETE',
     }),
@@ -519,12 +527,12 @@ export const appointmentsApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updateAppointment: (id: number, data: Partial<Appointment>) =>
+  updateAppointment: (id: string | number, data: Partial<Appointment>) =>
     apiFetch<Appointment>(`/appointments/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  deleteAppointment: (id: number) =>
+  deleteAppointment: (id: string | number) =>
     apiFetch<{ message: string }>(`/appointments/${id}`, {
       method: 'DELETE',
     }),
@@ -532,39 +540,39 @@ export const appointmentsApi = {
 
 export const formsApi = {
   getForms: () => apiFetch<DynamicForm[]>('/forms'),
-  getForm: (id: number) => apiFetch<DynamicForm>(`/forms/${id}`),
+  getForm: (id: string | number) => apiFetch<DynamicForm>(`/forms/${id}`),
   createForm: (data: Partial<DynamicForm>) =>
     apiFetch<DynamicForm>('/forms', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updateForm: (id: number, data: Partial<DynamicForm>) =>
+  updateForm: (id: string | number, data: Partial<DynamicForm>) =>
     apiFetch<DynamicForm>(`/forms/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  deleteForm: (id: number) =>
+  deleteForm: (id: string | number) =>
     apiFetch<{ message: string }>(`/forms/${id}`, {
       method: 'DELETE',
     }),
-  getSubmissions: (formId: number) =>
-    apiFetch<Array<{ id: number; data: Record<string, any>; created_at: string }>>(`/forms/${formId}/submissions`),
+  getSubmissions: (formId: string | number) =>
+    apiFetch<Array<{ id: number | string; data: Record<string, any>; created_at: string }>>(`/forms/${formId}/submissions`),
 };
 
 export const widgetsApi = {
   getWidgets: () => apiFetch<WebsiteWidget[]>('/widgets'),
-  getWidget: (id: number) => apiFetch<WebsiteWidget>(`/widgets/${id}`),
+  getWidget: (id: string | number) => apiFetch<WebsiteWidget>(`/widgets/${id}`),
   createWidget: (data: Partial<WebsiteWidget>) =>
     apiFetch<WebsiteWidget>('/widgets', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updateWidget: (id: number, data: Partial<WebsiteWidget>) =>
+  updateWidget: (id: string | number, data: Partial<WebsiteWidget>) =>
     apiFetch<WebsiteWidget>(`/widgets/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  deleteWidget: (id: number) =>
+  deleteWidget: (id: string | number) =>
     apiFetch<{ message: string }>(`/widgets/${id}`, {
       method: 'DELETE',
     }),
@@ -578,7 +586,7 @@ export const promptTemplatesApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  deleteTemplate: (id: number) =>
+  deleteTemplate: (id: string | number) =>
     apiFetch<{ message: string }>(`/prompt-templates/${id}`, {
       method: 'DELETE',
     }),
@@ -588,8 +596,8 @@ export const sovereignBillingApi = {
   getWallet: () => apiFetch<SovereignWallet>('/billing-sovereign/wallet'),
   getLedger: () => apiFetch<WalletLedgerItem[]>('/billing-sovereign/ledger'),
   getPlans: () => apiFetch<SaaSPlan[]>('/billing-sovereign/plans'),
-  subscribe: (planId: number) =>
-    apiFetch<{ message: string; plan_id: number }>('/billing-sovereign/subscribe', {
+  subscribe: (planId: number | string) =>
+    apiFetch<{ message: string; plan_id: number | string }>('/billing-sovereign/subscribe', {
       method: 'POST',
       body: JSON.stringify({ plan_id: planId }),
     }),

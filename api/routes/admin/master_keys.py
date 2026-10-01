@@ -25,10 +25,13 @@ class MasterCredentialRequest(BaseModel):
 class MasterCredentialResponse(BaseModel):
     provider: str
     category: str
-    is_enabled: bool
-    health_status: str
+    is_enabled: bool = True
+    is_active: bool = True
+    health_status: str = "active"
+    status: str = "active"
     last_tested_at: Optional[str] = None
     has_credentials: bool = True
+    api_key_masked: Optional[str] = None
 
 
 class TestConnectionRequest(BaseModel):
@@ -46,17 +49,34 @@ class TestConnectionResponse(BaseModel):
 async def list_master_keys(_user=Depends(get_superuser)):
     """List all configured master credentials with health and masked status."""
     records = await kodewaves_db_client.list_master_credentials()
-    return [
-        MasterCredentialResponse(
-            provider=r.provider,
-            category=r.category,
-            is_enabled=r.is_enabled,
-            health_status=r.health_status,
-            last_tested_at=r.last_tested_at.isoformat() if r.last_tested_at else None,
-            has_credentials=bool(r.credentials_encrypted),
+    results = []
+    for r in records:
+        masked = None
+        if r.credentials_encrypted:
+            try:
+                dec = await master_credential_service.get_decrypted_credential(r.provider)
+                if dec:
+                    raw_k = dec.get("api_key") or dec.get("key") or dec.get("auth_token") or ""
+                    if raw_k:
+                        masked = f"••••••••{raw_k[-4:]}" if len(raw_k) > 4 else "••••••••"
+                    else:
+                        masked = "•••••••• (configured)"
+            except Exception:
+                masked = "•••••••• (configured)"
+        results.append(
+            MasterCredentialResponse(
+                provider=r.provider,
+                category=r.category,
+                is_enabled=r.is_enabled,
+                is_active=r.is_enabled,
+                health_status=r.health_status,
+                status=r.health_status,
+                last_tested_at=r.last_tested_at.isoformat() if r.last_tested_at else None,
+                has_credentials=bool(r.credentials_encrypted),
+                api_key_masked=masked,
+            )
         )
-        for r in records
-    ]
+    return results
 
 
 @router.post("", response_model=Dict[str, Any])

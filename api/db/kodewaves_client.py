@@ -79,7 +79,8 @@ class KodewavesDBClient(BaseDBClient):
 
             if record:
                 record.category = category
-                record.credentials_encrypted = credentials_encrypted
+                if credentials_encrypted:
+                    record.credentials_encrypted = credentials_encrypted
                 record.is_enabled = is_enabled
                 record.health_status = health_status
                 record.updated_at = datetime.now(UTC)

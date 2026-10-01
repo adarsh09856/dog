@@ -245,7 +245,6 @@ KODEWAVES_SECRET_KEY=$FERNET_KEY
 OSS_JWT_SECRET=$JWT_SECRET
 JWT_SECRET=$JWT_SECRET
 KODEWAVES_DEVOPS_SECRET=$DEV_SECRET
-KODEWAVES_DEVOPS_SECRET=$DEV_SECRET
 DOGRAH_DEVOPS_SECRET=$DEV_SECRET
 
 # Local Storage (MinIO)
@@ -264,7 +263,7 @@ ENABLE_SIGNUP=true
 
 # Local CPU AI Engine (Ollama + Speaches — Admin Opt-In)
 OLLAMA_ENDPOINT=http://ollama:11434
-SPEACHES_ENDPOINT=http://speaches:8000
+SPEACHES_ENDPOINT=http://speaches:8000/v1
 ENABLE_LOCAL_AI_ENGINE=true
 
 # Payment Gateways (Configure in Admin Panel → Master Keys)
@@ -315,9 +314,8 @@ ENVFILE
 
         # Ensure Kodewaves v2 Local AI Engine env vars exist
         grep -q '^OLLAMA_ENDPOINT=' .env || echo "OLLAMA_ENDPOINT=http://ollama:11434" >> .env
-        grep -q '^SPEACHES_ENDPOINT=' .env || echo "SPEACHES_ENDPOINT=http://speaches:8000" >> .env
+        grep -q '^SPEACHES_ENDPOINT=' .env || echo "SPEACHES_ENDPOINT=http://speaches:8000/v1" >> .env
         grep -q '^ENABLE_LOCAL_AI_ENGINE=' .env || echo "ENABLE_LOCAL_AI_ENGINE=true" >> .env
-        grep -q '^KODEWAVES_DEVOPS_SECRET=' .env || echo "KODEWAVES_DEVOPS_SECRET=$(generate_secret)" >> .env
         grep -q '^KODEWAVES_DEVOPS_SECRET=' .env || echo "KODEWAVES_DEVOPS_SECRET=$(generate_secret)" >> .env
         grep -q '^DOGRAH_DEVOPS_SECRET=' .env || echo "DOGRAH_DEVOPS_SECRET=$(generate_secret)" >> .env
 

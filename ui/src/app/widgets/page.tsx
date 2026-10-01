@@ -101,7 +101,7 @@ export default function WidgetsPage() {
     }
   };
 
-  const handleDeleteWidget = async (id: number) => {
+  const handleDeleteWidget = async (id: number | string) => {
     if (!confirm("Are you sure you want to delete this voice widget?")) return;
     try {
       await widgetsApi.deleteWidget(id);
