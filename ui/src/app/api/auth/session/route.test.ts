@@ -37,7 +37,7 @@ describe('POST /api/auth/session', () => {
   });
 
   it('stores both session cookies with shared attributes', async () => {
-    const response = await POST(makeRequest('https://app.dograh.com/api/auth/session'));
+    const response = await POST(makeRequest('https://app.kodewaves.com/api/auth/session'));
 
     expect(response.status).toBe(200);
     expect(cookieStore.set).toHaveBeenCalledTimes(2);
@@ -70,7 +70,7 @@ describe('POST /api/auth/session', () => {
   });
 
   it('marks the cookie Secure on a direct https request', async () => {
-    expect(await secureFlagFor('https://app.dograh.com/api/auth/session')).toBe(true);
+    expect(await secureFlagFor('https://app.kodewaves.com/api/auth/session')).toBe(true);
   });
 
   it('marks the cookie Secure behind a TLS-terminating proxy', async () => {

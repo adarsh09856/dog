@@ -83,7 +83,7 @@ export default function TelephonyConfigurationDetailPage() {
   const organizationTimezone = useOrganizationTimezone();
   const inboundWebhookUrl = `${resolveWebhookBaseUrl(appConfig?.tunnelUrl)}${INBOUND_WEBHOOK_PATH}`;
   const [config, setConfig] = useState<TelephonyConfigurationDetail | null>(null);
-  // ARI only: Dograh generates the Stasis application name, so the dialplan
+  // ARI only: Kodewaves generates the Stasis application name, so the dialplan
   // line cannot be written until the configuration has been saved.
   const stasisAppName =
     typeof config?.credentials?.stasis_app_name === "string"

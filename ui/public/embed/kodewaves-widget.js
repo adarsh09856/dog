@@ -186,7 +186,7 @@
         injectChatStyles();
         createInlineChatWidget();
       } else if (state.config.embedMode === 'headless') {
-        // No UI — the host page drives chat via the window.DograhWidget API.
+        // No UI — the host page drives chat via the window.KodewavesWidget API.
       } else {
         injectStyles();
         injectChatStyles();
@@ -348,7 +348,7 @@
         max-width: calc(100vw - 40px);
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
         transition: filter 150ms ease, transform 100ms ease, box-shadow 200ms ease;
-        animation: dograh-cta-in 220ms ease-out;
+        animation: kodewaves-cta-in 220ms ease-out;
       }
 
       .kodewaves-widget-cta:hover {
@@ -358,16 +358,19 @@
       }
       .kodewaves-widget-cta:active { transform: scale(0.98); }
 
-      .kodewaves-widget-cta.dograh-state-connecting { background: #f59e0b !important; animation: dograh-pulse 1.6s infinite; }
+      .kodewaves-widget-cta.kodewaves-state-connecting,
+      .kodewaves-widget-cta.dograh-state-connecting { background: #f59e0b !important; animation: kodewaves-pulse 1.6s infinite; }
+      .kodewaves-widget-cta.kodewaves-state-connected,
       .kodewaves-widget-cta.dograh-state-connected  { background: #ef4444 !important; }
+      .kodewaves-widget-cta.kodewaves-state-failed,
       .kodewaves-widget-cta.dograh-state-failed     { background: #ef4444 !important; opacity: 0.85; }
 
-      @keyframes dograh-pulse {
+      @keyframes kodewaves-pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.6; }
       }
 
-      @keyframes dograh-cta-in {
+      @keyframes kodewaves-cta-in {
         from { opacity: 0; transform: translateY(8px); }
         to { opacity: 1; transform: translateY(0); }
       }
@@ -425,7 +428,7 @@
     const button = document.createElement('button');
     button.id = 'kodewaves-widget-cta';
     button.type = 'button';
-    button.className = `kodewaves-widget-cta dograh-state-${status}`;
+    button.className = `kodewaves-widget-cta kodewaves-state-${status} dograh-state-${status}`;
     // Idle uses configured color; status states use CSS-defined colors.
     if (status === 'idle') {
       button.style.backgroundColor = state.config.buttonColor;
@@ -446,7 +449,7 @@
   }
 
   /**
-   * Create headless widget (no UI — host page drives everything via window.DograhWidget API)
+   * Create headless widget (no UI — host page drives everything via window.KodewavesWidget API)
    */
   function createHeadlessWidget() {
     const audio = document.createElement('audio');
@@ -2363,6 +2366,12 @@
       }
     }
   };
+
+  // Expose widget globally
+  if (typeof window !== 'undefined') {
+    window.KodewavesWidget = KodewavesWidgetInstance;
+    window.DograhWidget = KodewavesWidgetInstance;
+  }
 
   // Auto-initialize on DOM ready
   if (document.readyState === 'loading') {

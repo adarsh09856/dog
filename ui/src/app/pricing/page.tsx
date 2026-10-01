@@ -210,7 +210,7 @@ export default function PricingPage() {
             <Link href="/" className="hover:text-amber-400 transition-colors">Platform</Link>
             <Link href="/pricing" className="text-amber-400">Pricing</Link>
             <Link href="/workflow" className="hover:text-amber-400 transition-colors">Builder</Link>
-            <a href="https://github.com/dograh-hq/dograh" target="_blank" rel="noreferrer" className="hover:text-amber-400 transition-colors">Docs</a>
+            <a href="/docs" target="_blank" rel="noreferrer" className="hover:text-amber-400 transition-colors">Docs</a>
           </nav>
 
           <div className="flex items-center gap-3">

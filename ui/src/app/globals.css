@@ -252,7 +252,7 @@
     background-color: oklch(0.165 0.002 80);
   }
 
-  /* Giant faded "dograh" imprint for the auth pages (applied to the AuthShell
+  /* Giant faded "kodewaves" imprint for the auth pages (applied to the AuthShell
      form column, shared by Stack + OSS login/signup). Same --brand-imprint as
      .app-surface; element-relative here (no fixed attachment), so it centers
      and scales to whatever element carries the class. */
@@ -388,7 +388,7 @@
   border-bottom-color: var(--cta);
 }
 
-/* Event banner (Dograh Cloud only, NEXT_PUBLIC_EVENT_BANNER=1). The bar is
+/* Event banner (Kodewaves Cloud only, NEXT_PUBLIC_EVENT_BANNER=1). The bar is
    sticky at top-0 in the root layout, so while it is up it permanently owns
    --event-banner-h pixels at the top of the viewport. Two things have to give
    way, and both are utility-class'd primitives we do not want to fork:

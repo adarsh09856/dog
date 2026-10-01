@@ -27,7 +27,7 @@ describe('POST /api/auth/logout', () => {
   });
 
   it('expires both session cookies', async () => {
-    const response = await POST(makeRequest('https://app.dograh.com/api/auth/logout'));
+    const response = await POST(makeRequest('https://app.kodewaves.com/api/auth/logout'));
 
     expect(response.status).toBe(200);
     expect(cookieStore.set.mock.calls.map((call) => call[0])).toEqual([
