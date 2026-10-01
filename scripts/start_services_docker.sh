@@ -8,8 +8,17 @@ set -e
 BASE_DIR="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
 ENV_FILE="$BASE_DIR/api/.env"
 
-ARQ_WORKERS=${ARQ_WORKERS:-1}
-FASTAPI_WORKERS=${FASTAPI_WORKERS:-1}
+# Clamp CPU thread spinning in OpenMP, PyTorch, BLAS, and NumPy
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+export OMP_WAIT_POLICY=PASSIVE
+export TORCH_NUM_THREADS=1
+
+ARQ_WORKERS=1
+FASTAPI_WORKERS=1
 UVICORN_BASE_PORT=${UVICORN_BASE_PORT:-8000}
 
 cd "$BASE_DIR"
@@ -62,8 +71,8 @@ start() {
 # ari_manager and campaign_orchestrator are optional; each defaults to on and
 # can be turned off (e.g. for an API/worker-only replica) by setting the flag to
 # "false" in the container env / docker-compose .env.
-ENABLE_ARI_MANAGER=${ENABLE_ARI_MANAGER:-false}
-ENABLE_CAMPAIGN_ORCHESTRATOR=${ENABLE_CAMPAIGN_ORCHESTRATOR:-true}
+ENABLE_ARI_MANAGER=false
+ENABLE_CAMPAIGN_ORCHESTRATOR=${ENABLE_CAMPAIGN_ORCHESTRATOR:-false}
 
 if [[ "$ENABLE_ARI_MANAGER" == "true" ]]; then
   start ari_manager           python -m api.services.telephony.ari_manager

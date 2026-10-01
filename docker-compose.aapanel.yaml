@@ -127,10 +127,19 @@ services:
       MINIO_BUCKET: "voice-audio"
       MINIO_SECURE: "false"
 
-      # Process Workers
-      FASTAPI_WORKERS: "${FASTAPI_WORKERS:-1}"
-      ENABLE_ARI_MANAGER: "${ENABLE_ARI_MANAGER:-false}"
-      ENABLE_CAMPAIGN_ORCHESTRATOR: "${ENABLE_CAMPAIGN_ORCHESTRATOR:-true}"
+      # Process Workers & Lean Resource Allocation
+      FASTAPI_WORKERS: "1"
+      ENABLE_ARI_MANAGER: "false"
+      ENABLE_CAMPAIGN_ORCHESTRATOR: "${ENABLE_CAMPAIGN_ORCHESTRATOR:-false}"
+
+      # OpenMP, PyTorch, & BLAS CPU Thread Throttling (Prevents idle CPU pegging)
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      VECLIB_MAXIMUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      OMP_WAIT_POLICY: "PASSIVE"
+      TORCH_NUM_THREADS: "1"
 
       # WebRTC NAT Traversal (STUN / TURN)
       ENABLE_COTURN: "${ENABLE_COTURN:-true}"

@@ -2,6 +2,15 @@ import logging
 import os
 import sys
 
+# Clamp CPU thread spinning in OpenMP, PyTorch, BLAS, and NumPy
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+os.environ.setdefault("TORCH_NUM_THREADS", "1")
+
 import loguru
 from pipecat.utils.run_context import run_id_var
 
