@@ -58,7 +58,7 @@ _SYSTEM_PROMPT = (
     "wrap the JSON in markdown."
 )
 
-#: Dograh's built-in business outcomes. This is a catalog for filters and
+#: Kodewaves's built-in business outcomes. This is a catalog for filters and
 #: reporting, not a validation allowlist: a workflow may configure its own
 #: values, such as ``call_rescheduled``.
 DEFAULT_DISPOSITION_CODES: tuple[str, ...] = tuple(

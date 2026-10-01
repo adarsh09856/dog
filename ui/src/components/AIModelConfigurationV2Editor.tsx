@@ -24,12 +24,12 @@ import { VoiceSelectorModal } from "@/components/VoiceSelectorModal";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
 import { formatRoundingPolicy } from "@/lib/billingDisplay";
 
-type ModelMode = "realtime" | "dograh" | "byok";
+type ModelMode = "realtime" | "kodewaves" | "dograh" | "byok";
 
 // Sentinel language value for "Multilingual (Auto-detect)".
 const MULTILINGUAL_LANGUAGE_CODE = "multi";
 
-interface DograhDefaults {
+export interface KodewavesDefaults {
     voices: string[];
     allow_custom_input?: boolean;
     speeds: number[];
@@ -47,8 +47,10 @@ interface DograhDefaults {
         language: string;
     };
 }
+export type DograhDefaults = KodewavesDefaults;
 
 export interface ModelConfigurationDefaultsV2 {
+    kodewaves?: KodewavesDefaults;
     dograh: DograhDefaults;
     byok: {
         pipeline: ServiceConfigurationDefaults;
@@ -61,13 +63,14 @@ export interface ModelConfigurationDefaultsV2 {
     };
 }
 
-interface DograhFormState {
+export interface KodewavesFormState {
     api_key: string;
     voice: string;
     speed: number;
     language: string;
     engine_type?: "cloud" | "local_cpu";
 }
+export type DograhFormState = KodewavesFormState;
 
 interface AIModelConfigurationV2EditorProps {
     defaults: ModelConfigurationDefaultsV2;
@@ -94,15 +97,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
         : null;
 }
 
-function isDograhEffectiveConfig(config: Record<string, unknown> | null | undefined): boolean {
+function isKodewavesEffectiveConfig(config: Record<string, unknown> | null | undefined): boolean {
     if (!config || config.is_realtime) return false;
     const llm = asRecord(config.llm);
     const tts = asRecord(config.tts);
     const stt = asRecord(config.stt);
-    return (llm?.provider === "dograh" || llm?.provider === "speaches") &&
-           (tts?.provider === "dograh" || tts?.provider === "speaches") &&
-           (stt?.provider === "dograh" || stt?.provider === "speaches");
+    return (llm?.provider === "kodewaves" || llm?.provider === "dograh" || llm?.provider === "speaches") &&
+           (tts?.provider === "kodewaves" || tts?.provider === "dograh" || tts?.provider === "speaches") &&
+           (stt?.provider === "kodewaves" || stt?.provider === "dograh" || stt?.provider === "speaches");
 }
+const isDograhEffectiveConfig = isKodewavesEffectiveConfig;
 
 function byokDefaults(defaults: ModelConfigurationDefaultsV2): ServiceConfigurationDefaults {
     return {
@@ -175,7 +179,11 @@ function getByokInitialConfig(
         return matchesTab(byokConfiguration) ? byokConfiguration : emptyByokInitialConfig(wantRealtime);
     }
 
-    if (configuration?.mode === "dograh" || isDograhEffectiveConfig(effectiveConfiguration)) {
+    if (
+        configuration?.mode === "kodewaves" ||
+        configuration?.mode === "dograh" ||
+        isKodewavesEffectiveConfig(effectiveConfiguration)
+    ) {
         return emptyByokInitialConfig(wantRealtime);
     }
 
@@ -183,26 +191,31 @@ function getByokInitialConfig(
     return matchesTab(effective) ? (effective as Record<string, unknown>) : emptyByokInitialConfig(wantRealtime);
 }
 
-function buildDograhState(
+function buildKodewavesState(
     defaults: ModelConfigurationDefaultsV2,
     configuration: Record<string, unknown> | null,
     effectiveConfiguration: Record<string, unknown> | null,
-): DograhFormState {
-    const fallback = defaults.dograh.defaults;
-    const configuredDograh = configuration?.mode === "dograh" ? asRecord(configuration.dograh) : null;
-    if (configuredDograh) {
-        const apiKey = String(configuredDograh.api_key || "");
+): KodewavesFormState {
+    const fallback = (defaults.kodewaves || defaults.dograh).defaults;
+    const configuredKodewaves =
+        configuration?.mode === "kodewaves"
+            ? asRecord(configuration.kodewaves || configuration.dograh)
+            : configuration?.mode === "dograh"
+            ? asRecord(configuration.dograh)
+            : null;
+    if (configuredKodewaves) {
+        const apiKey = String(configuredKodewaves.api_key || "");
         const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu");
         return {
             api_key: apiKey,
-            voice: String(configuredDograh.voice || fallback.voice),
-            speed: numberOrDefault(configuredDograh.speed, fallback.speed),
-            language: String(configuredDograh.language || fallback.language),
+            voice: String(configuredKodewaves.voice || fallback.voice),
+            speed: numberOrDefault(configuredKodewaves.speed, fallback.speed),
+            language: String(configuredKodewaves.language || fallback.language),
             engine_type: isLocalCpu ? "local_cpu" : "cloud",
         };
     }
 
-    if (isDograhEffectiveConfig(effectiveConfiguration)) {
+    if (isKodewavesEffectiveConfig(effectiveConfiguration)) {
         const llm = asRecord(effectiveConfiguration?.llm);
         const tts = asRecord(effectiveConfiguration?.tts);
         const stt = asRecord(effectiveConfiguration?.stt);
@@ -225,16 +238,17 @@ function buildDograhState(
         engine_type: "cloud",
     };
 }
+const buildDograhState = buildKodewavesState;
 
 function preferredMode(
     configuration: Record<string, unknown> | null,
     effectiveConfiguration: Record<string, unknown> | null,
 ): ModelMode {
-    if (configuration?.mode === "dograh") return "dograh";
+    if (configuration?.mode === "kodewaves" || configuration?.mode === "dograh") return "kodewaves";
     if (configuration?.mode === "byok") {
         return asRecord(configuration.byok)?.mode === "realtime" ? "realtime" : "byok";
     }
-    if (isDograhEffectiveConfig(effectiveConfiguration)) return "dograh";
+    if (isKodewavesEffectiveConfig(effectiveConfiguration)) return "kodewaves";
     return Boolean(effectiveConfiguration?.is_realtime) ? "realtime" : "byok";
 }
 
@@ -267,6 +281,7 @@ function requireByokService(
     if (
         !serviceConfiguration
         || !serviceConfiguration.provider
+        || serviceConfiguration.provider === "kodewaves"
         || serviceConfiguration.provider === "dograh"
         || !hasRequiredApiKey(service, serviceConfiguration, defaults)
     ) {
@@ -277,7 +292,7 @@ function requireByokService(
 
 function optionalByokService(config: Record<string, unknown>, service: ServiceSegment): Record<string, unknown> | undefined {
     const serviceConfiguration = asRecord(config[service]);
-    if (!serviceConfiguration?.provider || serviceConfiguration.provider === "dograh") return undefined;
+    if (!serviceConfiguration?.provider || serviceConfiguration.provider === "kodewaves" || serviceConfiguration.provider === "dograh") return undefined;
     return serviceConfiguration;
 }
 
@@ -328,16 +343,19 @@ function MetricPrice({
 
 function PricingSummary({
     pricing,
+    includeManagedModel,
     includeDograhModel,
     thirdPartyModels,
 }: {
     pricing?: ModelConfigurationPricingResponse | null;
-    includeDograhModel: boolean;
+    includeManagedModel?: boolean;
+    includeDograhModel?: boolean;
     thirdPartyModels?: boolean;
 }) {
     const platformPrice = pricing?.platform_usage;
-    const dograhModelPrice = includeDograhModel ? pricing?.dograh_model : null;
-    if (!platformPrice && !dograhModelPrice) return null;
+    const shouldInclude = includeManagedModel ?? includeDograhModel ?? false;
+    const managedModelPrice = shouldInclude ? ((pricing as any)?.kodewaves_model || pricing?.dograh_model) : null;
+    if (!platformPrice && !managedModelPrice) return null;
 
     return (
         <Card className="mb-4 border-primary/20 bg-primary/[0.03]">
@@ -346,8 +364,8 @@ function PricingSummary({
                 {platformPrice && (
                     <MetricPrice label="Platform usage" price={platformPrice} />
                 )}
-                {dograhModelPrice && (
-                    <MetricPrice label="Managed model usage" price={dograhModelPrice} />
+                {managedModelPrice && (
+                    <MetricPrice label="Managed model usage" price={managedModelPrice} />
                 )}
                 {thirdPartyModels && (
                     <p className="text-muted-foreground">
@@ -368,66 +386,74 @@ export function AIModelConfigurationV2Editor({
     submitLabel = "Save Configuration",
 }: AIModelConfigurationV2EditorProps) {
     const defaultsForByok = useMemo(() => byokDefaults(defaults), [defaults]);
-    const [mode, setMode] = useState<ModelMode>("dograh");
-    const [dograh, setDograh] = useState<DograhFormState>(() => ({
+    const [mode, setMode] = useState<ModelMode>("kodewaves");
+    const kodewavesDefaults = defaults.kodewaves || defaults.dograh;
+    const [kodewaves, setKodewaves] = useState<KodewavesFormState>(() => ({
         api_key: "",
-        voice: defaults.dograh.defaults.voice,
-        speed: defaults.dograh.defaults.speed,
-        language: defaults.dograh.defaults.language,
+        voice: kodewavesDefaults.defaults.voice,
+        speed: kodewavesDefaults.defaults.speed,
+        language: kodewavesDefaults.defaults.language,
     }));
     const [realtimeInitialConfig, setRealtimeInitialConfig] = useState<Record<string, unknown> | null>(null);
     const [pipelineInitialConfig, setPipelineInitialConfig] = useState<Record<string, unknown> | null>(null);
-    const [isSavingDograh, setIsSavingDograh] = useState(false);
+    const [isSavingKodewaves, setIsSavingKodewaves] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const allowCustomVoice = defaults.dograh.allow_custom_input ?? false;
-    const dograhSpeedRange = defaults.dograh.speed_range ?? { min: 0.5, max: 2.0, step: 0.1 };
+    const allowCustomVoice = kodewavesDefaults.allow_custom_input ?? false;
+    const kodewavesSpeedRange = kodewavesDefaults.speed_range ?? { min: 0.5, max: 2.0, step: 0.1 };
     const multilingualLanguageNames = useMemo(() => {
-        const codes = defaults.dograh.multilingual_languages ?? [];
+        const codes = kodewavesDefaults.multilingual_languages ?? [];
         if (codes.length === 0) return null;
         return codes.map((code) => LANGUAGE_DISPLAY_NAMES[code] || code).join(", ");
-    }, [defaults.dograh.multilingual_languages]);
+    }, [kodewavesDefaults.multilingual_languages]);
 
     useEffect(() => {
         const rawConfiguration = asRecord(configuration);
         const rawEffectiveConfiguration = asRecord(effectiveConfiguration);
         setMode(preferredMode(rawConfiguration, rawEffectiveConfiguration));
-        const nextDograh = buildDograhState(defaults, rawConfiguration, rawEffectiveConfiguration);
-        setDograh(nextDograh);
+        const nextKodewaves = buildKodewavesState(defaults, rawConfiguration, rawEffectiveConfiguration);
+        setKodewaves(nextKodewaves);
         setRealtimeInitialConfig(getByokInitialConfig(rawConfiguration, rawEffectiveConfiguration, true));
         setPipelineInitialConfig(getByokInitialConfig(rawConfiguration, rawEffectiveConfiguration, false));
     }, [configuration, defaults, effectiveConfiguration, allowCustomVoice]);
 
-    const saveDograhConfiguration = async () => {
-        setIsSavingDograh(true);
+    const saveKodewavesConfiguration = async () => {
+        setIsSavingKodewaves(true);
         setError(null);
         try {
             if (
-                !Number.isFinite(dograh.speed)
-                || dograh.speed < dograhSpeedRange.min
-                || dograh.speed > dograhSpeedRange.max
+                !Number.isFinite(kodewaves.speed)
+                || kodewaves.speed < kodewavesSpeedRange.min
+                || kodewaves.speed > kodewavesSpeedRange.max
             ) {
                 throw new Error(
-                    `Voice speed must be between ${dograhSpeedRange.min} and ${dograhSpeedRange.max}.`,
+                    `Voice speed must be between ${kodewavesSpeedRange.min} and ${kodewavesSpeedRange.max}.`,
                 );
             }
-            const apiKey = dograh.engine_type === "local_cpu" ? "sovereign-local-cpu" : "sovereign-managed";
+            const apiKey = kodewaves.engine_type === "local_cpu" ? "sovereign-local-cpu" : "sovereign-managed";
             await onSave({
                 version: 2,
-                mode: "dograh",
+                mode: "kodewaves",
+                kodewaves: {
+                    api_key: apiKey,
+                    voice: kodewaves.voice,
+                    speed: kodewaves.speed,
+                    language: kodewaves.language,
+                },
                 dograh: {
                     api_key: apiKey,
-                    voice: dograh.voice,
-                    speed: dograh.speed,
-                    language: dograh.language,
+                    voice: kodewaves.voice,
+                    speed: kodewaves.speed,
+                    language: kodewaves.language,
                 },
             });
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save configuration");
         } finally {
-            setIsSavingDograh(false);
+            setIsSavingKodewaves(false);
         }
     };
+    const saveDograhConfiguration = saveKodewavesConfiguration;
 
     const saveByokConfiguration = async (config: Record<string, unknown>) => {
         setError(null);
@@ -460,6 +486,8 @@ export function AIModelConfigurationV2Editor({
         await onSave(body);
     };
 
+    const activeTab = mode === "dograh" ? "kodewaves" : mode;
+
     return (
         <div className="space-y-6">
             {error && (
@@ -468,10 +496,10 @@ export function AIModelConfigurationV2Editor({
                 </div>
             )}
 
-            <Tabs value={mode} onValueChange={(value) => setMode(value as ModelMode)} className="space-y-6">
+            <Tabs value={activeTab} onValueChange={(value) => setMode(value as ModelMode)} className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="realtime">Speech to Speech</TabsTrigger>
-                    <TabsTrigger value="dograh">Managed Voice</TabsTrigger>
+                    <TabsTrigger value="kodewaves">Managed Voice</TabsTrigger>
                     <TabsTrigger value="byok">BYOK</TabsTrigger>
                 </TabsList>
 
@@ -479,7 +507,7 @@ export function AIModelConfigurationV2Editor({
                     <p className="mb-4 text-sm text-muted-foreground">
                         A single speech-to-speech model handles the conversation in realtime (no separate transcriber or voice). An LLM is still required for variable extraction and QA.
                     </p>
-                    <PricingSummary pricing={pricing} includeDograhModel={false} thirdPartyModels />
+                    <PricingSummary pricing={pricing} includeManagedModel={false} thirdPartyModels />
                     <ServiceConfigurationForm
                         key={`realtime-${JSON.stringify(realtimeInitialConfig)}`}
                         mode="global"
@@ -492,11 +520,11 @@ export function AIModelConfigurationV2Editor({
                     <ThirdPartyProviderNotice />
                 </TabsContent>
 
-                <TabsContent value="dograh" className="mt-0">
+                <TabsContent value="kodewaves" className="mt-0">
                     <p className="mb-4 text-sm text-muted-foreground">
                         Sovereign managed transcriber, LLM, and voice pipeline. Select a voice and language while Kodewaves manages the underlying model orchestration.
                     </p>
-                    <PricingSummary pricing={pricing} includeDograhModel />
+                    <PricingSummary pricing={pricing} includeManagedModel />
                     <Card>
                         <CardContent className="pt-6">
                             <div className="grid gap-4 sm:grid-cols-2">
@@ -505,9 +533,9 @@ export function AIModelConfigurationV2Editor({
                                     <Label className="text-xs font-semibold text-foreground">AI Engine Infrastructure</Label>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div
-                                            onClick={() => setDograh({ ...dograh, engine_type: "cloud" })}
+                                            onClick={() => setKodewaves({ ...kodewaves, engine_type: "cloud" })}
                                             className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                                                dograh.engine_type !== "local_cpu"
+                                                kodewaves.engine_type !== "local_cpu"
                                                     ? "border-primary bg-primary/10 shadow-sm"
                                                     : "border-border hover:border-muted-foreground/40 bg-card/50"
                                             }`}
@@ -517,7 +545,7 @@ export function AIModelConfigurationV2Editor({
                                                     <Cloud className="h-4 w-4 text-primary" />
                                                     Platform Cloud Master Keys
                                                 </div>
-                                                {dograh.engine_type !== "local_cpu" && (
+                                                {kodewaves.engine_type !== "local_cpu" && (
                                                     <CheckCircle2 className="h-4 w-4 text-primary" />
                                                 )}
                                             </div>
@@ -527,9 +555,9 @@ export function AIModelConfigurationV2Editor({
                                         </div>
 
                                         <div
-                                            onClick={() => setDograh({ ...dograh, engine_type: "local_cpu", voice: dograh.voice.startsWith("dg_") ? "af_heart" : dograh.voice })}
+                                            onClick={() => setKodewaves({ ...kodewaves, engine_type: "local_cpu", voice: (kodewaves.voice.startsWith("dg_") || kodewaves.voice.startsWith("kw_")) ? "af_heart" : kodewaves.voice })}
                                             className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                                                dograh.engine_type === "local_cpu"
+                                                kodewaves.engine_type === "local_cpu"
                                                     ? "border-amber-500 bg-amber-500/10 shadow-sm"
                                                     : "border-border hover:border-muted-foreground/40 bg-card/50"
                                             }`}
@@ -539,7 +567,7 @@ export function AIModelConfigurationV2Editor({
                                                     <Cpu className="h-4 w-4 text-amber-500" />
                                                     Sovereign Local CPU Stack
                                                 </div>
-                                                {dograh.engine_type === "local_cpu" && (
+                                                {kodewaves.engine_type === "local_cpu" && (
                                                     <CheckCircle2 className="h-4 w-4 text-amber-500" />
                                                 )}
                                             </div>
@@ -553,28 +581,28 @@ export function AIModelConfigurationV2Editor({
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Voice</Label>
                                     <VoiceSelectorModal
-                                        provider={dograh.engine_type === "local_cpu" ? "speaches" : "dograh"}
-                                        value={dograh.voice}
-                                        onChange={(voice) => setDograh({ ...dograh, voice })}
+                                        provider={kodewaves.engine_type === "local_cpu" ? "speaches" : "kodewaves"}
+                                        value={kodewaves.voice}
+                                        onChange={(voice) => setKodewaves({ ...kodewaves, voice })}
                                         allowManualInput={allowCustomVoice}
                                     />
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Language</Label>
-                                    <Select value={dograh.language} onValueChange={(language) => setDograh({ ...dograh, language })}>
+                                    <Select value={kodewaves.language} onValueChange={(language) => setKodewaves({ ...kodewaves, language })}>
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Select language" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {defaults.dograh.languages.map((language) => (
+                                            {kodewavesDefaults.languages.map((language) => (
                                                 <SelectItem key={language} value={language}>
                                                     {LANGUAGE_DISPLAY_NAMES[language] || language}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    {dograh.language === MULTILINGUAL_LANGUAGE_CODE && multilingualLanguageNames && (
+                                    {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && multilingualLanguageNames && (
                                         <p className="text-xs text-muted-foreground">
                                             Auto-detects {multilingualLanguageNames}.
                                         </p>
@@ -582,25 +610,25 @@ export function AIModelConfigurationV2Editor({
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">
-                                    <Label htmlFor="dograh-speed">Speed</Label>
+                                    <Label htmlFor="kodewaves-speed">Speed</Label>
                                     <Input
-                                        id="dograh-speed"
+                                        id="kodewaves-speed"
                                         type="number"
-                                        min={dograhSpeedRange.min}
-                                        max={dograhSpeedRange.max}
-                                        step={dograhSpeedRange.step ?? 0.1}
-                                        value={dograh.speed}
+                                        min={kodewavesSpeedRange.min}
+                                        max={kodewavesSpeedRange.max}
+                                        step={kodewavesSpeedRange.step ?? 0.1}
+                                        value={kodewaves.speed}
                                         onChange={(event) => {
                                             const speed = event.currentTarget.valueAsNumber;
-                                            setDograh({
-                                                ...dograh,
-                                                speed: Number.isFinite(speed) ? speed : defaults.dograh.defaults.speed,
+                                            setKodewaves({
+                                                ...kodewaves,
+                                                speed: Number.isFinite(speed) ? speed : kodewavesDefaults.defaults.speed,
                                             });
                                         }}
                                     />
                                 </div>
 
-                                {dograh.engine_type === "local_cpu" ? (
+                                {kodewaves.engine_type === "local_cpu" ? (
                                     <div className="sm:col-span-2 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex items-start gap-3">
                                         <Cpu className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                                         <div className="space-y-1 text-xs">
@@ -630,9 +658,9 @@ export function AIModelConfigurationV2Editor({
                                 )}
                             </div>
 
-                            <Button type="button" className="mt-6 w-full" onClick={saveDograhConfiguration} disabled={isSavingDograh}>
+                            <Button type="button" className="mt-6 w-full" onClick={saveKodewavesConfiguration} disabled={isSavingKodewaves}>
                                 <Save className="mr-2 h-4 w-4" />
-                                {isSavingDograh ? "Saving..." : submitLabel}
+                                {isSavingKodewaves ? "Saving..." : submitLabel}
                             </Button>
                         </CardContent>
                     </Card>
@@ -642,7 +670,7 @@ export function AIModelConfigurationV2Editor({
                     <p className="mb-4 text-sm text-muted-foreground">
                         Configure separate transcriber, LLM, and voice providers using your own API keys. An embeddings model can also be configured for knowledge retrieval.
                     </p>
-                    <PricingSummary pricing={pricing} includeDograhModel={false} thirdPartyModels />
+                    <PricingSummary pricing={pricing} includeManagedModel={false} thirdPartyModels />
                     <ServiceConfigurationForm
                         key={`byok-${JSON.stringify(pipelineInitialConfig)}`}
                         mode="global"

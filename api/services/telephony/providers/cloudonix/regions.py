@@ -1,7 +1,7 @@
 """Cloudonix regional SIP edges.
 
 One table drives both the inbound endpoints shown to customers and the remote
-peer a Dograh-managed outbound trunk terminates on, so the two cannot drift.
+peer a Kodewaves-managed outbound trunk terminates on, so the two cannot drift.
 """
 
 from dataclasses import dataclass
@@ -12,7 +12,7 @@ class CloudonixRegion:
     """One Cloudonix SIP region.
 
     ``edge_ip`` is the address customers whitelist for calls arriving from
-    Cloudonix, and is also the peer a Dograh-managed outbound trunk sends to.
+    Cloudonix, and is also the peer a Kodewaves-managed outbound trunk sends to.
     """
 
     name: str

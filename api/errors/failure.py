@@ -137,7 +137,7 @@ def _resolve_error_owner(
 
 
 @dataclass
-class DograhFailure:
+class KodewavesFailure:
     source: ErrorSource
     type: ErrorType
     code: str
@@ -160,6 +160,10 @@ class DograhFailure:
         self.code = _normalize_code(self.code)
         self.internal_message = redact_failure_message(self.internal_message)
         self.external_message = redact_failure_message(self.external_message)
+
+
+# Backward-compatibility alias
+DograhFailure = KodewavesFailure
 
 
 @dataclass(frozen=True)

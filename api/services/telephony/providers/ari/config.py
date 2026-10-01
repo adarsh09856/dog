@@ -16,7 +16,7 @@ class VicidialAgentAPIConfiguration(BaseModel):
     url: str = Field(..., min_length=1, description="Full URL to agc/api.php")
     username: str = Field(..., min_length=1, description="VICIdial agent API user")
     password: str = Field(..., min_length=1, description="VICIdial agent API password")
-    source: str = Field(default="dograh", description="VICIdial API source tag")
+    source: str = Field(default="kodewaves", description="VICIdial API source tag")
 
     @field_validator("url")
     @classmethod
@@ -33,7 +33,7 @@ class VicidialNonAgentAPIConfiguration(BaseModel):
     url: Optional[str] = Field(default=None, description="Full non_agent_api.php URL")
     username: Optional[str] = Field(default=None, description="Non-agent API user")
     password: Optional[str] = Field(default=None, description="Non-agent API password")
-    source: str = Field(default="dograh", description="Non-agent API source tag")
+    source: str = Field(default="kodewaves", description="Non-agent API source tag")
 
     @field_validator("url")
     @classmethod
@@ -84,7 +84,7 @@ class ARIConfigurationRequest(BaseModel):
     app_password: str = Field(..., description="ARI user password")
     ws_client_name: str = Field(
         default="",
-        description="websocket_client.conf connection name for externalMedia (e.g., dograh_staging)",
+        description="websocket_client.conf connection name for externalMedia (e.g., kodewaves_staging)",
     )
     dial_string_template: str = Field(
         default=DEFAULT_DIAL_STRING_TEMPLATE,

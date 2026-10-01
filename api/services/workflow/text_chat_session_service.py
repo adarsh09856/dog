@@ -231,7 +231,7 @@ def _build_text_chat_completion_write(
             "call_disposition": disposition,
             "mapped_call_disposition": mapped_disposition,
             # Text chats end on an explicit completion reason rather than a
-            # teardown Dograh observed, so mechanism and outcome coincide.
+            # teardown Kodewaves observed, so mechanism and outcome coincide.
             "call_status": disposition,
             "call_tags": call_tags,
         },

@@ -2,7 +2,7 @@
 set -e
 
 ENV_FILE=".env"
-REGISTRY="${REGISTRY:-ghcr.io/dograh-hq}"
+REGISTRY="${REGISTRY:-kodewaves}"
 ENABLE_TELEMETRY="${ENABLE_TELEMETRY:-true}"
 
 fail() {
@@ -27,7 +27,7 @@ generate_secret() {
 }
 
 generate_minio_root_user() {
-    printf 'dograh%s\n' "$(generate_secret | cut -c1-12)"
+    printf 'kodewaves%s\n' "$(generate_secret | cut -c1-12)"
 }
 
 dotenv_value() {
@@ -206,14 +206,14 @@ echo "  REGISTRY=$REGISTRY ENABLE_TELEMETRY=$ENABLE_TELEMETRY docker compose --p
 echo ""
 
 if [[ ! -t 0 ]]; then
-    echo "Run the command above from an interactive shell to start Dograh."
+    echo "Run the command above from an interactive shell to start Kodewaves."
     exit 0
 fi
 
-read -r -p "Start Dograh now? [Y/n]: " answer
+read -r -p "Start Kodewaves now? [Y/n]: " answer
 case "$answer" in
     [Nn]*)
-        echo "Dograh was not started."
+        echo "Kodewaves was not started."
         exit 0
         ;;
 esac

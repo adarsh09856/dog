@@ -229,7 +229,7 @@ return {redis.call('GET', KEYS[1]), details}
 class RedisCacheBackend:
     # Older namespaces allowed unreserved writers. Keep rolling deployments
     # isolated so they cannot bypass reservations. Old keys expire normally.
-    def __init__(self, client: Redis, *, prefix: str = "dograh:tts:v3"):
+    def __init__(self, client: Redis, *, prefix: str = "kodewaves:tts:v3"):
         self.client = client
         self.prefix = prefix
 

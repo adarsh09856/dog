@@ -119,7 +119,7 @@ def text_chat_trace_id(workflow_run_id: int) -> str:
     per-turn spans land in one shared trace — without persisting extra state
     across the otherwise stateless turn requests.
     """
-    digest = hashlib.sha256(f"dograh-text-chat:{workflow_run_id}".encode()).hexdigest()
+    digest = hashlib.sha256(f"kodewaves-text-chat:{workflow_run_id}".encode()).hexdigest()
     return digest[:32]
 
 
@@ -553,7 +553,7 @@ async def execute_text_chat_pending_turn(
             usage_context="variable_extraction",
         )
         if needs_extraction_llm
-        and user_config.llm.provider == ServiceProviders.DOGRAH.value
+        and user_config.llm.provider in (ServiceProviders.KODEWAVES.value, ServiceProviders.DOGRAH.value)
         else llm
     )
 

@@ -13,6 +13,10 @@ from api.db import db_client
 from api.db.models import OrganizationConfigurationModel
 from api.enums import OrganizationConfigurationKey
 from api.schemas.ai_model_configuration import (
+    KODEWAVES_DEFAULT_LANGUAGE,
+    KODEWAVES_DEFAULT_VOICE,
+    KODEWAVES_SPEED_MAX,
+    KODEWAVES_SPEED_MIN,
     DOGRAH_DEFAULT_LANGUAGE,
     DOGRAH_DEFAULT_VOICE,
     DOGRAH_SPEED_MAX,
@@ -22,6 +26,7 @@ from api.schemas.ai_model_configuration import (
     BYOKRealtimeAIModelConfiguration,
     DograhManagedAIModelConfiguration,
     EffectiveAIModelConfiguration,
+    KodewavesManagedAIModelConfiguration,
     OrganizationAIModelConfigurationV2,
     compile_ai_model_configuration_v2,
 )
@@ -256,16 +261,20 @@ def merge_ai_model_configuration_v2_secrets(
     incoming_dict = incoming.model_dump(mode="json", exclude_none=True)
     existing_dict = existing.model_dump(mode="json", exclude_none=True)
 
-    if incoming_dict.get("mode") == "dograh" and existing_dict.get("mode") == "dograh":
-        incoming_dograh = incoming_dict.get("dograh") or {}
-        existing_dograh = existing_dict.get("dograh") or {}
-        incoming_key = incoming_dograh.get("api_key")
-        existing_key = existing_dograh.get("api_key")
+    if incoming_dict.get("mode") in ("kodewaves", "dograh") and existing_dict.get("mode") in ("kodewaves", "dograh"):
+        incoming_managed = incoming_dict.get("kodewaves") or incoming_dict.get("dograh") or {}
+        existing_managed = existing_dict.get("kodewaves") or existing_dict.get("dograh") or {}
+        incoming_key = incoming_managed.get("api_key")
+        existing_key = existing_managed.get("api_key")
         if incoming_key and existing_key and contains_masked_key(incoming_key):
-            incoming_dograh["api_key"] = resolve_masked_api_keys(
+            incoming_managed["api_key"] = resolve_masked_api_keys(
                 incoming_key,
                 existing_key,
             )
+        if "kodewaves" in incoming_dict:
+            incoming_dict["kodewaves"] = incoming_managed
+        if "dograh" in incoming_dict:
+            incoming_dict["dograh"] = incoming_managed
 
     if incoming_dict.get("mode") == "byok" and existing_dict.get("mode") == "byok":
         _merge_byok_secret_fields(incoming_dict.get("byok"), existing_dict.get("byok"))
@@ -293,9 +302,9 @@ def mask_ai_model_configuration_v2(
 def convert_legacy_ai_model_configuration_to_v2(
     configuration: EffectiveAIModelConfiguration,
 ) -> OrganizationAIModelConfigurationV2:
-    dograh_key = _first_dograh_api_key(configuration)
-    if dograh_key:
-        return _convert_any_dograh_legacy_configuration(configuration, dograh_key)
+    managed_key = _first_kodewaves_api_key(configuration) or _first_dograh_api_key(configuration)
+    if managed_key:
+        return _convert_any_kodewaves_legacy_configuration(configuration, managed_key)
 
     if configuration.is_realtime:
         if configuration.realtime is None or configuration.llm is None:
@@ -332,9 +341,12 @@ def convert_legacy_ai_model_configuration_to_v2(
     )
 
 
-def dograh_embeddings_base_url() -> str:
+def kodewaves_embeddings_base_url() -> str:
     # AsyncOpenAI appends "/embeddings"; MPS exposes that under /api/v1/llm.
     return f"{MPS_API_URL}/api/v1/llm"
+
+
+dograh_embeddings_base_url = kodewaves_embeddings_base_url
 
 
 def apply_managed_embeddings_base_url(
@@ -342,8 +354,13 @@ def apply_managed_embeddings_base_url(
     provider: str | None,
     base_url: str | None,
 ) -> str | None:
-    if provider == ServiceProviders.DOGRAH.value or provider == ServiceProviders.DOGRAH:
-        return dograh_embeddings_base_url()
+    if provider in (
+        ServiceProviders.KODEWAVES.value,
+        ServiceProviders.KODEWAVES,
+        ServiceProviders.DOGRAH.value,
+        ServiceProviders.DOGRAH,
+    ):
+        return kodewaves_embeddings_base_url()
     return base_url
 
 
@@ -425,31 +442,34 @@ def _mask_secret_value(value):
     return mask_key(value)
 
 
-def _convert_any_dograh_legacy_configuration(
+def _convert_any_kodewaves_legacy_configuration(
     configuration: EffectiveAIModelConfiguration,
-    dograh_key: str,
+    api_key: str,
 ) -> OrganizationAIModelConfigurationV2:
     speed = getattr(configuration.tts, "speed", 1.0)
     try:
         speed = float(speed)
     except (TypeError, ValueError):
         speed = 1.0
-    if not DOGRAH_SPEED_MIN <= speed <= DOGRAH_SPEED_MAX:
+    if not KODEWAVES_SPEED_MIN <= speed <= KODEWAVES_SPEED_MAX:
         speed = 1.0
     return OrganizationAIModelConfigurationV2(
-        mode="dograh",
-        dograh=DograhManagedAIModelConfiguration(
-            api_key=dograh_key,
-            voice=getattr(configuration.tts, "voice", DOGRAH_DEFAULT_VOICE)
-            or DOGRAH_DEFAULT_VOICE,
+        mode="kodewaves",
+        kodewaves=KodewavesManagedAIModelConfiguration(
+            api_key=api_key,
+            voice=getattr(configuration.tts, "voice", KODEWAVES_DEFAULT_VOICE)
+            or KODEWAVES_DEFAULT_VOICE,
             speed=speed,
-            language=getattr(configuration.stt, "language", DOGRAH_DEFAULT_LANGUAGE)
-            or DOGRAH_DEFAULT_LANGUAGE,
+            language=getattr(configuration.stt, "language", KODEWAVES_DEFAULT_LANGUAGE)
+            or KODEWAVES_DEFAULT_LANGUAGE,
         ),
     )
 
 
-def _first_dograh_api_key(configuration: EffectiveAIModelConfiguration) -> str | None:
+_convert_any_dograh_legacy_configuration = _convert_any_kodewaves_legacy_configuration
+
+
+def _first_kodewaves_api_key(configuration: EffectiveAIModelConfiguration) -> str | None:
     for service in (
         configuration.llm,
         configuration.tts,
@@ -457,13 +477,16 @@ def _first_dograh_api_key(configuration: EffectiveAIModelConfiguration) -> str |
         configuration.embeddings,
         configuration.realtime,
     ):
-        if service is None or _provider(service) != ServiceProviders.DOGRAH:
+        if service is None or _provider(service) not in (ServiceProviders.KODEWAVES, ServiceProviders.DOGRAH):
             continue
         try:
             return _single_api_key(service)
         except ValueError:
             continue
     return None
+
+
+_first_dograh_api_key = _first_kodewaves_api_key
 
 
 def _provider(service):

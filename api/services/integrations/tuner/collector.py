@@ -123,7 +123,7 @@ class DeferredTunerObserver(Observer):
     defers delivery to the completion phase instead of POSTing on call end.
 
     The SDK ``Observer`` normally fire-and-forgets ``post_call`` when the call ends.
-    Dograh instead snapshots the payload into ``workflow_run.logs`` and delivers it
+    Kodewaves instead snapshots the payload into ``workflow_run.logs`` and delivers it
     later (``completion.py``) — once per tuner node with that node's BYOK credentials,
     after injecting the real ``recording_url`` and a locally-computed ``call_cost``.
     """

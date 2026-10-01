@@ -11,6 +11,7 @@ connecting directly to self-hosted Ollama & Speaches or Admin Master Keys
 with zero external cloud dependencies.
 """
 
+from .flux.stt import DograhFluxSTTService, KodewavesFluxSTTService
 from .llm import KodewavesLLMService
 from .stt import KodewavesSTTService, KodewavesSTTSettings
 from .tts import KodewavesTTSService, KodewavesTTSSettings
@@ -21,4 +22,6 @@ __all__ = [
     "KodewavesSTTSettings",
     "KodewavesTTSService",
     "KodewavesTTSSettings",
+    "KodewavesFluxSTTService",
+    "DograhFluxSTTService",
 ]

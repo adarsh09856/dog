@@ -1,7 +1,9 @@
 import type { NextRequest } from 'next/server';
 
-export const OSS_TOKEN_COOKIE = 'dograh_auth_token';
-export const OSS_USER_COOKIE = 'dograh_auth_user';
+export const OSS_TOKEN_COOKIE = 'kodewaves_auth_token';
+export const OSS_USER_COOKIE = 'kodewaves_auth_user';
+export const LEGACY_OSS_TOKEN_COOKIE = 'dograh_auth_token';
+export const LEGACY_OSS_USER_COOKIE = 'dograh_auth_user';
 
 /**
  * Whether the browser reached this deployment over HTTPS.

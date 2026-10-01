@@ -49,57 +49,57 @@ class RuntimeMetrics:
         )
         self.provider = MeterProvider(
             metric_readers=[reader],
-            resource=Resource.create({"service.name": "dograh-api"}),
+            resource=Resource.create({"service.name": "kodewaves-api"}),
             views=[
                 View(
-                    instrument_name="dograh_ai_latency",
+                    instrument_name="kodewaves_ai_latency",
                     aggregation=ExplicitBucketHistogramAggregation(LATENCY_BUCKETS),
                 ),
                 View(
-                    instrument_name="dograh_response_latency",
+                    instrument_name="kodewaves_response_latency",
                     aggregation=ExplicitBucketHistogramAggregation(LATENCY_BUCKETS),
                 ),
             ],
         )
-        meter = self.provider.get_meter("dograh.observability")
+        meter = self.provider.get_meter("kodewaves.observability")
         meter.create_observable_gauge(
-            "dograh_active_calls",
+            "kodewaves_active_calls",
             callbacks=[lambda _options: [Observation(active_call_count())]],
             description=(
                 "Voice pipelines running in this worker, including setup and teardown"
             ),
         )
         self.ai_latency = meter.create_histogram(
-            "dograh_ai_latency",
+            "kodewaves_ai_latency",
             unit="s",
             description="Pipecat service response latency",
         )
         self.response_latency = meter.create_histogram(
-            "dograh_response_latency",
+            "kodewaves_response_latency",
             unit="s",
             description="Time from user silence until the bot starts speaking",
         )
         self.tts_cache_events = meter.create_counter(
-            "dograh_tts_cache_events", description="TTS cache outcomes"
+            "kodewaves_tts_cache_events", description="TTS cache outcomes"
         )
         self.tts_cache_latency = meter.create_histogram(
-            "dograh_tts_cache_latency",
+            "kodewaves_tts_cache_latency",
             unit="s",
             description="TTS cache operation duration",
         )
         self.tts_cache_audio_bytes = meter.create_histogram(
-            "dograh_tts_cache_audio_bytes", unit="By", description="Admitted PCM size"
+            "kodewaves_tts_cache_audio_bytes", unit="By", description="Admitted PCM size"
         )
         self.tts_cache_evictions = meter.create_counter(
-            "dograh_tts_cache_evictions",
+            "kodewaves_tts_cache_evictions",
             description="Entries evicted to admit a new one",
         )
         self.tts_cache_avoided_characters = meter.create_counter(
-            "dograh_tts_cache_avoided_characters",
+            "kodewaves_tts_cache_avoided_characters",
             description="Synthesis characters served from cache",
         )
         self.tts_cache_replay_seconds = meter.create_histogram(
-            "dograh_tts_cache_replay_seconds",
+            "kodewaves_tts_cache_replay_seconds",
             unit="s",
             description="Cached audio duration",
         )

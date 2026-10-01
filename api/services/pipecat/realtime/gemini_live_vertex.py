@@ -1,44 +1,37 @@
-"""Dograh subclass of pipecat's Gemini Live Vertex AI LLM service.
+"""Kodewaves subclass of pipecat's Gemini Live Vertex AI LLM service.
 
-Diamond inheritance: combines the Dograh engine-integration overrides from
-:class:`DograhGeminiLiveLLMService` with the Vertex-specific tweaks from
+Diamond inheritance: combines the Kodewaves sovereign engine-integration overrides from
+:class:`KodewavesGeminiLiveLLMService` with the Vertex-specific tweaks from
 upstream's :class:`GeminiLiveVertexLLMService` (no history config,
 ``NON_BLOCKING`` tools disabled, service-account credentials).
-
-MRO::
-
-    DograhGeminiLiveVertexLLMService
-      -> DograhGeminiLiveLLMService
-      -> RealtimeConversationMixin
-      -> GeminiLiveVertexLLMService
-      -> GeminiLiveLLMService
-      -> LLMService
-      -> ...
 """
 
-from api.services.pipecat.realtime.gemini_live import DograhGeminiLiveLLMService
+from api.services.pipecat.realtime.gemini_live import KodewavesGeminiLiveLLMService
 from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 from pipecat.services.google.gemini_live.vertex.llm import (
     GeminiLiveVertexLLMService,
 )
 
 
-class DograhGeminiLiveVertexLLMService(
-    DograhGeminiLiveLLMService,
+class KodewavesGeminiLiveVertexLLMService(
+    KodewavesGeminiLiveLLMService,
     GeminiLiveVertexLLMService,
 ):
-    """Vertex AI variant of Gemini Live with Dograh integration quirks."""
+    """Vertex AI variant of Gemini Live with Kodewaves sovereign integration."""
 
     pass
 
 
-# Guard against MRO regressions: a future refactor that flips inheritance
-# order or breaks the diamond would silently bypass the Dograh overrides.
-_mro = DograhGeminiLiveVertexLLMService.__mro__
-assert _mro[1] is DograhGeminiLiveLLMService, (
-    f"Expected DograhGeminiLiveLLMService at MRO[1], got {_mro[1]}"
+# Guard against MRO regressions
+_mro = KodewavesGeminiLiveVertexLLMService.__mro__
+assert _mro[1] is KodewavesGeminiLiveLLMService, (
+    f"Expected KodewavesGeminiLiveLLMService at MRO[1], got {_mro[1]}"
 )
 assert _mro.index(GeminiLiveVertexLLMService) < _mro.index(GeminiLiveLLMService), (
     "Vertex overrides must precede the base Gemini implementation"
 )
 del _mro
+
+
+# Compatibility alias
+DograhGeminiLiveVertexLLMService = KodewavesGeminiLiveVertexLLMService

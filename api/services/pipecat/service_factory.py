@@ -20,7 +20,7 @@ from api.services.configuration.options import (
 )
 from api.services.configuration.registry import ServiceProviders
 from api.services.pipecat.gemini_json_schema_adapter import (
-    DograhGeminiJSONSchemaAdapter,
+    KodewavesGeminiJSONSchemaAdapter,
 )
 from api.services.pipecat.minimax_tts import (
     MiniMaxCachingTTSService,
@@ -45,9 +45,9 @@ from pipecat.services.deepgram.flux.stt import (
     DeepgramFluxSTTSettings,
 )
 from pipecat.services.deepgram.stt import DeepgramSTTService, DeepgramSTTSettings
-from pipecat.services.deepgram.tts import DeepgramTTSService, DeepgramTTSSettings
-from pipecat.services.dograh.flux.stt import DograhFluxSTTService
-from pipecat.services.kodewaves.llm import KodewavesLLMService
+from pipecat.services.kodewaves.flux.stt import KodewavesFluxSTTService
+
+DograhFluxSTTService = KodewavesFluxSTTService
 from pipecat.services.kodewaves.stt import KodewavesSTTService, KodewavesSTTSettings
 from pipecat.services.kodewaves.tts import KodewavesTTSService, KodewavesTTSSettings
 from pipecat.services.elevenlabs.stt import (
@@ -131,7 +131,9 @@ def _report_service_factory_failures(
 
             provider_value = getattr(provider, "value", provider)
             error_owner = (
-                "operator" if str(provider_value).lower() == "dograh" else "user"
+                "operator"
+                if str(provider_value).lower() in ("kodewaves", "dograh")
+                else "user"
             )
             try:
                 service = factory(*args, **kwargs)
@@ -178,10 +180,13 @@ def _resolve_deepgram_flux_language_hint(language: str | None) -> Language | Non
     return DEEPGRAM_FLUX_LANGUAGE_HINTS.get(base_language)
 
 
-def dograh_stt_uses_flux_language(language: str | None) -> bool:
+def kodewaves_stt_uses_flux_language(language: str | None) -> bool:
     if not language or language.lower() == "multi":
         return True
     return _resolve_deepgram_flux_language_hint(language) is not None
+
+
+dograh_stt_uses_flux_language = kodewaves_stt_uses_flux_language
 
 
 def _resolve_elevenlabs_stt_language(
@@ -233,19 +238,23 @@ def _elevenlabs_realtime_stt_host(base_url: str) -> str:
 def stt_uses_external_turns(user_config) -> bool:
     if user_config.stt.provider == ServiceProviders.DEEPGRAM.value:
         return user_config.stt.model in DEEPGRAM_FLUX_MODELS
-    if user_config.stt.provider == ServiceProviders.DOGRAH.value:
-        return dograh_stt_uses_flux_language(getattr(user_config.stt, "language", None))
+    if user_config.stt.provider in (
+        ServiceProviders.KODEWAVES.value,
+        ServiceProviders.DOGRAH.value,
+        "kodewaves",
+    ):
+        return kodewaves_stt_uses_flux_language(getattr(user_config.stt, "language", None))
     if user_config.stt.provider == ServiceProviders.CARTESIA.value:
         return user_config.stt.model == "ink-2"
     return False
 
 
-class DograhGoogleLLMService(GoogleLLMService):
-    adapter_class = DograhGeminiJSONSchemaAdapter
+class KodewavesGoogleLLMService(GoogleLLMService):
+    adapter_class = KodewavesGeminiJSONSchemaAdapter
 
 
-class DograhGoogleVertexLLMService(GoogleVertexLLMService):
-    adapter_class = DograhGeminiJSONSchemaAdapter
+class KodewavesGoogleVertexLLMService(GoogleVertexLLMService):
+    adapter_class = KodewavesGeminiJSONSchemaAdapter
 
 
 def _validate_runtime_service_url(url: str, field_name: str) -> None:
@@ -437,12 +446,16 @@ def create_stt_service(
             ),
             sample_rate=audio_config.transport_in_sample_rate,
         )
-    elif user_config.stt.provider == ServiceProviders.DOGRAH.value:
+    elif user_config.stt.provider in (
+        ServiceProviders.KODEWAVES.value,
+        ServiceProviders.DOGRAH.value,
+        "kodewaves",
+    ):
         base_url = MPS_API_URL.replace("http://", "ws://").replace("https://", "wss://")
         language = getattr(user_config.stt, "language", None) or "multi"
 
-        if dograh_stt_uses_flux_language(language):
-            # Dograh's Flux proxy only supports multilingual auto-detect and the
+        if kodewaves_stt_uses_flux_language(language):
+            # Kodewaves's Flux proxy only supports multilingual auto-detect and the
             # same language hint subset as Deepgram Flux multilingual.
             settings_kwargs = {
                 "model": "flux-general-multi",
@@ -454,7 +467,7 @@ def create_stt_service(
             language_hint = _resolve_deepgram_flux_language_hint(language)
             if language_hint:
                 settings_kwargs["language_hints"] = [language_hint]
-            return DograhFluxSTTService(
+            return KodewavesFluxSTTService(
                 base_url=base_url,
                 api_key=user_config.stt.api_key,
                 correlation_id=correlation_id,
@@ -822,11 +835,15 @@ def create_tts_service(
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,
         )
-    elif user_config.tts.provider in (ServiceProviders.DOGRAH.value, "kodewaves"):
+    elif user_config.tts.provider in (
+        ServiceProviders.KODEWAVES.value,
+        ServiceProviders.DOGRAH.value,
+        "kodewaves",
+    ):
         if getattr(user_config.tts, "api_key", None) == "sovereign-local-cpu":
             from pipecat.services.speaches.tts import SpeachesTTSService
             voice = getattr(user_config.tts, "voice", "af_heart")
-            if voice and voice.startswith("dg_"):
+            if voice and (voice.startswith("dg_") or voice.startswith("kw_")):
                 voice = "af_heart"
             return SpeachesTTSService(
                 base_url="http://localhost:8000/v1",
@@ -1168,7 +1185,7 @@ def create_llm_service_from_provider(
 
     Args:
         usage_context: Optional tag describing what the LLM instance is used for
-            (e.g. "voicemail_detection"). Sent as request metadata by the Dograh
+            (e.g. "voicemail_detection"). Sent as request metadata by the Kodewaves
             provider; ignored by other providers.
     """
     # Vertex builds its endpoint from the location, so it is part of what this
@@ -1223,7 +1240,7 @@ def create_llm_service_from_provider(
         )
     elif provider == ServiceProviders.GOOGLE.value:
         model = _migrate_deprecated_google_model(model)
-        return DograhGoogleLLMService(
+        return KodewavesGoogleLLMService(
             api_key=api_key,
             settings=GoogleLLMSettings(
                 model=model,
@@ -1233,7 +1250,7 @@ def create_llm_service_from_provider(
             ),
         )
     elif provider == ServiceProviders.GOOGLE_VERTEX.value:
-        return DograhGoogleVertexLLMService(
+        return KodewavesGoogleVertexLLMService(
             credentials=credentials,
             project_id=project_id,
             location=vertex_location,
@@ -1251,7 +1268,11 @@ def create_llm_service_from_provider(
             endpoint=endpoint,
             settings=AzureLLMSettings(model=model, temperature=0.1),
         )
-    elif provider in (ServiceProviders.DOGRAH.value, "kodewaves"):
+    elif provider in (
+        ServiceProviders.KODEWAVES.value,
+        ServiceProviders.DOGRAH.value,
+        "kodewaves",
+    ):
         if api_key == "sovereign-local-cpu":
             return KodewavesLLMService(
                 base_url="http://localhost:11434/v1",
@@ -1339,19 +1360,19 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
     )
 
     if provider == ServiceProviders.OPENAI_REALTIME.value and model == "gpt-live-1":
-        from api.services.pipecat.realtime.openai_live import DograhOpenAILiveLLMService
+        from api.services.pipecat.realtime.openai_live import KodewavesOpenAILiveLLMService
 
-        return DograhOpenAILiveLLMService(
+        return KodewavesOpenAILiveLLMService(
             api_key=api_key,
             backend_model=realtime_config.backend_model,
-            settings=DograhOpenAILiveLLMService.Settings(
+            settings=KodewavesOpenAILiveLLMService.Settings(
                 model=model,
                 voice=voice or "marin",
             ),
         )
     elif provider == ServiceProviders.OPENAI_REALTIME.value:
         from api.services.pipecat.realtime.openai_realtime import (
-            DograhOpenAIRealtimeLLMService,
+            KodewavesOpenAIRealtimeLLMService,
         )
         from pipecat.services.openai.realtime.events import (
             AudioConfiguration,
@@ -1368,9 +1389,9 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         if language:
             transcription_kwargs["language"] = language
 
-        return DograhOpenAIRealtimeLLMService(
+        return KodewavesOpenAIRealtimeLLMService(
             api_key=api_key,
-            settings=DograhOpenAIRealtimeLLMService.Settings(
+            settings=KodewavesOpenAIRealtimeLLMService.Settings(
                 model=model,
                 session_properties=SessionProperties(
                     audio=AudioConfiguration(
@@ -1388,7 +1409,7 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         )
     elif provider == ServiceProviders.GROK_REALTIME.value:
         from api.services.pipecat.realtime.grok_realtime import (
-            DograhGrokRealtimeLLMService,
+            KodewavesGrokRealtimeLLMService,
         )
         from pipecat.services.xai.realtime.events import (
             AudioConfiguration,
@@ -1401,9 +1422,9 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         if grok_voice.lower() in {"ara", "rex", "sal", "eve", "leo"}:
             grok_voice = grok_voice.lower()
 
-        return DograhGrokRealtimeLLMService(
+        return KodewavesGrokRealtimeLLMService(
             api_key=api_key,
-            settings=DograhGrokRealtimeLLMService.Settings(
+            settings=KodewavesGrokRealtimeLLMService.Settings(
                 model=model,
                 session_properties=SessionProperties(
                     voice=grok_voice,
@@ -1417,29 +1438,29 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         )
     elif provider == ServiceProviders.ULTRAVOX_REALTIME.value:
         from api.services.pipecat.realtime.ultravox_realtime import (
-            DograhUltravoxOneShotInputParams,
-            DograhUltravoxRealtimeLLMService,
+            KodewavesUltravoxOneShotInputParams,
+            KodewavesUltravoxRealtimeLLMService,
         )
 
-        return DograhUltravoxRealtimeLLMService(
-            params=DograhUltravoxOneShotInputParams(
+        return KodewavesUltravoxRealtimeLLMService(
+            params=KodewavesUltravoxOneShotInputParams(
                 api_key=api_key,
                 model=model,
                 voice=voice,
                 output_medium="voice",
             ),
-            settings=DograhUltravoxRealtimeLLMService.Settings(
+            settings=KodewavesUltravoxRealtimeLLMService.Settings(
                 model=model,
                 output_medium="voice",
             ),
         )
     elif provider == ServiceProviders.AWS_NOVA_SONIC.value:
         from api.services.pipecat.realtime.aws_nova_sonic import (
-            DograhAWSNovaSonicLLMService,
+            KodewavesAWSNovaSonicLLMService,
         )
         from pipecat.services.aws.nova_sonic.llm import AudioConfig as NovaAudioConfig
 
-        return DograhAWSNovaSonicLLMService(
+        return KodewavesAWSNovaSonicLLMService(
             secret_access_key=realtime_config.aws_secret_key,
             access_key_id=realtime_config.aws_access_key,
             session_token=realtime_config.aws_session_token or None,
@@ -1448,7 +1469,7 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
                 input_sample_rate=audio_config.transport_in_sample_rate,
                 output_sample_rate=audio_config.transport_out_sample_rate,
             ),
-            settings=DograhAWSNovaSonicLLMService.Settings(
+            settings=KodewavesAWSNovaSonicLLMService.Settings(
                 model=model,
                 voice=voice or "matthew",
                 endpointing_sensitivity=realtime_config.endpointing_sensitivity,
@@ -1459,7 +1480,7 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         )
     elif provider == ServiceProviders.GOOGLE_REALTIME.value:
         from api.services.pipecat.realtime.gemini_live import (
-            DograhGeminiLiveLLMService,
+            KodewavesGeminiLiveLLMService,
         )
 
         # Gemini Live enables input/output audio transcription by default
@@ -1470,13 +1491,13 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         }
         if language:
             settings_kwargs["language"] = language
-        return DograhGeminiLiveLLMService(
+        return KodewavesGeminiLiveLLMService(
             api_key=api_key,
-            settings=DograhGeminiLiveLLMService.Settings(**settings_kwargs),
+            settings=KodewavesGeminiLiveLLMService.Settings(**settings_kwargs),
         )
     elif provider == ServiceProviders.GOOGLE_VERTEX_REALTIME.value:
         from api.services.pipecat.realtime.gemini_live_vertex import (
-            DograhGeminiLiveVertexLLMService,
+            KodewavesGeminiLiveVertexLLMService,
         )
 
         project_id = getattr(realtime_config, "project_id", None)
@@ -1488,15 +1509,15 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
         }
         if language:
             settings_kwargs["language"] = language
-        return DograhGeminiLiveVertexLLMService(
+        return KodewavesGeminiLiveVertexLLMService(
             credentials=credentials,
             project_id=project_id,
             location=vertex_location,
-            settings=DograhGeminiLiveVertexLLMService.Settings(**settings_kwargs),
+            settings=KodewavesGeminiLiveVertexLLMService.Settings(**settings_kwargs),
         )
     elif provider == ServiceProviders.AZURE_REALTIME.value:
         from api.services.pipecat.realtime.azure_realtime import (
-            DograhAzureRealtimeLLMService,
+            KodewavesAzureRealtimeLLMService,
         )
         from pipecat.services.openai.realtime.events import (
             AudioConfiguration,
@@ -1535,10 +1556,10 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
                 "",
             )
         )
-        return DograhAzureRealtimeLLMService(
+        return KodewavesAzureRealtimeLLMService(
             api_key=api_key,
             base_url=wss_url,
-            settings=DograhAzureRealtimeLLMService.Settings(
+            settings=KodewavesAzureRealtimeLLMService.Settings(
                 model=model,
                 session_properties=SessionProperties(
                     audio=AudioConfiguration(

@@ -112,9 +112,9 @@ FROM python:3.13-slim AS runner
 
 WORKDIR /app
 
-RUN groupadd --system dograh \
- && useradd --system --gid dograh --no-log-init --home-dir /app --shell /usr/sbin/nologin dograh \
- && chown dograh:dograh /app
+RUN groupadd --system kodewaves \
+ && useradd --system --gid kodewaves --no-log-init --home-dir /app --shell /usr/sbin/nologin kodewaves \
+ && chown kodewaves:kodewaves /app
 
 # Static ffmpeg + ffprobe (used by audio_converter, audio_file_cache, etc.)
 COPY --from=ffmpeg-static /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
@@ -140,7 +140,7 @@ ENV PYTHONUNBUFFERED=1
 
 # Copy application code (chown at copy-time avoids a duplicate /app layer
 # from a later `RUN chown -R`, which would double the on-disk size of /app).
-COPY --chown=dograh:dograh ./api ./api
+COPY --chown=kodewaves:kodewaves ./api ./api
 
 # Entrypoint scripts.
 #   start_services_docker.sh — single-container (docker-compose) entrypoint
@@ -148,10 +148,10 @@ COPY --chown=dograh:dograh ./api ./api
 #   run_*.sh                 — per-service entrypoints used by the Helm chart,
 #     which runs each workload (web, arq-worker, ari-manager,
 #     campaign-orchestrator, migrate) as its own pod. Keep this list in sync
-#     with the command:[] entries in deploy/helm/dograh/templates/*.yaml.
+#     with the command:[] entries in deploy/helm/kodewaves/templates/*.yaml.
 #   drain_web.sh             — web pod preStop hook (call-safe scale-down); see
-#     lifecycle.preStop in deploy/helm/dograh/templates/web-deployment.yaml.
-COPY --chown=dograh:dograh \
+#     lifecycle.preStop in deploy/helm/kodewaves/templates/web-deployment.yaml.
+COPY --chown=kodewaves:kodewaves \
      ./scripts/start_services_docker.sh \
      ./scripts/run_migrate.sh \
      ./scripts/run_web.sh \
@@ -163,11 +163,11 @@ COPY --chown=dograh:dograh \
 
 # ts_validator Node deps (built in ts-deps stage with full node:22-slim image).
 # The validator runs as a short-lived subprocess from api/mcp_server/ts_bridge.py.
-COPY --from=ts-deps --chown=dograh:dograh /ts_validator/node_modules ./api/mcp_server/ts_validator/node_modules
+COPY --from=ts-deps --chown=kodewaves:kodewaves /ts_validator/node_modules ./api/mcp_server/ts_validator/node_modules
 
 # Product documentation — read at runtime by the MCP docs tools
-# (search_dograh_docs / fetch_dograh_doc) so agents can learn Dograh.
-COPY --chown=dograh:dograh ./docs ./docs
+# (search_kodewaves_docs / fetch_kodewaves_doc) so agents can learn Kodewaves.
+COPY --chown=kodewaves:kodewaves ./docs ./docs
 
 ENV PYTHONPATH=/app/pipecat/src:/app
 
@@ -186,7 +186,7 @@ ENV OMP_NUM_THREADS=1 \
     GOMP_SPINCOUNT=0 \
     KMP_AFFINITY=disabled
 
-USER dograh
+USER kodewaves
 
 # Expose the port FastAPI will run on
 EXPOSE 8000

@@ -1,8 +1,8 @@
-# Dograh deployment stack — driven by the helper scripts, not by a bare
+# Kodewaves deployment stack — driven by the helper scripts, not by a bare
 # `docker compose up`.
 #
 # This stack needs a generated .env (secrets, public host/URL) and, for the
-# remote/TURN profiles, runtime nginx/coturn config rendered by the dograh-init
+# remote/TURN profiles, runtime nginx/coturn config rendered by the kodewaves-init
 # service. The setup scripts create those for you — start with them:
 #
 #   Local:          ./start_docker.sh        (Windows: .\start_docker.ps1)
@@ -10,7 +10,7 @@
 #
 # Running `docker compose up` against a fresh checkout will fail or come up
 # misconfigured (e.g. OSS_JWT_SECRET is required). Full guide:
-# https://docs.dograh.com/deployment/docker
+# https://docs.kodewaves.com/deployment/docker
 
 services:
   postgres:
@@ -60,7 +60,7 @@ services:
     build:
       context: .
       dockerfile: deploy/minio/Dockerfile
-    image: dograh-minio:local
+    image: kodewaves-minio:local
     container_name: minio
     command: server /data --console-address ":9001"
     environment:
@@ -220,7 +220,8 @@ services:
 
       # Scrape /api/v1/metrics on each worker's own port. See deploy/observability.
       ENABLE_PROMETHEUS_METRICS: "${ENABLE_PROMETHEUS_METRICS:-false}"
-      DOGRAH_DEVOPS_SECRET: "${DOGRAH_DEVOPS_SECRET:-}"
+      KODEWAVES_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
+      DOGRAH_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
 
       # Trust X-Forwarded-* headers from any peer so uvicorn honors nginx's
       # `X-Forwarded-Proto: https`. nginx runs as its own container and reaches

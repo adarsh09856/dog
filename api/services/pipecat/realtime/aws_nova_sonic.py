@@ -48,7 +48,7 @@ _NODE_TRANSITION_RESPONSE_PROMPT = (
 )
 
 
-class DograhAWSNovaSonicLLMAdapter(AWSNovaSonicLLMAdapter):
+class KodewavesAWSNovaSonicLLMAdapter(AWSNovaSonicLLMAdapter):
     """Keep bot-first conversations valid when replaying history to Nova."""
 
     def get_llm_invocation_params(
@@ -60,7 +60,7 @@ class DograhAWSNovaSonicLLMAdapter(AWSNovaSonicLLMAdapter):
         messages = params["messages"]
         history: list[AWSNovaSonicConversationHistoryMessage] = []
         if messages and messages[0].role is Role.ASSISTANT:
-            # The greeting trigger is intentionally absent from Dograh's shared
+            # The greeting trigger is intentionally absent from Kodewaves's shared
             # transcript. Restore a historical USER prompt only in Nova's view:
             # AWS rejects history beginning with ASSISTANT. Keeping the greeting
             # also preserves what the caller is replying to after a reconnect.
@@ -80,10 +80,10 @@ class DograhAWSNovaSonicLLMAdapter(AWSNovaSonicLLMAdapter):
         return params
 
 
-class DograhAWSNovaSonicLLMService(RealtimeConversationMixin, AWSNovaSonicLLMService):
-    """AWS Nova 2 Sonic with Dograh workflow integration."""
+class KodewavesAWSNovaSonicLLMService(RealtimeConversationMixin, AWSNovaSonicLLMService):
+    """AWS Nova 2 Sonic with Kodewaves sovereign workflow integration."""
 
-    adapter_class = DograhAWSNovaSonicLLMAdapter
+    adapter_class = KodewavesAWSNovaSonicLLMAdapter
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -448,3 +448,8 @@ class DograhAWSNovaSonicLLMService(RealtimeConversationMixin, AWSNovaSonicLLMSer
             "call(s) after the Nova audio turn ended"
         )
         await super().run_function_calls(function_calls)
+
+
+# Compatibility aliases
+DograhAWSNovaSonicLLMAdapter = KodewavesAWSNovaSonicLLMAdapter
+DograhAWSNovaSonicLLMService = KodewavesAWSNovaSonicLLMService

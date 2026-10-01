@@ -34,7 +34,8 @@ class APIKeyStatusResponse(TypedDict):
 
 class UserConfigurationValidator:
     def __init__(self):
-        self._dograh_service_key_validation_cache: dict[str, bool] = {}
+        self._kodewaves_service_key_validation_cache: dict[str, bool] = {}
+        self._dograh_service_key_validation_cache = self._kodewaves_service_key_validation_cache
         self._validator_map = {
             ServiceProviders.OPENAI.value: self._check_openai_api_key,
             ServiceProviders.ATLASCLOUD.value: self._check_openai_api_key,
@@ -47,7 +48,8 @@ class UserConfigurationValidator:
             ServiceProviders.AZURE.value: self._check_azure_api_key,
             ServiceProviders.AZURE_SPEECH.value: self._check_azure_speech_api_key,
             ServiceProviders.CARTESIA.value: self._check_cartesia_api_key,
-            ServiceProviders.DOGRAH.value: self._check_dograh_api_key,
+            ServiceProviders.KODEWAVES.value: self._check_kodewaves_api_key,
+            ServiceProviders.DOGRAH.value: self._check_kodewaves_api_key,
             ServiceProviders.SARVAM.value: self._check_sarvam_api_key,
             ServiceProviders.SPEECHMATICS.value: self._check_speechmatics_api_key,
             ServiceProviders.CAMB.value: self._check_camb_api_key,
@@ -80,7 +82,7 @@ class UserConfigurationValidator:
     ) -> APIKeyStatusResponse:
         # A managed configuration commonly repeats one service key across LLM,
         # STT, TTS, and embeddings. Validate that credential once per request.
-        self._dograh_service_key_validation_cache.clear()
+        self._kodewaves_service_key_validation_cache.clear()
         self._auth_context: AuthContext = {
             "organization_id": organization_id,
             "created_by": created_by,
@@ -346,7 +348,7 @@ class UserConfigurationValidator:
     def _check_cartesia_api_key(self, model: str, api_key: str) -> bool:
         return True
 
-    def _check_dograh_api_key(self, model: str, api_key: str) -> bool:
+    def _check_kodewaves_api_key(self, model: str, api_key: str) -> bool:
         if not api_key or api_key in ("sovereign-managed", "sovereign-local-cpu", "default", "managed", "kodewaves-sovereign"):
             return True
         if api_key.startswith("dgr"):
@@ -355,6 +357,8 @@ class UserConfigurationValidator:
             )
         # In sovereign self-hosted mode, platform keys are administered via Admin Master Keys
         return True
+
+    _check_dograh_api_key = _check_kodewaves_api_key
 
     def _check_sarvam_api_key(self, model: str, api_key: str) -> bool:
         return True

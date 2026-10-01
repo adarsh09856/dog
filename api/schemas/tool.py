@@ -1,4 +1,4 @@
-"""Pydantic schemas for reusable Dograh tools.
+"""Pydantic schemas for reusable Kodewaves tools.
 
 These models are the single contract for tool creation/update across the
 REST API, generated SDKs, and the MCP authoring surface. Field descriptions
@@ -65,7 +65,7 @@ class ToolParameter(BaseModel):
 
 
 class PresetToolParameter(BaseModel):
-    """A parameter injected by Dograh at runtime."""
+    """A parameter injected by Kodewaves at runtime."""
 
     name: str = Field(description="Parameter name used as a key in the request body.")
     type: ToolParameterType = Field(
@@ -124,7 +124,7 @@ class HttpApiConfig(BaseModel):
     preset_parameters: list[PresetToolParameter] | None = Field(
         default=None,
         description=(
-            "Parameters injected by Dograh from fixed values or workflow context "
+            "Parameters injected by Kodewaves from fixed values or workflow context "
             "templates."
         ),
     )
@@ -230,7 +230,7 @@ class HttpTransferResolverConfig(BaseModel):
     )
     wait_message: str | None = Field(
         default=None,
-        description="Optional short message played while Dograh resolves routing.",
+        description="Optional short message played while Kodewaves resolves routing.",
     )
     parameters: list[ToolParameter] | None = Field(
         default=None,
@@ -239,7 +239,7 @@ class HttpTransferResolverConfig(BaseModel):
     preset_parameters: list[PresetToolParameter] | None = Field(
         default=None,
         description=(
-            "Parameters injected by Dograh from fixed values or workflow context "
+            "Parameters injected by Kodewaves from fixed values or workflow context "
             "templates."
         ),
     )
@@ -416,7 +416,7 @@ class TransferCallConfig(BaseModel):
         max_length=MAX_TRANSFER_CALL_DISPOSITION_LENGTH,
         description=(
             "Optional disposition to record after a successful transfer. When "
-            "omitted, Dograh records its provider-specific transfer default."
+            "omitted, Kodewaves records its provider-specific transfer default."
         ),
     )
     parameters: list[ToolParameter] | None = Field(
@@ -556,14 +556,14 @@ class TransferAgentConfig(BaseModel):
 
     Most of how a handoff sounds is fixed: the caller hears a ringer while the
     next agent is prepared. The handover line is configurable because it is
-    caller-facing and Dograh runs in more than one language, and so is whether
+    caller-facing and Kodewaves runs in more than one language, and so is whether
     the next agent opens with its greeting, because an agent that greets
     callers on its own number should not re-introduce itself mid-conversation.
     """
 
     workflow_id: int = Field(
         description=(
-            "Id of the Dograh agent to transfer to. Must be in the same "
+            "Id of the Kodewaves agent to transfer to. Must be in the same "
             "organization, and must not be a speech-to-speech agent."
         ),
         json_schema_extra=_llm_hint(

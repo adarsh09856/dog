@@ -22,7 +22,7 @@ LOG_TO_FILE=${LOG_TO_FILE:-true}    # Set to false in Docker to use stdout
 
 # Log startup
 cd "$BASE_DIR"
-echo "Starting Dograh Services at $(date) in BASE_DIR: ${BASE_DIR}"
+echo "Starting Kodewaves Services at $(date) in BASE_DIR: ${BASE_DIR}"
 
 ###############################################################################
 ### 1) Load environment variables
@@ -33,12 +33,13 @@ if [[ -f "$ENV_FILE" ]]; then
   set -a && . "$ENV_FILE" && set +a
 fi
 
-if [[ -z "${DOGRAH_DEVOPS_SECRET:-}" ]]; then
-  echo "ERROR: DOGRAH_DEVOPS_SECRET is not set. Add it to $ENV_FILE before starting production services."
+DEVOPS_SECRET="${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
+if [[ -z "$DEVOPS_SECRET" ]]; then
+  echo "ERROR: KODEWAVES_DEVOPS_SECRET (or DOGRAH_DEVOPS_SECRET) is not set. Add it to $ENV_FILE before starting production services."
   exit 1
 fi
-if [[ "$DOGRAH_DEVOPS_SECRET" == "change-me-dograh-devops-secret" ]]; then
-  echo "ERROR: DOGRAH_DEVOPS_SECRET still has the example placeholder value. Replace it in $ENV_FILE."
+if [[ "$DEVOPS_SECRET" == "change-me-dograh-devops-secret" || "$DEVOPS_SECRET" == "change-me-kodewaves-devops-secret" ]]; then
+  echo "ERROR: Devops secret still has an example placeholder value. Replace it in $ENV_FILE."
   exit 1
 fi
 

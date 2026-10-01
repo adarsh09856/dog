@@ -1,4 +1,4 @@
-"""Translate Dograh dispositions into an organization's own disposition codes.
+"""Translate Kodewaves dispositions into an organization's own disposition codes.
 
 ``gathered_context.mapped_call_disposition`` is the field every downstream
 consumer reads -- outbound webhooks, the ``dispositionCode`` run filter, the
@@ -6,10 +6,10 @@ daily/run reports, and the external-PBX lead write-back. Applying the
 organization's mapping when that field is *written* is what lets all of them
 speak the customer's vocabulary without each growing its own lookup, and what
 keeps ``call_disposition`` available beside it as the untranslated record of
-what Dograh actually observed.
+what Kodewaves actually observed.
 
 The mapping lives in organization preferences rather than in code because the
-target codes are a property of the customer's dialer or CRM, not of Dograh: a
+target codes are a property of the customer's dialer or CRM, not of Kodewaves: a
 VICIdial deployment's ``XFER``/``DNC`` catalog is one deployment's convention.
 """
 

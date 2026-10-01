@@ -51,7 +51,7 @@ Current workflow:
 """
 
 
-class DograhOpenAILiveLLMService(RealtimeConversationMixin, OpenAILiveLLMService):
+class KodewavesOpenAILiveLLMService(RealtimeConversationMixin, OpenAILiveLLMService):
     """Keep workflow instructions on the Responses backend of a Live session."""
 
     def __init__(self, *, backend_model: str, settings=None, **kwargs):
@@ -290,3 +290,7 @@ class DograhOpenAILiveLLMService(RealtimeConversationMixin, OpenAILiveLLMService
         self._initial_backend_request = False
         self._sent_backend_snapshot = None
         await super()._disconnect()
+
+
+# Compatibility alias
+DograhOpenAILiveLLMService = KodewavesOpenAILiveLLMService

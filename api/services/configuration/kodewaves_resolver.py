@@ -206,8 +206,8 @@ async def apply_kodewaves_sovereign_resolution(
                 base_url=ollama_v1_url,
             )
             is_using_local_cpu_engine = True
-        elif str(provider_name).lower() in ("dograh", "default") or not allow_byok or not user_key or user_key == "sovereign-managed":
-            if str(provider_name).lower() in ("dograh", "default"):
+        elif str(provider_name).lower() in ("kodewaves", "dograh", "default") or not allow_byok or not user_key or user_key == "sovereign-managed":
+            if str(provider_name).lower() in ("kodewaves", "dograh", "default"):
                 resolved = await _resolve_master_llm(effective)
                 if resolved:
                     is_using_master_keys = True
@@ -246,8 +246,8 @@ async def apply_kodewaves_sovereign_resolution(
                 base_url=speaches_v1_url,
             )
             is_using_local_cpu_engine = True
-        elif str(provider_name).lower() in ("dograh", "default") or not allow_byok or not user_key or user_key == "sovereign-managed":
-            if str(provider_name).lower() in ("dograh", "default"):
+        elif str(provider_name).lower() in ("kodewaves", "dograh", "default") or not allow_byok or not user_key or user_key == "sovereign-managed":
+            if str(provider_name).lower() in ("kodewaves", "dograh", "default"):
                 resolved = await _resolve_master_stt(effective)
                 if resolved:
                     is_using_master_keys = True
@@ -287,8 +287,8 @@ async def apply_kodewaves_sovereign_resolution(
                 base_url=speaches_v1_url,
             )
             is_using_local_cpu_engine = True
-        elif str(provider_name).lower() in ("dograh", "default") or not allow_byok or not user_key or user_key == "sovereign-managed":
-            if str(provider_name).lower() in ("dograh", "default"):
+        elif str(provider_name).lower() in ("kodewaves", "dograh", "default") or not allow_byok or not user_key or user_key == "sovereign-managed":
+            if str(provider_name).lower() in ("kodewaves", "dograh", "default"):
                 resolved = await _resolve_master_tts(effective)
                 if resolved:
                     is_using_master_keys = True

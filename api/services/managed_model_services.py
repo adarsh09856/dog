@@ -18,7 +18,7 @@ def uses_managed_model_services_v2(
         return False
 
     return any(
-        _is_dograh_service(getattr(ai_model_config, section_name, None))
+        _is_kodewaves_service(getattr(ai_model_config, section_name, None))
         for section_name in ("llm", "tts", "stt", "embeddings")
     )
 
@@ -51,19 +51,17 @@ async def ensure_mps_correlation_id(
     )
 
 
-def _is_dograh_service(service: Any) -> bool:
+def _is_kodewaves_service(service: Any) -> bool:
     provider = getattr(service, "provider", None)
-    return (
-        provider == ServiceProviders.DOGRAH or provider == ServiceProviders.DOGRAH.value
-    )
+    return str(provider).lower() in ("kodewaves", "dograh")
 
 
-def get_dograh_service_api_key(
+def get_kodewaves_service_api_key(
     ai_model_config: EffectiveAIModelConfiguration,
 ) -> str | None:
     for section_name in ("llm", "tts", "stt", "embeddings"):
         service = getattr(ai_model_config, section_name, None)
-        if not _is_dograh_service(service):
+        if not _is_kodewaves_service(service):
             continue
 
         if hasattr(service, "get_all_api_keys"):
@@ -76,3 +74,8 @@ def get_dograh_service_api_key(
             return api_key
 
     return None
+
+
+# Backward-compatibility aliases
+_is_dograh_service = _is_kodewaves_service
+get_dograh_service_api_key = get_kodewaves_service_api_key

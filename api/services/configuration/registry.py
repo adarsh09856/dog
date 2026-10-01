@@ -96,6 +96,7 @@ class ServiceProviders(str, Enum):
     GOOGLE = "google"
     AZURE = "azure"
     AZURE_SPEECH = "azure_speech"
+    KODEWAVES = "kodewaves"
     DOGRAH = "dograh"
     SARVAM = "sarvam"
     SPEECHMATICS = "speechmatics"
@@ -135,6 +136,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.GOOGLE,
         ServiceProviders.AZURE,
         ServiceProviders.AZURE_SPEECH,
+        ServiceProviders.KODEWAVES,
         ServiceProviders.DOGRAH,
         ServiceProviders.AWS_BEDROCK,
         ServiceProviders.SPEACHES,
@@ -327,7 +329,8 @@ GOOGLE_PROVIDER_MODEL_CONFIG = provider_model_config("Google")
 GROQ_PROVIDER_MODEL_CONFIG = provider_model_config("Groq")
 OPENROUTER_PROVIDER_MODEL_CONFIG = provider_model_config("Open Router")
 AZURE_OPENAI_PROVIDER_MODEL_CONFIG = provider_model_config("Azure OpenAI")
-DOGRAH_PROVIDER_MODEL_CONFIG = provider_model_config("Kodewaves")
+KODEWAVES_PROVIDER_MODEL_CONFIG = provider_model_config("Kodewaves")
+DOGRAH_PROVIDER_MODEL_CONFIG = KODEWAVES_PROVIDER_MODEL_CONFIG
 AWS_BEDROCK_PROVIDER_MODEL_CONFIG = provider_model_config("AWS Bedrock")
 MINIMAX_PROVIDER_MODEL_CONFIG = provider_model_config("MiniMax")
 GEMINI_PROVIDER_MODEL_CONFIG = provider_model_config(
@@ -441,7 +444,8 @@ OPENROUTER_MODELS = [
     "meta-llama/llama-3.3-70b-instruct",
     "deepseek/deepseek-chat-v3-0324",
 ]
-DOGRAH_LLM_MODELS = ["default", "accurate", "fast", "lite", "zen"]
+KODEWAVES_LLM_MODELS = ["default", "accurate", "fast", "lite", "zen"]
+DOGRAH_LLM_MODELS = KODEWAVES_LLM_MODELS
 AWS_BEDROCK_MODELS = [
     "us.amazon.nova-pro-v1:0",
     "us.amazon.nova-lite-v1:0",
@@ -580,13 +584,24 @@ class AzureLLMService(BaseLLMConfiguration):
 
 
 @register_llm
+class KodewavesLLMService(BaseLLMConfiguration):
+    model_config = KODEWAVES_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.KODEWAVES] = ServiceProviders.KODEWAVES
+    model: str = Field(
+        default="default",
+        description="Kodewaves-hosted model tier.",
+        json_schema_extra={"examples": KODEWAVES_LLM_MODELS, "allow_custom_input": True},
+    )
+
+
+@register_llm
 class DograhLLMService(BaseLLMConfiguration):
-    model_config = DOGRAH_PROVIDER_MODEL_CONFIG
+    model_config = KODEWAVES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.DOGRAH] = ServiceProviders.DOGRAH
     model: str = Field(
         default="default",
-        description="Dograh-hosted model tier.",
-        json_schema_extra={"examples": DOGRAH_LLM_MODELS, "allow_custom_input": True},
+        description="Kodewaves-hosted model tier (legacy provider name).",
+        json_schema_extra={"examples": KODEWAVES_LLM_MODELS, "allow_custom_input": True},
     )
 
 
@@ -1130,6 +1145,7 @@ LLMConfig = Annotated[
         OpenRouterLLMConfiguration,
         GoogleLLMService,
         AzureLLMService,
+        KodewavesLLMService,
         DograhLLMService,
         AWSBedrockLLMConfiguration,
         SpeachesLLMConfiguration,
@@ -1302,17 +1318,35 @@ class OpenAITTSService(BaseTTSConfiguration):
     )
 
 
-DOGRAH_TTS_MODELS = ["default"]
+KODEWAVES_TTS_MODELS = ["default"]
+DOGRAH_TTS_MODELS = KODEWAVES_TTS_MODELS
+
+
+@register_tts
+class KodewavesTTSService(BaseTTSConfiguration):
+    model_config = KODEWAVES_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.KODEWAVES] = ServiceProviders.KODEWAVES
+    model: str = Field(
+        default="default",
+        description="Kodewaves TTS tier.",
+        json_schema_extra={"examples": KODEWAVES_TTS_MODELS},
+    )
+    voice: str = Field(
+        default="default",
+        description="Voice preset.",
+        json_schema_extra={"allow_custom_input": True},
+    )
+    speed: float = Field(default=1.0, ge=0.5, le=2.0, description="Speed of the voice.")
 
 
 @register_tts
 class DograhTTSService(BaseTTSConfiguration):
-    model_config = DOGRAH_PROVIDER_MODEL_CONFIG
+    model_config = KODEWAVES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.DOGRAH] = ServiceProviders.DOGRAH
     model: str = Field(
         default="default",
-        description="Dograh TTS tier.",
-        json_schema_extra={"examples": DOGRAH_TTS_MODELS},
+        description="Kodewaves TTS tier (legacy provider name).",
+        json_schema_extra={"examples": KODEWAVES_TTS_MODELS},
     )
     voice: str = Field(
         default="default",
@@ -1831,6 +1865,7 @@ TTSConfig = Annotated[
         ElevenlabsTTSConfiguration,
         CartesiaTTSConfiguration,
         InworldTTSConfiguration,
+        KodewavesTTSService,
         DograhTTSService,
         SarvamTTSConfiguration,
         CambTTSConfiguration,
@@ -1971,28 +2006,47 @@ class GoogleSTTConfiguration(BaseSTTConfiguration):
     )
 
 
-# Dograh STT Service
-DOGRAH_STT_MODELS = ["default"]
-DOGRAH_STT_LANGUAGES = DEEPGRAM_LANGUAGES
-# Languages auto-detected when the Dograh STT language is "multi". Dograh STT runs
+# Kodewaves STT Service
+KODEWAVES_STT_MODELS = ["default"]
+KODEWAVES_STT_LANGUAGES = DEEPGRAM_LANGUAGES
+# Languages auto-detected when the Kodewaves STT language is "multi". Kodewaves STT runs
 # Deepgram Flux multilingual under the hood, which only auto-detects this subset —
-# not the full DOGRAH_STT_LANGUAGES list offered for explicit single-language selection.
-DOGRAH_MULTILINGUAL_AUTODETECT_LANGUAGES = DEEPGRAM_FLUX_MULTILINGUAL_LANGUAGES
+# not the full KODEWAVES_STT_LANGUAGES list offered for explicit single-language selection.
+KODEWAVES_MULTILINGUAL_AUTODETECT_LANGUAGES = DEEPGRAM_FLUX_MULTILINGUAL_LANGUAGES
+DOGRAH_STT_MODELS = KODEWAVES_STT_MODELS
+DOGRAH_STT_LANGUAGES = KODEWAVES_STT_LANGUAGES
+DOGRAH_MULTILINGUAL_AUTODETECT_LANGUAGES = KODEWAVES_MULTILINGUAL_AUTODETECT_LANGUAGES
 
 
 @register_stt
-class DograhSTTService(BaseSTTConfiguration):
-    model_config = DOGRAH_PROVIDER_MODEL_CONFIG
-    provider: Literal[ServiceProviders.DOGRAH] = ServiceProviders.DOGRAH
+class KodewavesSTTService(BaseSTTConfiguration):
+    model_config = KODEWAVES_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.KODEWAVES] = ServiceProviders.KODEWAVES
     model: str = Field(
         default="default",
         description="Kodewaves STT tier.",
-        json_schema_extra={"examples": DOGRAH_STT_MODELS},
+        json_schema_extra={"examples": KODEWAVES_STT_MODELS},
     )
     language: str = Field(
         default="multi",
         description="Language code; use 'multi' for auto-detect.",
-        json_schema_extra={"examples": DOGRAH_STT_LANGUAGES},
+        json_schema_extra={"examples": KODEWAVES_STT_LANGUAGES},
+    )
+
+
+@register_stt
+class DograhSTTService(BaseSTTConfiguration):
+    model_config = KODEWAVES_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.DOGRAH] = ServiceProviders.DOGRAH
+    model: str = Field(
+        default="default",
+        description="Kodewaves STT tier (legacy provider name).",
+        json_schema_extra={"examples": KODEWAVES_STT_MODELS},
+    )
+    language: str = Field(
+        default="multi",
+        description="Language code; use 'multi' for auto-detect.",
+        json_schema_extra={"examples": KODEWAVES_STT_LANGUAGES},
     )
 
 
@@ -2311,6 +2365,7 @@ STTConfig = Annotated[
         CartesiaSTTConfiguration,
         OpenAISTTConfiguration,
         GoogleSTTConfiguration,
+        KodewavesSTTService,
         DograhSTTService,
         SpeechmaticsSTTConfiguration,
         SarvamSTTConfiguration,
@@ -2386,17 +2441,29 @@ class AzureOpenAIEmbeddingsConfiguration(BaseEmbeddingsConfiguration):
     )
 
 
-DOGRAH_EMBEDDING_MODELS = ["dograh_embedding_v1"]
+KODEWAVES_EMBEDDING_MODELS = ["kodewaves_embedding_v1", "dograh_embedding_v1"]
+DOGRAH_EMBEDDING_MODELS = KODEWAVES_EMBEDDING_MODELS
+
+
+@register_embeddings
+class KodewavesEmbeddingsConfiguration(BaseEmbeddingsConfiguration):
+    model_config = KODEWAVES_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.KODEWAVES] = ServiceProviders.KODEWAVES
+    model: str = Field(
+        default="kodewaves_embedding_v1",
+        description="Kodewaves-managed embedding model.",
+        json_schema_extra={"examples": KODEWAVES_EMBEDDING_MODELS},
+    )
 
 
 @register_embeddings
 class DograhEmbeddingsConfiguration(BaseEmbeddingsConfiguration):
-    model_config = DOGRAH_PROVIDER_MODEL_CONFIG
+    model_config = KODEWAVES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.DOGRAH] = ServiceProviders.DOGRAH
     model: str = Field(
-        default="dograh_embedding_v1",
-        description="Kodewaves-managed embedding model.",
-        json_schema_extra={"examples": DOGRAH_EMBEDDING_MODELS},
+        default="kodewaves_embedding_v1",
+        description="Kodewaves-managed embedding model (legacy provider name).",
+        json_schema_extra={"examples": KODEWAVES_EMBEDDING_MODELS},
     )
 
 
@@ -2423,6 +2490,7 @@ EmbeddingsConfig = Annotated[
         OpenAIEmbeddingsConfiguration,
         OpenRouterEmbeddingsConfiguration,
         AzureOpenAIEmbeddingsConfiguration,
+        KodewavesEmbeddingsConfiguration,
         DograhEmbeddingsConfiguration,
         GoogleGeminiEmbeddingsConfiguration,
     ],

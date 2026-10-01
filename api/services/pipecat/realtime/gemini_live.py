@@ -30,6 +30,7 @@ from loguru import logger
 
 from api.services.pipecat.gemini_json_schema_adapter import (
     DograhGeminiLiveJSONSchemaAdapter,
+    KodewavesGeminiLiveJSONSchemaAdapter,
 )
 from api.services.pipecat.realtime.conversation import RealtimeConversationMixin
 from api.services.pipecat.realtime.static_greeting import format_static_greeting_prompt
@@ -44,8 +45,8 @@ from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 from pipecat.utils.tracing.service_decorators import traced_gemini_live
 
 
-class DograhGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMService):
-    """Gemini Live with Dograh engine integration quirks. See module docstring."""
+class KodewavesGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMService):
+    """Gemini Live with Kodewaves sovereign engine integration."""
 
     # Gemini input transcription is delivered independently from tool calls.
     # Give late transcription messages a small window to arrive before running
@@ -58,7 +59,7 @@ class DograhGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMService
     # while keeping upstream's Live-specific tool-call-to-text conversion for
     # seeded contexts. Mirrors the non-realtime ``DograhGoogleLLMService`` fix;
     # ``DograhGeminiLiveVertexLLMService`` inherits this via MRO.
-    adapter_class = DograhGeminiLiveJSONSchemaAdapter
+    adapter_class = KodewavesGeminiLiveJSONSchemaAdapter
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -514,3 +515,7 @@ class DograhGeminiLiveLLMService(RealtimeConversationMixin, GeminiLiveLLMService
         finally:
             self._node_transition_context_seed_started = False
             self._ready_for_realtime_input = True
+
+
+# Compatibility alias
+DograhGeminiLiveLLMService = KodewavesGeminiLiveLLMService

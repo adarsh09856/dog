@@ -41,8 +41,8 @@ from pipecat.services.xai.realtime.llm import GrokRealtimeLLMService
 from pipecat.utils.time import time_now_iso8601
 
 
-class DograhGrokRealtimeLLMService(RealtimeConversationMixin, GrokRealtimeLLMService):
-    """Grok Realtime with Dograh engine integration quirks."""
+class KodewavesGrokRealtimeLLMService(RealtimeConversationMixin, GrokRealtimeLLMService):
+    """Grok Realtime with Kodewaves sovereign engine integration."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -336,3 +336,7 @@ class DograhGrokRealtimeLLMService(RealtimeConversationMixin, GrokRealtimeLLMSer
             result=evt,
             finalized=True,
         )
+
+
+# Compatibility alias
+DograhGrokRealtimeLLMService = KodewavesGrokRealtimeLLMService

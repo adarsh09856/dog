@@ -7,11 +7,16 @@ from pydantic import BaseModel, Field, field_validator
 
 from .regions import CLOUDONIX_REGION_NAMES, get_cloudonix_region
 
-# Identity of the configuration Dograh provisions for every organization at
+# Identity of the configuration Kodewaves provisions for every organization at
 # signup. Lives here rather than in ``provisioning`` so the leaf modules that
 # only need to recognize a managed row don't pull in the provisioning path.
-MANAGED_CONFIGURATION_NAME = "Dograh Cloudonix SIP"
-MANAGED_BY = "dograh-mps"
+KODEWAVES_MANAGED_CONFIGURATION_NAME = "Kodewaves Cloudonix SIP"
+MANAGED_CONFIGURATION_NAME = KODEWAVES_MANAGED_CONFIGURATION_NAME
+DOGRAH_MANAGED_CONFIGURATION_NAME = "Dograh Cloudonix SIP"
+
+KODEWAVES_MANAGED_BY = "kodewaves-mps"
+MANAGED_BY = "kodewaves-mps"
+DOGRAH_MANAGED_BY = "dograh-mps"
 
 
 def normalize_cloudonix_domain(value: str | None) -> str | None:

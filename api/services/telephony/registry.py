@@ -365,7 +365,9 @@ def _instrument_validation_error_response(spec: ProviderSpec) -> None:
     original = getattr(spec.provider_cls, "generate_validation_error_response", None)
     if not callable(original):
         return
-    if getattr(original, "_dograh_failure_reporting_instrumented", False):
+    if getattr(original, "_kodewaves_failure_reporting_instrumented", False) or getattr(
+        original, "_dograh_failure_reporting_instrumented", False
+    ):
         return
 
     @wraps(original)
@@ -373,6 +375,7 @@ def _instrument_validation_error_response(spec: ProviderSpec) -> None:
         log_telephony_error(error_type, provider=spec.name)
         return original(error_type, *args, **kwargs)
 
+    generate_validation_error_response._kodewaves_failure_reporting_instrumented = True
     generate_validation_error_response._dograh_failure_reporting_instrumented = True
     spec.provider_cls.generate_validation_error_response = staticmethod(
         generate_validation_error_response

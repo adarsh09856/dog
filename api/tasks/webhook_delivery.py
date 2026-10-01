@@ -28,12 +28,14 @@ from api.constants import DEFAULT_WEBHOOK_DELIVERY_CONFIG
 from api.db import db_client
 from api.db.models import WebhookDeliveryModel
 from api.errors.failure import (
-    DograhFailure,
     ErrorSource,
+    KodewavesFailure,
     classify_exception,
     classify_http_response,
     log_failure,
 )
+
+DograhFailure = KodewavesFailure
 from api.tasks.function_names import FunctionNames
 from api.utils.credential_auth import build_auth_header
 
@@ -113,6 +115,9 @@ def _log_webhook_request(
             if key.lower()
             in {
                 "content-type",
+                "x-kodewaves-delivery-id",
+                "x-kodewaves-workflow-run-id",
+                "x-kodewaves-delivery-attempt",
                 "x-dograh-delivery-id",
                 "x-dograh-workflow-run-id",
                 "x-dograh-delivery-attempt",
@@ -205,6 +210,9 @@ async def _build_headers(delivery: WebhookDeliveryModel, attempt: int) -> dict:
             headers[key] = value
 
     # Stable idempotency signal so the receiver can dedupe retried deliveries.
+    headers["X-Kodewaves-Delivery-Id"] = delivery.delivery_uuid
+    headers["X-Kodewaves-Workflow-Run-Id"] = str(delivery.workflow_run_id)
+    headers["X-Kodewaves-Delivery-Attempt"] = str(attempt)
     headers["X-Dograh-Delivery-Id"] = delivery.delivery_uuid
     headers["X-Dograh-Workflow-Run-Id"] = str(delivery.workflow_run_id)
     headers["X-Dograh-Delivery-Attempt"] = str(attempt)
@@ -243,7 +251,7 @@ async def _handle_transient_failure(
 
 
 def _log_dead_letter_failure(
-    delivery: WebhookDeliveryModel, failure: DograhFailure
+    delivery: WebhookDeliveryModel, failure: KodewavesFailure
 ) -> None:
     log_failure(
         failure,

@@ -1,4 +1,4 @@
-"""Dograh-specific Gemini adapter customizations."""
+"""Kodewaves sovereign Gemini adapter customizations."""
 
 from typing import Any
 
@@ -7,7 +7,7 @@ from pipecat.adapters.services.gemini_adapter import GeminiLLMAdapter
 from pipecat.adapters.services.gemini_live_adapter import GeminiLiveLLMAdapter
 
 
-class DograhGeminiJSONSchemaAdapter(GeminiLLMAdapter):
+class KodewavesGeminiJSONSchemaAdapter(GeminiLLMAdapter):
     """Use Gemini's full JSON Schema tool parameter field.
 
     Pipecat's default Gemini adapter maps ``FunctionSchema.parameters`` into
@@ -40,8 +40,8 @@ class DograhGeminiJSONSchemaAdapter(GeminiLLMAdapter):
         return formatted_standard_tools + custom_gemini_tools
 
 
-class DograhGeminiLiveJSONSchemaAdapter(
-    GeminiLiveLLMAdapter, DograhGeminiJSONSchemaAdapter
+class KodewavesGeminiLiveJSONSchemaAdapter(
+    GeminiLiveLLMAdapter, KodewavesGeminiJSONSchemaAdapter
 ):
     """Gemini Live adapter with the JSON Schema tool-parameter fix.
 
@@ -51,3 +51,8 @@ class DograhGeminiLiveJSONSchemaAdapter(
     """
 
     pass
+
+
+# Compatibility aliases
+DograhGeminiJSONSchemaAdapter = KodewavesGeminiJSONSchemaAdapter
+DograhGeminiLiveJSONSchemaAdapter = KodewavesGeminiLiveJSONSchemaAdapter

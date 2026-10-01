@@ -95,6 +95,7 @@ class NoveumRuntimeSession(IntegrationRuntimeSession):
         attributes = dict(self._call_attributes)
         disposition = gathered_context.get("call_disposition")
         if disposition:
+            attributes["kodewaves.call_disposition"] = disposition
             attributes["dograh.call_disposition"] = disposition
 
         envelope = build_payload_envelope(self._observer, self._manifest, attributes)
@@ -150,6 +151,9 @@ def create_runtime_sessions(
 
     models = _resolve_model_labels(context)
     call_attributes: dict[str, Any] = {
+        "kodewaves.workflow_run_id": context.workflow_run_id,
+        "kodewaves.mode": getattr(context.workflow_run, "mode", None),
+        "kodewaves.agent_version": getattr(context.run_definition, "version_number", None),
         "dograh.workflow_run_id": context.workflow_run_id,
         "dograh.mode": getattr(context.workflow_run, "mode", None),
         "dograh.agent_version": getattr(context.run_definition, "version_number", None),

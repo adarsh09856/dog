@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $EnvFile = '.env'
-$Registry = if ([string]::IsNullOrEmpty($env:REGISTRY)) { 'ghcr.io/dograh-hq' } else { $env:REGISTRY }
+$Registry = if ([string]::IsNullOrEmpty($env:REGISTRY)) { 'kodewaves' } else { $env:REGISTRY }
 $EnableTelemetry = if ([string]::IsNullOrEmpty($env:ENABLE_TELEMETRY)) { 'true' } else { $env:ENABLE_TELEMETRY }
 $Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
@@ -17,7 +17,7 @@ function New-HexSecret {
 }
 
 function New-MinioRootUser {
-    return "dograh$((New-HexSecret).Substring(0, 12))"
+    return "kodewaves$((New-HexSecret).Substring(0, 12))"
 }
 
 function Get-DotEnvValue {
@@ -217,9 +217,9 @@ Write-Host 'This will run:'
 Write-Host "  `$env:REGISTRY = '$Registry'; `$env:ENABLE_TELEMETRY = '$EnableTelemetry'; docker compose --profile tunnel up --pull always"
 Write-Host ''
 
-$answer = Read-Host 'Start Dograh now? [Y/n]'
+$answer = Read-Host 'Start Kodewaves now? [Y/n]'
 if ($answer -match '^[Nn]') {
-    Write-Host 'Dograh was not started.'
+    Write-Host 'Kodewaves was not started.'
     exit 0
 }
 

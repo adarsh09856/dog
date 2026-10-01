@@ -60,11 +60,15 @@ CALL_ENDED = "call_ended"
 def host_name() -> str:
     """Which host ran this pipeline, reported as ``call_ended.detail.host``.
 
-    Multi-host installations set ``DOGRAH_INSTANCE`` to a stable instance name
+    Multi-host installations set ``KODEWAVES_INSTANCE`` to a stable instance name
     so latencies and outcomes can be compared per host; otherwise the hostname
     identifies it.
     """
-    return os.environ.get("DOGRAH_INSTANCE") or socket.gethostname()
+    return (
+        os.environ.get("KODEWAVES_INSTANCE")
+        or os.environ.get("DOGRAH_INSTANCE")
+        or socket.gethostname()
+    )
 
 
 @dataclass(slots=True, kw_only=True)

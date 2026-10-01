@@ -49,10 +49,10 @@ from pipecat.transcriptions.language import Language
 from pipecat.utils.time import time_now_iso8601
 
 
-class DograhOpenAIRealtimeLLMService(
+class KodewavesOpenAIRealtimeLLMService(
     RealtimeConversationMixin, OpenAIRealtimeLLMService
 ):
-    """OpenAI Realtime with Dograh engine integration quirks. See module docstring."""
+    """OpenAI Realtime with Kodewaves sovereign engine integration."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -362,3 +362,7 @@ class DograhOpenAIRealtimeLLMService(
             finalized=True,
         )
         await self._handle_user_transcription(evt.transcript, True, Language.EN)
+
+
+# Compatibility alias
+DograhOpenAIRealtimeLLMService = KodewavesOpenAIRealtimeLLMService

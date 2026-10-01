@@ -113,7 +113,7 @@ class ARIProvider(TelephonyProvider):
         dial_string = build_dial_string(to_number, self.dial_string_template)
 
         # Prepare channel creation data
-        channel_id = f"dograh-call-{uuid.uuid4()}"
+        channel_id = f"kodewaves-call-{uuid.uuid4()}"
         params = {
             "channelId": channel_id,
             "endpoint": dial_string,

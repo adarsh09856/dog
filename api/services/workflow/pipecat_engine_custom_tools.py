@@ -527,7 +527,7 @@ class CustomToolManager:
         return end_call_handler
 
     def _create_transfer_agent_handler(self, tool: Any, function_name: str):
-        """Create a handler that hands the live call to another Dograh agent.
+        """Create a handler that hands the live call to another Kodewaves agent.
 
         The handler's job ends the moment the handoff is accepted. Announcing,
         holding, preparing the destination and activating it all run on an
@@ -814,7 +814,7 @@ class CustomToolManager:
                                 external_result, properties=properties
                             )
                             # Let VICIdial redirect the customer out of its
-                            # conference before Dograh tears down the local leg.
+                            # conference before Kodewaves tears down the local leg.
                             await asyncio.sleep(_TRANSFER_POST_HANDOFF_DELAY_SECS)
                             await self._engine.end_call_with_reason(
                                 EndTaskReason.CALL_TRANSFERRED.value,

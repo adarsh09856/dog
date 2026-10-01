@@ -23,19 +23,22 @@ def format_public_cost_info(
     elif cost_info and cost_info.get("call_duration_seconds") is not None:
         duration = int(round(cost_info.get("call_duration_seconds") or 0))
 
-    dograh_token_usage = 0
+    kodewaves_token_usage = 0
     if cost_info:
-        if "dograh_token_usage" in cost_info:
-            dograh_token_usage = cost_info.get("dograh_token_usage") or 0
+        if "kodewaves_token_usage" in cost_info:
+            kodewaves_token_usage = cost_info.get("kodewaves_token_usage") or 0
+        elif "dograh_token_usage" in cost_info:
+            kodewaves_token_usage = cost_info.get("dograh_token_usage") or 0
         elif "total_cost_usd" in cost_info:
-            dograh_token_usage = round(
+            kodewaves_token_usage = round(
                 float(cost_info.get("total_cost_usd", 0)) * 100, 2
             )
 
-    if duration is None and dograh_token_usage == 0:
+    if duration is None and kodewaves_token_usage == 0:
         return None
 
     return {
-        "dograh_token_usage": dograh_token_usage,
+        "kodewaves_token_usage": kodewaves_token_usage,
+        "dograh_token_usage": kodewaves_token_usage,
         "call_duration_seconds": duration,
     }

@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { useDispositionCodes } from "@/hooks/useDispositionCodes";
 
 type Row = {
-  /** The Dograh disposition being translated. Fixed for a built-in row. */
+  /** The Kodewaves disposition being translated. Fixed for a built-in row. */
   source: string;
   /** What this organization calls it. Seeded with `source`. */
   target: string;
@@ -28,7 +28,7 @@ type Row = {
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Overrides currently stored, keyed by Dograh disposition. */
+  /** Overrides currently stored, keyed by Kodewaves disposition. */
   mapping: Record<string, string>;
   /** Persist the mapping and report whether the dialog may close. */
   onSave: (mapping: Record<string, string>) => Promise<boolean>;

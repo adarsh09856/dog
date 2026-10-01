@@ -4,12 +4,14 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from api.errors.failure import (
-    DograhFailure,
     ErrorSource,
     ErrorType,
+    KodewavesFailure,
     classify_exception,
     log_failure,
 )
+
+DograhFailure = KodewavesFailure
 
 if TYPE_CHECKING:
     from api.services.telephony.base import TelephonyProvider
@@ -17,7 +19,7 @@ if TYPE_CHECKING:
 
 def classify_telephony_exception(
     exc: BaseException, *, provider: object | None
-) -> DograhFailure:
+) -> KodewavesFailure:
     """Apply config-aware rules available only at the telephony boundary."""
 
     try:
@@ -34,7 +36,7 @@ def classify_telephony_exception(
         )
     ):
         provider_value = getattr(provider, "value", provider) or "telephony"
-        return DograhFailure(
+        return KodewavesFailure(
             source=ErrorSource.TELEPHONY,
             type=ErrorType.CONFIG_ERROR,
             code=f"{provider_value}-invalid-config",
@@ -55,7 +57,9 @@ def classify_telephony_exception(
 def instrument_telephony_provider(provider: "TelephonyProvider") -> "TelephonyProvider":
     """Classify outbound initiation errors without changing propagation semantics."""
 
-    if getattr(provider, "_dograh_failure_reporting_instrumented", False):
+    if getattr(provider, "_kodewaves_failure_reporting_instrumented", False) or getattr(
+        provider, "_dograh_failure_reporting_instrumented", False
+    ):
         return provider
 
     original = provider.initiate_call
@@ -80,6 +84,7 @@ def instrument_telephony_provider(provider: "TelephonyProvider") -> "TelephonyPr
 
     try:
         provider.initiate_call = initiate_call_with_failure_reporting
+        provider._kodewaves_failure_reporting_instrumented = True
         provider._dograh_failure_reporting_instrumented = True
     except Exception:
         # Instrumentation must not make a valid provider unusable. All current

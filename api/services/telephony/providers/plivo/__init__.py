@@ -53,7 +53,7 @@ async def _ensure_application_id(
     backend_endpoint, _ = await get_backend_endpoints()
     inbound_url = f"{backend_endpoint}/api/v1/telephony/inbound/run"
 
-    app_name = f"dograh-{uuid.uuid4().hex[:12]}"
+    app_name = f"kodewaves-{uuid.uuid4().hex[:12]}"
     endpoint = f"{PLIVO_API_BASE_URL}/Account/{auth_id}/Application/"
     body = {
         "app_name": app_name,
@@ -104,7 +104,7 @@ async def _ensure_application_id(
 
 _UI_METADATA = ProviderUIMetadata(
     display_name="Plivo",
-    docs_url="https://docs.dograh.com/integrations/telephony/plivo",
+    docs_url="https://docs.kodewaves.in/integrations/telephony/plivo",
     fields=[
         ProviderUIField(name="auth_id", label="Auth ID", type="text", sensitive=True),
         ProviderUIField(

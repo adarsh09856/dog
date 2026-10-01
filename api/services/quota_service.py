@@ -1,4 +1,4 @@
-"""Quota checking service for Dograh credits.
+"""Quota checking service for Kodewaves credits.
 
 This module provides reusable quota checking functionality that can be used
 across different endpoints (WebRTC signaling, telephony, public API triggers).
@@ -15,6 +15,7 @@ from api.db import db_client
 from api.db.models import UserModel
 from api.errors.failure import (
     DograhFailure,
+    KodewavesFailure,
     ErrorSource,
     ErrorType,
     classify_exception,
@@ -26,12 +27,13 @@ from api.services.configuration.ai_model_configuration import (
 from api.services.configuration.registry import ServiceProviders
 from api.services.managed_model_services import (
     MPS_CORRELATION_ID_CONTEXT_KEY,
-    get_dograh_service_api_key,
+    get_kodewaves_service_api_key,
     uses_managed_model_services_v2,
 )
 from api.services.mps_service_key_client import mps_service_key_client
 
-MINIMUM_DOGRAH_CREDITS_FOR_CALL = 0.10
+MINIMUM_KODEWAVES_CREDITS_FOR_CALL = 0.10
+MINIMUM_DOGRAH_CREDITS_FOR_CALL = MINIMUM_KODEWAVES_CREDITS_FOR_CALL
 
 _MPS_UNREACHABLE_ERRORS = (
     httpx.TimeoutException,
@@ -84,7 +86,7 @@ def _log_mps_exception(
         classify_exception(
             error,
             source=ErrorSource.PLATFORM,
-            provider="dograh",
+            provider="kodewaves",
             error_owner="operator",
         ),
         organization_id=organization_id,
@@ -101,13 +103,13 @@ def _log_mps_system_failure(
     workflow_run_id: int | None = None,
 ) -> None:
     log_failure(
-        DograhFailure(
+        KodewavesFailure(
             source=ErrorSource.PLATFORM,
             type=ErrorType.SYSTEM_ERROR,
-            code=f"dograh-{code}",
+            code=f"kodewaves-{code}",
             internal_message=message,
             external_message="Kodewaves could not verify managed model access.",
-            provider="dograh",
+            provider="kodewaves",
             error_owner="operator",
             retryable=None,
         ),
@@ -116,25 +118,28 @@ def _log_mps_system_failure(
     )
 
 
-def _log_insufficient_dograh_credits(
+def _log_insufficient_kodewaves_credits(
     *,
     organization_id: int | None = None,
     workflow_run_id: int | None = None,
 ) -> None:
     log_failure(
-        DograhFailure(
+        KodewavesFailure(
             source=ErrorSource.PLATFORM,
             type=ErrorType.QUOTA_ERROR,
-            code="dograh-insufficient-credits",
+            code="kodewaves-insufficient-credits",
             internal_message="Insufficient Kodewaves credits",
             external_message="Your organization has insufficient Kodewaves credits.",
-            provider="dograh",
+            provider="kodewaves",
             error_owner="user",
             retryable=False,
         ),
         organization_id=organization_id,
         workflow_run_id=workflow_run_id,
     )
+
+
+_log_insufficient_dograh_credits = _log_insufficient_kodewaves_credits
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -209,18 +214,26 @@ def _oss_run_authorization_denied_result(
     return _insufficient_oss_quota_result()
 
 
-def _service_uses_dograh(service: Any) -> bool:
+def _service_uses_kodewaves(service: Any) -> bool:
     provider = getattr(service, "provider", None)
     return (
-        provider == ServiceProviders.DOGRAH or provider == ServiceProviders.DOGRAH.value
+        provider in (
+            ServiceProviders.KODEWAVES,
+            ServiceProviders.KODEWAVES.value,
+            ServiceProviders.DOGRAH,
+            ServiceProviders.DOGRAH.value,
+        )
     )
 
 
-def _dograh_api_keys(user_config: Any) -> set[str]:
+_service_uses_dograh = _service_uses_kodewaves
+
+
+def _kodewaves_api_keys(user_config: Any) -> set[str]:
     api_keys: set[str] = set()
     for section_name in ("llm", "stt", "tts", "embeddings"):
         service = getattr(user_config, section_name, None)
-        if not _service_uses_dograh(service):
+        if not _service_uses_kodewaves(service):
             continue
         if hasattr(service, "get_all_api_keys"):
             all_api_keys = [
@@ -235,6 +248,9 @@ def _dograh_api_keys(user_config: Any) -> set[str]:
         if api_key:
             api_keys.add(api_key)
     return api_keys
+
+
+_dograh_api_keys = _kodewaves_api_keys
 
 
 def _is_service_key_org_mismatch_error(error: Exception) -> bool:
@@ -309,7 +325,7 @@ async def _authorize_hosted_workflow_run_start(
         workflow_run_id and uses_managed_model_services_v2(user_config)
     )
     service_key = (
-        get_dograh_service_api_key(user_config) if requires_correlation else None
+        get_kodewaves_service_api_key(user_config) if requires_correlation else None
     )
     if service_key in ("sovereign-local-cpu", "sovereign-managed", "default", "managed", "kodewaves-sovereign"):
         return QuotaCheckResult(has_quota=True)
@@ -321,14 +337,18 @@ async def _authorize_hosted_workflow_run_start(
     return QuotaCheckResult(has_quota=True)
 
 
-async def _authorize_oss_dograh_keys(
+async def _authorize_oss_kodewaves_keys(
     *,
-    dograh_api_keys: set[str],
+    kodewaves_api_keys: set[str] | None = None,
+    dograh_api_keys: set[str] | None = None,
 ) -> QuotaCheckResult:
     """Check per-key credits for OSS deployments before a run starts.
     In sovereign Kodewaves self-hosted mode, platform keys are managed locally.
     """
     return QuotaCheckResult(has_quota=True)
+
+
+_authorize_oss_dograh_keys = _authorize_oss_kodewaves_keys
 
 
 async def _authorize_oss_managed_v2_correlation(
@@ -340,11 +360,11 @@ async def _authorize_oss_managed_v2_correlation(
     if not workflow_run_id or not uses_managed_model_services_v2(user_config):
         return QuotaCheckResult(has_quota=True)
 
-    service_key = get_dograh_service_api_key(user_config)
+    service_key = get_kodewaves_service_api_key(user_config)
     if not service_key:
         _log_mps_system_failure(
             "invalid-service-key",
-            "OSS managed-v2 workflow configuration has no Dograh service key",
+            "OSS managed-v2 workflow configuration has no Kodewaves service key",
             workflow_run_id=workflow_run_id,
         )
         return QuotaCheckResult(
@@ -407,7 +427,7 @@ async def _authorize_oss_managed_v2_run(
             service_key=service_key,
             workflow_run_id=workflow_run_id,
             require_correlation_id=True,
-            minimum_credits=MINIMUM_DOGRAH_CREDITS_FOR_CALL,
+            minimum_credits=MINIMUM_KODEWAVES_CREDITS_FOR_CALL,
             metadata={"workflow_id": workflow_id},
         )
     except httpx.HTTPStatusError as e:
@@ -428,8 +448,8 @@ async def _authorize_oss_managed_v2_run(
             "MPS service-key run authorization is unavailable; using legacy "
             "quota and correlation endpoints"
         )
-        legacy_quota = await _authorize_oss_dograh_keys(
-            dograh_api_keys={service_key},
+        legacy_quota = await _authorize_oss_kodewaves_keys(
+            kodewaves_api_keys={service_key},
         )
         if not legacy_quota.has_quota:
             return legacy_quota
@@ -460,9 +480,9 @@ async def _authorize_oss_managed_v2_run(
     remaining = _safe_float(authorization.get("remaining_credits"))
     if (
         not authorization.get("allowed", False)
-        or remaining < MINIMUM_DOGRAH_CREDITS_FOR_CALL
+        or remaining < MINIMUM_KODEWAVES_CREDITS_FOR_CALL
     ):
-        _log_insufficient_dograh_credits(workflow_run_id=workflow_run_id)
+        _log_insufficient_kodewaves_credits(workflow_run_id=workflow_run_id)
         return _oss_run_authorization_denied_result(authorization)
 
     correlation_id = _required_correlation_id(authorization)
@@ -667,7 +687,7 @@ async def authorize_workflow_run_start(
 
         is_managed = (
             uses_managed_model_services_v2(user_config)
-            or bool(_dograh_api_keys(user_config))
+            or bool(_kodewaves_api_keys(user_config))
             or getattr(user_config, "is_managed", False)
         )
 

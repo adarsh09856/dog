@@ -42,10 +42,10 @@ from pipecat.utils.time import time_now_iso8601
 from pipecat.utils.types import NotGiven, assert_given
 
 
-class DograhUltravoxOneShotInputParams(OneShotInputParams):
-    """Dograh-friendly OneShot params with string voice support."""
+class KodewavesUltravoxOneShotInputParams(OneShotInputParams):
+    """Kodewaves-friendly OneShot params with string voice support."""
 
-    # Ultravox accepts built-in voice names as well as UUIDs. Dograh stores the
+    # Ultravox accepts built-in voice names as well as UUIDs. Kodewaves stores the
     # former (for example, "Mark"), while upstream narrows this field to UUID.
     voice: str | None = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
         default=None
@@ -55,10 +55,10 @@ class DograhUltravoxOneShotInputParams(OneShotInputParams):
 _ULTRAVOX_MAX_TOOL_TIMEOUT_SECS = 40.0
 
 
-class DograhUltravoxRealtimeLLMService(
+class KodewavesUltravoxRealtimeLLMService(
     RealtimeConversationMixin, UltravoxRealtimeLLMService
 ):
-    """Ultravox realtime with Dograh engine integration quirks."""
+    """Ultravox realtime with Kodewaves sovereign engine integration."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -450,7 +450,7 @@ class DograhUltravoxRealtimeLLMService(
         if isinstance(output_medium, NotGiven):
             output_medium = current_params.output_medium
 
-        return DograhUltravoxOneShotInputParams(
+        return KodewavesUltravoxOneShotInputParams(
             api_key=current_params.api_key,
             system_prompt=self._current_system_instruction(),
             temperature=current_params.temperature,
@@ -529,3 +529,8 @@ class DograhUltravoxRealtimeLLMService(
                 parts.append(text)
             return "\n".join(parts) if parts else None
         return None
+
+
+# Compatibility aliases
+DograhUltravoxRealtimeLLMService = KodewavesUltravoxRealtimeLLMService
+DograhUltravoxOneShotInputParams = KodewavesUltravoxOneShotInputParams

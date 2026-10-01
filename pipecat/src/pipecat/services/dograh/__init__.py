@@ -4,16 +4,20 @@
 # SPDX-License-Identifier: BSD 2-Clause License
 #
 
-"""Dograh unified AI services for Pipecat.
+"""Backward compatibility module for Dograh services.
 
-This module provides unified access to various AI services through a single
-Dograh API endpoint, abstracting away provider-specific implementations.
+All implementations have migrated to Kodewaves. This module provides backward
+compatibility aliases pointing to `pipecat.services.kodewaves`.
 """
 
-from pipecat.services.dograh.flux.stt import DograhFluxSTTService
-from pipecat.services.dograh.llm import DograhLLMService
-from pipecat.services.dograh.stt import DograhSTTService, DograhSTTSettings
-from pipecat.services.dograh.tts import DograhTTSService, DograhTTSSettings
+from pipecat.services.kodewaves import (
+    DograhFluxSTTService,
+    DograhLLMService,
+    DograhSTTService,
+    DograhSTTSettings,
+    DograhTTSService,
+    DograhTTSSettings,
+)
 
 __all__ = [
     "DograhFluxSTTService",

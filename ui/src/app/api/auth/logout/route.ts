@@ -1,7 +1,13 @@
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { OSS_TOKEN_COOKIE, OSS_USER_COOKIE, sessionCookieOptions } from '@/lib/auth/cookies';
+import {
+  LEGACY_OSS_TOKEN_COOKIE,
+  LEGACY_OSS_USER_COOKIE,
+  OSS_TOKEN_COOKIE,
+  OSS_USER_COOKIE,
+  sessionCookieOptions,
+} from '@/lib/auth/cookies';
 
 export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
@@ -9,6 +15,8 @@ export async function POST(request: NextRequest) {
 
   cookieStore.set(OSS_TOKEN_COOKIE, '', options);
   cookieStore.set(OSS_USER_COOKIE, '', options);
+  cookieStore.set(LEGACY_OSS_TOKEN_COOKIE, '', options);
+  cookieStore.set(LEGACY_OSS_USER_COOKIE, '', options);
 
   return NextResponse.json({ success: true });
 }

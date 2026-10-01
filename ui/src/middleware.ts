@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { getServerBackendUrl } from '@/lib/apiClient';
-import { OSS_TOKEN_COOKIE } from '@/lib/auth/cookies';
+import { LEGACY_OSS_TOKEN_COOKIE, OSS_TOKEN_COOKIE } from '@/lib/auth/cookies';
 
 // Paths that don't require authentication in OSS mode.
 // '/' (Landing page), '/pricing' (SaaS pricing), and '/embed' (widget) are public.
@@ -31,8 +31,10 @@ async function fetchAuthProvider(): Promise<string> {
 }
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-  const token = request.cookies.get(OSS_TOKEN_COOKIE)?.value || request.cookies.get('oss_token')?.value;
+  const token =
+    request.cookies.get(OSS_TOKEN_COOKIE)?.value ||
+    request.cookies.get(LEGACY_OSS_TOKEN_COOKIE)?.value ||
+    request.cookies.get('oss_token')?.value;
 
   // Strict server-side guard for /admin routes - must have token regardless of provider
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {

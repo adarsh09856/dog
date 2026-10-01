@@ -42,7 +42,7 @@ services:
     build:
       context: .
       dockerfile: deploy/minio/Dockerfile
-    image: dograh-minio:local
+    image: kodewaves-minio:local
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin

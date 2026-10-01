@@ -13,7 +13,7 @@ Three kinds of built-in value feed that field:
 * the telephony status callback, via ``status_processor`` and
   ``mark_workflow_run_failed`` — a ``TelephonyCallStatus`` value, for calls
   that never connected;
-* terminal variable extraction — one of Dograh's default business outcomes,
+* terminal variable extraction — one of Kodewaves's default business outcomes,
   such as ``do_not_call`` or ``callback_requested``.
 
 Organizations that map dispositions to their own codes (``XFER``, ``DNC``, …)
