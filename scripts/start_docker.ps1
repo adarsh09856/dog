@@ -134,11 +134,11 @@ function Sync-PostgresPassword {
 
     Wait-PostgresReady
 
-    "ALTER USER postgres WITH PASSWORD :'dograh_password';" | docker compose exec -T postgres psql `
+    "ALTER USER postgres WITH PASSWORD :'kodewaves_password';" | docker compose exec -T postgres psql `
         -U postgres `
         -d postgres `
         -v 'ON_ERROR_STOP=1' `
-        -v "dograh_password=$Password" > $null
+        -v "kodewaves_password=$Password" > $null
     if ($LASTEXITCODE -ne 0) {
         Write-Error 'Failed to sync POSTGRES_PASSWORD with the existing Postgres volume.'
         exit $LASTEXITCODE

@@ -160,8 +160,8 @@ fi
 
 mkdir -p "$RUN_DIR"
 
-NGINX_UPSTREAM_TEMPLATE="$BASE_DIR/nginx/dograh_upstream.conf.template"
-NGINX_UPSTREAM_CONF="/etc/nginx/conf.d/dograh_upstream.conf"
+NGINX_UPSTREAM_TEMPLATE="$BASE_DIR/nginx/kodewaves_upstream.conf.template"
+NGINX_UPSTREAM_CONF="/etc/nginx/conf.d/kodewaves_upstream.conf"
 
 ###############################################################################
 ### 4) Install ts_validator npm dependencies

@@ -126,12 +126,12 @@ sync_postgres_password() {
         fail "Postgres did not become ready while syncing POSTGRES_PASSWORD."
     fi
 
-    printf '%s\n' "ALTER USER postgres WITH PASSWORD :'dograh_password';" \
+    printf '%s\n' "ALTER USER postgres WITH PASSWORD :'kodewaves_password';" \
         | docker compose exec -T postgres psql \
         -U postgres \
         -d postgres \
         -v ON_ERROR_STOP=1 \
-        -v "dograh_password=$postgres_password" >/dev/null
+        -v "kodewaves_password=$postgres_password" >/dev/null
     echo "Postgres password synced."
 }
 
