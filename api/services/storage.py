@@ -19,6 +19,8 @@ from api.enums import Environment, StorageBackend
 
 from .filesystem import BaseFileSystem, MinioFileSystem, NullFileSystem, S3FileSystem
 
+_storage_backends_cache: dict[str, BaseFileSystem] = {}
+
 
 def get_storage_for_backend(backend: str) -> BaseFileSystem:
     """Get storage instance for a specific backend enum.
@@ -27,6 +29,10 @@ def get_storage_for_backend(backend: str) -> BaseFileSystem:
     - Code 1 (S3): AWS S3 via S3FileSystem
     - Code 2 (MINIO): MinIO via MinioFileSystem
     """
+    if backend in _storage_backends_cache:
+        return _storage_backends_cache[backend]
+
+    instance: BaseFileSystem
     # Code 2: MinIO implementation (local/OSS deployments)
     if backend == StorageBackend.MINIO.value:
         if not MINIO_PUBLIC_ENDPOINT:
@@ -40,7 +46,7 @@ def get_storage_for_backend(backend: str) -> BaseFileSystem:
             f"Initializing {backend} storage at {MINIO_ENDPOINT} "
             f"(public: {MINIO_PUBLIC_ENDPOINT}) with bucket '{MINIO_BUCKET}'"
         )
-        return MinioFileSystem(
+        instance = MinioFileSystem(
             endpoint=MINIO_ENDPOINT,
             access_key=MINIO_ACCESS_KEY,
             secret_key=MINIO_SECRET_KEY,
@@ -60,7 +66,7 @@ def get_storage_for_backend(backend: str) -> BaseFileSystem:
         logger.info(
             f"Initializing {backend} storage with bucket '{bucket}' in region '{region}'"
         )
-        return S3FileSystem(
+        instance = S3FileSystem(
             bucket_name=bucket,
             region_name=region,
             endpoint_url=S3_ENDPOINT_URL,
@@ -68,14 +74,11 @@ def get_storage_for_backend(backend: str) -> BaseFileSystem:
             addressing_style=S3_ADDRESSING_STYLE,
         )
 
-    # Future backend implementations can be added here:
-    # elif backend == StorageBackend.GCS:  # Code 3
-    #     return GoogleCloudFileSystem(...)
-    # elif backend == StorageBackend.AZURE:  # Code 4
-    #     return AzureBlobFileSystem(...)
-
     else:
         raise ValueError(f"Unknown storage backend: {backend}")
+
+    _storage_backends_cache[backend] = instance
+    return instance
 
 
 def get_current_storage_backend() -> StorageBackend:

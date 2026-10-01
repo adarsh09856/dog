@@ -62,7 +62,7 @@ start() {
 # ari_manager and campaign_orchestrator are optional; each defaults to on and
 # can be turned off (e.g. for an API/worker-only replica) by setting the flag to
 # "false" in the container env / docker-compose .env.
-ENABLE_ARI_MANAGER=${ENABLE_ARI_MANAGER:-true}
+ENABLE_ARI_MANAGER=${ENABLE_ARI_MANAGER:-false}
 ENABLE_CAMPAIGN_ORCHESTRATOR=${ENABLE_CAMPAIGN_ORCHESTRATOR:-true}
 
 if [[ "$ENABLE_ARI_MANAGER" == "true" ]]; then
@@ -95,6 +95,13 @@ done
 ### 5) Wait — if any service exits, tear the container down so docker restarts
 ###############################################################################
 
+START_TIME=$(date +%s)
 wait -n
-echo "A service exited; tearing down container."
+EXIT_TIME=$(date +%s)
+UPTIME=$((EXIT_TIME - START_TIME))
+echo "A service exited after ${UPTIME}s; tearing down container."
+if [ "$UPTIME" -lt 10 ]; then
+  echo "Service exited in under 10s (${UPTIME}s). Backing off for 10s to prevent rapid CPU crash-loop..."
+  sleep 10
+fi
 shutdown

@@ -169,7 +169,7 @@ COPY --from=ts-deps --chown=dograh:dograh /ts_validator/node_modules ./api/mcp_s
 # (search_dograh_docs / fetch_dograh_doc) so agents can learn Dograh.
 COPY --chown=dograh:dograh ./docs ./docs
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/pipecat/src:/app
 
 # Disable file logging in Docker - logs go to stdout for docker logs
 ENV LOG_TO_FILE=false

@@ -19,9 +19,14 @@ services:
       - kodewaves_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1024M
     networks:
       - kodewaves-network
 
@@ -37,9 +42,14 @@ services:
       - kodewaves_redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secure_pass}", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
     networks:
       - kodewaves-network
 
@@ -55,6 +65,7 @@ services:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER:-minioadmin}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-minio_secure_pass}"
       MINIO_API_CORS_ALLOW_ORIGIN: "*"
+      MINIO_SCANNER_SPEED: "slow"
     ports:
       - "127.0.0.1:${MINIO_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -62,9 +73,14 @@ services:
       - kodewaves_minio_data:/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
+      interval: 15s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     networks:
       - kodewaves-network
 
@@ -112,9 +128,9 @@ services:
       MINIO_SECURE: "false"
 
       # Process Workers
-      FASTAPI_WORKERS: "${FASTAPI_WORKERS:-2}"
-      ENABLE_ARI_MANAGER: "true"
-      ENABLE_CAMPAIGN_ORCHESTRATOR: "true"
+      FASTAPI_WORKERS: "${FASTAPI_WORKERS:-1}"
+      ENABLE_ARI_MANAGER: "${ENABLE_ARI_MANAGER:-false}"
+      ENABLE_CAMPAIGN_ORCHESTRATOR: "${ENABLE_CAMPAIGN_ORCHESTRATOR:-true}"
 
       # WebRTC NAT Traversal (STUN / TURN)
       ENABLE_COTURN: "${ENABLE_COTURN:-true}"
@@ -132,8 +148,12 @@ services:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
       - ./api:/app/api:ro
-      - ./pipecat:/app/pipecat:ro
       - ./scripts:/app/scripts:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 2048M
     networks:
       - kodewaves-network
 
@@ -155,6 +175,11 @@ services:
       BACKEND_URL: "http://api:8000"
     ports:
       - "127.0.0.1:${UI_PORT:-3010}:3010"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1024M
     networks:
       - kodewaves-network
 
@@ -163,6 +188,14 @@ services:
     image: coturn/coturn:4.8.0
     container_name: kodewaves_coturn
     restart: unless-stopped
+    command:
+      - -n
+      - --log-file=stdout
+      - --no-cli
+      - --fingerprint
+      - --lt-cred-mech
+      - --realm=${PUBLIC_HOST:-localhost}
+      - --static-auth-secret=${TURN_SECRET:-coturn_shared_secret}
     environment:
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
     ports:
@@ -171,6 +204,11 @@ services:
       - "5349:5349/udp"
       - "5349:5349/tcp"
       - "49152-49200:49152-49200/udp"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
     networks:
       - kodewaves-network
 
@@ -192,6 +230,7 @@ services:
     deploy:
       resources:
         limits:
+          cpus: "2.0"
           memory: 2000M
     networks:
       - kodewaves-network
@@ -208,9 +247,15 @@ services:
       - WHISPER_MODEL=Systran/faster-whisper-tiny
       - KOKORO_MODEL=hexgrad/Kokoro-82M
       - DEFAULT_DEVICE=cpu
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - VECLIB_MAXIMUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
     deploy:
       resources:
         limits:
+          cpus: "1.0"
           memory: 1000M
     networks:
       - kodewaves-network
