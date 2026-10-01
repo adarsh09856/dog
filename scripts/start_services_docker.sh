@@ -96,7 +96,7 @@ fi
 # worker accepted them first.
 for ((i=0; i<FASTAPI_WORKERS; i++)); do
   port=$((UVICORN_BASE_PORT + i))
-  start "uvicorn$i" uvicorn api.app:app --host 0.0.0.0 --port "$port" --workers 1
+  start "uvicorn$i" uvicorn api.app:app --host 0.0.0.0 --port "$port"
 done
 
 for ((i=1; i<=ARQ_WORKERS; i++)); do

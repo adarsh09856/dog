@@ -7,7 +7,7 @@
 """Kodewaves STT Service implementation."""
 
 from dataclasses import dataclass
-from pipecat.services.stt_settings import STTSettings
+from pipecat.services.settings import STTSettings
 from pipecat.services.dograh.stt import DograhSTTService, DograhSTTSettings
 
 

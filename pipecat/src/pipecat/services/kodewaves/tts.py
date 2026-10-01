@@ -7,7 +7,7 @@
 """Kodewaves TTS Service implementation."""
 
 from dataclasses import dataclass
-from pipecat.services.tts_settings import TTSSettings
+from pipecat.services.settings import TTSSettings
 from pipecat.services.dograh.tts import DograhTTSService, DograhTTSSettings
 
 
