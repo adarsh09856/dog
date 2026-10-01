@@ -22,6 +22,12 @@ from api.enums import OrganizationConfigurationKey, PostHogEvent
 from api.errors.failure import ErrorSource, classify_exception, log_failure
 from api.errors.mps import MPSUnavailableError
 from api.schemas.ai_model_configuration import (
+    KODEWAVES_DEFAULT_LANGUAGE,
+    KODEWAVES_DEFAULT_VOICE,
+    KODEWAVES_SPEED_MAX,
+    KODEWAVES_SPEED_MIN,
+    KODEWAVES_SPEED_OPTIONS,
+    KODEWAVES_SPEED_STEP,
     DOGRAH_DEFAULT_LANGUAGE,
     DOGRAH_DEFAULT_VOICE,
     DOGRAH_SPEED_MAX,
@@ -227,6 +233,7 @@ class ModelConfigurationPricingResponse(BaseModel):
     """MPS-owned effective prices relevant to model configuration choices."""
 
     platform_usage: ModelConfigurationMetricPrice | None = None
+    kodewaves_model: ModelConfigurationMetricPrice | None = None
     dograh_model: ModelConfigurationMetricPrice | None = None
 
 
@@ -331,8 +338,11 @@ async def get_telephony_config_warnings(user: UserModel = Depends(get_user)):
 # ---------------------------------------------------------------------------
 
 
-def _dograh_allows_custom_voice() -> bool:
-    extra = DograhTTSService.model_fields["voice"].json_schema_extra
+def _kodewaves_allows_custom_voice() -> bool:
+    extra = KodewavesTTSService.model_fields["voice"].json_schema_extra
+    return bool(extra.get("allow_custom_input")) if isinstance(extra, dict) else False
+
+_dograh_allows_custom_voice = _kodewaves_allows_custom_voice
     if isinstance(extra, dict):
         return bool(extra.get("allow_custom_input", False))
     return False
@@ -377,20 +387,20 @@ async def get_model_configuration_v2_defaults(
     }
     return {
         "dograh": {
-            "voices": [DOGRAH_DEFAULT_VOICE],
-            "allow_custom_input": _dograh_allows_custom_voice(),
-            "speeds": list(DOGRAH_SPEED_OPTIONS),
+            "voices": [KODEWAVES_DEFAULT_VOICE],
+            "allow_custom_input": _kodewaves_allows_custom_voice(),
+            "speeds": list(KODEWAVES_SPEED_OPTIONS),
             "speed_range": {
-                "min": DOGRAH_SPEED_MIN,
-                "max": DOGRAH_SPEED_MAX,
-                "step": DOGRAH_SPEED_STEP,
+                "min": KODEWAVES_SPEED_MIN,
+                "max": KODEWAVES_SPEED_MAX,
+                "step": KODEWAVES_SPEED_STEP,
             },
-            "languages": DOGRAH_STT_LANGUAGES,
-            "multilingual_languages": DOGRAH_MULTILINGUAL_AUTODETECT_LANGUAGES,
+            "languages": KODEWAVES_STT_LANGUAGES,
+            "multilingual_languages": KODEWAVES_MULTILINGUAL_AUTODETECT_LANGUAGES,
             "defaults": {
-                "voice": DOGRAH_DEFAULT_VOICE,
+                "voice": KODEWAVES_DEFAULT_VOICE,
                 "speed": 1.0,
-                "language": DOGRAH_DEFAULT_LANGUAGE,
+                "language": KODEWAVES_DEFAULT_LANGUAGE,
             },
         },
         "byok": {
