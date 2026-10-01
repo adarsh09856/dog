@@ -1,15 +1,15 @@
 ---
 name: merge-pipecat-upstream
-description: Merge the latest upstream pipecat-ai/pipecat tag into the pipecat submodule fork (dograh-hq/pipecat) and bump the dograh repo to it. Use whenever the user asks to bump, upgrade, sync, or merge pipecat, resolve pipecat merge conflicts, audit whether upstream changes break or supersede Dograh's in-fork patches, or verify the api/ wrapper subclasses still match the upstream classes they wrap.
+description: Merge the latest upstream pipecat-ai/pipecat tag into the pipecat submodule fork (kodewaves/pipecat) and bump the kodewaves repo to it. Use whenever the user asks to bump, upgrade, sync, or merge pipecat, resolve pipecat merge conflicts, audit whether upstream changes break or supersede Kodewaves's in-fork patches, or verify the api/ wrapper subclasses still match the upstream classes they wrap.
 ---
 
 # Merging upstream pipecat
 
-`pipecat/` is a git submodule of the fork `dograh-hq/pipecat` (`origin`), installed editable by `scripts/setup_requirements.sh`. Upstream is `https://github.com/pipecat-ai/pipecat` and is usually not configured as a remote. Fork `main` is the integration branch; the dograh repo pins a commit of it via the submodule pointer.
+`pipecat/` is a git submodule of the fork `kodewaves/pipecat` (`origin`), installed editable by `scripts/setup_requirements.sh`. Upstream is `https://github.com/pipecat-ai/pipecat` and is usually not configured as a remote. Fork `main` is the integration branch; the kodewaves repo pins a commit of it via the submodule pointer.
 
 Kodewaves customization lives in two layers, and both must be audited on every merge:
 
-1. **In-fork changes** — kodewaves-owned modules that don't exist upstream (`src/pipecat/services/dograh/`, serializers like `vobiz.py`/`cloudonix.py`/`asterisk.py`, `call_strategies.py`, `tests/test_dograh_services.py`) plus **patches to upstream files** (aggregators, transports, turn tracking, serializers).
+1. **In-fork changes** — kodewaves-owned modules that don't exist upstream (`src/pipecat/services/kodewaves/`, serializers like `vobiz.py`/`cloudonix.py`/`asterisk.py`, `call_strategies.py`, `tests/test_kodewaves_services.py`) plus **patches to upstream files** (aggregators, transports, turn tracking, serializers).
 2. **api/-side wrappers** — subclasses in the kodewaves repo (`api/services/pipecat/`, `api/services/telephony/providers/*/`, `api/services/workflow/pipecat_engine*.py`) that override upstream hooks and reach into private state (`self._session`, `self._bot_is_responding`, …). These break **silently** on upstream refactors — no merge conflict, no import error.
 
 Freshness rule: trust the current repos over any inventory in this file. Discover state with the commands below; don't assume file lists here are complete.
@@ -25,7 +25,7 @@ git tag --sort=-v:refname | head -5                                # pick NEW_TA
 git checkout -b merge-vNEW origin/main
 ```
 
-In the dograh repo, work on a `bump-pipecat-X.Y` branch.
+In the kodewaves repo, work on a `bump-pipecat-X.Y` branch.
 
 ## 2. Recon before merging
 
@@ -75,18 +75,18 @@ merged that PR and consumed the fragment into `CHANGELOG.md`, so the fork's copy
 git merge NEW_TAG
 ```
 
-Resolve conflicts using the recon verdicts. Then adapt kodewaves-owned modules to changed upstream contracts (base-class signatures, renamed frames/params) — precedent: the v1.5.0 merge needed a follow-up "Fix Kodewaves services for Pipecat 1.5 contracts" touching `src/pipecat/services/dograh/` and `tests/test_dograh_services.py`.
+Resolve conflicts using the recon verdicts. Then adapt kodewaves-owned modules to changed upstream contracts (base-class signatures, renamed frames/params) — precedent: the v1.5.0 merge needed a follow-up "Fix Kodewaves services for Pipecat 1.5 contracts" touching `src/pipecat/services/kodewaves/` and `tests/test_kodewaves_services.py`.
 
 ## 4. Audit the Kodewaves MPS services (fork side)
 
-The services in `src/pipecat/services/dograh/` are thin clients for model services (`~/Projects/dograh/model_services`). The wire protocol is fixed by the separately-deployed server; the pipecat-facing half must track upstream base contracts. For each service, diff its base classes OLD_TAG..NEW_TAG and verify every wire message still fires at the same conversational boundary — STT finalization on end of user speech, TTS context open/close/cancel across turn end and interruption, LLM billing metadata on every request. These couplings live in lifecycle hooks and private base state, so they drift silently rather than error. Answer server-behavior questions from model_services source; never change wire verbs without a coordinated model_services change.
+The services in `src/pipecat/services/kodewaves/` are thin clients for model services (`~/Projects/kodewaves/model_services`). The wire protocol is fixed by the separately-deployed server; the pipecat-facing half must track upstream base contracts. For each service, diff its base classes OLD_TAG..NEW_TAG and verify every wire message still fires at the same conversational boundary — STT finalization on end of user speech, TTS context open/close/cancel across turn end and interruption, LLM billing metadata on every request. These couplings live in lifecycle hooks and private base state, so they drift silently rather than error. Answer server-behavior questions from model_services source; never change wire verbs without a coordinated model_services change.
 
 ## 5. Audit the api/ wrappers
 
 Inventory the wrapper surface (in the kodewaves repo):
 
 ```bash
-rg -n "class Dograh\w+\(" api --type py                       # named wrappers
+rg -n "class (Kodewaves|Dograh)\w+\(" api --type py            # named wrappers
 rg -l "^from pipecat" api/services api/utils --type py        # full consumer surface
 ```
 
@@ -107,9 +107,9 @@ Also check non-subclass consumers: `pipecat_engine*.py` and frame/type imports a
 ```bash
 ./scripts/setup_requirements.sh        # reinstall; first check its hardcoded extras list still matches upstream pyproject extras
 source venv/bin/activate && python -c "import api.app"   # import smoke test
-cd pipecat && python -m pytest tests/test_dograh_services.py
+cd pipecat && python -m pytest tests/test_kodewaves_services.py
 ```
 
 Run api tests with `set -a && source api/.env.test && set +a`: first the tests matching audited wrappers (e.g. `api/tests/test_azure_realtime_wrapper.py`) and `api/tests/telephony/` serializer tests for fast iteration, then the full `api/tests/` suite as the final check.
 
-Never rebase fork `main` — old dograh-repo commits reference its commits via submodule pointers; history must stay append-only.
+Never rebase fork `main` — old kodewaves-repo commits reference its commits via submodule pointers; history must stay append-only.
