@@ -66,8 +66,8 @@ _HTTP_STATUS_IN_MESSAGE_RE = re.compile(
     r"(?i)\b(?:http(?:\s+status)?|status(?:_code)?)\s*[:=]?\s*(\d{3})\b"
 )
 _MAX_MESSAGE_LENGTH = 4000
-_FAILURE_METADATA_ATTR = "_dograh_failure_metadata"
-_FAILURE_REPORTED_ATTR = "_dograh_failure_reported"
+_FAILURE_METADATA_ATTR = "_kodewaves_failure_metadata"
+_FAILURE_REPORTED_ATTR = "_kodewaves_failure_reported"
 
 
 def _redact_quoted_secret_assignment(match: re.Match[str]) -> str:
@@ -121,10 +121,10 @@ def _resolve_error_owner(
     owner the seam declared: the seam knows whose credentials were in play,
     which the shape of the exception cannot tell us. ``system_error`` used to
     force operator here, which silently overrode seams that had correctly said
-    "user" and made every unclassifiable provider error look like a Dograh bug.
+    "user" and made every unclassifiable provider error look like a Kodewaves bug.
 
     An unstated owner still falls back to operator — an unattributed failure is
-    Dograh's to investigate until a seam claims otherwise.
+    Kodewaves's to investigate until a seam claims otherwise.
     """
 
     if error_type in (ErrorType.CONFIG_ERROR, ErrorType.QUOTA_ERROR):
@@ -183,7 +183,7 @@ def _external_message(source: ErrorSource, error_type: ErrorType) -> str:
         return f"The {label} account has insufficient quota or credits."
     if error_type == ErrorType.PROVIDER_ERROR:
         return f"The external {label} service is temporarily unavailable."
-    return f"Dograh encountered an internal error while processing {label}."
+    return f"Kodewaves encountered an internal error while processing {label}."
 
 
 def _valid_http_status(value: object) -> int | None:
@@ -425,7 +425,7 @@ def classify_exception(
         return DograhFailure(
             source=source,
             type=ErrorType.SYSTEM_ERROR,
-            code=f"dograh-{detail_code}",
+            code=f"kodewaves-{detail_code}",
             internal_message=internal_message,
             external_message=_external_message(source, ErrorType.SYSTEM_ERROR),
             provider="dograh",
@@ -638,7 +638,7 @@ def log_failure(
         )
         bound.opt(depth=1).log(
             level.upper(),
-            "DOGRAH_FAILURE [src={} type={} code={}] [owner={}] {}",
+            "KODEWAVES_FAILURE [src={} type={} code={}] [owner={}] {}",
             failure.source.value,
             failure.type.value,
             failure.code,

@@ -705,7 +705,7 @@ async def start_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    # Check Dograh quota before starting campaign (apply per-workflow
+    # Check Kodewaves quota before starting campaign (apply per-workflow
     # model_overrides so we evaluate the keys this campaign will use).
     await _authorize_campaign_variants(campaign, user)
 
@@ -1065,7 +1065,7 @@ async def resume_campaign(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    # Check Dograh quota before resuming campaign (apply per-workflow
+    # Check Kodewaves quota before resuming campaign (apply per-workflow
     # model_overrides so we evaluate the keys this campaign will use).
     await _authorize_campaign_variants(campaign, user)
 

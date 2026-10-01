@@ -12,7 +12,7 @@ router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
 class PlatformSettingsResponse(BaseModel):
     company_name: str = "Kodewaves"
-    logo_url: Optional[str] = "/dograh-logo.png"
+    logo_url: Optional[str] = "/kodewaves-logo.png"
     support_email: Optional[str] = "support@kodewaves.in"
     primary_color: Optional[str] = "#4f46e5"
     allow_user_byok: bool = False
@@ -48,7 +48,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
 
         return PlatformSettingsResponse(
             company_name=branding.get("company_name", "Kodewaves"),
-            logo_url=branding.get("logo_url", "/dograh-logo.png"),
+            logo_url=branding.get("logo_url", "/kodewaves-logo.png"),
             support_email=branding.get("support_email", "support@kodewaves.in"),
             primary_color=branding.get("primary_color", "#4f46e5"),
             allow_user_byok=byok.get("allow_user_byok", False),
@@ -73,7 +73,7 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
         # 1. Branding
         branding = {
             "company_name": payload.get("company_name", "Kodewaves"),
-            "logo_url": payload.get("logo_url", "/dograh-logo.png"),
+            "logo_url": payload.get("logo_url", "/kodewaves-logo.png"),
             "support_email": payload.get("support_email", "support@kodewaves.in"),
             "primary_color": payload.get("primary_color", "#4f46e5"),
         }

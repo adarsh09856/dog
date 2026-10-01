@@ -62,9 +62,9 @@ class EffectiveAIModelConfiguration(BaseModel):
 
 class KodewavesManagedAIModelConfiguration(BaseModel):
     api_key: str = "sovereign-managed"
-    voice: str = DOGRAH_DEFAULT_VOICE
-    speed: float = Field(default=1.0, ge=DOGRAH_SPEED_MIN, le=DOGRAH_SPEED_MAX)
-    language: str = DOGRAH_DEFAULT_LANGUAGE
+    voice: str = KODEWAVES_DEFAULT_VOICE
+    speed: float = Field(default=1.0, ge=KODEWAVES_SPEED_MIN, le=KODEWAVES_SPEED_MAX)
+    language: str = KODEWAVES_DEFAULT_LANGUAGE
 
     @model_validator(mode="before")
     @classmethod
@@ -86,11 +86,11 @@ class BYOKPipelineAIModelConfiguration(BaseModel):
     embeddings: EmbeddingsConfig | None = None
 
     @model_validator(mode="after")
-    def reject_dograh_providers(self):
-        _reject_dograh_provider("llm", self.llm)
-        _reject_dograh_provider("tts", self.tts)
-        _reject_dograh_provider("stt", self.stt)
-        _reject_dograh_provider("embeddings", self.embeddings)
+    def reject_kodewaves_providers(self):
+        _reject_kodewaves_provider("llm", self.llm)
+        _reject_kodewaves_provider("tts", self.tts)
+        _reject_kodewaves_provider("stt", self.stt)
+        _reject_kodewaves_provider("embeddings", self.embeddings)
         return self
 
 
@@ -100,9 +100,9 @@ class BYOKRealtimeAIModelConfiguration(BaseModel):
     embeddings: EmbeddingsConfig | None = None
 
     @model_validator(mode="after")
-    def reject_dograh_providers(self):
-        _reject_dograh_provider("llm", self.llm)
-        _reject_dograh_provider("embeddings", self.embeddings)
+    def reject_kodewaves_providers(self):
+        _reject_kodewaves_provider("llm", self.llm)
+        _reject_kodewaves_provider("embeddings", self.embeddings)
         return self
 
 

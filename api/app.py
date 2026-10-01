@@ -58,13 +58,13 @@ async def lifespan(app: FastAPI):
     async with mcp_app.lifespan(app):
         await get_arq_redis()
 
-        # Purge any legacy Dograh Cloudonix SIP auto-created configurations
+        # Purge any legacy Kodewaves/Dograh Cloudonix SIP auto-created configurations
         try:
             from sqlalchemy import text
             from api.db import db_client
             async with db_client.get_session() as session:
                 await session.execute(
-                    text("DELETE FROM telephony_configurations WHERE name = 'Dograh Cloudonix SIP'")
+                    text("DELETE FROM telephony_configurations WHERE name IN ('Dograh Cloudonix SIP', 'Kodewaves Cloudonix SIP')")
                 )
                 await session.commit()
         except Exception:

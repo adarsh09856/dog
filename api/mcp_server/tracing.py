@@ -29,7 +29,7 @@ from opentelemetry.trace import Status, StatusCode
 
 R = TypeVar("R")
 
-_TRACER = trace.get_tracer("dograh.mcp")
+_TRACER = trace.get_tracer("kodewaves.mcp")
 # Langfuse truncates long payloads anyway; cap here to keep span size
 # bounded. Tune up if you find tool outputs consistently clipped.
 _MAX_ATTR_LEN = 8000
