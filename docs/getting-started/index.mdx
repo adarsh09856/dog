@@ -2,21 +2,21 @@
 title: "Introduction"
 ---
 
-## About Dograh
+## About Kodewaves
 
-**Dograh is an open-source alternative to platforms like Vapi and Retell** - Dograh helps you build voice AI agents with an easy drag-and-drop workflow builder. Unlike proprietary solutions like Vapi, Dograh gives you:
+**Kodewaves is an open-source alternative to platforms like Vapi and Retell** - Kodewaves helps you build voice AI agents with an easy drag-and-drop workflow builder. Unlike proprietary solutions like Vapi, Kodewaves gives you:
 - **100% open source** - no vendor lock-in, full transparency
 - **Self-hostable** - deploy anywhere, own your infrastructure  
 - **Complete control** - every line of code is open and customizable
 - **2-minute setup** - from zero to working voice bot in under 2 minutes
 
 ## Overview
-Watch the following video to learn about Dograh’s capabilities.
+Watch the following video to learn about Kodewaves’s capabilities.
 
 <iframe
   className="w-full aspect-video rounded-xl"
   src="https://www.youtube.com/embed/sxiSp4JXqws"
-  title="Dograh Overview"
+  title="Kodewaves Overview"
   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
   allowFullScreen
 ></iframe>
@@ -30,28 +30,28 @@ Get the platform up and running using Docker with a small startup script on your
 
 <CodeGroup>
 ```bash macOS/Linux
-curl -o docker-compose.yaml https://raw.githubusercontent.com/dograh-hq/dograh/main/docker-compose.yaml && curl -o start_docker.sh https://raw.githubusercontent.com/dograh-hq/dograh/main/scripts/start_docker.sh && chmod +x start_docker.sh && ./start_docker.sh
+curl -o docker-compose.yaml https://raw.githubusercontent.com/kodewaves-hq/kodewaves/main/docker-compose.yaml && curl -o start_docker.sh https://raw.githubusercontent.com/kodewaves-hq/kodewaves/main/scripts/start_docker.sh && chmod +x start_docker.sh && ./start_docker.sh
 ```
 ```powershell Windows
-Invoke-WebRequest -OutFile docker-compose.yaml https://raw.githubusercontent.com/dograh-hq/dograh/main/docker-compose.yaml; Invoke-WebRequest -OutFile start_docker.ps1 https://raw.githubusercontent.com/dograh-hq/dograh/main/scripts/start_docker.ps1; .\start_docker.ps1
+Invoke-WebRequest -OutFile docker-compose.yaml https://raw.githubusercontent.com/kodewaves-hq/kodewaves/main/docker-compose.yaml; Invoke-WebRequest -OutFile start_docker.ps1 https://raw.githubusercontent.com/kodewaves-hq/kodewaves/main/scripts/start_docker.ps1; .\start_docker.ps1
 ```
 </CodeGroup>
 
 <Tip>
-**Using an AI coding agent?** If you work in **Claude Code** or **Codex**, install the official Dograh setup skill and let your agent handle installation, configuration, and troubleshooting for you. It orients to your OS, picks the right deploy path, runs Dograh's own setup scripts, and verifies the result. Install it once:
+**Using an AI coding agent?** If you work in **Claude Code** or **Codex**, install the official Kodewaves setup skill and let your agent handle installation, configuration, and troubleshooting for you. It orients to your OS, picks the right deploy path, runs Kodewaves's own setup scripts, and verifies the result. Install it once:
 
 <CodeGroup>
 ```text Claude Code
-/plugin marketplace add dograh-hq/dograh-plugins
-/plugin install dograh@dograh
+/plugin marketplace add kodewaves-hq/kodewaves-plugins
+/plugin install kodewaves@kodewaves
 ```
 ```text Codex
-codex plugin marketplace add dograh-hq/dograh-plugins
-codex plugin add dograh@dograh
+codex plugin marketplace add kodewaves-hq/kodewaves-plugins
+codex plugin add kodewaves@kodewaves
 ```
 </CodeGroup>
 
-Then start a new session and ask it to *"set up Dograh"* (in Claude Code you can also run `/dograh-setup`). See [dograh-hq/dograh-plugins](https://github.com/dograh-hq/dograh-plugins) for details.
+Then start a new session and ask it to *"set up Kodewaves"* (in Claude Code you can also run `/kodewaves-setup`). See [kodewaves-hq/kodewaves-plugins](https://github.com/kodewaves-hq/kodewaves-plugins) for details.
 </Tip>
 
 Please check [Prerequisites](getting-started/prerequisites) for the system requirements and [Troubleshooting](getting-started/troubleshooting) for common issues.
