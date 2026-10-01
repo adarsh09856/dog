@@ -343,9 +343,6 @@ def _kodewaves_allows_custom_voice() -> bool:
     return bool(extra.get("allow_custom_input")) if isinstance(extra, dict) else False
 
 _dograh_allows_custom_voice = _kodewaves_allows_custom_voice
-    if isinstance(extra, dict):
-        return bool(extra.get("allow_custom_input", False))
-    return False
 
 
 def _byok_provider_schemas(service_type: ServiceType) -> dict[str, dict]:

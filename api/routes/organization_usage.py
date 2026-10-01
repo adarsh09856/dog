@@ -77,8 +77,7 @@ class CurrentUsageResponse(BaseModel):
     period_start: str
     period_end: str
     used_kodewaves_tokens: float = 0
-    used_kodewaves_tokens: float = 0
-    dograh_tokens: float = 0 = 0
+    used_dograh_tokens: float = 0
     total_duration_seconds: int
     used_amount_usd: Optional[float] = None
     currency: Optional[str] = None
@@ -176,8 +175,7 @@ class WorkflowRunUsageResponse(BaseModel):
 class UsageHistoryResponse(BaseModel):
     runs: List[WorkflowRunUsageResponse]
     total_kodewaves_tokens: float = 0
-    total_kodewaves_tokens: float = 0
-    dograh_tokens: float = 0 = 0
+    total_dograh_tokens: float = 0
     total_duration_seconds: int
     total_count: int
     page: int
@@ -199,8 +197,7 @@ class DailyUsageBreakdownResponse(BaseModel):
     total_minutes: float
     total_cost_usd: Optional[float] = None
     total_kodewaves_tokens: float = 0
-    total_kodewaves_tokens: float = 0
-    dograh_tokens: float = 0 = 0
+    total_dograh_tokens: float = 0
     currency: Optional[str] = None
 
 
