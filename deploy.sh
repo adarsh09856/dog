@@ -35,7 +35,7 @@ docker compose -f docker-compose.aapanel.yaml up -d --build
 # 3. Apply any new Alembic database migrations & platform seed
 echo -e "${BLUE}[3/4] Running database migrations & platform seed...${NC}"
 sleep 5
-docker exec kodewaves_api python -m alembic upgrade head || true
+docker exec kodewaves_api python -m alembic -c api/alembic.ini upgrade head || true
 docker exec kodewaves_api python -m scripts.seed_platform || true
 
 # 4. Container health verification
