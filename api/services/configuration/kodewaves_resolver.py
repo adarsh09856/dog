@@ -184,7 +184,7 @@ def _detect_provider_from_voice(voice: Optional[str]) -> Optional[str]:
     if not voice or voice == "default":
         return None
     vl = voice.lower()
-    if vl.startswith(("af_", "am_", "bf_", "bm_")):
+    if vl.startswith(("af_", "am_", "bf_", "bm_", "if_", "im_")):
         return "speaches"
     if vl.startswith("aura-"):
         return "deepgram"
@@ -418,8 +418,14 @@ async def apply_kodewaves_sovereign_resolution(
                     status_code=403,
                     detail="Local CPU AI Engine access is restricted. Please contact your administrator to enable access.",
                 )
-            current_voice = getattr(effective.tts, "voice", "af_heart")
-            voice = current_voice if (current_voice and not current_voice.startswith("dg_") and current_voice != "default") else "af_heart"
+            lang = getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None)
+            default_local_voice = "if_sara" if lang == "hi" else "af_heart"
+            current_voice = getattr(effective.tts, "voice", default_local_voice)
+            voice = (
+                current_voice
+                if (current_voice and not current_voice.startswith(("dg_", "kw_")) and current_voice not in ("default", "alloy", "none"))
+                else default_local_voice
+            )
             effective.tts = SpeachesTTSConfiguration(
                 api_key="local-cpu-token",
                 model="kokoro",
@@ -435,8 +441,14 @@ async def apply_kodewaves_sovereign_resolution(
                 else:
                     # Automatic graceful fallback to Local CPU Speaches Kokoro TTS
                     logger.info(f"[KodewavesResolver] No cloud master TTS key configured; falling back to Local CPU Speaches Kokoro TTS for Org {organization_id}")
-                    current_voice = getattr(effective.tts, "voice", "af_heart")
-                    voice = current_voice if (current_voice and not current_voice.startswith("dg_") and current_voice != "default") else "af_heart"
+                    lang = getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None)
+                    default_local_voice = "if_sara" if lang == "hi" else "af_heart"
+                    current_voice = getattr(effective.tts, "voice", default_local_voice)
+                    voice = (
+                        current_voice
+                        if (current_voice and not current_voice.startswith(("dg_", "kw_")) and current_voice not in ("default", "alloy", "none"))
+                        else default_local_voice
+                    )
                     effective.tts = SpeachesTTSConfiguration(
                         api_key="local-cpu-token",
                         model="kokoro",

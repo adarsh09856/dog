@@ -257,14 +257,23 @@ function buildKodewavesState(
             : configuration?.mode === "dograh"
             ? asRecord(configuration.dograh)
             : null;
+    const cleanVoice = (v: unknown, lang?: string) => {
+        const s = String(v || "");
+        if (!s || s === "default" || s === "alloy" || s.startsWith("kw_") || s.startsWith("dg_")) {
+            return lang === "hi" ? "if_sara" : "af_heart";
+        }
+        return s;
+    };
+
     if (configuredKodewaves) {
         const apiKey = String(configuredKodewaves.api_key || "");
         const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu");
+        const lang = String(configuredKodewaves.language || fallback.language);
         return {
             api_key: apiKey,
-            voice: String(configuredKodewaves.voice || fallback.voice),
+            voice: cleanVoice(configuredKodewaves.voice || fallback.voice, lang),
             speed: numberOrDefault(configuredKodewaves.speed, fallback.speed),
-            language: String(configuredKodewaves.language || fallback.language),
+            language: lang,
             engine_type: isLocalCpu ? "local_cpu" : "cloud",
             llm_model: configuredKodewaves.llm_model ? String(configuredKodewaves.llm_model) : undefined,
             stt_model: configuredKodewaves.stt_model ? String(configuredKodewaves.stt_model) : undefined,
@@ -278,11 +287,12 @@ function buildKodewavesState(
         const stt = asRecord(effectiveConfiguration?.stt);
         const apiKey = firstApiKey(llm?.api_key || tts?.api_key || stt?.api_key);
         const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu") || llm?.provider === "speaches";
+        const lang = String(stt?.language || fallback.language);
         return {
             api_key: apiKey,
-            voice: String(tts?.voice || fallback.voice),
+            voice: cleanVoice(tts?.voice || fallback.voice, lang),
             speed: numberOrDefault(tts?.speed, fallback.speed),
-            language: String(stt?.language || fallback.language),
+            language: lang,
             engine_type: isLocalCpu ? "local_cpu" : "cloud",
             llm_model: llm?.model ? String(llm.model) : undefined,
             stt_model: stt?.model ? String(stt.model) : undefined,
@@ -292,7 +302,7 @@ function buildKodewavesState(
 
     return {
         api_key: "",
-        voice: fallback.voice,
+        voice: cleanVoice(fallback.voice, fallback.language),
         speed: fallback.speed,
         language: fallback.language,
         engine_type: "cloud",
@@ -479,27 +489,45 @@ export function AIModelConfigurationV2Editor({
     }, []);
 
     const effectiveLlmModels = useMemo(() => {
-        if (!catalogManifest) return [];
         if (kodewaves.engine_type === "local_cpu") {
-            return catalogManifest.local_llm_models || [];
+            if (catalogManifest?.local_llm_models && catalogManifest.local_llm_models.length > 0) {
+                return catalogManifest.local_llm_models;
+            }
+            return [
+                { value: "qwen2.5:1.5b", label: "Qwen 2.5 1.5B (Installed CPU, ~980MB RAM)" },
+                { value: "qwen2.5:0.5b", label: "Qwen 2.5 0.5B (Installed CPU, ~350MB RAM)" },
+            ];
         }
-        return catalogManifest.cloud_llm_models || [];
+        if (catalogManifest?.cloud_llm_models && catalogManifest.cloud_llm_models.length > 0) {
+            return catalogManifest.cloud_llm_models;
+        }
+        return CLOUD_LLM_MODELS;
     }, [kodewaves.engine_type, catalogManifest]);
 
     const effectiveSttModels = useMemo(() => {
-        if (!catalogManifest) return [];
         if (kodewaves.engine_type === "local_cpu") {
-            return catalogManifest.local_stt_models || [];
+            if (catalogManifest?.local_stt_models && catalogManifest.local_stt_models.length > 0) {
+                return catalogManifest.local_stt_models;
+            }
+            return LOCAL_STT_MODELS;
         }
-        return catalogManifest.cloud_stt_models || [];
+        if (catalogManifest?.cloud_stt_models && catalogManifest.cloud_stt_models.length > 0) {
+            return catalogManifest.cloud_stt_models;
+        }
+        return CLOUD_STT_MODELS;
     }, [kodewaves.engine_type, catalogManifest]);
 
     const effectiveTtsModels = useMemo(() => {
-        if (!catalogManifest) return [];
         if (kodewaves.engine_type === "local_cpu") {
-            return catalogManifest.local_tts_models || [];
+            if (catalogManifest?.local_tts_models && catalogManifest.local_tts_models.length > 0) {
+                return catalogManifest.local_tts_models;
+            }
+            return LOCAL_TTS_MODELS;
         }
-        return catalogManifest.cloud_tts_models || [];
+        if (catalogManifest?.cloud_tts_models && catalogManifest.cloud_tts_models.length > 0) {
+            return catalogManifest.cloud_tts_models;
+        }
+        return CLOUD_TTS_MODELS;
     }, [kodewaves.engine_type, catalogManifest]);
 
     useEffect(() => {

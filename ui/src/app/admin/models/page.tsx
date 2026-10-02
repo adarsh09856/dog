@@ -68,8 +68,6 @@ const DEFAULT_PROVIDERS = [
   { provider: "smallest", name: "Smallest AI (Waves TTS)", category: "tts", region: "Global 🌐" },
   { provider: "lmnt", name: "LMNT Speech", category: "tts", region: "Global 🌐" },
   { provider: "rime", name: "Rime Labs Speech", category: "tts", region: "Global 🌐" },
-  { provider: "speaches", name: "Speaches Local CPU (Whisper + Kokoro)", category: "tts", region: "Local 🖥️" },
-  { provider: "ollama", name: "Ollama Local CPU (Qwen2.5 / Llama)", category: "llm", region: "Local 🖥️" },
   { provider: "exotel", name: "Exotel (Indian Sovereign Telecom)", category: "telecom", region: "India 🇮🇳" },
   { provider: "twilio", name: "Twilio Telephony", category: "telecom", region: "Global 🌐" },
   { provider: "plivo", name: "Plivo India", category: "telecom", region: "India 🇮🇳" },

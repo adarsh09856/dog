@@ -22,6 +22,9 @@ export function LocalProviderWrapper({ children }: { children: React.ReactNode }
           const data = await response.json();
           tokenRef.current = data.token;
           setUser(data.user);
+          if (typeof window !== 'undefined' && data.token) {
+            localStorage.setItem('kodewaves_auth_token', data.token);
+          }
           logger.info('OSS auth initialized', { user: data.user });
         } else if (response.status === 401) {
           // No token - only redirect if trying to access a protected page
@@ -69,6 +72,10 @@ export function LocalProviderWrapper({ children }: { children: React.ReactNode }
 
   const logout = React.useCallback(async () => {
     try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('kodewaves_auth_token');
+        localStorage.removeItem('token');
+      }
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch (error) {
       logger.error('Error during logout', error);

@@ -880,11 +880,13 @@ def create_tts_service(
             if not speaches_host.endswith("/v1"):
                 speaches_host = f"{speaches_host.rstrip('/')}/v1"
             from pipecat.services.speaches.tts import SpeachesTTSService, SpeachesTTSSettings
-            voice = getattr(user_config.tts, "voice", "af_heart")
-            if voice and (voice.startswith("dg_") or voice.startswith("kw_")):
-                voice = "af_heart"
+            lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None)
+            default_voice = "if_sara" if lang == "hi" else "af_heart"
+            voice = getattr(user_config.tts, "voice", default_voice)
+            if not voice or voice in ("default", "alloy", "none") or voice.startswith(("dg_", "kw_")):
+                voice = default_voice
             tts_model = getattr(user_config.tts, "model", None) or "kokoro"
-            if tts_model == "default":
+            if not tts_model or tts_model in ("default", "none"):
                 tts_model = "kokoro"
             return SpeachesTTSService(
                 base_url=speaches_host,
@@ -928,12 +930,13 @@ def create_tts_service(
         tts._settings.language = language
         return tts
     elif user_config.tts.provider == ServiceProviders.SPEACHES.value:
-        _validate_runtime_service_url(user_config.tts.base_url, "base_url")
-        voice = getattr(user_config.tts, "voice", "af_heart") or "af_heart"
-        if voice in ("default", "alloy", "none") or voice.startswith("dg_") or voice.startswith("kw_"):
-            voice = "af_heart"
+        lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None)
+        default_voice = "if_sara" if lang == "hi" else "af_heart"
+        voice = getattr(user_config.tts, "voice", default_voice) or default_voice
+        if not voice or voice in ("default", "alloy", "none") or voice.startswith(("dg_", "kw_")):
+            voice = default_voice
         tts_model = getattr(user_config.tts, "model", "kokoro") or "kokoro"
-        if tts_model == "default":
+        if not tts_model or tts_model in ("default", "none"):
             tts_model = "kokoro"
         return SpeachesTTSService(
             base_url=user_config.tts.base_url,

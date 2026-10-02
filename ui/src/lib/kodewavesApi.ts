@@ -1,19 +1,35 @@
 import { resolveBrowserBackendUrl } from './apiClient';
 
 async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const baseUrl = resolveBrowserBackendUrl();
+  const isBrowser = typeof window !== 'undefined';
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const apiPath = cleanEndpoint.startsWith('/api/v1') ? cleanEndpoint : `/api/v1${cleanEndpoint}`;
+
+  // In the browser, use relative path "" (same origin) so session cookies are forwarded seamlessly.
+  // On SSR/server, use the backend container/internal URL.
+  let baseUrl = '';
+  if (!isBrowser) {
+    baseUrl = process.env.BACKEND_URL || 'http://api:8000';
+  } else if (window.location.hostname === 'localhost' && window.location.port !== '8000') {
+    // Local development outside docker/nginx proxy
+    baseUrl = resolveBrowserBackendUrl();
+  }
   const url = `${baseUrl}${apiPath}`;
 
-  // Read auth token from cookies if in browser
+  // Read auth token from localStorage or cookies if in browser
   let authHeader = '';
-  if (typeof document !== 'undefined') {
-    const match = document.cookie.match(/(?:^|;\s*)kodewaves_auth_token=([^;]+)/) ||
-                  document.cookie.match(/(?:^|;\s*)dograh_auth_token=([^;]+)/) ||
-                  document.cookie.match(/(?:^|;\s*)oss_token=([^;]+)/);
-    if (match) {
-      authHeader = `Bearer ${decodeURIComponent(match[1])}`;
+  if (isBrowser) {
+    const lsToken = localStorage.getItem('kodewaves_auth_token') ||
+                    localStorage.getItem('token');
+    if (lsToken) {
+      authHeader = `Bearer ${lsToken}`;
+    } else if (typeof document !== 'undefined') {
+      const match = document.cookie.match(/(?:^|;\s*)kodewaves_auth_token=([^;]+)/) ||
+                    document.cookie.match(/(?:^|;\s*)dograh_auth_token=([^;]+)/) ||
+                    document.cookie.match(/(?:^|;\s*)oss_token=([^;]+)/);
+      if (match) {
+        authHeader = `Bearer ${decodeURIComponent(match[1])}`;
+      }
     }
   }
 

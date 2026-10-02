@@ -723,7 +723,12 @@ async def preview_voice(
         if not speaches_endpoint.endswith("/v1"):
             speaches_endpoint = f"{speaches_endpoint.rstrip('/')}/v1"
         url = f"{speaches_endpoint}/audio/speech"
-        prompt_text = "नमस्ते! मैं आपकी कैसे मदद कर सकता हूँ?" if voice_id in ("if_sara", "im_nicola") else "Hello! This is a preview of this voice on Kodewaves."
+        is_indic = voice_id in ("if_sara", "im_nicola")
+        prompt_text = (
+            "Namaste! Kodewaves par aapka swagat hai. Main aapki kya madad kar sakti hoon?"
+            if is_indic
+            else "Hello! This is a live preview of this voice on Kodewaves."
+        )
         payload = {
             "model": "kokoro",
             "voice": voice_id,
@@ -731,13 +736,27 @@ async def preview_voice(
             "response_format": "mp3",
         }
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
                 async with session.post(url, json=payload) as resp:
                     if resp.status == 200:
                         audio_data = await resp.read()
                         return Response(content=audio_data, media_type="audio/mpeg")
+                    else:
+                        resp_text = await resp.text()
+                        logger.warning(f"[VoicePreview] Speaches returned {resp.status}: {resp_text}, trying fallback voice")
+                        # If the specific voice was not found in container, fallback to af_heart
+                        fallback_payload = {
+                            "model": "kokoro",
+                            "voice": "af_heart",
+                            "input": "Hello! This is a preview of this voice on Kodewaves.",
+                            "response_format": "mp3",
+                        }
+                        async with session.post(url, json=fallback_payload) as fb_resp:
+                            if fb_resp.status == 200:
+                                fb_audio = await fb_resp.read()
+                                return Response(content=fb_audio, media_type="audio/mpeg")
         except Exception as e:
-            logger.debug(f"[VoicePreview] Speaches preview failed for {voice_id}: {e}")
+            logger.warning(f"[VoicePreview] Speaches preview failed for {voice_id}: {e}")
 
     # 2. Sarvam Indic (Hindi)
     if provider_lower == "sarvam":

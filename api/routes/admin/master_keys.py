@@ -51,6 +51,8 @@ async def list_master_keys(_user=Depends(get_superuser)):
     records = await kodewaves_db_client.list_master_credentials()
     results = []
     for r in records:
+        if r.provider.lower() in ("speaches", "ollama"):
+            continue
         masked = None
         if r.credentials_encrypted:
             try:

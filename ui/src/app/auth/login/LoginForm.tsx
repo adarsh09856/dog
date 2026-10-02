@@ -38,6 +38,10 @@ export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
         body: JSON.stringify({ token: res.data.token, user: res.data.user }),
       });
 
+      if (typeof window !== "undefined" && res.data.token) {
+        localStorage.setItem("kodewaves_auth_token", res.data.token);
+      }
+
       window.location.href = "/after-sign-in";
     } catch {
       toast.error("An error occurred. Please try again.");

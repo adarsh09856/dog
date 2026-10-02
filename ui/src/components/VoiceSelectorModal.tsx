@@ -271,36 +271,8 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             setPlayingVoiceId(null);
         };
 
-        const tryWebSpeechFallback = () => {
-            if (typeof window !== "undefined" && "speechSynthesis" in window) {
-                try {
-                    window.speechSynthesis.cancel();
-                    const text = voice.language === "hi"
-                        ? "नमस्ते! यह कोडवेव्स पर इस आवाज़ का पूर्वावलोकन है।"
-                        : `Hello! This is a preview of the ${voice.name} voice on Kodewaves.`;
-                    const utterance = new SpeechSynthesisUtterance(text);
-                    if (voice.language === "hi") {
-                        utterance.lang = "hi-IN";
-                    } else if (voice.accent === "gb") {
-                        utterance.lang = "en-GB";
-                    } else if (voice.accent === "in") {
-                        utterance.lang = "en-IN";
-                    } else {
-                        utterance.lang = "en-US";
-                    }
-                    utterance.onend = clear;
-                    utterance.onerror = clear;
-                    window.speechSynthesis.speak(utterance);
-                    return;
-                } catch (e) {
-                    console.warn("Speech synthesis fallback failed:", e);
-                }
-            }
-            clear();
-        };
-
         if (!voice.preview_url) {
-            tryWebSpeechFallback();
+            clear();
             return;
         }
 
@@ -308,10 +280,10 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         audioRef.current = audio;
         audio.onended = clear;
         audio.onerror = () => {
-            tryWebSpeechFallback();
+            clear();
         };
         audio.play().catch(() => {
-            tryWebSpeechFallback();
+            clear();
         });
     };
 
