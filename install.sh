@@ -495,8 +495,8 @@ NGINX_CONF
     echo ""
     echo -e "${BOLD}Firewall Ports Configuration (aaPanel Security tab):${NC}"
     echo -e "   • ${BOLD}80 (TCP) & 443 (TCP)${NC} [MANDATORY] — Web UI, API, and Phone Telephony (Twilio/Plivo/Exotel)"
-    echo -e "   • ${BOLD}3478 (UDP/TCP), 5349 (UDP/TCP), 49152-49200 (UDP)${NC} [OPTIONAL] — WebRTC Coturn"
-    echo -e "     (Only needed if users test voice from browser microphones behind strict corporate firewalls)"
+    echo -e "   • ${BOLD}3478 (UDP/TCP), 5349 (UDP/TCP), 49152-49200 (UDP)${NC} [REQUIRED FOR WEBRTC TEST AUDIO] — Coturn STUN/TURN"
+    echo -e "     (Must be opened in aaPanel Security / VPS firewall so browser microphone 'Test Audio' works)"
     echo ""
 }
 

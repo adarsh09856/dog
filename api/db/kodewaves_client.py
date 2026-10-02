@@ -243,5 +243,32 @@ class KodewavesDBClient(BaseDBClient):
             await session.refresh(setting)
             return setting
 
+    # ------------------------------------------------------------------------
+    # Audit Logs
+    # ------------------------------------------------------------------------
+    async def record_audit_log(
+        self,
+        actor_id: Optional[int],
+        actor_email: Optional[str],
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        changes: Optional[Dict[str, Any]] = None,
+        ip_address: Optional[str] = None,
+    ) -> AuditLogModel:
+        async with self.get_session() as session:
+            entry = AuditLogModel(
+                actor_id=actor_id,
+                actor_email=actor_email,
+                action=action,
+                resource_type=resource_type,
+                resource_id=str(resource_id),
+                changes=changes or {},
+                ip_address=ip_address,
+            )
+            session.add(entry)
+            await session.commit()
+            return entry
+
 
 kodewaves_db_client = KodewavesDBClient()

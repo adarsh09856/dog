@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, CheckCircle2, Cloud, Cpu, Info, Mic, Save, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, CheckCircle2, Cloud, Cpu, Info, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VoiceSelectorModal } from "@/components/VoiceSelectorModal";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
 import { formatRoundingPolicy } from "@/lib/billingDisplay";
+import { catalogApi, type AvailableCatalogResponse } from "@/lib/kodewavesApi";
 
 type ModelMode = "realtime" | "kodewaves" | "dograh" | "byok";
 
@@ -71,6 +72,7 @@ export interface KodewavesFormState {
     engine_type?: "cloud" | "local_cpu";
     llm_model?: string;
     stt_model?: string;
+    tts_model?: string;
 }
 export type DograhFormState = KodewavesFormState;
 
@@ -106,6 +108,22 @@ export const LOCAL_STT_MODELS = [
     { value: "Systran/faster-whisper-tiny.en", label: "Whisper Tiny English (Fastest CPU)" },
     { value: "Systran/faster-whisper-base", label: "Whisper Base Multilingual (Recommended CPU)" },
     { value: "Systran/faster-whisper-small", label: "Whisper Small Multilingual (High Accuracy CPU)" },
+];
+
+export const CLOUD_TTS_MODELS = [
+    { value: "auto", label: "Auto (Recommended - Best matched for voice)" },
+    { value: "sonic-3.5", label: "Cartesia Sonic 3.5 (Ultra-low latency, 90ms)" },
+    { value: "sonic-multilingual", label: "Cartesia Sonic Multilingual" },
+    { value: "eleven_flash_v2_5", label: "ElevenLabs Flash v2.5 (High Speed & Expressive)" },
+    { value: "eleven_multilingual_v2", label: "ElevenLabs Multilingual v2 (Rich Neural)" },
+    { value: "tts-1", label: "OpenAI TTS-1 (Standard Natural Speech)" },
+    { value: "tts-1-hd", label: "OpenAI TTS-1 HD (High Definition Studio)" },
+    { value: "bulbul:v1", label: "Sarvam Bulbul v1 (Native Indian Languages)" },
+    { value: "gemini-2.5-flash-preview-tts", label: "Google Gemini 2.5 Audio" },
+];
+
+export const LOCAL_TTS_MODELS = [
+    { value: "kokoro", label: "Kokoro TTS (Fast CPU Neural Voices)" },
 ];
 
 interface AIModelConfigurationV2EditorProps {
@@ -250,6 +268,7 @@ function buildKodewavesState(
             engine_type: isLocalCpu ? "local_cpu" : "cloud",
             llm_model: configuredKodewaves.llm_model ? String(configuredKodewaves.llm_model) : undefined,
             stt_model: configuredKodewaves.stt_model ? String(configuredKodewaves.stt_model) : undefined,
+            tts_model: configuredKodewaves.tts_model ? String(configuredKodewaves.tts_model) : undefined,
         };
     }
 
@@ -267,6 +286,7 @@ function buildKodewavesState(
             engine_type: isLocalCpu ? "local_cpu" : "cloud",
             llm_model: llm?.model ? String(llm.model) : undefined,
             stt_model: stt?.model ? String(stt.model) : undefined,
+            tts_model: tts?.model ? String(tts.model) : undefined,
         };
     }
 
@@ -278,6 +298,7 @@ function buildKodewavesState(
         engine_type: "cloud",
         llm_model: undefined,
         stt_model: undefined,
+        tts_model: undefined,
     };
 }
 const buildDograhState = buildKodewavesState;
@@ -449,6 +470,35 @@ export function AIModelConfigurationV2Editor({
         return codes.map((code) => LANGUAGE_DISPLAY_NAMES[code] || code).join(", ");
     }, [kodewavesDefaults.multilingual_languages]);
 
+    const [catalogManifest, setCatalogManifest] = useState<AvailableCatalogResponse | null>(null);
+
+    useEffect(() => {
+        catalogApi.getAvailableCatalog()
+            .then((data) => setCatalogManifest(data))
+            .catch((err) => console.warn("[AIModelConfigurationV2Editor] Failed to fetch dynamic catalog:", err));
+    }, []);
+
+    const effectiveLlmModels = useMemo(() => {
+        if (kodewaves.engine_type === "local_cpu") {
+            return catalogManifest?.local_llm_models?.length ? catalogManifest.local_llm_models : LOCAL_LLM_MODELS;
+        }
+        return catalogManifest?.cloud_llm_models?.length ? catalogManifest.cloud_llm_models : CLOUD_LLM_MODELS;
+    }, [kodewaves.engine_type, catalogManifest]);
+
+    const effectiveSttModels = useMemo(() => {
+        if (kodewaves.engine_type === "local_cpu") {
+            return catalogManifest?.local_stt_models?.length ? catalogManifest.local_stt_models : LOCAL_STT_MODELS;
+        }
+        return catalogManifest?.cloud_stt_models?.length ? catalogManifest.cloud_stt_models : CLOUD_STT_MODELS;
+    }, [kodewaves.engine_type, catalogManifest]);
+
+    const effectiveTtsModels = useMemo(() => {
+        if (kodewaves.engine_type === "local_cpu") {
+            return catalogManifest?.local_tts_models?.length ? catalogManifest.local_tts_models : LOCAL_TTS_MODELS;
+        }
+        return catalogManifest?.cloud_tts_models?.length ? catalogManifest.cloud_tts_models : CLOUD_TTS_MODELS;
+    }, [kodewaves.engine_type, catalogManifest]);
+
     useEffect(() => {
         const rawConfiguration = asRecord(configuration);
         const rawEffectiveConfiguration = asRecord(effectiveConfiguration);
@@ -483,6 +533,7 @@ export function AIModelConfigurationV2Editor({
                     language: kodewaves.language,
                     llm_model: kodewaves.llm_model || undefined,
                     stt_model: kodewaves.stt_model || undefined,
+                    tts_model: kodewaves.tts_model || undefined,
                 },
                 dograh: {
                     api_key: apiKey,
@@ -491,6 +542,7 @@ export function AIModelConfigurationV2Editor({
                     language: kodewaves.language,
                     llm_model: kodewaves.llm_model || undefined,
                     stt_model: kodewaves.stt_model || undefined,
+                    tts_model: kodewaves.tts_model || undefined,
                 },
             });
         } catch (err) {
@@ -601,11 +653,16 @@ export function AIModelConfigurationV2Editor({
                                         </div>
 
                                         <div
-                                            onClick={() => setKodewaves({ ...kodewaves, engine_type: "local_cpu", voice: (kodewaves.voice.startsWith("dg_") || kodewaves.voice.startsWith("kw_")) ? "af_heart" : kodewaves.voice })}
-                                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                                                kodewaves.engine_type === "local_cpu"
-                                                    ? "border-amber-500 bg-amber-500/10 shadow-sm"
-                                                    : "border-border hover:border-muted-foreground/40 bg-card/50"
+                                            onClick={() => {
+                                                if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
+                                                setKodewaves({ ...kodewaves, engine_type: "local_cpu", voice: (kodewaves.voice.startsWith("dg_") || kodewaves.voice.startsWith("kw_")) ? "af_heart" : kodewaves.voice });
+                                            }}
+                                            className={`p-3.5 rounded-xl border transition-all ${
+                                                catalogManifest && catalogManifest.has_local_ai_access === false
+                                                    ? "opacity-50 cursor-not-allowed border-dashed bg-muted/20"
+                                                    : "cursor-pointer " + (kodewaves.engine_type === "local_cpu"
+                                                        ? "border-amber-500 bg-amber-500/10 shadow-sm"
+                                                        : "border-border hover:border-muted-foreground/40 bg-card/50")
                                             }`}
                                         >
                                             <div className="flex items-center justify-between mb-1.5">
@@ -618,7 +675,9 @@ export function AIModelConfigurationV2Editor({
                                                 )}
                                             </div>
                                             <p className="text-[11px] text-muted-foreground leading-snug">
-                                                100% Free & Self-Hosted. Runs local Ollama (Qwen2.5) + Speaches Whisper STT + Kokoro TTS on host CPU.
+                                                {catalogManifest && catalogManifest.has_local_ai_access === false
+                                                    ? "Requires administrator permission. Contact your superadmin to enable Local CPU access."
+                                                    : "100% Free & Self-Hosted. Runs local Ollama (Qwen2.5) + Speaches Whisper STT + Kokoro TTS on host CPU."}
                                             </p>
                                         </div>
                                     </div>
@@ -643,7 +702,7 @@ export function AIModelConfigurationV2Editor({
                                             <SelectValue placeholder="Select LLM model" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {(kodewaves.engine_type === "local_cpu" ? LOCAL_LLM_MODELS : CLOUD_LLM_MODELS).map((m) => (
+                                            {effectiveLlmModels.map((m) => (
                                                 <SelectItem key={m.value} value={m.value}>
                                                     {m.label}
                                                 </SelectItem>
@@ -671,7 +730,35 @@ export function AIModelConfigurationV2Editor({
                                             <SelectValue placeholder="Select STT model" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {(kodewaves.engine_type === "local_cpu" ? LOCAL_STT_MODELS : CLOUD_STT_MODELS).map((m) => (
+                                            {effectiveSttModels.map((m) => (
+                                                <SelectItem key={m.value} value={m.value}>
+                                                    {m.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* TTS Model Selector */}
+                                <div className="space-y-2 sm:col-span-2">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                                            <Volume2 className="h-4 w-4 text-primary" />
+                                            Synthesizer (TTS) Model
+                                        </Label>
+                                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                                            {kodewaves.engine_type === "local_cpu" ? "Local Kokoro" : "Cloud Synthesizer"}
+                                        </span>
+                                    </div>
+                                    <Select
+                                        value={kodewaves.tts_model || (kodewaves.engine_type === "local_cpu" ? "kokoro" : "auto")}
+                                        onValueChange={(tts_model) => setKodewaves({ ...kodewaves, tts_model: tts_model === "auto" ? undefined : tts_model })}
+                                    >
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Select TTS model" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {effectiveTtsModels.map((m) => (
                                                 <SelectItem key={m.value} value={m.value}>
                                                     {m.label}
                                                 </SelectItem>

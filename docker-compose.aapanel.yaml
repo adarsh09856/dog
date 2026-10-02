@@ -105,6 +105,7 @@ services:
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-https://your-domain.com}"
       PUBLIC_HOST: "${PUBLIC_HOST:-your-domain.com}"
       BACKEND_API_ENDPOINT: "${PUBLIC_BASE_URL:-https://your-domain.com}"
+      FORWARDED_ALLOW_IPS: "*"
       
       # Database and Cache
       DATABASE_URL: "postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/postgres"

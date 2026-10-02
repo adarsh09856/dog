@@ -667,4 +667,26 @@ export const paymentsApi = {
     }),
 };
 
+export interface CatalogModelOption {
+  value: string;
+  label: string;
+  provider?: string;
+}
+
+export interface AvailableCatalogResponse {
+  active_providers: string[];
+  cloud_llm_models: CatalogModelOption[];
+  cloud_stt_models: CatalogModelOption[];
+  cloud_tts_models: CatalogModelOption[];
+  local_llm_models: CatalogModelOption[];
+  local_stt_models: CatalogModelOption[];
+  local_tts_models: CatalogModelOption[];
+  local_engine_enabled: boolean;
+  has_local_ai_access: boolean;
+}
+
+export const catalogApi = {
+  getAvailableCatalog: () => apiFetch<AvailableCatalogResponse>('/catalog/available'),
+};
+
 

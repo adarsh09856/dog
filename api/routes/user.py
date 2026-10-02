@@ -23,6 +23,7 @@ from api.schemas.workflow_configurations import (
     get_default_workflow_configurations,
 )
 from api.services.auth.depends import get_user
+from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.ai_model_configuration import (
     convert_legacy_ai_model_configuration_to_v2,
     get_resolved_ai_model_configuration,
@@ -634,6 +635,22 @@ async def get_voices(
     """Get available voices for a TTS provider with 0ms in-memory latency and zero cloud locks."""
     provider_key = provider.lower()
     raw_catalog = UNIVERSAL_VOICE_CATALOG.get(provider_key) or MANAGED_UNIVERSAL_VOICES
+
+    # Filter managed voices by active platform master keys
+    if provider_key in ("kodewaves", "dograh", "all"):
+        enabled_provs = {"speaches"}
+        for p in ["elevenlabs", "cartesia", "openai", "deepgram", "google", "gemini", "azure", "sarvam", "navana", "smallest", "lmnt", "rime"]:
+            try:
+                creds = await master_credential_service.get_master_credential(p)
+                if creds and (creds.get("api_key") or creds.get("auth_token")):
+                    enabled_provs.add(p)
+                    if p in ("google", "gemini"):
+                        enabled_provs.add("google")
+                        enabled_provs.add("gemini")
+            except Exception:
+                pass
+        if len(enabled_provs) > 1:
+            raw_catalog = [v for v in raw_catalog if v.get("provider") in enabled_provs]
 
     filtered = raw_catalog
     if provider_filter and provider_filter != "__all__":

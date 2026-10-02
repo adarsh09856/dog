@@ -81,17 +81,20 @@ class MasterCredentialService:
         elif prov_key in ("navana", "bodhi"):
             lookup_candidates.extend(["navana", "bodhi"])
 
-        for candidate in lookup_candidates:
             try:
                 record = await kodewaves_db_client.get_master_credential(candidate)
-                if record and record.is_enabled and record.credentials_encrypted:
-                    try:
-                        decrypted_str = self.decrypt(record.credentials_encrypted)
-                        data = json.loads(decrypted_str)
-                        if data and (data.get("api_key") or data.get("account_sid") or data.get("auth_token")):
-                            return data
-                    except Exception as e:
-                        logger.error(f"[MasterCredentialService] Failed to decrypt credentials for {candidate}: {e}")
+                if record:
+                    if not record.is_enabled:
+                        logger.info(f"[MasterCredentialService] Provider '{candidate}' is explicitly disabled in DB.")
+                        return None
+                    if record.credentials_encrypted:
+                        try:
+                            decrypted_str = self.decrypt(record.credentials_encrypted)
+                            data = json.loads(decrypted_str)
+                            if data and (data.get("api_key") or data.get("account_sid") or data.get("auth_token")):
+                                return data
+                        except Exception as e:
+                            logger.error(f"[MasterCredentialService] Failed to decrypt credentials for {candidate}: {e}")
             except Exception as db_err:
                 logger.debug(f"[MasterCredentialService] DB lookup for {candidate} failed or unavailable: {db_err}")
 

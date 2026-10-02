@@ -27,6 +27,7 @@ class UserResponse(BaseModel):
     organization_id: int | None = None
     provider_id: str | None = None
     is_superuser: bool = False
+    has_local_ai_access: bool = True
 
 
 class AuthResponse(BaseModel):

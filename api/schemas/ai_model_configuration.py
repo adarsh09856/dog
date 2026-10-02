@@ -67,6 +67,7 @@ class KodewavesManagedAIModelConfiguration(BaseModel):
     language: str = KODEWAVES_DEFAULT_LANGUAGE
     llm_model: Optional[str] = None
     stt_model: Optional[str] = None
+    tts_model: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -201,7 +202,7 @@ def _compile_kodewaves_configuration(
         tts=KodewavesTTSService(
             provider=ServiceProviders.KODEWAVES,
             api_key=api_key,
-            model="default",
+            model=configuration.tts_model or "default",
             voice=configuration.voice,
             speed=configuration.speed,
         ),

@@ -45,11 +45,15 @@ from pipecat.services.deepgram.flux.stt import (
     DeepgramFluxSTTSettings,
 )
 from pipecat.services.deepgram.stt import DeepgramSTTService, DeepgramSTTSettings
+from pipecat.services.deepgram.tts import DeepgramTTSService, DeepgramTTSSettings
 from pipecat.services.kodewaves.flux.stt import KodewavesFluxSTTService
 
 DograhFluxSTTService = KodewavesFluxSTTService
 from pipecat.services.kodewaves.stt import KodewavesSTTService, KodewavesSTTSettings
 from pipecat.services.kodewaves.tts import KodewavesTTSService, KodewavesTTSSettings
+from pipecat.services.kodewaves.llm import KodewavesLLMService
+
+DograhLLMService = KodewavesLLMService
 from pipecat.services.elevenlabs.stt import (
     CommitStrategy,
     ElevenLabsRealtimeSTTService,
@@ -457,6 +461,19 @@ def create_stt_service(
         base_url = MPS_API_URL.replace("http://", "ws://").replace("https://", "wss://")
         language = getattr(user_config.stt, "language", None) or "multi"
 
+        if getattr(user_config.stt, "api_key", None) == "sovereign-local-cpu":
+            import os
+            speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
+            if not speaches_host.endswith("/v1"):
+                speaches_host = f"{speaches_host.rstrip('/')}/v1"
+            from pipecat.services.speaches.stt import SpeachesSTTService
+            stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-tiny"
+            return SpeachesSTTService(
+                base_url=speaches_host,
+                model=stt_model,
+                sample_rate=audio_config.transport_in_sample_rate,
+            )
+
         if kodewaves_stt_uses_flux_language(language):
             # Kodewaves's Flux proxy only supports multilingual auto-detect and the
             # same language hint subset as Deepgram Flux multilingual.
@@ -476,19 +493,6 @@ def create_stt_service(
                 correlation_id=correlation_id,
                 settings=DeepgramFluxSTTSettings(**settings_kwargs),
                 should_interrupt=False,  # external turn strategies own interruption
-                sample_rate=audio_config.transport_in_sample_rate,
-            )
-
-        if getattr(user_config.stt, "api_key", None) == "sovereign-local-cpu":
-            import os
-            speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
-            if not speaches_host.endswith("/v1"):
-                speaches_host = f"{speaches_host.rstrip('/')}/v1"
-            from pipecat.services.speaches.stt import SpeachesSTTService
-            stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-tiny"
-            return SpeachesSTTService(
-                base_url=speaches_host,
-                model=stt_model,
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
@@ -853,13 +857,19 @@ def create_tts_service(
             speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
             if not speaches_host.endswith("/v1"):
                 speaches_host = f"{speaches_host.rstrip('/')}/v1"
-            from pipecat.services.speaches.tts import SpeachesTTSService
+            from pipecat.services.speaches.tts import SpeachesTTSService, SpeachesTTSSettings
             voice = getattr(user_config.tts, "voice", "af_heart")
             if voice and (voice.startswith("dg_") or voice.startswith("kw_")):
                 voice = "af_heart"
+            tts_model = getattr(user_config.tts, "model", None) or "kokoro"
+            if tts_model == "default":
+                tts_model = "kokoro"
             return SpeachesTTSService(
                 base_url=speaches_host,
-                voice=voice,
+                settings=SpeachesTTSSettings(
+                    model=tts_model,
+                    voice=voice,
+                ),
                 text_filters=[xml_function_tag_filter],
                 skip_aggregator_types=["recording_router", "recording"],
                 silence_time_s=1.0,
@@ -1286,10 +1296,17 @@ def create_llm_service_from_provider(
         "kodewaves",
     ):
         if api_key == "sovereign-local-cpu":
+            import os
+            ollama_host = os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
+            if not ollama_host.endswith("/v1"):
+                ollama_host = f"{ollama_host.rstrip('/')}/v1"
+            llm_model = model or "qwen2.5:0.5b"
+            if llm_model == "default":
+                llm_model = "qwen2.5:0.5b"
             return KodewavesLLMService(
-                base_url="http://localhost:11434/v1",
+                base_url=ollama_host,
                 api_key="sovereign-local-cpu",
-                settings=OpenAILLMSettings(model="qwen2.5:0.5b"),
+                settings=OpenAILLMSettings(model=llm_model),
             )
         return KodewavesLLMService(
             base_url=f"{MPS_API_URL}/api/v1/llm",

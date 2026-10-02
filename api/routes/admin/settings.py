@@ -140,6 +140,18 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
         }
         await kodewaves_db_client.set_setting(key="payments", value=payments, category="payments")
 
+        try:
+            await kodewaves_db_client.record_audit_log(
+                actor_id=_user.id,
+                actor_email=_user.email,
+                action="settings.update",
+                resource_type="platform_settings",
+                resource_id="global",
+                changes={"categories": ["branding", "policy", "local_ai", "payments"]},
+            )
+        except Exception:
+            pass
+
         return {"message": "Successfully saved sovereign platform settings"}
 
     # Fallback to key-value update if structured as { category, key, value }

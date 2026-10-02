@@ -22,6 +22,7 @@ from api.routes.reports import router as reports_router
 from api.routes.s3_signed_url import router as s3_router
 from api.routes.service_keys import router as service_keys_router
 from api.routes.admin import admin_router
+from api.routes.catalog import router as catalog_router
 from api.routes.appointments import router as appointments_router
 from api.routes.billing_sovereign import router as billing_sovereign_router
 from api.routes.crm import router as crm_router
@@ -48,6 +49,7 @@ router = APIRouter(
 )
 
 router.include_router(admin_router)
+router.include_router(catalog_router)
 router.include_router(crm_router)
 router.include_router(appointments_router)
 router.include_router(forms_router)

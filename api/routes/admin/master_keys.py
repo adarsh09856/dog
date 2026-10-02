@@ -112,6 +112,19 @@ async def save_master_key(req: MasterCredentialRequest, _user=Depends(get_superu
 
     if not success:
         raise HTTPException(status_code=500, detail="Failed to encrypt and store master credentials.")
+
+    try:
+        await kodewaves_db_client.record_audit_log(
+            actor_id=_user.id,
+            actor_email=_user.email,
+            action="master_key.upsert",
+            resource_type="credential",
+            resource_id=provider_clean,
+            changes={"is_enabled": is_enabled, "category": category},
+        )
+    except Exception:
+        pass
+
     return {"message": f"Successfully stored master credentials for {req.provider}"}
 
 
@@ -175,4 +188,15 @@ async def delete_master_key(provider: str, _user=Depends(get_superuser)):
 
         await session.delete(record)
         await session.commit()
+        try:
+            await kodewaves_db_client.record_audit_log(
+                actor_id=_user.id,
+                actor_email=_user.email,
+                action="master_key.delete",
+                resource_type="credential",
+                resource_id=provider,
+                changes={"deleted": True},
+            )
+        except Exception:
+            pass
         return {"message": f"Successfully removed master credentials for '{provider}'"}

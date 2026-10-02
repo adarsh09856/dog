@@ -92,6 +92,7 @@ async def signup(request: SignupRequest):
             organization_id=organization.id,
             provider_id=user.provider_id,
             is_superuser=bool(user.is_superuser),
+            has_local_ai_access=bool(getattr(user, "has_local_ai_access", True)),
         ),
     )
 
@@ -132,6 +133,7 @@ async def login(request: LoginRequest):
             organization_id=user.selected_organization_id,
             provider_id=user.provider_id,
             is_superuser=bool(user.is_superuser),
+            has_local_ai_access=bool(getattr(user, "has_local_ai_access", True)),
         ),
     )
 
@@ -144,5 +146,6 @@ async def get_current_user(user: UserModel = Depends(get_user)):
         organization_id=user.selected_organization_id,
         provider_id=user.provider_id,
         is_superuser=bool(user.is_superuser),
+        has_local_ai_access=bool(getattr(user, "has_local_ai_access", True)),
     )
 

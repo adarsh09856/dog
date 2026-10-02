@@ -207,12 +207,34 @@ def _detect_provider_from_voice(voice: Optional[str]) -> Optional[str]:
     return None
 
 
+def _detect_provider_from_tts_model(model: Optional[str]) -> Optional[str]:
+    if not model or model == "default":
+        return None
+    ml = model.lower()
+    if "sonic" in ml or "cartesia" in ml:
+        return "cartesia"
+    if "eleven" in ml:
+        return "elevenlabs"
+    if "tts-1" in ml or "openai" in ml:
+        return "openai"
+    if "bulbul" in ml or "sarvam" in ml:
+        return "sarvam"
+    if "bodhi" in ml or "navana" in ml:
+        return "navana"
+    if "gemini" in ml or "google" in ml:
+        return "gemini"
+    if "kokoro" in ml or "speaches" in ml:
+        return "speaches"
+    return None
+
+
 async def _resolve_master_tts(effective: EffectiveAIModelConfiguration) -> bool:
     """Resolve sovereign TTS master credentials (Cartesia, Navana, Gemini, ElevenLabs, Sarvam, OpenAI, Deepgram, Azure)."""
     current_voice = getattr(effective.tts, "voice", None)
-    detected_prov = _detect_provider_from_voice(current_voice)
+    configured_model = getattr(effective.tts, "model", None)
+    detected_prov = _detect_provider_from_tts_model(configured_model) or _detect_provider_from_voice(current_voice)
 
-    # 1. If voice belongs to a specific provider and master credentials exist, route directly
+    # 1. If voice/model belongs to a specific provider and master credentials exist, route directly
     if detected_prov and detected_prov != "speaches":
         creds = await master_credential_service.get_master_credential(detected_prov)
         if creds and creds.get("api_key"):
@@ -225,9 +247,9 @@ async def _resolve_master_tts(effective: EffectiveAIModelConfiguration) -> bool:
                 "sarvam": "bulbul:v1",
                 "navana": "bodhi-tts-v1",
             }
-            model = default_models.get(detected_prov, "default")
+            model = configured_model if (configured_model and configured_model != "default") else default_models.get(detected_prov, "default")
             effective.tts = _build_master_tts(detected_prov, model, creds["api_key"], current_voice)
-            logger.info(f"[KodewavesResolver] Injected targeted voice TTS: {detected_prov}/{current_voice}")
+            logger.info(f"[KodewavesResolver] Injected targeted TTS: {detected_prov}/{model}/{current_voice}")
             return True
 
     # 2. Fallback provider priority order
@@ -244,8 +266,9 @@ async def _resolve_master_tts(effective: EffectiveAIModelConfiguration) -> bool:
         creds = await master_credential_service.get_master_credential(prov)
         if creds and creds.get("api_key"):
             voice = current_voice if (current_voice and current_voice != "default") else fallback_voice
-            effective.tts = _build_master_tts(prov, default_model, creds["api_key"], voice)
-            logger.info(f"[KodewavesResolver] Injected master TTS: {prov}/{default_model}")
+            chosen_model = configured_model if (configured_model and configured_model != "default") else default_model
+            effective.tts = _build_master_tts(prov, chosen_model, creds["api_key"], voice)
+            logger.info(f"[KodewavesResolver] Injected master TTS: {prov}/{chosen_model}")
             return True
     return False
 

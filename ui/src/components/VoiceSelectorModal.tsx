@@ -96,6 +96,18 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     const [error, setError] = useState<string | null>(null);
 
     const [providerFilter, setProviderFilter] = useState("__all__");
+
+    const activeTabs = useMemo(() => {
+        if (provider === "speaches") {
+            return [{ id: "__all__", label: "Local Kokoro Voices (8)" }];
+        }
+        return PROVIDER_TABS;
+    }, [provider]);
+
+    useEffect(() => {
+        setProviderFilter("__all__");
+    }, [provider]);
+
     const [gender, setGender] = useState(DEFAULT_GENDER);
     const [accent, setAccent] = useState(DEFAULT_ACCENT);
     const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
@@ -286,7 +298,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
 
                     {/* Provider Filter Tabs */}
                     <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/20 px-6 py-2">
-                        {PROVIDER_TABS.map((tab) => (
+                        {activeTabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 type="button"
