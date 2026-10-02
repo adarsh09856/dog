@@ -240,6 +240,10 @@ def _elevenlabs_realtime_stt_host(base_url: str) -> str:
 
 
 def stt_uses_external_turns(user_config) -> bool:
+    if getattr(user_config.stt, "api_key", None) == "sovereign-local-cpu":
+        return False
+    if user_config.stt.provider == ServiceProviders.SPEACHES.value or getattr(user_config.stt, "provider", None) == "speaches":
+        return False
     if user_config.stt.provider == ServiceProviders.DEEPGRAM.value:
         return user_config.stt.model in DEEPGRAM_FLUX_MODELS
     if user_config.stt.provider in (
@@ -466,11 +470,22 @@ def create_stt_service(
             speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
             if not speaches_host.endswith("/v1"):
                 speaches_host = f"{speaches_host.rstrip('/')}/v1"
-            from pipecat.services.speaches.stt import SpeachesSTTService
+            from pipecat.services.speaches.stt import SpeachesSTTService, SpeachesSTTSettings
+            from pipecat.transcriptions.language import Language
             stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-tiny"
+            lang_str = getattr(user_config.stt, "language", None)
+            lang_obj = None
+            if lang_str and lang_str not in ("multi", "auto", "default"):
+                try:
+                    lang_obj = Language(lang_str)
+                except ValueError:
+                    lang_obj = None
             return SpeachesSTTService(
                 base_url=speaches_host,
-                model=stt_model,
+                settings=SpeachesSTTSettings(
+                    model=stt_model,
+                    language=lang_obj,
+                ),
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
@@ -543,14 +558,21 @@ def create_stt_service(
             sample_rate=audio_config.transport_in_sample_rate,
         )
     elif user_config.stt.provider == ServiceProviders.SPEACHES.value:
-        language = getattr(user_config.stt, "language", None)
+        lang_str = getattr(user_config.stt, "language", None)
+        lang_obj = None
+        if lang_str and lang_str not in ("multi", "auto", "default"):
+            try:
+                from pipecat.transcriptions.language import Language
+                lang_obj = Language(lang_str)
+            except ValueError:
+                lang_obj = None
         _validate_runtime_service_url(user_config.stt.base_url, "base_url")
         return SpeachesSTTService(
             base_url=user_config.stt.base_url,
             api_key=user_config.stt.api_key or "none",
             settings=SpeachesSTTSettings(
                 model=user_config.stt.model,
-                language=language,
+                language=lang_obj,
             ),
             sample_rate=audio_config.transport_in_sample_rate,
         )
@@ -907,12 +929,18 @@ def create_tts_service(
         return tts
     elif user_config.tts.provider == ServiceProviders.SPEACHES.value:
         _validate_runtime_service_url(user_config.tts.base_url, "base_url")
+        voice = getattr(user_config.tts, "voice", "af_heart") or "af_heart"
+        if voice in ("default", "alloy", "none") or voice.startswith("dg_") or voice.startswith("kw_"):
+            voice = "af_heart"
+        tts_model = getattr(user_config.tts, "model", "kokoro") or "kokoro"
+        if tts_model == "default":
+            tts_model = "kokoro"
         return SpeachesTTSService(
             base_url=user_config.tts.base_url,
             api_key=user_config.tts.api_key or "none",
             settings=SpeachesTTSSettings(
-                model=user_config.tts.model,
-                voice=user_config.tts.voice,
+                model=tts_model,
+                voice=voice,
                 speed=user_config.tts.speed,
             ),
             text_filters=[xml_function_tag_filter],

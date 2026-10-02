@@ -479,24 +479,27 @@ export function AIModelConfigurationV2Editor({
     }, []);
 
     const effectiveLlmModels = useMemo(() => {
+        if (!catalogManifest) return [];
         if (kodewaves.engine_type === "local_cpu") {
-            return catalogManifest?.local_llm_models?.length ? catalogManifest.local_llm_models : LOCAL_LLM_MODELS;
+            return catalogManifest.local_llm_models || [];
         }
-        return catalogManifest?.cloud_llm_models?.length ? catalogManifest.cloud_llm_models : CLOUD_LLM_MODELS;
+        return catalogManifest.cloud_llm_models || [];
     }, [kodewaves.engine_type, catalogManifest]);
 
     const effectiveSttModels = useMemo(() => {
+        if (!catalogManifest) return [];
         if (kodewaves.engine_type === "local_cpu") {
-            return catalogManifest?.local_stt_models?.length ? catalogManifest.local_stt_models : LOCAL_STT_MODELS;
+            return catalogManifest.local_stt_models || [];
         }
-        return catalogManifest?.cloud_stt_models?.length ? catalogManifest.cloud_stt_models : CLOUD_STT_MODELS;
+        return catalogManifest.cloud_stt_models || [];
     }, [kodewaves.engine_type, catalogManifest]);
 
     const effectiveTtsModels = useMemo(() => {
+        if (!catalogManifest) return [];
         if (kodewaves.engine_type === "local_cpu") {
-            return catalogManifest?.local_tts_models?.length ? catalogManifest.local_tts_models : LOCAL_TTS_MODELS;
+            return catalogManifest.local_tts_models || [];
         }
-        return catalogManifest?.cloud_tts_models?.length ? catalogManifest.cloud_tts_models : CLOUD_TTS_MODELS;
+        return catalogManifest.cloud_tts_models || [];
     }, [kodewaves.engine_type, catalogManifest]);
 
     useEffect(() => {
@@ -695,18 +698,33 @@ export function AIModelConfigurationV2Editor({
                                         </span>
                                     </div>
                                     <Select
-                                        value={kodewaves.llm_model || (kodewaves.engine_type === "local_cpu" ? "qwen2.5:1.5b" : "auto")}
-                                        onValueChange={(llm_model) => setKodewaves({ ...kodewaves, llm_model: llm_model === "auto" ? undefined : llm_model })}
+                                        disabled={effectiveLlmModels.length === 0}
+                                        value={
+                                            effectiveLlmModels.length === 0
+                                                ? "none"
+                                                : (kodewaves.llm_model && effectiveLlmModels.some((m) => m.value === kodewaves.llm_model)
+                                                    ? kodewaves.llm_model
+                                                    : (effectiveLlmModels[0]?.value || "auto"))
+                                        }
+                                        onValueChange={(llm_model) => setKodewaves({ ...kodewaves, llm_model: llm_model === "auto" || llm_model === "none" ? undefined : llm_model })}
                                     >
                                         <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Select LLM model" />
+                                            <SelectValue placeholder={effectiveLlmModels.length === 0 ? "No active models available" : "Select LLM model"} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {effectiveLlmModels.map((m) => (
-                                                <SelectItem key={m.value} value={m.value}>
-                                                    {m.label}
+                                            {effectiveLlmModels.length === 0 ? (
+                                                <SelectItem key="none" value="none" disabled>
+                                                    {kodewaves.engine_type === "local_cpu"
+                                                        ? "No local Ollama models installed (Download in Admin > Settings)"
+                                                        : "No active cloud master keys (Add keys in Admin > Models)"}
                                                 </SelectItem>
-                                            ))}
+                                            ) : (
+                                                effectiveLlmModels.map((m) => (
+                                                    <SelectItem key={m.value} value={m.value}>
+                                                        {m.label}
+                                                    </SelectItem>
+                                                ))
+                                            )}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -723,18 +741,33 @@ export function AIModelConfigurationV2Editor({
                                         </span>
                                     </div>
                                     <Select
-                                        value={kodewaves.stt_model || (kodewaves.engine_type === "local_cpu" ? "Systran/faster-whisper-base" : "auto")}
-                                        onValueChange={(stt_model) => setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" ? undefined : stt_model })}
+                                        disabled={effectiveSttModels.length === 0}
+                                        value={
+                                            effectiveSttModels.length === 0
+                                                ? "none"
+                                                : (kodewaves.stt_model && effectiveSttModels.some((m) => m.value === kodewaves.stt_model)
+                                                    ? kodewaves.stt_model
+                                                    : (effectiveSttModels[0]?.value || "auto"))
+                                        }
+                                        onValueChange={(stt_model) => setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" || stt_model === "none" ? undefined : stt_model })}
                                     >
                                         <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Select STT model" />
+                                            <SelectValue placeholder={effectiveSttModels.length === 0 ? "No active transcribers available" : "Select STT model"} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {effectiveSttModels.map((m) => (
-                                                <SelectItem key={m.value} value={m.value}>
-                                                    {m.label}
+                                            {effectiveSttModels.length === 0 ? (
+                                                <SelectItem key="none" value="none" disabled>
+                                                    {kodewaves.engine_type === "local_cpu"
+                                                        ? "Local Speaches Whisper STT unavailable"
+                                                        : "No active transcriber keys (Add Deepgram / Sarvam in Admin > Models)"}
                                                 </SelectItem>
-                                            ))}
+                                            ) : (
+                                                effectiveSttModels.map((m) => (
+                                                    <SelectItem key={m.value} value={m.value}>
+                                                        {m.label}
+                                                    </SelectItem>
+                                                ))
+                                            )}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -751,18 +784,33 @@ export function AIModelConfigurationV2Editor({
                                         </span>
                                     </div>
                                     <Select
-                                        value={kodewaves.tts_model || (kodewaves.engine_type === "local_cpu" ? "kokoro" : "auto")}
-                                        onValueChange={(tts_model) => setKodewaves({ ...kodewaves, tts_model: tts_model === "auto" ? undefined : tts_model })}
+                                        disabled={effectiveTtsModels.length === 0}
+                                        value={
+                                            effectiveTtsModels.length === 0
+                                                ? "none"
+                                                : (kodewaves.tts_model && effectiveTtsModels.some((m) => m.value === kodewaves.tts_model)
+                                                    ? kodewaves.tts_model
+                                                    : (effectiveTtsModels[0]?.value || "auto"))
+                                        }
+                                        onValueChange={(tts_model) => setKodewaves({ ...kodewaves, tts_model: tts_model === "auto" || tts_model === "none" ? undefined : tts_model })}
                                     >
                                         <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Select TTS model" />
+                                            <SelectValue placeholder={effectiveTtsModels.length === 0 ? "No active synthesizers available" : "Select TTS model"} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {effectiveTtsModels.map((m) => (
-                                                <SelectItem key={m.value} value={m.value}>
-                                                    {m.label}
+                                            {effectiveTtsModels.length === 0 ? (
+                                                <SelectItem key="none" value="none" disabled>
+                                                    {kodewaves.engine_type === "local_cpu"
+                                                        ? "Local Speaches Kokoro TTS unavailable"
+                                                        : "No active synthesizer keys (Add Cartesia / ElevenLabs in Admin > Models)"}
                                                 </SelectItem>
-                                            ))}
+                                            ) : (
+                                                effectiveTtsModels.map((m) => (
+                                                    <SelectItem key={m.value} value={m.value}>
+                                                        {m.label}
+                                                    </SelectItem>
+                                                ))
+                                            )}
                                         </SelectContent>
                                     </Select>
                                 </div>

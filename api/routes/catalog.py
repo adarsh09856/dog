@@ -46,12 +46,12 @@ DEFAULT_CLOUD_TTS_MODELS = [
 
 DEFAULT_LOCAL_STT_MODELS = [
     {"value": "Systran/faster-whisper-tiny.en", "label": "Whisper Tiny English (Fastest CPU)"},
-    {"value": "Systran/faster-whisper-base", "label": "Whisper Base Multilingual (Recommended CPU)"},
-    {"value": "Systran/faster-whisper-small", "label": "Whisper Small Multilingual (High Accuracy CPU)"},
+    {"value": "Systran/faster-whisper-base", "label": "Whisper Base Multilingual (Recommended CPU - English & Hindi)"},
+    {"value": "Systran/faster-whisper-small", "label": "Whisper Small Multilingual (High Accuracy CPU - English & Hindi)"},
 ]
 
 DEFAULT_LOCAL_TTS_MODELS = [
-    {"value": "kokoro", "label": "Kokoro TTS (Fast CPU Neural Voices)"},
+    {"value": "kokoro", "label": "Kokoro TTS (Fast CPU Neural Voices - English & Hindi)"},
 ]
 
 

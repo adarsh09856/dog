@@ -384,6 +384,7 @@ async def _validate_inbound_request(
     webhook_data: dict,
     headers: dict,
     raw_body: str = "",
+    request: Optional[Request] = None,
 ) -> tuple[bool, TelephonyError, dict, object]:
     """
     Validate all aspects of inbound request.
@@ -456,6 +457,10 @@ async def _validate_inbound_request(
     signature_valid = await provider_instance.verify_inbound_signature(
         webhook_url, webhook_data, headers, raw_body
     )
+    if not signature_valid and request is not None:
+        signature_valid = await provider_instance.verify_inbound_signature(
+            str(request.url), webhook_data, headers, raw_body
+        )
     logger.info(f"Signature validation for {provider}: {signature_valid}")
     if not signature_valid:
         return (
@@ -922,9 +927,18 @@ async def handle_inbound_run(request: Request):
         provider_instance = await get_telephony_provider_by_id(
             telephony_configuration_id, config.organization_id
         )
+        backend_endpoint, _ = await get_backend_endpoints(request=request)
+        public_url = f"{backend_endpoint}{request.url.path}"
+        if request.url.query:
+            public_url = f"{public_url}?{request.url.query}"
+
         signature_valid = await provider_instance.verify_inbound_signature(
-            str(request.url), webhook_data, headers, raw_body
+            public_url, webhook_data, headers, raw_body
         )
+        if not signature_valid:
+            signature_valid = await provider_instance.verify_inbound_signature(
+                str(request.url), webhook_data, headers, raw_body
+            )
         if not signature_valid:
             logger.warning(
                 f"/inbound/run: signature validation failed for "
@@ -1086,6 +1100,11 @@ async def handle_inbound_telephony(
             logger.warning(f"Non-inbound call received: {normalized_data.direction}")
             return generic_hangup_response()
 
+        backend_endpoint, _ = await get_backend_endpoints(request=request)
+        public_url = f"{backend_endpoint}{request.url.path}"
+        if request.url.query:
+            public_url = f"{public_url}?{request.url.query}"
+
         (
             is_valid,
             error_type,
@@ -1093,12 +1112,13 @@ async def handle_inbound_telephony(
             provider_instance,
         ) = await _validate_inbound_request(
             workflow_id,
-            str(request.url),
+            public_url,
             provider_class,
             normalized_data,
             webhook_data,
             headers,
             raw_body,
+            request=request,
         )
 
         if not is_valid:

@@ -32,21 +32,25 @@ interface Facets {
     genders: string[];
     accents: string[];
     languages: string[];
+    providers?: string[];
 }
 
-const EMPTY_FACETS: Facets = { genders: [], accents: [], languages: [] };
+const EMPTY_FACETS: Facets = { genders: [], accents: [], languages: [], providers: [] };
 
 const PROVIDER_TABS = [
-    { id: "__all__", label: "All Voices (60+)" },
-    { id: "elevenlabs", label: "ElevenLabs" },
+    { id: "__all__", label: "All Active Voices" },
+    { id: "speaches", label: "Local Kokoro" },
+    { id: "sarvam", label: "Sarvam Indic" },
     { id: "cartesia", label: "Cartesia Sonic" },
     { id: "openai", label: "OpenAI" },
+    { id: "elevenlabs", label: "ElevenLabs" },
     { id: "deepgram", label: "Deepgram Aura" },
     { id: "azure", label: "Azure Neural" },
     { id: "google", label: "Gemini / Google" },
-    { id: "sarvam", label: "Sarvam Indic" },
     { id: "navana", label: "Navana Indic" },
-    { id: "speaches", label: "Local Kokoro" },
+    { id: "smallest", label: "Smallest AI" },
+    { id: "lmnt", label: "LMNT" },
+    { id: "rime", label: "Rime" },
 ];
 
 interface VoiceSelectorModalProps {
@@ -99,10 +103,24 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
 
     const activeTabs = useMemo(() => {
         if (provider === "speaches") {
-            return [{ id: "__all__", label: "Local Kokoro Voices (8)" }];
+            return [{ id: "__all__", label: "Local Kokoro Voices" }];
         }
-        return PROVIDER_TABS;
-    }, [provider]);
+        const activeProvList = facets.providers || [];
+        if (activeProvList.length === 0) {
+            const detected = Array.from(new Set(voices.map((v) => (v as any).provider).filter(Boolean)));
+            if (detected.length > 0) {
+                return [
+                    { id: "__all__", label: `All Active Voices (${voices.length})` },
+                    ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && detected.includes(t.id)),
+                ];
+            }
+            return [{ id: "__all__", label: `All Voices (${voices.length || 0})` }];
+        }
+        return [
+            { id: "__all__", label: `All Active Voices (${voices.length})` },
+            ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && activeProvList.includes(t.id)),
+        ];
+    }, [provider, facets.providers, voices]);
 
     useEffect(() => {
         setProviderFilter("__all__");
@@ -194,6 +212,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                         genders: response.data.facets.genders ?? [],
                         accents: response.data.facets.accents ?? [],
                         languages: response.data.facets.languages ?? [],
+                        providers: (response.data.facets as any).providers ?? [],
                     });
                 }
             }
@@ -245,17 +264,55 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             return;
         }
         stopPreview();
-        if (!voice.preview_url) return;
+        setPlayingVoiceId(voice.voice_id);
+
+        const clear = () => {
+            if (audioRef.current) audioRef.current = null;
+            setPlayingVoiceId(null);
+        };
+
+        const tryWebSpeechFallback = () => {
+            if (typeof window !== "undefined" && "speechSynthesis" in window) {
+                try {
+                    window.speechSynthesis.cancel();
+                    const text = voice.language === "hi"
+                        ? "नमस्ते! यह कोडवेव्स पर इस आवाज़ का पूर्वावलोकन है।"
+                        : `Hello! This is a preview of the ${voice.name} voice on Kodewaves.`;
+                    const utterance = new SpeechSynthesisUtterance(text);
+                    if (voice.language === "hi") {
+                        utterance.lang = "hi-IN";
+                    } else if (voice.accent === "gb") {
+                        utterance.lang = "en-GB";
+                    } else if (voice.accent === "in") {
+                        utterance.lang = "en-IN";
+                    } else {
+                        utterance.lang = "en-US";
+                    }
+                    utterance.onend = clear;
+                    utterance.onerror = clear;
+                    window.speechSynthesis.speak(utterance);
+                    return;
+                } catch (e) {
+                    console.warn("Speech synthesis fallback failed:", e);
+                }
+            }
+            clear();
+        };
+
+        if (!voice.preview_url) {
+            tryWebSpeechFallback();
+            return;
+        }
+
         const audio = new Audio(voice.preview_url);
         audioRef.current = audio;
-        setPlayingVoiceId(voice.voice_id);
-        const clear = () => {
-            if (audioRef.current === audio) audioRef.current = null;
-            setPlayingVoiceId((current) => (current === voice.voice_id ? null : current));
-        };
         audio.onended = clear;
-        audio.onerror = clear;
-        audio.play().catch(clear);
+        audio.onerror = () => {
+            tryWebSpeechFallback();
+        };
+        audio.play().catch(() => {
+            tryWebSpeechFallback();
+        });
     };
 
     const commitSelection = () => {
@@ -297,14 +354,14 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                     </DialogHeader>
 
                     {/* Provider Filter Tabs */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/20 px-6 py-2">
+                    <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/20 px-6 py-2.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden shrink-0">
                         {activeTabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 type="button"
                                 onClick={() => setProviderFilter(tab.id)}
                                 className={cn(
-                                    "whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                                    "whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
                                     providerFilter === tab.id
                                         ? "bg-primary text-primary-foreground shadow-sm"
                                         : "text-muted-foreground hover:bg-muted hover:text-foreground"

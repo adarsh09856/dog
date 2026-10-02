@@ -36,15 +36,27 @@ async def handle_twiml_webhook(
     workflow_run = await db_client.get_workflow_run_by_id(workflow_run_id)
     provider = await get_telephony_provider_for_run(workflow_run, organization_id)
     callback_data = dict(await request.form())
+    from api.utils.common import get_backend_endpoints
+    backend_endpoint, _ = await get_backend_endpoints(request=request)
+    public_url = f"{backend_endpoint}{request.url.path}"
+    if request.url.query:
+        public_url = f"{public_url}?{request.url.query}"
 
     is_valid = await provider.verify_inbound_signature(
-        str(request.url),
+        public_url,
         callback_data,
         dict(request.headers),
     )
     if not is_valid:
+        is_valid = await provider.verify_inbound_signature(
+            str(request.url),
+            callback_data,
+            dict(request.headers),
+        )
+
+    if not is_valid:
         logger.warning(
-            f"[run {workflow_run_id}] Invalid Twilio signature on answer webhook"
+            f"[run {workflow_run_id}] Invalid Twilio signature on answer webhook (tried {public_url} and {str(request.url)})"
         )
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
@@ -87,11 +99,23 @@ async def handle_twilio_status_callback(
         workflow_run, workflow.organization_id
     )
 
+    from api.utils.common import get_backend_endpoints
+    backend_endpoint, _ = await get_backend_endpoints(request=request)
+    public_url = f"{backend_endpoint}{request.url.path}"
+    if request.url.query:
+        public_url = f"{public_url}?{request.url.query}"
+
     is_valid = await provider.verify_inbound_signature(
-        str(request.url),
+        public_url,
         callback_data,
         dict(request.headers),
     )
+    if not is_valid:
+        is_valid = await provider.verify_inbound_signature(
+            str(request.url),
+            callback_data,
+            dict(request.headers),
+        )
     if not is_valid:
         logger.warning(f"Invalid webhook signature for workflow run {workflow_run_id}")
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
