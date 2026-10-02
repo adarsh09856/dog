@@ -253,6 +253,7 @@ async def _resolve_master_tts(effective: EffectiveAIModelConfiguration) -> bool:
 async def apply_kodewaves_sovereign_resolution(
     effective: EffectiveAIModelConfiguration,
     organization_id: Optional[int] = None,
+    enforce_balance: bool = False,
 ) -> EffectiveAIModelConfiguration:
     """
     Seamlessly injects Kodewaves Superadmin master keys when organization is in
@@ -456,8 +457,8 @@ async def apply_kodewaves_sovereign_resolution(
     # Sever external Dograh cloud proxying by clearing managed_service_version
     effective.managed_service_version = None
 
-    # 8. Balance Enforcement for Platform-Managed Calls
-    if is_using_master_keys and not has_positive_balance:
+    # 8. Balance Enforcement for Platform-Managed Calls (only during execution)
+    if enforce_balance and is_using_master_keys and not has_positive_balance:
         logger.warning(f"[KodewavesResolver] Org {organization_id} has depleted voice balance ({wallet.credit_balance_minutes} min)")
         raise HTTPException(
             status_code=402,

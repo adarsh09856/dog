@@ -116,7 +116,7 @@ async def get_effective_ai_model_configuration_for_workflow(
         )
 
     from api.services.configuration.kodewaves_resolver import apply_kodewaves_sovereign_resolution
-    return await apply_kodewaves_sovereign_resolution(effective, organization_id)
+    return await apply_kodewaves_sovereign_resolution(effective, organization_id, enforce_balance=True)
 
 
 async def get_organization_ai_model_configuration_v2(
@@ -154,10 +154,10 @@ def _parse_organization_ai_model_configuration_v2(
         return None
     try:
         return OrganizationAIModelConfigurationV2.model_validate(row.value)
-    except ValidationError as exc:
+    except Exception as exc:
         logger.warning(
             "Invalid org AI model configuration v2 for organization "
-            f"{organization_id}: {exc}. Falling back to legacy configuration."
+            f"{organization_id}: {exc}. Falling back to default configuration."
         )
         return None
 
