@@ -162,6 +162,7 @@ services:
     volumes:
       - ./api:/app/api:ro
       - ./scripts:/app/scripts:ro
+      - ./pipecat:/app/pipecat:ro
     deploy:
       resources:
         limits:

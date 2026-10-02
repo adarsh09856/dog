@@ -495,6 +495,32 @@ def seed_local_ai_model():
         print(f"[WARN] Ollama model pull skipped (will download on first user request): {e}")
 
 
+async def seed_superadmin_user():
+    import os
+    admin_email = os.getenv("ADMIN_EMAIL", "").strip()
+    admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
+
+    if admin_email and admin_password:
+        print(f"[SEED] Ensuring Superadmin account for '{admin_email}'...")
+        from scripts.create_superuser import create_or_promote_superuser
+        try:
+            await create_or_promote_superuser(admin_email, admin_password, name="Super Admin")
+            print(f"[SUCCESS] Superadmin '{admin_email}' verified and operational.")
+        except Exception as e:
+            print(f"[WARN] Superadmin seeding notice: {e}")
+    else:
+        # Check if at least one superuser exists in the database
+        async with db_client.async_session() as session:
+            stmt = select(UserModel).where(UserModel.is_superuser == True).limit(1)
+            res = await session.execute(stmt)
+            existing_super = res.scalar_one_or_none()
+            if existing_super:
+                print(f"[INFO] Active Superadmin account exists: '{existing_super.email}'")
+            else:
+                print("[WARN] No Superadmin account found in database and ADMIN_EMAIL/ADMIN_PASSWORD not set in environment.")
+                print("[TIP] Run `python -m scripts.create_superuser --email admin@example.com --password secret` to create one.")
+
+
 async def main():
     print("=================================================================")
     print("🚀 Starting Kodewaves Sovereign Platform Bootstrap Seeder...")
@@ -506,11 +532,12 @@ async def main():
     await seed_banned_words()
     await seed_prompt_templates()
     await seed_wallets_for_existing_orgs()
+    await seed_superadmin_user()
     seed_local_ai_model()
     print("=================================================================")
     print("🎉 Sovereign Platform Bootstrap Completed Successfully!")
     print("   ✅ Global Settings, Plans, Packages, Models, Templates, Wallets")
-    print("   ✅ Content Moderation, Prompt Gallery, Local AI Engine")
+    print("   ✅ Superadmin Privileges, Content Moderation, Prompt Gallery")
     print("=================================================================")
 
 

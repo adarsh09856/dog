@@ -138,9 +138,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Unbuffered output for better container logging
 ENV PYTHONUNBUFFERED=1
 
-# Copy application code (chown at copy-time avoids a duplicate /app layer
+# Copy application code and pipecat framework (chown at copy-time avoids a duplicate /app layer
 # from a later `RUN chown -R`, which would double the on-disk size of /app).
 COPY --chown=kodewaves:kodewaves ./api ./api
+COPY --chown=kodewaves:kodewaves ./pipecat ./pipecat
 
 # Entrypoint scripts.
 #   start_services_docker.sh — single-container (docker-compose) entrypoint

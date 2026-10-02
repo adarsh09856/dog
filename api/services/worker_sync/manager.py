@@ -91,6 +91,7 @@ class WorkerSyncManager:
             raise
         except Exception:
             logger.exception("Worker sync listener crashed")
+            await asyncio.sleep(1.0)
 
 
 # Module-level singleton, initialized in app lifespan

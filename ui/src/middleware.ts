@@ -1,34 +1,11 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { getServerBackendUrl } from '@/lib/apiClient';
 import { LEGACY_OSS_TOKEN_COOKIE, OSS_TOKEN_COOKIE } from '@/lib/auth/cookies';
 
-// Paths that don't require authentication in OSS mode.
+// Paths that don't require authentication.
 // '/' (Landing page), '/pricing' (SaaS pricing), and '/embed' (widget) are public.
-const PUBLIC_PATHS = ['/', '/pricing', '/auth/login', '/auth/signup', '/embed'];
-
-let cachedAuthProvider: string | null = null;
-
-async function fetchAuthProvider(): Promise<string> {
-  if (cachedAuthProvider) {
-    return cachedAuthProvider;
-  }
-
-  try {
-    const backendUrl = getServerBackendUrl();
-    const res = await fetch(`${backendUrl}/api/v1/health`);
-    if (res.ok) {
-      const data = await res.json();
-      cachedAuthProvider = (data.auth_provider as string) || 'local';
-      return cachedAuthProvider;
-    }
-  } catch {
-    // Backend not reachable — fall through without caching so we retry next request.
-  }
-
-  return 'unknown';
-}
+const PUBLIC_PATHS = ['/', '/pricing', '/auth', '/handler', '/embed'];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -37,8 +14,13 @@ export async function middleware(request: NextRequest) {
     request.cookies.get(LEGACY_OSS_TOKEN_COOKIE)?.value ||
     request.cookies.get('oss_token')?.value;
 
-  // Strict server-side guard for /admin routes - must have token regardless of provider
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+  // Strict server-side guard for /admin and /superadmin routes - must have token
+  if (
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
+    pathname === '/superadmin' ||
+    pathname.startsWith('/superadmin/')
+  ) {
     if (!token) {
       const loginUrl = new URL('/auth/login', request.url);
       loginUrl.searchParams.set('redirect', pathname);
@@ -46,21 +28,16 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const authProvider = await fetchAuthProvider();
-
-  // Only handle OSS mode for standard user routes
-  if (authProvider !== 'local') {
-    return NextResponse.next();
-  }
-
   // Allow public paths without auth
-  if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  if (isPublic) {
     return NextResponse.next();
   }
 
-  // If no token, redirect to login
+  // All other routes are private tenant application routes - require token
   if (!token) {
     const loginUrl = new URL('/auth/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
   }
 

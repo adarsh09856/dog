@@ -25,15 +25,17 @@ async def signup(request: SignupRequest):
     if not ENABLE_SIGNUP:
         raise HTTPException(status_code=403, detail="Signup is disabled")
 
+    normalized_email = request.email.lower().strip()
+
     # Check if email is already taken
-    existing_user = await db_client.get_user_by_email(request.email)
+    existing_user = await db_client.get_user_by_email(normalized_email)
     if existing_user:
         raise HTTPException(status_code=409, detail="Email already registered")
 
     # Hash password and create user
     hashed = hash_password(request.password)
     user = await db_client.create_user_with_email(
-        email=request.email,
+        email=normalized_email,
         password_hash=hashed,
         name=request.name,
     )
@@ -100,8 +102,9 @@ async def signup(request: SignupRequest):
     dependencies=[Depends(require_local_auth)],
 )
 async def login(request: LoginRequest):
-    # Look up user by email
-    user = await db_client.get_user_by_email(request.email)
+    # Look up user by email (case-insensitive and trimmed)
+    email = request.email.lower().strip()
+    user = await db_client.get_user_by_email(email)
     if not user or not user.password_hash:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 

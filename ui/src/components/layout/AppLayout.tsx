@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { LeadFormsProvider } from "@/context/LeadFormsContext";
+import { useAuth } from "@/lib/auth";
 
 import { AppSidebar } from "./AppSidebar";
 
@@ -36,7 +37,10 @@ function BackendStatusBanner() {
     config.backendStatus === "reachable" ||
     pathname === "/" ||
     pathname?.startsWith("/auth") ||
-    pathname?.startsWith("/pricing")
+    pathname?.startsWith("/pricing") ||
+    pathname?.startsWith("/embed") ||
+    pathname?.startsWith("/admin") ||
+    pathname?.startsWith("/superadmin")
   ) {
     return null;
   }
@@ -86,10 +90,24 @@ const AppLayout: React.FC<AppLayoutProps> = ({
   stickyTabs,
 }) => {
   const pathname = usePathname();
+  const { isAuthenticated } = useAuth();
 
-  // Check if current route should have sidebar
-  // Hide sidebar for root (/), /handler routes (Stack Auth routes), and /auth routes
-  const shouldShowSidebar = pathname !== "/" && !pathname.startsWith("/handler") && !pathname.startsWith("/auth");
+  // Public marketing & embedding routes: Never render sidebar or internal app chrome
+  const isPublicOrMarketing =
+    pathname === "/" ||
+    pathname.startsWith("/pricing") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/handler") ||
+    pathname.startsWith("/embed");
+
+  // Admin and superadmin control plane routes have their own layout and sidebar
+  const isAdminRoute =
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/superadmin") ||
+    pathname.startsWith("/superuser");
+
+  // Show AppSidebar only on authenticated private tenant application routes
+  const shouldShowSidebar = Boolean(isAuthenticated && !isPublicOrMarketing && !isAdminRoute);
 
   // Only match the exact editor page /workflow/<id>, not sub-routes like /workflow/<id>/runs
   const isWorkflowEditor = /^\/workflow\/\d+$/.test(pathname);

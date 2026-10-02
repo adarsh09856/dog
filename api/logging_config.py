@@ -14,13 +14,6 @@ os.environ["KMP_BLOCKTIME"] = "0"
 os.environ["GOMP_SPINCOUNT"] = "0"
 os.environ["KMP_AFFINITY"] = "disabled"
 
-try:
-    import torch
-    torch.set_num_threads(1)
-    torch.set_num_interop_threads(1)
-except Exception:
-    pass
-
 import loguru
 from pipecat.utils.run_context import run_id_var
 
