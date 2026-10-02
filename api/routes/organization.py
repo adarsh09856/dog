@@ -82,8 +82,11 @@ from api.services.configuration.masking import is_mask_of, mask_key, mask_user_c
 from api.services.configuration.registry import (
     DOGRAH_MULTILINGUAL_AUTODETECT_LANGUAGES,
     DOGRAH_STT_LANGUAGES,
+    KODEWAVES_MULTILINGUAL_AUTODETECT_LANGUAGES,
+    KODEWAVES_STT_LANGUAGES,
     REGISTRY,
     DograhTTSService,
+    KodewavesTTSService,
     ServiceProviders,
     ServiceType,
 )
@@ -382,24 +385,26 @@ async def get_model_configuration_v2_defaults(
         for service, provider in DEFAULT_SERVICE_PROVIDERS.items()
         if provider != ServiceProviders.DOGRAH.value
     }
-    return {
-        "dograh": {
-            "voices": [KODEWAVES_DEFAULT_VOICE],
-            "allow_custom_input": _kodewaves_allows_custom_voice(),
-            "speeds": list(KODEWAVES_SPEED_OPTIONS),
-            "speed_range": {
-                "min": KODEWAVES_SPEED_MIN,
-                "max": KODEWAVES_SPEED_MAX,
-                "step": KODEWAVES_SPEED_STEP,
-            },
-            "languages": KODEWAVES_STT_LANGUAGES,
-            "multilingual_languages": KODEWAVES_MULTILINGUAL_AUTODETECT_LANGUAGES,
-            "defaults": {
-                "voice": KODEWAVES_DEFAULT_VOICE,
-                "speed": 1.0,
-                "language": KODEWAVES_DEFAULT_LANGUAGE,
-            },
+    managed_defaults = {
+        "voices": [KODEWAVES_DEFAULT_VOICE],
+        "allow_custom_input": _kodewaves_allows_custom_voice(),
+        "speeds": list(KODEWAVES_SPEED_OPTIONS),
+        "speed_range": {
+            "min": KODEWAVES_SPEED_MIN,
+            "max": KODEWAVES_SPEED_MAX,
+            "step": KODEWAVES_SPEED_STEP,
         },
+        "languages": KODEWAVES_STT_LANGUAGES,
+        "multilingual_languages": KODEWAVES_MULTILINGUAL_AUTODETECT_LANGUAGES,
+        "defaults": {
+            "voice": KODEWAVES_DEFAULT_VOICE,
+            "speed": 1.0,
+            "language": KODEWAVES_DEFAULT_LANGUAGE,
+        },
+    }
+    return {
+        "kodewaves": managed_defaults,
+        "dograh": managed_defaults,
         "byok": {
             "pipeline": {
                 "llm": _byok_provider_schemas(ServiceType.LLM),
