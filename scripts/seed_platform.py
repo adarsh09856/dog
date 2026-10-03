@@ -225,7 +225,16 @@ async def seed_ai_model_catalog():
             "retail_price_cents_per_unit": 0.15,
             "sort_order": 4,
         },
-        # STT
+        # STT Models
+        {
+            "model_identifier": "gemini-stt",
+            "display_name": "Google Gemini Multimodal STT",
+            "provider": "google",
+            "category": "stt",
+            "base_cost_cents_per_unit": 0.20,
+            "retail_price_cents_per_unit": 0.45,
+            "sort_order": 9,
+        },
         {
             "model_identifier": "deepgram-nova-2",
             "display_name": "Deepgram Nova-2",
@@ -244,7 +253,7 @@ async def seed_ai_model_catalog():
             "retail_price_cents_per_unit": 0.50,
             "sort_order": 11,
         },
-        # TTS
+        # TTS Models
         {
             "model_identifier": "elevenlabs-turbo-v2-5",
             "display_name": "ElevenLabs Turbo v2.5",
@@ -272,7 +281,16 @@ async def seed_ai_model_catalog():
             "retail_price_cents_per_unit": 0.50,
             "sort_order": 22,
         },
-        # Gemini Models (NEW — Added in Kodewaves v2)
+        {
+            "model_identifier": "deepgram-aura",
+            "display_name": "Deepgram Aura (Sub-150ms Conversational)",
+            "provider": "deepgram",
+            "category": "tts",
+            "base_cost_cents_per_unit": 0.35,
+            "retail_price_cents_per_unit": 0.70,
+            "sort_order": 23,
+        },
+        # Gemini Models (Kodewaves Sovereign Platform)
         {
             "model_identifier": "gemini-2.5-flash",
             "display_name": "Gemini 2.5 Flash",
@@ -293,14 +311,23 @@ async def seed_ai_model_catalog():
         },
         {
             "model_identifier": "gemini-tts",
-            "display_name": "Gemini AI Studio TTS",
-            "provider": "google_gemini_tts",
+            "display_name": "Google Gemini 2.5 Voice Studio TTS",
+            "provider": "google",
             "category": "tts",
             "base_cost_cents_per_unit": 0.30,
             "retail_price_cents_per_unit": 0.60,
-            "sort_order": 23,
+            "sort_order": 24,
         },
-        # Navana Indic Models (NEW — Added in Kodewaves v2)
+        {
+            "model_identifier": "gemini-live-2.0",
+            "display_name": "Google Gemini 2.0 Live (Bidirectional Realtime)",
+            "provider": "google",
+            "category": "sts",
+            "base_cost_cents_per_unit": 0.50,
+            "retail_price_cents_per_unit": 1.00,
+            "sort_order": 8,
+        },
+        # Navana Indic Models
         {
             "model_identifier": "navana-hi-banking-v2-8khz",
             "display_name": "Navana Hindi STT (Banking)",
@@ -317,9 +344,9 @@ async def seed_ai_model_catalog():
             "category": "tts",
             "base_cost_cents_per_unit": 0.15,
             "retail_price_cents_per_unit": 0.40,
-            "sort_order": 24,
+            "sort_order": 25,
         },
-        # Local CPU Models (Speaches + Ollama + Piper — Zero Cloud Cost)
+        # Local CPU Models (Faster-Whisper + Piper ONNX — Zero Cloud Cost)
         {
             "model_identifier": "speaches-whisper-tiny",
             "display_name": "Speaches Whisper Tiny (Local CPU STT)",
@@ -342,15 +369,6 @@ async def seed_ai_model_catalog():
             "model_identifier": "piper-hindi",
             "display_name": "Piper TTS (Native Hindi & Indic ONNX)",
             "provider": "piper",
-            "category": "tts",
-            "base_cost_cents_per_unit": 0.00,
-            "retail_price_cents_per_unit": 0.00,
-            "sort_order": 25,
-        },
-        {
-            "model_identifier": "speaches-kokoro-82m",
-            "display_name": "Speaches Kokoro-82M (Local CPU TTS)",
-            "provider": "speaches",
             "category": "tts",
             "base_cost_cents_per_unit": 0.00,
             "retail_price_cents_per_unit": 0.00,

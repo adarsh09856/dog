@@ -96,8 +96,10 @@ export const LOCAL_LLM_MODELS = [
 ];
 
 export const CLOUD_STT_MODELS = [
-    { value: "auto", label: "Auto (Recommended - Nova-3 / Whisper)" },
+    { value: "auto", label: "Auto (Recommended - Best matched for language)" },
+    { value: "gemini-stt", label: "Google Gemini Multimodal STT (Speech-to-Text)" },
     { value: "deepgram-nova-3", label: "Deepgram Nova-3 (Highest Accuracy & Speed)" },
+    { value: "deepgram-nova-2", label: "Deepgram Nova-2 (Conversational English & Hindi)" },
     { value: "whisper-1", label: "OpenAI Whisper-1 (Accurate Multilingual)" },
     { value: "saaras:v2", label: "Sarvam Saaras v2 (High-accuracy Indic Speech)" },
     { value: "azure-stt", label: "Microsoft Azure Speech" },
@@ -111,6 +113,7 @@ export const LOCAL_STT_MODELS = [
 
 export const CLOUD_TTS_MODELS = [
     { value: "auto", label: "Auto (Recommended - Best matched for voice)" },
+    { value: "gemini-2.5-flash-preview-tts", label: "Google Gemini 2.5 Voice Studio (High Fidelity)" },
     { value: "sonic-3.5", label: "Cartesia Sonic 3.5 (Ultra-low latency, 90ms)" },
     { value: "sonic-multilingual", label: "Cartesia Sonic Multilingual" },
     { value: "eleven_flash_v2_5", label: "ElevenLabs Flash v2.5 (High Speed & Expressive)" },
@@ -118,12 +121,12 @@ export const CLOUD_TTS_MODELS = [
     { value: "tts-1", label: "OpenAI TTS-1 (Standard Natural Speech)" },
     { value: "tts-1-hd", label: "OpenAI TTS-1 HD (High Definition Studio)" },
     { value: "bulbul:v1", label: "Sarvam Bulbul v1 (Native Indian Languages)" },
-    { value: "gemini-2.5-flash-preview-tts", label: "Google Gemini 2.5 Audio" },
+    { value: "deepgram-aura", label: "Deepgram Aura (Sub-150ms Conversational)" },
+    { value: "azure-tts", label: "Microsoft Azure Neural Voice" },
 ];
 
 export const LOCAL_TTS_MODELS = [
     { value: "piper", label: "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)" },
-    { value: "kokoro", label: "Kokoro TTS (English Neural Voices, 82M CPU)" },
 ];
 
 interface AIModelConfigurationV2EditorProps {
@@ -259,8 +262,8 @@ function buildKodewavesState(
             : null;
     const cleanVoice = (v: unknown, lang?: string) => {
         const s = String(v || "");
-        if (!s || s === "default" || s === "alloy" || s.startsWith("kw_") || s.startsWith("dg_")) {
-            return lang === "hi" ? "hi_IN-priya-medium" : "af_heart";
+        if (!s || s === "default" || s === "alloy" || s.startsWith("kw_") || s.startsWith("dg_") || s.startsWith("af_") || s.startsWith("am_") || s === "kokoro") {
+            return "hi_IN-priya-medium";
         }
         if (s === "if_sara" || s === "im_nicola") {
             return "hi_IN-priya-medium";
@@ -282,7 +285,7 @@ function buildKodewavesState(
         const sttEngineType = (configuredKodewaves.stt_engine_type as "cloud" | "local_cpu") ||
             (sttModel && sttModel.startsWith("Systran/") ? "local_cpu" : (isLocalCpu ? "local_cpu" : "cloud"));
         const ttsEngineType = (configuredKodewaves.tts_engine_type as "cloud" | "local_cpu") ||
-            (ttsModel === "piper" || ttsModel === "kokoro" || chosenVoice.startsWith("hi_IN-") || chosenVoice.startsWith("af_") ? (isLocalCpu ? "local_cpu" : "cloud") : (isLocalCpu ? "local_cpu" : "cloud"));
+            (ttsModel === "piper" || chosenVoice.startsWith("hi_IN-") || chosenVoice.startsWith("en_IN-") ? (isLocalCpu ? "local_cpu" : "cloud") : (isLocalCpu ? "local_cpu" : "cloud"));
 
         return {
             api_key: apiKey,
@@ -313,7 +316,7 @@ function buildKodewavesState(
 
         const llmEngineType = (llm?.provider === "speaches" || (llmModel && llmModel.startsWith("qwen"))) ? "local_cpu" : "cloud";
         const sttEngineType = (stt?.provider === "speaches" || (sttModel && sttModel.startsWith("Systran/"))) ? "local_cpu" : "cloud";
-        const ttsEngineType = (tts?.provider === "speaches" || ttsModel === "piper" || ttsModel === "kokoro" || chosenVoice.startsWith("hi_IN-")) ? "local_cpu" : "cloud";
+        const ttsEngineType = (tts?.provider === "speaches" || tts?.provider === "piper" || ttsModel === "piper" || chosenVoice.startsWith("hi_IN-") || chosenVoice.startsWith("en_IN-")) ? "local_cpu" : "cloud";
 
         return {
             api_key: apiKey,
@@ -911,7 +914,7 @@ export function AIModelConfigurationV2Editor({
                                             {effectiveTtsModels.length === 0 ? (
                                                 <SelectItem key="none" value="none" disabled>
                                                     {kodewaves.tts_engine_type === "local_cpu"
-                                                        ? "Local Speaches / Piper TTS unavailable"
+                                                        ? "Local Piper ONNX TTS unavailable"
                                                         : "No active synthesizer keys (Add Cartesia / ElevenLabs in Admin > Models)"}
                                                 </SelectItem>
                                             ) : (
@@ -928,7 +931,7 @@ export function AIModelConfigurationV2Editor({
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Voice</Label>
                                     <VoiceSelectorModal
-                                        provider={kodewaves.tts_engine_type === "local_cpu" ? "speaches" : "kodewaves"}
+                                        provider={kodewaves.tts_engine_type === "local_cpu" ? "piper" : "kodewaves"}
                                         value={kodewaves.voice}
                                         onChange={(voice) => setKodewaves({ ...kodewaves, voice })}
                                         allowManualInput={allowCustomVoice}
@@ -986,7 +989,7 @@ export function AIModelConfigurationV2Editor({
                                                 </span>
                                             </div>
                                             <p className="text-muted-foreground leading-relaxed">
-                                                Voice pipeline calls run exclusively on your server CPU via Ollama (Qwen2.5) and Speaches (Whisper STT & Kokoro TTS). Completely sovereign, reliable, and consumes zero wallet minutes.
+                                                Voice pipeline calls run exclusively on your server CPU via Ollama (Qwen2.5) and Speaches (Faster-Whisper STT & Piper Native Indic ONNX TTS). Completely sovereign, reliable, and consumes zero wallet minutes.
                                             </p>
                                         </div>
                                     </div>
@@ -998,7 +1001,7 @@ export function AIModelConfigurationV2Editor({
                                                 Sovereign Platform Managed (Admin Master Keys)
                                             </div>
                                             <p className="text-muted-foreground leading-relaxed">
-                                                Voice pipelines run seamlessly using the master provider keys configured in your Admin Panel (OpenAI, Deepgram, Sarvam, Cartesia, ElevenLabs). Voice usage is billed in minutes from your organization balance.
+                                                Voice pipelines run seamlessly using the master provider keys configured in your Admin Panel (Google Gemini, OpenAI, Deepgram, Sarvam, Cartesia, ElevenLabs). Voice usage is billed in minutes from your organization balance.
                                             </p>
                                         </div>
                                     </div>

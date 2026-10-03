@@ -1507,9 +1507,10 @@ class RimeTTSConfiguration(BaseTTSConfiguration):
 
 
 SPEACHES_TTS_MODELS = [
-    "hexgrad/Kokoro-82M",
-    "piper/en_US-amy-medium",
-    "piper/hi_IN-natasha-medium",
+    "piper",
+    "piper/hi_IN-priya-medium",
+    "piper/hi_IN-rohit-medium",
+    "piper/en_IN-cpc-medium",
 ]
 
 
@@ -1518,17 +1519,17 @@ class SpeachesTTSConfiguration(BaseTTSConfiguration):
     model_config = SPEACHES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
     model: str = Field(
-        default="kokoro",
-        description="Model name as served by your TTS endpoint (e.g. kokoro, piper).",
+        default="piper",
+        description="Model name as served by your TTS endpoint (e.g. piper).",
         json_schema_extra={
             "examples": SPEACHES_TTS_MODELS,
             "allow_custom_input": True,
         },
     )
     voice: str = Field(
-        default="af_heart",
+        default="hi_IN-priya-medium",
         json_schema_extra={"allow_custom_input": True},
-        description="Voice ID for the TTS engine (e.g. af_heart, af_bella, am_adam).",
+        description="Voice ID for the Piper ONNX engine (e.g. hi_IN-priya-medium, hi_IN-rohit-medium, en_IN-cpc-medium).",
     )
     base_url: str = Field(
         default="http://speaches:8000/v1",

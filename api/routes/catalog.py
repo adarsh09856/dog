@@ -27,6 +27,7 @@ DEFAULT_CLOUD_LLM_MODELS = [
 ]
 
 DEFAULT_CLOUD_STT_MODELS = [
+    {"value": "gemini-stt", "label": "Google Gemini Multimodal STT", "provider": "google"},
     {"value": "deepgram-nova-3", "label": "Deepgram Nova-3 (Highest Accuracy & Speed)", "provider": "deepgram"},
     {"value": "whisper-1", "label": "OpenAI Whisper-1 (Accurate Multilingual)", "provider": "openai"},
     {"value": "saaras:v2", "label": "Sarvam Saaras v2 (High-accuracy Indic Speech)", "provider": "sarvam"},
@@ -34,6 +35,7 @@ DEFAULT_CLOUD_STT_MODELS = [
 ]
 
 DEFAULT_CLOUD_TTS_MODELS = [
+    {"value": "gemini-2.5-flash-preview-tts", "label": "Google Gemini 2.5 Voice Studio", "provider": "google"},
     {"value": "sonic-3.5", "label": "Cartesia Sonic 3.5 (Ultra-low latency, 90ms)", "provider": "cartesia"},
     {"value": "sonic-multilingual", "label": "Cartesia Sonic Multilingual", "provider": "cartesia"},
     {"value": "eleven_flash_v2_5", "label": "ElevenLabs Flash v2.5 (High Speed & Expressive)", "provider": "elevenlabs"},
@@ -41,7 +43,7 @@ DEFAULT_CLOUD_TTS_MODELS = [
     {"value": "tts-1", "label": "OpenAI TTS-1 (Standard Natural Speech)", "provider": "openai"},
     {"value": "tts-1-hd", "label": "OpenAI TTS-1 HD (High Definition Studio)", "provider": "openai"},
     {"value": "bulbul:v1", "label": "Sarvam Bulbul v1 (Native Indian Languages)", "provider": "sarvam"},
-    {"value": "gemini-2.5-flash-preview-tts", "label": "Google Gemini 2.5 Audio", "provider": "google"},
+    {"value": "deepgram-aura", "label": "Deepgram Aura (Conversational TTS)", "provider": "deepgram"},
 ]
 
 DEFAULT_LOCAL_STT_MODELS = [
@@ -52,7 +54,6 @@ DEFAULT_LOCAL_STT_MODELS = [
 
 DEFAULT_LOCAL_TTS_MODELS = [
     {"value": "piper", "label": "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)"},
-    {"value": "kokoro", "label": "Kokoro TTS (English Neural Voices, 82M CPU)"},
 ]
 
 

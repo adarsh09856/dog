@@ -166,7 +166,7 @@ export default function PricingPage() {
   const faqs = [
     {
       q: "What makes Kodewaves 90% cheaper than Retell or Vapi?",
-      a: "Traditional voice platforms charge high markups on top of expensive US cloud providers (Twilio, ElevenLabs, OpenAI). Kodewaves provides native direct integration with ultra-cost-effective sovereign models like Navana Bodhi Indic speech, Gemini 2.5 Flash, Cartesia Sonic, and even ultra-lightweight self-hosted local CPU models (Whisper + Kokoro), bringing your effective per-minute cost down from ₹12–18/min to just ₹0.55–1.20/min.",
+      a: "Traditional voice platforms charge high markups on top of expensive US cloud providers (Twilio, ElevenLabs, OpenAI). Kodewaves provides native direct integration with ultra-cost-effective sovereign models like Navana Bodhi Indic speech, Gemini 2.5 Flash, Cartesia Sonic, and even ultra-lightweight self-hosted local CPU models (Faster-Whisper + Piper ONNX Hindi), bringing your effective per-minute cost down from ₹12–18/min to just ₹0.55–1.20/min.",
     },
     {
       q: "Can I bring my own API keys (BYOK)?",
@@ -174,7 +174,7 @@ export default function PricingPage() {
     },
     {
       q: "How does the Local CPU AI Engine work on a low-RAM VPS?",
-      a: "Our self-hosted stack uses lightweight quantized models specifically optimized for CPUs: Qwen 2.5 1.5B (or Phi-4 Mini), Faster-Whisper-Tiny (STT), and Kokoro-82M (TTS). It operates within 2–3 GB RAM inside Docker containers, allowing you to run zero-cloud voice agents on budget cloud servers without GPUs.",
+      a: "Our self-hosted stack uses lightweight quantized models specifically optimized for CPUs: Qwen 2.5 1.5B (or Phi-4 Mini), Faster-Whisper (STT), and Piper Native Indic ONNX (TTS). It operates within 2–3 GB RAM inside Docker containers, allowing you to run zero-cloud voice agents on budget cloud servers without GPUs.",
     },
     {
       q: "Which Indian languages and accents are supported?",

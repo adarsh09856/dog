@@ -64,8 +64,9 @@ export default function HomePage() {
   ];
 
   const ttsOptions = [
+    "Piper Native Indic (Local CPU)",
+    "Google Gemini Voice Studio",
     "Cartesia Sonic 3.5",
-    "Speaches Kokoro (Local CPU)",
     "ElevenLabs Flash v2.5",
     "Navana Bodhi TTS",
     "Sarvam Bulbul (Indic)",
@@ -607,7 +608,7 @@ export default function HomePage() {
                 Sovereign Local CPU Stack
               </h3>
               <p className="text-xs text-[#8f8c87] leading-relaxed">
-                Run 100% self-hosted Ollama (Qwen2.5) + Speaches Whisper STT + Kokoro TTS directly on your server CPU. Zero cloud API keys and ₹0 minute costs.
+                Run 100% self-hosted Ollama (Qwen2.5) + Faster-Whisper STT + Piper Native Indic ONNX TTS directly on your server CPU. Zero cloud API keys and ₹0 minute costs.
               </p>
             </div>
 
@@ -688,7 +689,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  Kokoro-82M (Speaches TTS)
+                  Piper ONNX Indic (Speaches TTS)
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />

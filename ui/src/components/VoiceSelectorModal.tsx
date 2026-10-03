@@ -39,8 +39,7 @@ const EMPTY_FACETS: Facets = { genders: [], accents: [], languages: [], provider
 
 const PROVIDER_TABS = [
     { id: "__all__", label: "All Active Voices" },
-    { id: "piper", label: "Piper Hindi (Local)" },
-    { id: "speaches", label: "Kokoro English (Local)" },
+    { id: "piper", label: "Piper Hindi & Indic (Local)" },
     { id: "sarvam", label: "Sarvam Indic" },
     { id: "cartesia", label: "Cartesia Sonic" },
     { id: "openai", label: "OpenAI" },
@@ -103,18 +102,16 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     const [providerFilter, setProviderFilter] = useState("__all__");
 
     const activeTabs = useMemo(() => {
-        if (provider === "speaches") {
+        if (provider === "speaches" || provider === "piper") {
             return [
-                { id: "__all__", label: "All Local Voices" },
-                { id: "piper", label: "Piper Hindi (Local)" },
-                { id: "speaches", label: "Kokoro English (Local)" },
+                { id: "piper", label: "Piper Hindi & Indic (Local CPU)" },
             ];
         }
         const activeProvList = facets.providers || [];
         if (activeProvList.length === 0) {
             const detected = Array.from(new Set(voices.map((v) => (v as any).provider).filter(Boolean)));
             if (detected.length > 0) {
-                const uniqueDetected = Array.from(new Set(detected.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p)));
+                const uniqueDetected = Array.from(new Set(detected.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p === "speaches" ? "piper" : p)));
                 return [
                     { id: "__all__", label: `All Active Voices (${voices.length})` },
                     ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && uniqueDetected.includes(t.id)),
@@ -122,7 +119,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             }
             return [{ id: "__all__", label: `All Voices (${voices.length || 0})` }];
         }
-        const normalizedProvList = Array.from(new Set(activeProvList.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p)));
+        const normalizedProvList = Array.from(new Set(activeProvList.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p === "speaches" ? "piper" : p)));
         return [
             { id: "__all__", label: `All Active Voices (${voices.length})` },
             ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && normalizedProvList.includes(t.id)),
@@ -173,7 +170,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         }
         let active = true;
         (async () => {
-            const targetProv = (provider === "speaches" && (value.startsWith("hi_IN") || value.startsWith("en_IN"))) ? "piper" : provider;
+            const targetProv = (provider === "speaches" || provider === "piper") ? "piper" : provider;
             const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
                 path: { provider: targetProv as never },
                 query: { q: value },
@@ -204,7 +201,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             const search = debouncedSearch.trim();
             if (search) query.q = search;
 
-            const targetProvider = (provider === "speaches" && providerFilter === "piper") ? "piper" : provider;
+            const targetProvider = (provider === "speaches" || provider === "piper") ? "piper" : provider;
 
             const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
                 path: { provider: targetProvider as never },

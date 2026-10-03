@@ -54,23 +54,127 @@ import {
   ModelCatalogEntry,
 } from "@/lib/kodewavesApi";
 
-const DEFAULT_PROVIDERS = [
-  { provider: "sarvam", name: "Sarvam AI (Indian Sovereign AI)", category: "llm", region: "India 🇮🇳" },
-  { provider: "navana", name: "Navana.ai (Indic Speech AI - Hindi, Tamil, Telugu)", category: "tts", region: "India 🇮🇳" },
-  { provider: "krutrim", name: "Krutrim Cloud (Indian Indic Models)", category: "llm", region: "India 🇮🇳" },
-  { provider: "openai", name: "OpenAI", category: "llm", region: "Global 🌐" },
-  { provider: "gemini", name: "Google Gemini", category: "llm", region: "Global 🌐" },
-  { provider: "anthropic", name: "Anthropic Claude", category: "llm", region: "Global 🌐" },
-  { provider: "elevenlabs", name: "ElevenLabs (TTS / Conversational)", category: "tts", region: "Global 🌐" },
-  { provider: "cartesia", name: "Cartesia Sonic", category: "tts", region: "Global 🌐" },
-  { provider: "deepgram", name: "Deepgram (STT / Aura TTS)", category: "stt", region: "Global 🌐" },
-  { provider: "azure", name: "Microsoft Azure Speech", category: "tts", region: "Global 🌐" },
-  { provider: "smallest", name: "Smallest AI (Waves TTS)", category: "tts", region: "Global 🌐" },
-  { provider: "lmnt", name: "LMNT Speech", category: "tts", region: "Global 🌐" },
-  { provider: "rime", name: "Rime Labs Speech", category: "tts", region: "Global 🌐" },
-  { provider: "exotel", name: "Exotel (Indian Sovereign Telecom)", category: "telecom", region: "India 🇮🇳" },
-  { provider: "twilio", name: "Twilio Telephony", category: "telecom", region: "Global 🌐" },
-  { provider: "plivo", name: "Plivo India", category: "telecom", region: "India 🇮🇳" },
+export interface ProviderMeta {
+  provider: string;
+  name: string;
+  categories: ("llm" | "stt" | "tts" | "realtime" | "telecom")[];
+  region: string;
+  description: string;
+}
+
+const DEFAULT_PROVIDERS: ProviderMeta[] = [
+  {
+    provider: "gemini",
+    name: "Google Gemini",
+    categories: ["llm", "stt", "tts", "realtime"],
+    region: "Global 🌐",
+    description: "Multimodal LLM (2.5 Flash), Gemini Multimodal STT, Voice Studio TTS (Puck, Journey, etc.) & Live Audio.",
+  },
+  {
+    provider: "openai",
+    name: "OpenAI",
+    categories: ["llm", "stt", "tts", "realtime"],
+    region: "Global 🌐",
+    description: "GPT-4o / GPT-4o mini reasoning, Whisper STT, OpenAI TTS (Alloy, Echo) & Realtime WebRTC.",
+  },
+  {
+    provider: "sarvam",
+    name: "Sarvam AI (Indian Sovereign AI)",
+    categories: ["llm", "stt", "tts"],
+    region: "India 🇮🇳",
+    description: "Sarvam 2B Indic LLM, Saaras Indic STT, and Bulbul Hindi/Indic text-to-speech voices.",
+  },
+  {
+    provider: "deepgram",
+    name: "Deepgram",
+    categories: ["stt", "tts"],
+    region: "Global 🌐",
+    description: "Nova-3 & Nova-2 ultra-fast streaming STT transcribers and Aura conversational neural TTS voices.",
+  },
+  {
+    provider: "azure",
+    name: "Microsoft Azure Speech",
+    categories: ["stt", "tts"],
+    region: "Global 🌐",
+    description: "Azure Speech-to-Text & Neural TTS voices (Swara, Neerja, Prabhat, Jenny, etc.).",
+  },
+  {
+    provider: "cartesia",
+    name: "Cartesia Sonic",
+    categories: ["tts"],
+    region: "Global 🌐",
+    description: "Ultra-low latency (90ms) sonic streaming voice synthesis (Sonic English, Multilingual, Barbershop).",
+  },
+  {
+    provider: "elevenlabs",
+    name: "ElevenLabs",
+    categories: ["tts"],
+    region: "Global 🌐",
+    description: "Multilingual v2, Flash v2.5 expressive neural studio voices and conversational agents.",
+  },
+  {
+    provider: "navana",
+    name: "Navana.ai Indic Speech",
+    categories: ["stt", "tts"],
+    region: "India 🇮🇳",
+    description: "Acoustically tuned Indic speech recognition & 8kHz Indian telephony TTS (Hindi, Telugu, Kannada).",
+  },
+  {
+    provider: "anthropic",
+    name: "Anthropic Claude",
+    categories: ["llm"],
+    region: "Global 🌐",
+    description: "Claude 3.5 Sonnet & Claude 3.5 Haiku enterprise conversational reasoning.",
+  },
+  {
+    provider: "krutrim",
+    name: "Krutrim Cloud",
+    categories: ["llm"],
+    region: "India 🇮🇳",
+    description: "Indian Indic foundation models and multilingual conversational intelligence.",
+  },
+  {
+    provider: "smallest",
+    name: "Smallest AI",
+    categories: ["tts"],
+    region: "Global 🌐",
+    description: "Waves lightning fast streaming TTS (Emily, Arman, Samantha, Raj).",
+  },
+  {
+    provider: "lmnt",
+    name: "LMNT Speech",
+    categories: ["tts"],
+    region: "Global 🌐",
+    description: "Low-latency conversational speech synthesis (Lily, Daniel, Zoe, Miles).",
+  },
+  {
+    provider: "rime",
+    name: "Rime Labs Speech",
+    categories: ["tts"],
+    region: "Global 🌐",
+    description: "Rich expressive neural voices for enterprise telephony (Abbie, Allison, Antony, Arch).",
+  },
+  {
+    provider: "exotel",
+    name: "Exotel Telephony",
+    categories: ["telecom"],
+    region: "India 🇮🇳",
+    description: "Indian sovereign SIP trunking and bidirectional telephony carrier infrastructure.",
+  },
+  {
+    provider: "twilio",
+    name: "Twilio Telephony",
+    categories: ["telecom"],
+    region: "Global 🌐",
+    description: "Global programmable voice and SIP media streams.",
+  },
+  {
+    provider: "plivo",
+    name: "Plivo India Telephony",
+    categories: ["telecom"],
+    region: "India 🇮🇳",
+    description: "Indian and international voice carrier connectivity.",
+  },
 ];
 
 export default function MasterKeysAndModelsPage() {
@@ -79,6 +183,11 @@ export default function MasterKeysAndModelsPage() {
   const [loading, setLoading] = useState(true);
   const [testingProvider, setTestingProvider] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string; latency_ms?: number }>>({});
+
+  // Filters
+  const [providerCategoryFilter, setProviderCategoryFilter] = useState<string>("all");
+  const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string>("all");
+  const [catalogSearch, setCatalogSearch] = useState<string>("");
 
   // Key Edit Modal
   const [selectedKey, setSelectedKey] = useState<Partial<MasterCredential> | null>(null);
@@ -213,20 +322,50 @@ export default function MasterKeysAndModelsPage() {
         {/* TAB 1: MASTER CREDENTIALS */}
         <TabsContent value="credentials" className="space-y-6">
           <Card className="border-border/60">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>Platform Sovereign Master Credentials</span>
-                <Badge variant="secondary" className="font-normal text-xs">
-                  Encrypted AES-256 (Fernet)
-                </Badge>
-              </CardTitle>
-              <CardDescription>
-                These keys are provisioned once by Superadmin and consumed by all users unless BYOK is explicitly toggled.
-              </CardDescription>
+            <CardHeader className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span>Platform Sovereign Master Credentials</span>
+                    <Badge variant="secondary" className="font-normal text-xs">
+                      Encrypted AES-256 (Fernet)
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Provision provider keys centrally. A single master key (e.g. Google Gemini, OpenAI, Sarvam) automatically powers LLM reasoning, Speech-to-Text (STT), Voice Studio (TTS), and Bidirectional Live Audio.
+                  </CardDescription>
+                </div>
+              </div>
+
+              {/* Master Keys Category Filter Tabs */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {[
+                  { id: "all", label: "All Providers" },
+                  { id: "llm", label: "LLM (Reasoning)" },
+                  { id: "stt", label: "STT (Speech-to-Text)" },
+                  { id: "tts", label: "TTS (Voice Studio)" },
+                  { id: "realtime", label: "Realtime (Live Audio)" },
+                  { id: "telecom", label: "Telecom (SIP Trunks)" },
+                ].map((f) => (
+                  <Button
+                    key={f.id}
+                    type="button"
+                    variant={providerCategoryFilter === f.id ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 text-xs px-3"
+                    onClick={() => setProviderCategoryFilter(f.id)}
+                  >
+                    {f.label}
+                  </Button>
+                ))}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {DEFAULT_PROVIDERS.map((item) => {
+                {DEFAULT_PROVIDERS.filter((item) => {
+                  if (providerCategoryFilter === "all") return true;
+                  return item.categories.includes(providerCategoryFilter as any);
+                }).map((item) => {
                   const saved = keys.find((k) => k.provider.toLowerCase() === item.provider.toLowerCase());
                   const isTested = testResult[item.provider];
                   const isTesting = testingProvider === item.provider;
@@ -234,26 +373,49 @@ export default function MasterKeysAndModelsPage() {
                   return (
                     <div
                       key={item.provider}
-                      className="flex flex-col justify-between p-4 rounded-xl border border-border/60 bg-card hover:border-primary/40 transition-colors"
+                      className="flex flex-col justify-between p-4 rounded-xl border border-border/60 bg-card hover:border-primary/40 transition-colors shadow-xs"
                     >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-sm">{item.name}</span>
-                          <span className="text-[11px] text-muted-foreground">{item.region}</span>
+                      <div className="space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-semibold text-sm leading-tight">{item.name}</span>
+                          <span className="text-[11px] text-muted-foreground shrink-0">{item.region}</span>
                         </div>
 
-                        <div className="flex items-center gap-2 text-xs">
-                          <Badge variant="outline" className="uppercase text-[10px]">
-                            {item.category}
-                          </Badge>
+                        <div className="flex flex-wrap items-center gap-1">
+                          {item.categories.map((cat) => (
+                            <Badge
+                              key={cat}
+                              variant="outline"
+                              className={`uppercase text-[9px] font-bold px-1.5 py-0 ${
+                                cat === "stt"
+                                  ? "border-sky-500/40 text-sky-600 dark:text-sky-400 bg-sky-500/5"
+                                  : cat === "tts"
+                                  ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5"
+                                  : cat === "realtime"
+                                  ? "border-purple-500/40 text-purple-600 dark:text-purple-400 bg-purple-500/5"
+                                  : cat === "telecom"
+                                  ? "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/5"
+                                  : "border-indigo-500/40 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5"
+                              }`}
+                            >
+                              {cat}
+                            </Badge>
+                          ))}
+                        </div>
+
+                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                          {item.description}
+                        </p>
+
+                        <div className="pt-0.5">
                           {saved?.api_key_masked || (saved as any)?.has_credentials ? (
                             <span className="text-emerald-500 flex items-center gap-1 font-mono text-[11px]">
-                              <CheckCircle2 className="h-3 w-3" />
+                              <CheckCircle2 className="h-3.5 w-3.5" />
                               {saved.api_key_masked || "•••••••• (configured)"}
                             </span>
                           ) : (
                             <span className="text-amber-500 flex items-center gap-1 text-[11px]">
-                              <AlertCircle className="h-3 w-3" />
+                              <AlertCircle className="h-3.5 w-3.5" />
                               No Key Configured
                             </span>
                           )}
@@ -285,7 +447,7 @@ export default function MasterKeysAndModelsPage() {
                           size="sm"
                           className="h-8 text-xs gap-1"
                           onClick={() => {
-                            setSelectedKey(saved || { provider: item.provider, display_name: item.name, category: item.category as any, is_active: true });
+                            setSelectedKey(saved || { provider: item.provider, display_name: item.name, category: item.categories[0] as any, is_active: true });
                             setKeyInput("");
                             setSecretInput("");
                           }}
@@ -315,30 +477,65 @@ export default function MasterKeysAndModelsPage() {
         {/* TAB 2: MODEL CATALOG & MARGINS */}
         <TabsContent value="catalog" className="space-y-6">
           <Card className="border-border/60">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base">AI Model Catalog & Retail Pricing</CardTitle>
-                <CardDescription>
-                  Define which models are presented in the Studio and configure platform gross markup margins.
-                </CardDescription>
+            <CardHeader className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle className="text-base">AI Model Catalog & Retail Pricing</CardTitle>
+                  <CardDescription>
+                    Define which models are presented in the Studio and configure platform gross markup margins.
+                  </CardDescription>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-2 shrink-0"
+                  onClick={() => {
+                    setEditingModel({
+                      category: "llm",
+                      is_active: true,
+                      is_default: false,
+                      markup_margin_percent: 50,
+                      cost_per_minute: 1.0,
+                      rate_per_minute: 1.5,
+                    });
+                    setModelModalOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4" /> Add Catalog Entry
+                </Button>
               </div>
-              <Button
-                size="sm"
-                className="gap-2"
-                onClick={() => {
-                  setEditingModel({
-                    category: "llm",
-                    is_active: true,
-                    is_default: false,
-                    markup_margin_percent: 50,
-                    cost_per_minute: 1.0,
-                    rate_per_minute: 1.5,
-                  });
-                  setModelModalOpen(true);
-                }}
-              >
-                <Plus className="h-4 w-4" /> Add Catalog Entry
-              </Button>
+
+              {/* Catalog Category Filters and Search */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: "all", label: "All Models" },
+                    { id: "llm", label: "LLM (Reasoning)" },
+                    { id: "stt", label: "STT (Speech-to-Text)" },
+                    { id: "tts", label: "TTS (Voice Studio)" },
+                    { id: "sts", label: "Realtime (Live)" },
+                  ].map((f) => (
+                    <Button
+                      key={f.id}
+                      type="button"
+                      variant={catalogCategoryFilter === f.id ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5"
+                      onClick={() => setCatalogCategoryFilter(f.id)}
+                    >
+                      {f.label}
+                    </Button>
+                  ))}
+                </div>
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search catalog models..."
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    className="h-8 pl-8 text-xs"
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="rounded-lg border border-border/60 overflow-hidden">
@@ -357,14 +554,31 @@ export default function MasterKeysAndModelsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {models.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8 text-sm text-muted-foreground">
-                          No models registered in catalog yet. Click &quot;Add Catalog Entry&quot; to seed.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      models.map((m) => (
+                    {(() => {
+                      const filtered = models.filter((m) => {
+                        if (catalogCategoryFilter !== "all" && m.category !== catalogCategoryFilter) return false;
+                        if (catalogSearch.trim()) {
+                          const q = catalogSearch.toLowerCase();
+                          return (
+                            m.display_name.toLowerCase().includes(q) ||
+                            m.model_id.toLowerCase().includes(q) ||
+                            m.provider.toLowerCase().includes(q)
+                          );
+                        }
+                        return true;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <TableRow>
+                            <TableCell colSpan={9} className="text-center py-8 text-sm text-muted-foreground">
+                              No models found matching current filter. Click &quot;Add Catalog Entry&quot; to register new models.
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+
+                      return filtered.map((m) => (
                         <TableRow key={m.id} className="hover:bg-muted/20">
                           <TableCell>
                             <Badge variant="outline" className="uppercase text-[10px]">
@@ -416,8 +630,8 @@ export default function MasterKeysAndModelsPage() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
+                      ));
+                    })()}
                   </TableBody>
                 </Table>
               </div>
@@ -435,6 +649,30 @@ export default function MasterKeysAndModelsPage() {
               Stored with AES-256 Fernet encryption on the Kodewaves sovereign host.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Capability Callout */}
+          {(() => {
+            const meta = DEFAULT_PROVIDERS.find((p) => p.provider.toLowerCase() === selectedKey?.provider?.toLowerCase());
+            if (!meta) return null;
+            return (
+              <div className="p-3 bg-muted/40 rounded-lg border border-border/50 text-xs space-y-1.5 my-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-foreground">Services Powered by this Master Key:</span>
+                  <span className="text-muted-foreground text-[11px]">{meta.region}</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {meta.categories.map((c) => (
+                    <Badge key={c} variant="secondary" className="uppercase text-[9px] font-semibold">
+                      {c === "stt" ? "STT Transcriber" : c === "tts" ? "TTS Voice Studio" : c === "realtime" ? "Live Bidirectional Audio" : c.toUpperCase()}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  {meta.description}
+                </p>
+              </div>
+            );
+          })()}
 
           <div className="space-y-4 py-2">
             <div className="space-y-1">

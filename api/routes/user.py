@@ -483,19 +483,20 @@ TTSProvider = Literal[
 
 UNIVERSAL_VOICE_CATALOG: dict[str, list[dict]] = {
     "speaches": [
-        {"voice_id": "af_heart", "name": "Heart (Warm & Natural)", "description": "Natural sounding American female voice, ideal for conversational agents.", "gender": "female", "accent": "us", "language": "en"},
-        {"voice_id": "am_adam", "name": "Adam (Clear Professional)", "description": "Confident American male voice suitable for business, banking, and support.", "gender": "male", "accent": "us", "language": "en"},
-        {"voice_id": "bf_emma", "name": "Emma (Expressive British)", "description": "Refined British female voice with excellent diction and warmth.", "gender": "female", "accent": "gb", "language": "en"},
-        {"voice_id": "bm_george", "name": "George (Authoritative British)", "description": "Distinguished British male voice for corporate and authoritative personas.", "gender": "male", "accent": "gb", "language": "en"},
-        {"voice_id": "af_nicole", "name": "Nicole (Friendly Guide)", "description": "Engaging, friendly female guide for real estate and appointments.", "gender": "female", "accent": "us", "language": "en"},
-        {"voice_id": "am_michael", "name": "Michael (Calm Narrator)", "description": "Calm, reassuring American male voice great for healthcare inquiries.", "gender": "male", "accent": "us", "language": "en"},
-        {"voice_id": "af_bella", "name": "Bella (Conversational Warmth)", "description": "Bubbly and warm female persona for sales and retail.", "gender": "female", "accent": "us", "language": "en"},
-        {"voice_id": "af_sarah", "name": "Sarah (Corporate Support)", "description": "Polite and responsive female voice designed for customer service.", "gender": "female", "accent": "us", "language": "en"},
+        {"voice_id": "hi_IN-priya-medium", "name": "Priya (Hindi Female - Piper ONNX)", "description": "Lightweight native Hindi female voice with fast CPU synthesis.", "gender": "female", "accent": "in", "language": "hi"},
+        {"voice_id": "hi_IN-rohit-medium", "name": "Rohit (Hindi Male - Piper ONNX)", "description": "Fast conversational Hindi male voice for alerts and IVR.", "gender": "male", "accent": "in", "language": "hi"},
+        {"voice_id": "en_IN-cpc-medium", "name": "Aarav (Indian English Male - Piper ONNX)", "description": "Natural Indian English male voice with clear accent.", "gender": "male", "accent": "in", "language": "en"},
+        {"voice_id": "hi_IN-ananya-medium", "name": "Ananya (Hindi Expressive - Piper ONNX)", "description": "Conversational Hindi female voice for customer support.", "gender": "female", "accent": "in", "language": "hi"},
+        {"voice_id": "hi_IN-krrish-medium", "name": "Krrish (Hindi Professional - Piper ONNX)", "description": "Crisp conversational Hindi male voice for financial telecalling.", "gender": "male", "accent": "in", "language": "hi"},
+        {"voice_id": "en_IN-diya-medium", "name": "Diya (Indian English Female - Piper ONNX)", "description": "Clear Indian English female tone for front desk reception.", "gender": "female", "accent": "in", "language": "en"},
     ],
     "piper": [
         {"voice_id": "hi_IN-priya-medium", "name": "Priya (Hindi Female - Piper ONNX)", "description": "Lightweight native Hindi female voice with fast CPU synthesis.", "gender": "female", "accent": "in", "language": "hi"},
         {"voice_id": "hi_IN-rohit-medium", "name": "Rohit (Hindi Male - Piper ONNX)", "description": "Fast conversational Hindi male voice for alerts and IVR.", "gender": "male", "accent": "in", "language": "hi"},
         {"voice_id": "en_IN-cpc-medium", "name": "Aarav (Indian English Male - Piper ONNX)", "description": "Natural Indian English male voice with clear accent.", "gender": "male", "accent": "in", "language": "en"},
+        {"voice_id": "hi_IN-ananya-medium", "name": "Ananya (Hindi Expressive - Piper ONNX)", "description": "Conversational Hindi female voice for customer support.", "gender": "female", "accent": "in", "language": "hi"},
+        {"voice_id": "hi_IN-krrish-medium", "name": "Krrish (Hindi Professional - Piper ONNX)", "description": "Crisp conversational Hindi male voice for financial telecalling.", "gender": "male", "accent": "in", "language": "hi"},
+        {"voice_id": "en_IN-diya-medium", "name": "Diya (Indian English Female - Piper ONNX)", "description": "Clear Indian English female tone for front desk reception.", "gender": "female", "accent": "in", "language": "en"},
     ],
     "openai": [
         {"voice_id": "alloy", "name": "Alloy (Neutral & Balanced)", "description": "Versatile and balanced voice suitable for general conversational agents.", "gender": "female", "accent": "us", "language": "en"},
@@ -676,9 +677,9 @@ async def get_voices(
 
     if provider_key in ("kodewaves", "dograh", "all"):
         raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES if v.get("provider") in enabled_provs]
-    elif provider_key == "speaches":
-        # Speaches / Local CPU engine hosts both Kokoro and Piper voices
-        local_catalog = (UNIVERSAL_VOICE_CATALOG.get("speaches") or []) + (UNIVERSAL_VOICE_CATALOG.get("piper") or [])
+    elif provider_key in ("speaches", "piper"):
+        # Piper Native Hindi & Indic ONNX Local CPU engine
+        local_catalog = UNIVERSAL_VOICE_CATALOG.get("piper") or []
         raw_catalog = [dict(v) for v in local_catalog if local_engine_enabled]
     else:
         raw_catalog = [dict(v) for v in (UNIVERSAL_VOICE_CATALOG.get(provider_key) or []) if v.get("provider") in enabled_provs or (local_engine_enabled and provider_key in ("speaches", "piper"))]
@@ -744,16 +745,19 @@ async def preview_voice(
 
     provider_lower = provider.lower()
 
-    # 0. Piper (Local Hindi & Indic ONNX)
-    if provider_lower == "piper":
+    # 0. Piper ONNX Native Hindi & Indic (Local CPU)
+    if provider_lower in ("piper", "speaches"):
+        clean_voice_id = voice_id
+        if clean_voice_id.startswith("af_") or clean_voice_id.startswith("am_") or clean_voice_id in ("kokoro", "default"):
+            clean_voice_id = "hi_IN-priya-medium"
         speaches_endpoint = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
         if not speaches_endpoint.endswith("/v1"):
             speaches_endpoint = f"{speaches_endpoint.rstrip('/')}/v1"
         url = f"{speaches_endpoint}/audio/speech"
         payload = {
             "model": "piper",
-            "voice": voice_id,
-            "input": "नमस्ते! कोडवेव्स पर आपका स्वागत है।",
+            "voice": clean_voice_id,
+            "input": "नमस्ते! कोडवेव्स सॉवरेन वॉयस एआई पर आपका स्वागत है।",
             "response_format": "mp3",
         }
         try:
@@ -762,36 +766,11 @@ async def preview_voice(
                     if resp.status == 200:
                         audio_data = await resp.read()
                         return Response(content=audio_data, media_type="audio/mpeg")
-        except Exception as e:
-            logger.warning(f"[VoicePreview] Piper preview failed for {voice_id}: {e}")
-
-    # 1. Speaches (Local Kokoro)
-    if provider_lower == "speaches":
-        speaches_endpoint = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
-        if not speaches_endpoint.endswith("/v1"):
-            speaches_endpoint = f"{speaches_endpoint.rstrip('/')}/v1"
-        url = f"{speaches_endpoint}/audio/speech"
-        prompt_text = "Hello! This is a live preview of this voice on Kodewaves."
-        payload = {
-            "model": "kokoro",
-            "voice": voice_id,
-            "input": prompt_text,
-            "response_format": "mp3",
-        }
-        try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
-                async with session.post(url, json=payload) as resp:
-                    if resp.status == 200:
-                        audio_data = await resp.read()
-                        return Response(content=audio_data, media_type="audio/mpeg")
                     else:
-                        resp_text = await resp.text()
-                        logger.warning(f"[VoicePreview] Speaches returned {resp.status}: {resp_text}, trying fallback voice")
-                        # If the specific voice was not found in container, fallback to af_heart
                         fallback_payload = {
-                            "model": "kokoro",
-                            "voice": "af_heart",
-                            "input": "Hello! This is a preview of this voice on Kodewaves.",
+                            "model": "piper",
+                            "voice": "hi_IN-priya-medium",
+                            "input": "नमस्ते! कोडवेव्स सॉवरेन वॉयस एआई पर आपका स्वागत है।",
                             "response_format": "mp3",
                         }
                         async with session.post(url, json=fallback_payload) as fb_resp:
@@ -799,9 +778,9 @@ async def preview_voice(
                                 fb_audio = await fb_resp.read()
                                 return Response(content=fb_audio, media_type="audio/mpeg")
         except Exception as e:
-            logger.warning(f"[VoicePreview] Speaches preview failed for {voice_id}: {e}")
+            logger.warning(f"[VoicePreview] Piper preview failed for {voice_id}: {e}")
 
-    # 2. Sarvam Indic (Hindi)
+    # 1. Sarvam Indic (Hindi)
     if provider_lower == "sarvam":
         creds = await master_credential_service.get_master_credential("sarvam")
         if creds and creds.get("api_key"):
@@ -825,7 +804,7 @@ async def preview_voice(
             except Exception as e:
                 logger.debug(f"[VoicePreview] Sarvam preview failed: {e}")
 
-    # 3. Cartesia
+    # 2. Cartesia
     if provider_lower == "cartesia":
         creds = await master_credential_service.get_master_credential("cartesia")
         if creds and creds.get("api_key"):
@@ -849,7 +828,7 @@ async def preview_voice(
             except Exception as e:
                 logger.debug(f"[VoicePreview] Cartesia preview failed: {e}")
 
-    # 4. OpenAI
+    # 3. OpenAI
     if provider_lower == "openai":
         creds = await master_credential_service.get_master_credential("openai")
         if creds and creds.get("api_key"):
@@ -864,7 +843,7 @@ async def preview_voice(
             except Exception as e:
                 logger.debug(f"[VoicePreview] OpenAI preview failed: {e}")
 
-    # 5. ElevenLabs
+    # 4. ElevenLabs
     if provider_lower == "elevenlabs":
         creds = await master_credential_service.get_master_credential("elevenlabs")
         if creds and creds.get("api_key"):
@@ -878,5 +857,85 @@ async def preview_voice(
                             return Response(content=audio_data, media_type="audio/mpeg")
             except Exception as e:
                 logger.debug(f"[VoicePreview] ElevenLabs preview failed: {e}")
+
+    # 5. Google / Gemini
+    if provider_lower in ("google", "gemini"):
+        creds = await master_credential_service.get_master_credential("gemini")
+        if not (creds and creds.get("api_key")):
+            creds = await master_credential_service.get_master_credential("google")
+        if creds and creds.get("api_key"):
+            try:
+                gemini_voice = voice_id if voice_id in ("Journey", "Puck", "Charon", "Aoede", "Fenrir", "Kore") else "Puck"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={creds['api_key']}"
+                payload = {
+                    "contents": [{"parts": [{"text": "Hello! This is a live preview of this Gemini voice on Kodewaves."}]}],
+                    "generationConfig": {
+                        "responseModalities": ["AUDIO"],
+                        "speechConfig": {
+                            "voiceConfig": {
+                                "prebuiltVoiceConfig": {
+                                    "voiceName": gemini_voice
+                                }
+                            }
+                        }
+                    }
+                }
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+                    async with session.post(url, json=payload) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                for part in parts:
+                                    inline_data = part.get("inlineData", {})
+                                    if inline_data.get("data"):
+                                        import base64
+                                        audio_bytes = base64.b64decode(inline_data["data"])
+                                        mime = inline_data.get("mimeType", "audio/wav")
+                                        return Response(content=audio_bytes, media_type=mime)
+            except Exception as e:
+                logger.debug(f"[VoicePreview] Gemini preview failed: {e}")
+
+    # 6. Deepgram Aura
+    if provider_lower == "deepgram":
+        creds = await master_credential_service.get_master_credential("deepgram")
+        if creds and creds.get("api_key"):
+            try:
+                headers = {
+                    "Authorization": f"Token {creds['api_key']}",
+                    "Content-Type": "application/json",
+                }
+                model_name = voice_id if voice_id.startswith("aura-") else f"aura-{voice_id}-en"
+                url = f"https://api.deepgram.com/v1/speak?model={model_name}"
+                payload = {"text": "Hello, this is a sample preview of Deepgram Aura voice on Kodewaves."}
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                    async with session.post(url, json=payload, headers=headers) as resp:
+                        if resp.status == 200:
+                            audio_data = await resp.read()
+                            return Response(content=audio_data, media_type="audio/mp3")
+            except Exception as e:
+                logger.debug(f"[VoicePreview] Deepgram preview failed: {e}")
+
+    # 7. Azure Speech
+    if provider_lower in ("azure", "azure_speech"):
+        creds = await master_credential_service.get_master_credential("azure")
+        if creds and creds.get("api_key") and creds.get("region"):
+            try:
+                region = creds.get("region", "eastus")
+                url = f"https://{region}.tts.speech.microsoft.com/cognitiveservices/v1"
+                headers = {
+                    "Ocp-Apim-Subscription-Key": creds["api_key"],
+                    "Content-Type": "application/ssml+xml",
+                    "X-Microsoft-OutputFormat": "audio-16khz-32kbitrate-mono-mp3",
+                }
+                ssml = f"<speak version='1.0' xml:lang='en-US'><voice name='{voice_id}'>Hello, this is a live preview on Kodewaves.</voice></speak>"
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+                    async with session.post(url, data=ssml.encode("utf-8"), headers=headers) as resp:
+                        if resp.status == 200:
+                            audio_data = await resp.read()
+                            return Response(content=audio_data, media_type="audio/mpeg")
+            except Exception as e:
+                logger.debug(f"[VoicePreview] Azure preview failed: {e}")
 
     raise HTTPException(status_code=404, detail="Preview unavailable for this voice")

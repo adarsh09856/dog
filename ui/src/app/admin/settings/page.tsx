@@ -318,7 +318,7 @@ export default function AdminSettingsPage() {
                   Local AI Engine (Self-Hosted CPU Stack)
                 </CardTitle>
                 <CardDescription>
-                  Host ultra-lightweight LLM, STT, and TTS directly on your VPS (Ollama + Speaches/Whisper/Kokoro) with zero third-party cloud bills.
+                  Host ultra-lightweight LLM, STT, and TTS directly on your VPS (Ollama + Speaches/Whisper/Piper) with zero third-party cloud bills.
                 </CardDescription>
               </div>
               <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">
@@ -388,7 +388,7 @@ export default function AdminSettingsPage() {
                   placeholder="http://speaches:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">OpenAI-compatible endpoint for faster-whisper & Kokoro</p>
+                <p className="text-[10px] text-muted-foreground">OpenAI-compatible endpoint for faster-whisper & Piper ONNX</p>
               </div>
 
               <div className="space-y-1">

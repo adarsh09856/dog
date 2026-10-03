@@ -223,7 +223,7 @@ def _detect_provider_from_tts_model(model: Optional[str]) -> Optional[str]:
         return "navana"
     if "gemini" in ml or "google" in ml:
         return "gemini"
-    if "kokoro" in ml or "speaches" in ml:
+    if "piper" in ml or "speaches" in ml:
         return "speaches"
     return None
 
@@ -419,14 +419,14 @@ async def apply_kodewaves_sovereign_resolution(
                     detail="Local CPU AI Engine access is restricted. Please contact your administrator to enable access.",
                 )
             lang = getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None)
-            default_local_voice = "hi_IN-priya-medium" if lang == "hi" else "af_heart"
+            default_local_voice = "hi_IN-priya-medium"
             current_voice = getattr(effective.tts, "voice", default_local_voice)
             voice = (
                 current_voice
-                if (current_voice and not current_voice.startswith(("dg_", "kw_")) and current_voice not in ("default", "alloy", "none"))
+                if (current_voice and not current_voice.startswith(("dg_", "kw_", "af_", "am_")) and current_voice not in ("default", "alloy", "none", "kokoro"))
                 else default_local_voice
             )
-            local_tts_model = "piper" if (voice.startswith("hi_") or lang == "hi" or "piper" in voice) else "kokoro"
+            local_tts_model = "piper"
             effective.tts = SpeachesTTSConfiguration(
                 api_key="local-cpu-token",
                 model=local_tts_model,
@@ -440,17 +440,17 @@ async def apply_kodewaves_sovereign_resolution(
                 if resolved:
                     is_using_master_keys = True
                 else:
-                    # Automatic graceful fallback to Local CPU Speaches/Piper TTS
-                    logger.info(f"[KodewavesResolver] No cloud master TTS key configured; falling back to Local CPU Speaches/Piper TTS for Org {organization_id}")
+                    # Automatic graceful fallback to Local CPU Piper ONNX TTS
+                    logger.info(f"[KodewavesResolver] No cloud master TTS key configured; falling back to Local CPU Piper TTS for Org {organization_id}")
                     lang = getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None)
-                    default_local_voice = "hi_IN-priya-medium" if lang == "hi" else "af_heart"
+                    default_local_voice = "hi_IN-priya-medium"
                     current_voice = getattr(effective.tts, "voice", default_local_voice)
                     voice = (
                         current_voice
-                        if (current_voice and not current_voice.startswith(("dg_", "kw_")) and current_voice not in ("default", "alloy", "none"))
+                        if (current_voice and not current_voice.startswith(("dg_", "kw_", "af_", "am_")) and current_voice not in ("default", "alloy", "none", "kokoro"))
                         else default_local_voice
                     )
-                    local_tts_model = "piper" if (voice.startswith("hi_") or lang == "hi" or "piper" in voice) else "kokoro"
+                    local_tts_model = "piper"
                     effective.tts = SpeachesTTSConfiguration(
                         api_key="local-cpu-token",
                         model=local_tts_model,
