@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, List, Loader2 } from 'lucide-react';
+import { ArrowRight, List, Loader2, ShieldAlert } from 'lucide-react';
 import Link from "next/link";
 import { useState } from "react";
 
@@ -76,6 +76,25 @@ export default function SuperadminPage() {
         e.preventDefault();
         await handleImpersonate("email", email);
     };
+
+    const isSuper = (user as any)?.is_superuser || (user as any)?.role === 'admin' || (user as any)?.is_admin;
+
+    if (!isSuper) {
+        return (
+            <div className="flex h-[70vh] flex-col items-center justify-center p-6 text-center">
+                <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
+                <h1 className="text-2xl font-bold tracking-tight">Superadmin Access Required</h1>
+                <p className="mt-2 text-sm text-muted-foreground max-w-md">
+                    Your account ({user?.email}) does not have administrative privileges to access this area.
+                </p>
+                <div className="mt-6 flex gap-4">
+                    <Link href="/workflow">
+                        <Button variant="outline">Back to Workflows</Button>
+                    </Link>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <>

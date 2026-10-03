@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle, ChevronLeft, ChevronRight, ExternalLink, FileText, Info, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle, ChevronLeft, ChevronRight, ExternalLink, FileText, Info, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -285,6 +286,25 @@ export default function RunsPage() {
         },
         [auth],
     );
+
+    const isSuper = (auth.user as any)?.is_superuser || (auth.user as any)?.role === 'admin' || (auth.user as any)?.is_admin;
+
+    if (!auth.loading && (!auth.isAuthenticated || !isSuper)) {
+        return (
+            <div className="flex h-[70vh] flex-col items-center justify-center p-6 text-center">
+                <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
+                <h1 className="text-2xl font-bold tracking-tight">Superadmin Access Required</h1>
+                <p className="mt-2 text-sm text-muted-foreground max-w-md">
+                    Your account ({auth.user?.email}) does not have administrative privileges to view global workflow runs.
+                </p>
+                <div className="mt-6 flex gap-4">
+                    <Link href="/workflow">
+                        <Button variant="outline">Back to Workflows</Button>
+                    </Link>
+                </div>
+            </div>
+        );
+    }
 
     if (isLoading && runs.length === 0) {
         return (
