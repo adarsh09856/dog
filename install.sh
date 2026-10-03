@@ -400,7 +400,11 @@ deploy_containers() {
     log_success "Platform defaults, models catalog, plans, templates, and wallets verified."
 
     log_info "Building and launching full production application stack..."
-    docker compose -f docker-compose.aapanel.yaml up -d --build
+    docker compose -f docker-compose.aapanel.yaml up -d --build --remove-orphans
+
+    # Clean up old unused images and dangling containers on the server
+    log_info "Cleaning up old dangling images and builder caches from the server..."
+    docker image prune -f >/dev/null 2>&1 || true
     
     log_success "All services are running! (API, UI, Coturn, Ollama, Speaches, PostgreSQL, Redis, MinIO)"
 }

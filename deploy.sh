@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Kodewaves Sovereign Voice AI — Fast Production Update & Redeploy Script
-# Pulls latest changes, applies database migrations, seeds models, and checks health
+# Pulls latest changes, cleans old server artifacts, applies migrations, seeds models
 # ==============================================================================
 
 set -eo pipefail
@@ -37,30 +37,46 @@ echo -e "${BLUE}Using Docker Compose configuration: ${BOLD}${COMPOSE_FILE}${NC}"
 
 # 1. Pull latest code if git repo
 if [ -d ".git" ]; then
-    echo -e "${BLUE}[1/5] Pulling latest updates from Git...${NC}"
+    echo -e "${BLUE}[1/6] Pulling latest updates from Git...${NC}"
     git pull origin main || echo -e "${YELLOW}⚠️ Git pull failed or working offline, proceeding with local changes.${NC}"
 else
-    echo -e "${BLUE}[1/5] Deploying from local workspace directory...${NC}"
+    echo -e "${BLUE}[1/6] Deploying from local workspace directory...${NC}"
 fi
 
-# 2. Rebuild and restart application containers
-echo -e "${BLUE}[2/5] Building and updating application containers...${NC}"
-docker compose -f "$COMPOSE_FILE" up -d --build
+# 2. Rebuild and restart application containers (removes orphaned/old containers)
+echo -e "${BLUE}[2/6] Building and updating application containers...${NC}"
+docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
 
-# 3. Apply Alembic database migrations & platform catalog seed
-echo -e "${BLUE}[3/5] Applying database migrations (Alembic)...${NC}"
+# 3. Apply Alembic database migrations
+echo -e "${BLUE}[3/6] Applying database migrations (Alembic)...${NC}"
 sleep 5
 docker compose -f "$COMPOSE_FILE" exec -T api python -m alembic -c api/alembic.ini upgrade head \
     || docker exec kodewaves_api python -m alembic -c api/alembic.ini upgrade head \
     || echo -e "${YELLOW}⚠️ Alembic migration execution skipped or reported warning.${NC}"
 
-echo -e "${BLUE}[4/5] Bootstrapping platform catalog (Piper Hindi TTS, Ollama, Models, Wallets)...${NC}"
+# 4. Bootstrap platform catalog seed
+echo -e "${BLUE}[4/6] Bootstrapping platform catalog (Piper Hindi TTS, Ollama, Models, Wallets)...${NC}"
 docker compose -f "$COMPOSE_FILE" exec -T api python -m scripts.seed_platform \
     || docker exec kodewaves_api python -m scripts.seed_platform \
     || echo -e "${YELLOW}⚠️ Platform seed executed with warning.${NC}"
 
-# 5. Service health verification
-echo -e "${BLUE}[5/5] Verifying running services and API health...${NC}"
+# 5. Clean up old unused/dangling artifacts on the server side
+echo -e "${BLUE}[5/6] Cleaning up old images, dangling containers, and legacy server artifacts...${NC}"
+# Prune dangling/unused images left over from previous builds on the server
+docker image prune -f >/dev/null 2>&1 || true
+
+# Clean up any legacy environment keys in server .env (e.g. duplicate DOGRAH keys)
+if [ -f ".env" ]; then
+    sed -i '/^DOGRAH_DEVOPS_SECRET=/d' .env 2>/dev/null || true
+fi
+
+# Clean up any stale PID/band lock files from old host-level runs
+rm -f run/*.pid run/active_band run/*.port 2>/dev/null || true
+
+echo -e "${GREEN}✓ Server cleanup completed (freed disk space, pruned dangling images)${NC}"
+
+# 6. Service health verification
+echo -e "${BLUE}[6/6] Verifying running services and API health...${NC}"
 docker compose -f "$COMPOSE_FILE" ps
 
 # Read API port from .env or default to 8000
