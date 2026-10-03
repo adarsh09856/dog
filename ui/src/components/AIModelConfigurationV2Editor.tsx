@@ -343,8 +343,6 @@ function buildKodewavesState(
         stt_model: undefined,
         tts_model: undefined,
     };
-        tts_model: undefined,
-    };
 }
 const buildDograhState = buildKodewavesState;
 
