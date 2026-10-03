@@ -84,17 +84,25 @@ async def get_monitoring_stats(_user=Depends(get_superuser)):
             except Exception:
                 completed_calls = 0
 
-            # 4. Total Minutes Calculation from WorkflowRunModel usage_info
+            # 4. Total Minutes Calculation via SQL JSON aggregation (avoids OOM on large datasets)
             try:
-                all_runs_stmt = select(WorkflowRunModel.usage_info).where(
-                    WorkflowRunModel.usage_info.isnot(None)
-                )
-                runs_usage = (await session.execute(all_runs_stmt)).scalars().all()
-                total_seconds = 0.0
-                for usage in runs_usage:
-                    if isinstance(usage, dict):
-                        total_seconds += float(usage.get("call_duration_seconds", 0.0) or 0.0)
-                total_minutes = round(total_seconds / 60.0, 1)
+                from sqlalchemy import Float
+                stmt = select(
+                    func.coalesce(
+                        func.sum(
+                            func.cast(
+                                func.nullif(
+                                    WorkflowRunModel.usage_info.op("->>")("call_duration_seconds"),
+                                    ""
+                                ),
+                                Float
+                            )
+                        ),
+                        0.0
+                    )
+                ).where(WorkflowRunModel.usage_info.isnot(None))
+                total_seconds = (await session.execute(stmt)).scalar() or 0.0
+                total_minutes = round(float(total_seconds) / 60.0, 1)
             except Exception:
                 total_minutes = 0.0
 

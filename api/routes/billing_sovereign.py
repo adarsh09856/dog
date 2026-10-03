@@ -247,7 +247,7 @@ class SubscribePlanRequest(BaseModel):
 
 @router.post("/subscribe")
 async def subscribe_to_plan(req: SubscribePlanRequest, user: UserModel = Depends(get_user)):
-    """Subscribe user's organization to a SaaS plan and grant initial plan minutes."""
+    """Subscribe user's organization to a SaaS plan. Paid plans require checkout verification."""
     org_id = user.selected_organization_id
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization required")
@@ -277,6 +277,25 @@ async def subscribe_to_plan(req: SubscribePlanRequest, user: UserModel = Depends
             plan = plan_res.scalar_one_or_none()
 
         plan_code = plan.code if plan else "starter"
+
+        # Security check: Paid tiers require payment checkout
+        if plan_code != "starter" and (plan and plan.monthly_price_cents > 0):
+            raise HTTPException(
+                status_code=402,
+                detail=f"Plan '{plan.name}' requires payment verification. Please complete subscription checkout via /payments/create-order.",
+            )
+
+        existing_plan = await kodewaves_db_client.get_setting(f"org_plan_{org_id}")
+        wallet = await kodewaves_db_client.get_or_create_wallet(org_id)
+
+        # Starter tier can only grant trial minutes once per organization
+        if existing_plan:
+            return {
+                "message": f"Organization is already on {existing_plan.get('plan_name', 'Starter')} plan",
+                "plan_code": existing_plan.get("plan_code", plan_code),
+                "wallet_balance_minutes": wallet.credit_balance_minutes,
+            }
+
         minutes = plan.included_monthly_minutes if plan else 100
 
         # Save plan assignment in org settings
@@ -290,13 +309,13 @@ async def subscribe_to_plan(req: SubscribePlanRequest, user: UserModel = Depends
             category="plan",
         )
 
-        # Grant monthly plan minutes
+        # Grant initial trial plan minutes
         wallet = await kodewaves_db_client.add_minutes(
             organization_id=org_id,
             minutes=minutes,
             reason="plan_subscription",
             reference_id=str(plan.id) if plan else "sub_starter",
-            notes=f"Subscribed to {plan.name if plan else 'Starter'} Plan",
+            notes=f"Subscribed to {plan.name if plan else 'Starter'} Plan (Trial Minutes)",
         )
 
         return {

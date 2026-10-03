@@ -20,8 +20,8 @@ export KMP_BLOCKTIME=0
 export GOMP_SPINCOUNT=0
 export KMP_AFFINITY=disabled
 
-ARQ_WORKERS=1
-FASTAPI_WORKERS=1
+ARQ_WORKERS=${ARQ_WORKERS:-1}
+FASTAPI_WORKERS=${FASTAPI_WORKERS:-1}
 UVICORN_BASE_PORT=${UVICORN_BASE_PORT:-8000}
 
 cd "$BASE_DIR"
@@ -74,7 +74,7 @@ start() {
 # ari_manager and campaign_orchestrator are optional; each defaults to on and
 # can be turned off (e.g. for an API/worker-only replica) by setting the flag to
 # "false" in the container env / docker-compose .env.
-ENABLE_ARI_MANAGER=false
+ENABLE_ARI_MANAGER=${ENABLE_ARI_MANAGER:-false}
 ENABLE_CAMPAIGN_ORCHESTRATOR=${ENABLE_CAMPAIGN_ORCHESTRATOR:-false}
 
 if [[ "$ENABLE_ARI_MANAGER" == "true" ]]; then

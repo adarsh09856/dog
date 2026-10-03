@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -25,10 +26,40 @@ class AuditLogItem(BaseModel):
 
 
 @router.get("", response_model=List[AuditLogItem])
-async def list_audit_logs(limit: int = 100, offset: int = 0, _user=Depends(get_superuser)):
-    """Retrieve immutable audit log trail."""
+async def list_audit_logs(
+    limit: int = 100,
+    offset: int = 0,
+    actor: Optional[str] = None,
+    action: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    _user=Depends(get_superuser),
+):
+    """Retrieve immutable audit log trail with optional filters."""
     async with kodewaves_db_client.get_session() as session:
-        stmt = select(AuditLogModel).order_by(desc(AuditLogModel.created_at)).limit(limit).offset(offset)
+        stmt = select(AuditLogModel)
+
+        if actor and actor.strip():
+            stmt = stmt.where(AuditLogModel.actor_email.ilike(f"%{actor.strip()}%"))
+        if action and action.strip():
+            stmt = stmt.where(AuditLogModel.action.ilike(f"%{action.strip()}%"))
+        if resource_type and resource_type.strip():
+            stmt = stmt.where(AuditLogModel.resource_type == resource_type.strip())
+        if date_from and date_from.strip():
+            try:
+                dt_from = datetime.fromisoformat(date_from.strip().replace("Z", "+00:00"))
+                stmt = stmt.where(AuditLogModel.created_at >= dt_from)
+            except Exception:
+                pass
+        if date_to and date_to.strip():
+            try:
+                dt_to = datetime.fromisoformat(date_to.strip().replace("Z", "+00:00"))
+                stmt = stmt.where(AuditLogModel.created_at <= dt_to)
+            except Exception:
+                pass
+
+        stmt = stmt.order_by(desc(AuditLogModel.created_at)).limit(limit).offset(offset)
         result = await session.execute(stmt)
         records = result.scalars().all()
         return [
@@ -47,3 +78,4 @@ async def list_audit_logs(limit: int = 100, offset: int = 0, _user=Depends(get_s
             )
             for r in records
         ]
+

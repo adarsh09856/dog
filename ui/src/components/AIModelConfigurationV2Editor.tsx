@@ -70,6 +70,9 @@ export interface KodewavesFormState {
     speed: number;
     language: string;
     engine_type?: "cloud" | "local_cpu";
+    llm_engine_type?: "cloud" | "local_cpu";
+    stt_engine_type?: "cloud" | "local_cpu";
+    tts_engine_type?: "cloud" | "local_cpu";
     llm_model?: string;
     stt_model?: string;
     tts_model?: string;
@@ -88,12 +91,8 @@ export const CLOUD_LLM_MODELS = [
 ];
 
 export const LOCAL_LLM_MODELS = [
-    { value: "qwen2.5:0.5b", label: "Qwen 2.5 0.5B (Ultra-fast CPU, ~350MB RAM)" },
     { value: "qwen2.5:1.5b", label: "Qwen 2.5 1.5B (Recommended CPU, ~980MB RAM)" },
-    { value: "llama3.2:1b", label: "Llama 3.2 1B (Meta fast CPU, ~1.3GB RAM)" },
-    { value: "llama3.2:3b", label: "Llama 3.2 3B (Meta high-IQ CPU, ~2.0GB RAM)" },
-    { value: "phi4-mini", label: "Microsoft Phi-4 Mini 3.8B (~2.4GB RAM)" },
-    { value: "mistral:7b", label: "Mistral 7B (~4.5GB RAM)" },
+    { value: "qwen2.5:0.5b", label: "Qwen 2.5 0.5B (Ultra-fast CPU, ~350MB RAM)" },
 ];
 
 export const CLOUD_STT_MODELS = [
@@ -105,9 +104,9 @@ export const CLOUD_STT_MODELS = [
 ];
 
 export const LOCAL_STT_MODELS = [
-    { value: "Systran/faster-whisper-tiny.en", label: "Whisper Tiny English (Fastest CPU)" },
-    { value: "Systran/faster-whisper-base", label: "Whisper Base Multilingual (Recommended CPU)" },
-    { value: "Systran/faster-whisper-small", label: "Whisper Small Multilingual (High Accuracy CPU)" },
+    { value: "Systran/faster-whisper-base", label: "Faster-Whisper Base (Recommended CPU - English & Hindi)" },
+    { value: "Systran/faster-whisper-small", label: "Faster-Whisper Small (High Accuracy CPU - English & Hindi)" },
+    { value: "Systran/faster-whisper-tiny.en", label: "Faster-Whisper Tiny English (Fastest CPU)" },
 ];
 
 export const CLOUD_TTS_MODELS = [
@@ -123,7 +122,8 @@ export const CLOUD_TTS_MODELS = [
 ];
 
 export const LOCAL_TTS_MODELS = [
-    { value: "kokoro", label: "Kokoro TTS (Fast CPU Neural Voices)" },
+    { value: "piper", label: "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)" },
+    { value: "kokoro", label: "Kokoro TTS (English Neural Voices, 82M CPU)" },
 ];
 
 interface AIModelConfigurationV2EditorProps {
@@ -260,7 +260,10 @@ function buildKodewavesState(
     const cleanVoice = (v: unknown, lang?: string) => {
         const s = String(v || "");
         if (!s || s === "default" || s === "alloy" || s.startsWith("kw_") || s.startsWith("dg_")) {
-            return lang === "hi" ? "if_sara" : "af_heart";
+            return lang === "hi" ? "hi_IN-priya-medium" : "af_heart";
+        }
+        if (s === "if_sara" || s === "im_nicola") {
+            return "hi_IN-priya-medium";
         }
         return s;
     };
@@ -269,15 +272,30 @@ function buildKodewavesState(
         const apiKey = String(configuredKodewaves.api_key || "");
         const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu");
         const lang = String(configuredKodewaves.language || fallback.language);
+        const llmModel = configuredKodewaves.llm_model ? String(configuredKodewaves.llm_model) : undefined;
+        const sttModel = configuredKodewaves.stt_model ? String(configuredKodewaves.stt_model) : undefined;
+        const ttsModel = configuredKodewaves.tts_model ? String(configuredKodewaves.tts_model) : undefined;
+        const chosenVoice = cleanVoice(configuredKodewaves.voice || fallback.voice, lang);
+
+        const llmEngineType = (configuredKodewaves.llm_engine_type as "cloud" | "local_cpu") ||
+            (llmModel && (llmModel.startsWith("qwen") || llmModel.startsWith("llama3.2") || llmModel.startsWith("phi")) ? "local_cpu" : (isLocalCpu ? "local_cpu" : "cloud"));
+        const sttEngineType = (configuredKodewaves.stt_engine_type as "cloud" | "local_cpu") ||
+            (sttModel && sttModel.startsWith("Systran/") ? "local_cpu" : (isLocalCpu ? "local_cpu" : "cloud"));
+        const ttsEngineType = (configuredKodewaves.tts_engine_type as "cloud" | "local_cpu") ||
+            (ttsModel === "piper" || ttsModel === "kokoro" || chosenVoice.startsWith("hi_IN-") || chosenVoice.startsWith("af_") ? (isLocalCpu ? "local_cpu" : "cloud") : (isLocalCpu ? "local_cpu" : "cloud"));
+
         return {
             api_key: apiKey,
-            voice: cleanVoice(configuredKodewaves.voice || fallback.voice, lang),
+            voice: chosenVoice,
             speed: numberOrDefault(configuredKodewaves.speed, fallback.speed),
             language: lang,
             engine_type: isLocalCpu ? "local_cpu" : "cloud",
-            llm_model: configuredKodewaves.llm_model ? String(configuredKodewaves.llm_model) : undefined,
-            stt_model: configuredKodewaves.stt_model ? String(configuredKodewaves.stt_model) : undefined,
-            tts_model: configuredKodewaves.tts_model ? String(configuredKodewaves.tts_model) : undefined,
+            llm_engine_type: llmEngineType,
+            stt_engine_type: sttEngineType,
+            tts_engine_type: ttsEngineType,
+            llm_model: llmModel,
+            stt_model: sttModel,
+            tts_model: ttsModel,
         };
     }
 
@@ -288,15 +306,27 @@ function buildKodewavesState(
         const apiKey = firstApiKey(llm?.api_key || tts?.api_key || stt?.api_key);
         const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu") || llm?.provider === "speaches";
         const lang = String(stt?.language || fallback.language);
+        const llmModel = llm?.model ? String(llm.model) : undefined;
+        const sttModel = stt?.model ? String(stt.model) : undefined;
+        const ttsModel = tts?.model ? String(tts.model) : undefined;
+        const chosenVoice = cleanVoice(tts?.voice || fallback.voice, lang);
+
+        const llmEngineType = (llm?.provider === "speaches" || (llmModel && llmModel.startsWith("qwen"))) ? "local_cpu" : "cloud";
+        const sttEngineType = (stt?.provider === "speaches" || (sttModel && sttModel.startsWith("Systran/"))) ? "local_cpu" : "cloud";
+        const ttsEngineType = (tts?.provider === "speaches" || ttsModel === "piper" || ttsModel === "kokoro" || chosenVoice.startsWith("hi_IN-")) ? "local_cpu" : "cloud";
+
         return {
             api_key: apiKey,
-            voice: cleanVoice(tts?.voice || fallback.voice, lang),
+            voice: chosenVoice,
             speed: numberOrDefault(tts?.speed, fallback.speed),
             language: lang,
             engine_type: isLocalCpu ? "local_cpu" : "cloud",
-            llm_model: llm?.model ? String(llm.model) : undefined,
-            stt_model: stt?.model ? String(stt.model) : undefined,
-            tts_model: tts?.model ? String(tts.model) : undefined,
+            llm_engine_type: llmEngineType,
+            stt_engine_type: sttEngineType,
+            tts_engine_type: ttsEngineType,
+            llm_model: llmModel,
+            stt_model: sttModel,
+            tts_model: ttsModel,
         };
     }
 
@@ -306,8 +336,13 @@ function buildKodewavesState(
         speed: fallback.speed,
         language: fallback.language,
         engine_type: "cloud",
+        llm_engine_type: "cloud",
+        stt_engine_type: "cloud",
+        tts_engine_type: "cloud",
         llm_model: undefined,
         stt_model: undefined,
+        tts_model: undefined,
+    };
         tts_model: undefined,
     };
 }
@@ -489,7 +524,8 @@ export function AIModelConfigurationV2Editor({
     }, []);
 
     const effectiveLlmModels = useMemo(() => {
-        if (kodewaves.engine_type === "local_cpu") {
+        const isLocal = kodewaves.llm_engine_type === "local_cpu";
+        if (isLocal) {
             if (catalogManifest?.local_llm_models && catalogManifest.local_llm_models.length > 0) {
                 return catalogManifest.local_llm_models;
             }
@@ -502,10 +538,11 @@ export function AIModelConfigurationV2Editor({
             return catalogManifest.cloud_llm_models;
         }
         return CLOUD_LLM_MODELS;
-    }, [kodewaves.engine_type, catalogManifest]);
+    }, [kodewaves.llm_engine_type, catalogManifest]);
 
     const effectiveSttModels = useMemo(() => {
-        if (kodewaves.engine_type === "local_cpu") {
+        const isLocal = kodewaves.stt_engine_type === "local_cpu";
+        if (isLocal) {
             if (catalogManifest?.local_stt_models && catalogManifest.local_stt_models.length > 0) {
                 return catalogManifest.local_stt_models;
             }
@@ -515,10 +552,11 @@ export function AIModelConfigurationV2Editor({
             return catalogManifest.cloud_stt_models;
         }
         return CLOUD_STT_MODELS;
-    }, [kodewaves.engine_type, catalogManifest]);
+    }, [kodewaves.stt_engine_type, catalogManifest]);
 
     const effectiveTtsModels = useMemo(() => {
-        if (kodewaves.engine_type === "local_cpu") {
+        const isLocal = kodewaves.tts_engine_type === "local_cpu";
+        if (isLocal) {
             if (catalogManifest?.local_tts_models && catalogManifest.local_tts_models.length > 0) {
                 return catalogManifest.local_tts_models;
             }
@@ -528,7 +566,7 @@ export function AIModelConfigurationV2Editor({
             return catalogManifest.cloud_tts_models;
         }
         return CLOUD_TTS_MODELS;
-    }, [kodewaves.engine_type, catalogManifest]);
+    }, [kodewaves.tts_engine_type, catalogManifest]);
 
     useEffect(() => {
         const rawConfiguration = asRecord(configuration);
@@ -553,7 +591,8 @@ export function AIModelConfigurationV2Editor({
                     `Voice speed must be between ${kodewavesSpeedRange.min} and ${kodewavesSpeedRange.max}.`,
                 );
             }
-            const apiKey = kodewaves.engine_type === "local_cpu" ? "sovereign-local-cpu" : "sovereign-managed";
+            const isAllLocal = kodewaves.llm_engine_type === "local_cpu" && kodewaves.stt_engine_type === "local_cpu" && kodewaves.tts_engine_type === "local_cpu";
+            const apiKey = isAllLocal ? "sovereign-local-cpu" : "sovereign-managed";
             await onSave({
                 version: 2,
                 mode: "kodewaves",
@@ -562,6 +601,9 @@ export function AIModelConfigurationV2Editor({
                     voice: kodewaves.voice,
                     speed: kodewaves.speed,
                     language: kodewaves.language,
+                    llm_engine_type: kodewaves.llm_engine_type,
+                    stt_engine_type: kodewaves.stt_engine_type,
+                    tts_engine_type: kodewaves.tts_engine_type,
                     llm_model: kodewaves.llm_model || undefined,
                     stt_model: kodewaves.stt_model || undefined,
                     tts_model: kodewaves.tts_model || undefined,
@@ -571,6 +613,9 @@ export function AIModelConfigurationV2Editor({
                     voice: kodewaves.voice,
                     speed: kodewaves.speed,
                     language: kodewaves.language,
+                    llm_engine_type: kodewaves.llm_engine_type,
+                    stt_engine_type: kodewaves.stt_engine_type,
+                    tts_engine_type: kodewaves.tts_engine_type,
                     llm_model: kodewaves.llm_model || undefined,
                     stt_model: kodewaves.stt_model || undefined,
                     tts_model: kodewaves.tts_model || undefined,
@@ -657,61 +702,28 @@ export function AIModelConfigurationV2Editor({
                     <Card>
                         <CardContent className="pt-6">
                             <div className="grid gap-4 sm:grid-cols-2">
-                                {/* AI Engine Infrastructure Selector */}
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label className="text-xs font-semibold text-foreground">AI Engine Infrastructure</Label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div
-                                            onClick={() => setKodewaves({ ...kodewaves, engine_type: "cloud" })}
-                                            className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                                                kodewaves.engine_type !== "local_cpu"
-                                                    ? "border-primary bg-primary/10 shadow-sm"
-                                                    : "border-border hover:border-muted-foreground/40 bg-card/50"
-                                            }`}
-                                        >
-                                            <div className="flex items-center justify-between mb-1.5">
-                                                <div className="flex items-center gap-2 font-semibold text-xs text-foreground">
-                                                    <Cloud className="h-4 w-4 text-primary" />
-                                                    Platform Cloud Master Keys
-                                                </div>
-                                                {kodewaves.engine_type !== "local_cpu" && (
-                                                    <CheckCircle2 className="h-4 w-4 text-primary" />
-                                                )}
-                                            </div>
-                                            <p className="text-[11px] text-muted-foreground leading-snug">
-                                                OpenAI, Deepgram, ElevenLabs & Cartesia configured by your platform administrator. Billed in minutes from balance.
-                                            </p>
+                                {/* Pipeline Overview Banner */}
+                                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:col-span-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <Cpu className="h-4 w-4 text-primary" />
+                                            <span className="text-xs font-semibold text-foreground">Independent Layer Configuration</span>
                                         </div>
-
-                                        <div
-                                            onClick={() => {
-                                                if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
-                                                setKodewaves({ ...kodewaves, engine_type: "local_cpu", voice: (kodewaves.voice.startsWith("dg_") || kodewaves.voice.startsWith("kw_")) ? "af_heart" : kodewaves.voice });
-                                            }}
-                                            className={`p-3.5 rounded-xl border transition-all ${
-                                                catalogManifest && catalogManifest.has_local_ai_access === false
-                                                    ? "opacity-50 cursor-not-allowed border-dashed bg-muted/20"
-                                                    : "cursor-pointer " + (kodewaves.engine_type === "local_cpu"
-                                                        ? "border-amber-500 bg-amber-500/10 shadow-sm"
-                                                        : "border-border hover:border-muted-foreground/40 bg-card/50")
-                                            }`}
-                                        >
-                                            <div className="flex items-center justify-between mb-1.5">
-                                                <div className="flex items-center gap-2 font-semibold text-xs text-foreground">
-                                                    <Cpu className="h-4 w-4 text-amber-500" />
-                                                    Sovereign Local CPU Stack
-                                                </div>
-                                                {kodewaves.engine_type === "local_cpu" && (
-                                                    <CheckCircle2 className="h-4 w-4 text-amber-500" />
-                                                )}
-                                            </div>
-                                            <p className="text-[11px] text-muted-foreground leading-snug">
-                                                {catalogManifest && catalogManifest.has_local_ai_access === false
-                                                    ? "Requires administrator permission. Contact your superadmin to enable Local CPU access."
-                                                    : "100% Free & Self-Hosted. Runs local Ollama (Qwen2.5) + Speaches Whisper STT + Kokoro TTS on host CPU."}
-                                            </p>
+                                        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                            <span className="rounded-md border bg-background px-2 py-0.5 font-medium text-muted-foreground">
+                                                LLM: <strong className="text-foreground">{kodewaves.llm_engine_type === "local_cpu" ? "🖥️ Local" : "☁️ Cloud"}</strong>
+                                            </span>
+                                            <span className="rounded-md border bg-background px-2 py-0.5 font-medium text-muted-foreground">
+                                                STT: <strong className="text-foreground">{kodewaves.stt_engine_type === "local_cpu" ? "🖥️ Local" : "☁️ Cloud"}</strong>
+                                            </span>
+                                            <span className="rounded-md border bg-background px-2 py-0.5 font-medium text-muted-foreground">
+                                                TTS: <strong className="text-foreground">{kodewaves.tts_engine_type === "local_cpu" ? "🖥️ Local" : "☁️ Cloud"}</strong>
+                                            </span>
                                         </div>
                                     </div>
+                                    <p className="mt-1 text-[11px] text-muted-foreground">
+                                        Mix and match cloud master keys and local CPU engines independently for each layer based on your latency and cost preferences.
+                                    </p>
                                 </div>
 
                                 {/* LLM Model Selector */}
@@ -721,9 +733,33 @@ export function AIModelConfigurationV2Editor({
                                             <Bot className="h-4 w-4 text-primary" />
                                             LLM Model (Intelligence Engine)
                                         </Label>
-                                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                                            {kodewaves.engine_type === "local_cpu" ? "Local Ollama" : "Cloud Master Keys"}
-                                        </span>
+                                        <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5 text-[11px]">
+                                            <button
+                                                type="button"
+                                                onClick={() => setKodewaves({ ...kodewaves, llm_engine_type: "cloud" })}
+                                                className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
+                                                    kodewaves.llm_engine_type !== "local_cpu"
+                                                        ? "bg-primary text-primary-foreground shadow-xs"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                }`}
+                                            >
+                                                <Cloud className="h-3 w-3" /> Cloud
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
+                                                    setKodewaves({ ...kodewaves, llm_engine_type: "local_cpu" });
+                                                }}
+                                                className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
+                                                    kodewaves.llm_engine_type === "local_cpu"
+                                                        ? "bg-amber-500 text-white shadow-xs"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                }`}
+                                            >
+                                                <Cpu className="h-3 w-3" /> Local CPU
+                                            </button>
+                                        </div>
                                     </div>
                                     <Select
                                         disabled={effectiveLlmModels.length === 0}
@@ -742,7 +778,7 @@ export function AIModelConfigurationV2Editor({
                                         <SelectContent>
                                             {effectiveLlmModels.length === 0 ? (
                                                 <SelectItem key="none" value="none" disabled>
-                                                    {kodewaves.engine_type === "local_cpu"
+                                                    {kodewaves.llm_engine_type === "local_cpu"
                                                         ? "No local Ollama models installed (Download in Admin > Settings)"
                                                         : "No active cloud master keys (Add keys in Admin > Models)"}
                                                 </SelectItem>
@@ -764,9 +800,33 @@ export function AIModelConfigurationV2Editor({
                                             <Mic className="h-4 w-4 text-primary" />
                                             Transcriber (STT) Model
                                         </Label>
-                                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                                            {kodewaves.engine_type === "local_cpu" ? "Local Whisper" : "Cloud Transcriber"}
-                                        </span>
+                                        <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5 text-[11px]">
+                                            <button
+                                                type="button"
+                                                onClick={() => setKodewaves({ ...kodewaves, stt_engine_type: "cloud" })}
+                                                className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
+                                                    kodewaves.stt_engine_type !== "local_cpu"
+                                                        ? "bg-primary text-primary-foreground shadow-xs"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                }`}
+                                            >
+                                                <Cloud className="h-3 w-3" /> Cloud
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
+                                                    setKodewaves({ ...kodewaves, stt_engine_type: "local_cpu" });
+                                                }}
+                                                className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
+                                                    kodewaves.stt_engine_type === "local_cpu"
+                                                        ? "bg-amber-500 text-white shadow-xs"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                }`}
+                                            >
+                                                <Cpu className="h-3 w-3" /> Local CPU
+                                            </button>
+                                        </div>
                                     </div>
                                     <Select
                                         disabled={effectiveSttModels.length === 0}
@@ -785,7 +845,7 @@ export function AIModelConfigurationV2Editor({
                                         <SelectContent>
                                             {effectiveSttModels.length === 0 ? (
                                                 <SelectItem key="none" value="none" disabled>
-                                                    {kodewaves.engine_type === "local_cpu"
+                                                    {kodewaves.stt_engine_type === "local_cpu"
                                                         ? "Local Speaches Whisper STT unavailable"
                                                         : "No active transcriber keys (Add Deepgram / Sarvam in Admin > Models)"}
                                                 </SelectItem>
@@ -807,9 +867,33 @@ export function AIModelConfigurationV2Editor({
                                             <Volume2 className="h-4 w-4 text-primary" />
                                             Synthesizer (TTS) Model
                                         </Label>
-                                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
-                                            {kodewaves.engine_type === "local_cpu" ? "Local Kokoro" : "Cloud Synthesizer"}
-                                        </span>
+                                        <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5 text-[11px]">
+                                            <button
+                                                type="button"
+                                                onClick={() => setKodewaves({ ...kodewaves, tts_engine_type: "cloud" })}
+                                                className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
+                                                    kodewaves.tts_engine_type !== "local_cpu"
+                                                        ? "bg-primary text-primary-foreground shadow-xs"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                }`}
+                                            >
+                                                <Cloud className="h-3 w-3" /> Cloud
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
+                                                    setKodewaves({ ...kodewaves, tts_engine_type: "local_cpu" });
+                                                }}
+                                                className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
+                                                    kodewaves.tts_engine_type === "local_cpu"
+                                                        ? "bg-amber-500 text-white shadow-xs"
+                                                        : "text-muted-foreground hover:text-foreground"
+                                                }`}
+                                            >
+                                                <Cpu className="h-3 w-3" /> Local CPU
+                                            </button>
+                                        </div>
                                     </div>
                                     <Select
                                         disabled={effectiveTtsModels.length === 0}
@@ -828,8 +912,8 @@ export function AIModelConfigurationV2Editor({
                                         <SelectContent>
                                             {effectiveTtsModels.length === 0 ? (
                                                 <SelectItem key="none" value="none" disabled>
-                                                    {kodewaves.engine_type === "local_cpu"
-                                                        ? "Local Speaches Kokoro TTS unavailable"
+                                                    {kodewaves.tts_engine_type === "local_cpu"
+                                                        ? "Local Speaches / Piper TTS unavailable"
                                                         : "No active synthesizer keys (Add Cartesia / ElevenLabs in Admin > Models)"}
                                                 </SelectItem>
                                             ) : (
@@ -846,7 +930,7 @@ export function AIModelConfigurationV2Editor({
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Voice</Label>
                                     <VoiceSelectorModal
-                                        provider={kodewaves.engine_type === "local_cpu" ? "speaches" : "kodewaves"}
+                                        provider={kodewaves.tts_engine_type === "local_cpu" ? "speaches" : "kodewaves"}
                                         value={kodewaves.voice}
                                         onChange={(voice) => setKodewaves({ ...kodewaves, voice })}
                                         allowManualInput={allowCustomVoice}

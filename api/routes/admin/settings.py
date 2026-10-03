@@ -60,6 +60,13 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
         smtp = settings_map.get("smtp") or {}
         payments = settings_map.get("payments") or {}
 
+        def _mask_secret(val: Optional[str]) -> Optional[str]:
+            if not val:
+                return None
+            if len(val) <= 8:
+                return "••••••••"
+            return "••••••••" + val[-4:]
+
         return PlatformSettingsResponse(
             company_name=branding.get("company_name", "Kodewaves"),
             logo_url=branding.get("logo_url", "/kodewaves-logo.png"),
@@ -75,12 +82,12 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
             smtp_host=smtp.get("smtp_host"),
             smtp_port=smtp.get("smtp_port", 587),
             smtp_user=smtp.get("smtp_user"),
-            smtp_password=smtp.get("smtp_password"),
+            smtp_password=_mask_secret(smtp.get("smtp_password")),
             smtp_from=smtp.get("smtp_from"),
             razorpay_key_id=payments.get("razorpay_key_id"),
-            razorpay_key_secret=payments.get("razorpay_key_secret"),
+            razorpay_key_secret=_mask_secret(payments.get("razorpay_key_secret")),
             stripe_publishable_key=payments.get("stripe_publishable_key"),
-            stripe_secret_key=payments.get("stripe_secret_key"),
+            stripe_secret_key=_mask_secret(payments.get("stripe_secret_key")),
         )
 
 
@@ -112,11 +119,15 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
 
         # 4. SMTP Settings
         if payload.get("smtp_host"):
+            existing_smtp = await kodewaves_db_client.get_setting("smtp") or {}
+            smtp_pass = payload.get("smtp_password")
+            if smtp_pass and smtp_pass.startswith("••••••••"):
+                smtp_pass = existing_smtp.get("smtp_password")
             smtp = {
                 "smtp_host": payload.get("smtp_host"),
                 "smtp_port": payload.get("smtp_port", 587),
                 "smtp_user": payload.get("smtp_user"),
-                "smtp_password": payload.get("smtp_password"),
+                "smtp_password": smtp_pass,
                 "smtp_from": payload.get("smtp_from"),
             }
             await kodewaves_db_client.set_setting(key="smtp", value=smtp, category="smtp")
@@ -132,11 +143,19 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
         await kodewaves_db_client.set_setting(key="local_ai", value=local_ai, category="local_ai")
 
         # 6. Payment Gateways
+        existing_payments = await kodewaves_db_client.get_setting("payments") or {}
+        rp_secret = payload.get("razorpay_key_secret")
+        if rp_secret and rp_secret.startswith("••••••••"):
+            rp_secret = existing_payments.get("razorpay_key_secret")
+        st_secret = payload.get("stripe_secret_key")
+        if st_secret and st_secret.startswith("••••••••"):
+            st_secret = existing_payments.get("stripe_secret_key")
+
         payments = {
             "razorpay_key_id": payload.get("razorpay_key_id"),
-            "razorpay_key_secret": payload.get("razorpay_key_secret"),
+            "razorpay_key_secret": rp_secret if rp_secret is not None else existing_payments.get("razorpay_key_secret"),
             "stripe_publishable_key": payload.get("stripe_publishable_key"),
-            "stripe_secret_key": payload.get("stripe_secret_key"),
+            "stripe_secret_key": st_secret if st_secret is not None else existing_payments.get("stripe_secret_key"),
         }
         await kodewaves_db_client.set_setting(key="payments", value=payments, category="payments")
 
@@ -178,6 +197,7 @@ async def send_test_email(payload: TestEmailRequest, _user=Depends(get_superuser
     if not host:
         raise HTTPException(status_code=400, detail="SMTP Host is not configured in Platform Settings")
 
+    import asyncio
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
@@ -194,7 +214,7 @@ async def send_test_email(payload: TestEmailRequest, _user=Depends(get_superuser
     )
     msg.attach(MIMEText(body, "plain"))
 
-    try:
+    def _send_sync():
         if port == 465:
             server = smtplib.SMTP_SSL(host, port, timeout=10)
         else:
@@ -204,6 +224,9 @@ async def send_test_email(payload: TestEmailRequest, _user=Depends(get_superuser
             server.login(user, password)
         server.send_message(msg)
         server.quit()
+
+    try:
+        await asyncio.to_thread(_send_sync)
         return {"success": True, "message": f"Test email successfully sent to {payload.recipient_email}"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")

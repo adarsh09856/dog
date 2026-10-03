@@ -199,6 +199,8 @@ export interface FlaggedViolation {
   violation_type: string;
   matched_text: string;
   action_taken: string;
+  snippet?: string;
+  is_reviewed?: boolean;
   created_at?: string;
 }
 
@@ -379,7 +381,17 @@ export const adminApi = {
     apiFetch<{ message: string }>(`/admin/moderation/banned-words/${id}`, {
       method: 'DELETE',
     }),
-  getViolations: () => apiFetch<FlaggedViolation[]>('/admin/moderation/violations'),
+  getViolations: (isReviewed?: boolean) =>
+    apiFetch<FlaggedViolation[]>(`/admin/moderation/violations${isReviewed !== undefined ? `?is_reviewed=${isReviewed}` : ''}`),
+  resolveViolation: (id: string | number, isReviewed = true) =>
+    apiFetch<{ message: string; id: string; is_reviewed: boolean }>(`/admin/moderation/violations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_reviewed: isReviewed }),
+    }),
+  deleteViolation: (id: string | number) =>
+    apiFetch<{ message: string }>(`/admin/moderation/violations/${id}`, {
+      method: 'DELETE',
+    }),
 
   // Settings
   getSettings: () => apiFetch<PlatformSettings>('/admin/settings'),
@@ -408,7 +420,26 @@ export const adminApi = {
     }),
 
   // Audit Logs
-  getAuditLogs: () => apiFetch<AuditLogItem[]>('/admin/audit-logs'),
+  getAuditLogs: (params?: {
+    actor?: string;
+    action?: string;
+    resource_type?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.actor) query.set('actor', params.actor);
+    if (params?.action) query.set('action', params.action);
+    if (params?.resource_type) query.set('resource_type', params.resource_type);
+    if (params?.date_from) query.set('date_from', params.date_from);
+    if (params?.date_to) query.set('date_to', params.date_to);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return apiFetch<AuditLogItem[]>(`/admin/audit-logs${qs ? `?${qs}` : ''}`);
+  },
 };
 
 // ---------------------------------------------------------------------------

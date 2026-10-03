@@ -156,6 +156,10 @@ async def get_user(
         created_by=str(stack_user["id"]),
     )
 
+    # Enforce account deactivation (admin can disable even Stack Auth users)
+    if not getattr(user_model, "is_active", True):
+        raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact support.")
+
     return user_model
 
 
@@ -281,6 +285,8 @@ async def _handle_oss_auth(authorization: str | None) -> UserModel:
         user = await db_client.get_user_by_id(int(payload["sub"]))
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
+        if not getattr(user, "is_active", True):
+            raise HTTPException(status_code=403, detail="Your account has been deactivated. Please contact support.")
     except HTTPException:
         raise
     except Exception:
@@ -316,6 +322,10 @@ async def _handle_api_key_auth(api_key: str) -> UserModel:
     user = await db_client.get_user_by_id(api_key_model.created_by)
     if not user:
         raise HTTPException(status_code=401, detail="API key owner not found")
+
+    # Enforce account deactivation
+    if not getattr(user, "is_active", True):
+        raise HTTPException(status_code=403, detail="API key owner account has been deactivated")
 
     # Set the organization context to the API key's organization
     user.selected_organization_id = api_key_model.organization_id

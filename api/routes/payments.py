@@ -319,10 +319,16 @@ async def verify_payment(req: VerifyPaymentRequest, user: UserModel = Depends(ge
     creds = await get_gateway_credentials()
 
     # Signature verification for Razorpay
-    if req.gateway.lower() == "razorpay" and req.signature:
+    if req.gateway.lower() == "razorpay":
         secret = creds["razorpay_key_secret"]
-        if secret and not verify_razorpay_signature(req.order_id, req.payment_id, req.signature, secret):
-            raise HTTPException(status_code=400, detail="Invalid Razorpay payment signature")
+        if secret:
+            if not req.signature:
+                raise HTTPException(status_code=400, detail="Razorpay signature is required for payment verification")
+            if not verify_razorpay_signature(req.order_id, req.payment_id, req.signature, secret):
+                raise HTTPException(status_code=400, detail="Invalid Razorpay payment signature")
+        elif not req.order_id.startswith("order_kw_"):
+            # When gateway is not yet configured, allow sandbox orders but warn
+            logger.warning(f"[Payments] Non-sandbox order verified without razorpay_key_secret: {req.order_id}")
 
     minutes_to_add = 0
     assigned_plan_code = None

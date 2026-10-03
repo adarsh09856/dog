@@ -283,7 +283,7 @@ def _create_realtime_user_turn_config(provider: str, model: str | None = None):
                 ],
                 stop=[SpeechTimeoutUserTurnStopStrategy(wait_for_transcript=False)],
             ),
-            SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+            SileroVADAnalyzer(params=VADParams(stop_secs=0.5)),
         )
 
     if provider in {
@@ -976,7 +976,8 @@ async def _run_pipeline_impl(
         get_parent_context=engine._get_otel_context,
     )
     user_mute_strategies = _create_user_mute_strategies(engine, answer_supervisor)
-    user_vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=0.2))
+    vad_stop_s = float(run_configs.get("vad_stop_secs", 0.5))
+    user_vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=vad_stop_s))
 
     # Configure turn strategies based on STT provider, model, and workflow configuration
     if is_realtime:

@@ -39,7 +39,8 @@ const EMPTY_FACETS: Facets = { genders: [], accents: [], languages: [], provider
 
 const PROVIDER_TABS = [
     { id: "__all__", label: "All Active Voices" },
-    { id: "speaches", label: "Local Kokoro" },
+    { id: "piper", label: "Piper Hindi (Local)" },
+    { id: "speaches", label: "Kokoro English (Local)" },
     { id: "sarvam", label: "Sarvam Indic" },
     { id: "cartesia", label: "Cartesia Sonic" },
     { id: "openai", label: "OpenAI" },
@@ -103,22 +104,28 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
 
     const activeTabs = useMemo(() => {
         if (provider === "speaches") {
-            return [{ id: "__all__", label: "Local Kokoro Voices" }];
+            return [
+                { id: "__all__", label: "All Local Voices" },
+                { id: "piper", label: "Piper Hindi (Local)" },
+                { id: "speaches", label: "Kokoro English (Local)" },
+            ];
         }
         const activeProvList = facets.providers || [];
         if (activeProvList.length === 0) {
             const detected = Array.from(new Set(voices.map((v) => (v as any).provider).filter(Boolean)));
             if (detected.length > 0) {
+                const uniqueDetected = Array.from(new Set(detected.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p)));
                 return [
                     { id: "__all__", label: `All Active Voices (${voices.length})` },
-                    ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && detected.includes(t.id)),
+                    ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && uniqueDetected.includes(t.id)),
                 ];
             }
             return [{ id: "__all__", label: `All Voices (${voices.length || 0})` }];
         }
+        const normalizedProvList = Array.from(new Set(activeProvList.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p)));
         return [
             { id: "__all__", label: `All Active Voices (${voices.length})` },
-            ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && activeProvList.includes(t.id)),
+            ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && normalizedProvList.includes(t.id)),
         ];
     }, [provider, facets.providers, voices]);
 
@@ -326,14 +333,17 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                     </DialogHeader>
 
                     {/* Provider Filter Tabs */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/20 px-6 py-2.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden shrink-0">
+                    <div
+                        className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/20 px-6 py-3 scrollbar-none no-scrollbar shrink-0 select-none"
+                        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                    >
                         {activeTabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 type="button"
                                 onClick={() => setProviderFilter(tab.id)}
                                 className={cn(
-                                    "whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                                    "whitespace-nowrap shrink-0 rounded-md px-3.5 py-1.5 text-xs font-medium transition-colors",
                                     providerFilter === tab.id
                                         ? "bg-primary text-primary-foreground shadow-sm"
                                         : "text-muted-foreground hover:bg-muted hover:text-foreground"

@@ -68,6 +68,7 @@ class UserModel(Base):
         back_populates="users",
     )
     is_superuser = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True, nullable=False)
     email = Column(String, nullable=True)
     password_hash = Column(String, nullable=True)
 

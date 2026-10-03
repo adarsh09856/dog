@@ -68,6 +68,9 @@ class KodewavesManagedAIModelConfiguration(BaseModel):
     llm_model: Optional[str] = None
     stt_model: Optional[str] = None
     tts_model: Optional[str] = None
+    llm_engine_type: Optional[str] = None
+    stt_engine_type: Optional[str] = None
+    tts_engine_type: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -193,22 +196,26 @@ def _compile_kodewaves_configuration(
     configuration: KodewavesManagedAIModelConfiguration,
 ) -> EffectiveAIModelConfiguration:
     api_key = configuration.api_key or "sovereign-managed"
+    llm_key = "sovereign-local-cpu" if configuration.llm_engine_type == "local_cpu" else api_key
+    tts_key = "sovereign-local-cpu" if configuration.tts_engine_type == "local_cpu" else api_key
+    stt_key = "sovereign-local-cpu" if configuration.stt_engine_type == "local_cpu" else api_key
+
     return EffectiveAIModelConfiguration(
         llm=KodewavesLLMService(
             provider=ServiceProviders.KODEWAVES,
-            api_key=api_key,
+            api_key=llm_key,
             model=configuration.llm_model or "default",
         ),
         tts=KodewavesTTSService(
             provider=ServiceProviders.KODEWAVES,
-            api_key=api_key,
+            api_key=tts_key,
             model=configuration.tts_model or "default",
             voice=configuration.voice,
             speed=configuration.speed,
         ),
         stt=KodewavesSTTService(
             provider=ServiceProviders.KODEWAVES,
-            api_key=api_key,
+            api_key=stt_key,
             model=configuration.stt_model or "default",
             language=configuration.language,
         ),

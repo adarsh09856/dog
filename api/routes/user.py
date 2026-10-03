@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 
 from api.db import db_client
+from api.db.kodewaves_client import kodewaves_db_client
 from api.db.models import (
     UserModel,
 )
@@ -474,6 +475,8 @@ TTSProvider = Literal[
     "camb",
     "minimax",
     "xai",
+    "speaches",
+    "piper",
     "dograh",
 ]
 
@@ -482,14 +485,17 @@ UNIVERSAL_VOICE_CATALOG: dict[str, list[dict]] = {
     "speaches": [
         {"voice_id": "af_heart", "name": "Heart (Warm & Natural)", "description": "Natural sounding American female voice, ideal for conversational agents.", "gender": "female", "accent": "us", "language": "en"},
         {"voice_id": "am_adam", "name": "Adam (Clear Professional)", "description": "Confident American male voice suitable for business, banking, and support.", "gender": "male", "accent": "us", "language": "en"},
-        {"voice_id": "if_sara", "name": "Sara (Indian Female - Hindi / Hinglish)", "description": "Natural Indian female voice fluent in Hindi and Indian English.", "gender": "female", "accent": "in", "language": "hi"},
-        {"voice_id": "im_nicola", "name": "Nicola (Indian Male - Hindi / Hinglish)", "description": "Authentic Indian male voice for customer service, alerts and Hindi IVR.", "gender": "male", "accent": "in", "language": "hi"},
         {"voice_id": "bf_emma", "name": "Emma (Expressive British)", "description": "Refined British female voice with excellent diction and warmth.", "gender": "female", "accent": "gb", "language": "en"},
         {"voice_id": "bm_george", "name": "George (Authoritative British)", "description": "Distinguished British male voice for corporate and authoritative personas.", "gender": "male", "accent": "gb", "language": "en"},
         {"voice_id": "af_nicole", "name": "Nicole (Friendly Guide)", "description": "Engaging, friendly female guide for real estate and appointments.", "gender": "female", "accent": "us", "language": "en"},
         {"voice_id": "am_michael", "name": "Michael (Calm Narrator)", "description": "Calm, reassuring American male voice great for healthcare inquiries.", "gender": "male", "accent": "us", "language": "en"},
         {"voice_id": "af_bella", "name": "Bella (Conversational Warmth)", "description": "Bubbly and warm female persona for sales and retail.", "gender": "female", "accent": "us", "language": "en"},
         {"voice_id": "af_sarah", "name": "Sarah (Corporate Support)", "description": "Polite and responsive female voice designed for customer service.", "gender": "female", "accent": "us", "language": "en"},
+    ],
+    "piper": [
+        {"voice_id": "hi_IN-priya-medium", "name": "Priya (Hindi Female - Piper ONNX)", "description": "Lightweight native Hindi female voice with fast CPU synthesis.", "gender": "female", "accent": "in", "language": "hi"},
+        {"voice_id": "hi_IN-rohit-medium", "name": "Rohit (Hindi Male - Piper ONNX)", "description": "Fast conversational Hindi male voice for alerts and IVR.", "gender": "male", "accent": "in", "language": "hi"},
+        {"voice_id": "en_IN-cpc-medium", "name": "Aarav (Indian English Male - Piper ONNX)", "description": "Natural Indian English male voice with clear accent.", "gender": "male", "accent": "in", "language": "en"},
     ],
     "openai": [
         {"voice_id": "alloy", "name": "Alloy (Neutral & Balanced)", "description": "Versatile and balanced voice suitable for general conversational agents.", "gender": "female", "accent": "us", "language": "en"},
@@ -584,7 +590,7 @@ for prov_key, voice_list in UNIVERSAL_VOICE_CATALOG.items():
 
 # Build the complete universal catalog across all cloud & local providers
 MANAGED_UNIVERSAL_VOICES: list[dict] = []
-for p_key in ["elevenlabs", "cartesia", "openai", "deepgram", "google", "azure", "sarvam", "navana", "speaches", "smallest", "lmnt", "rime"]:
+for p_key in ["elevenlabs", "cartesia", "openai", "deepgram", "google", "azure", "sarvam", "navana", "speaches", "piper", "smallest", "lmnt", "rime"]:
     if p_key in UNIVERSAL_VOICE_CATALOG:
         for v in UNIVERSAL_VOICE_CATALOG[p_key]:
             MANAGED_UNIVERSAL_VOICES.append(v)
@@ -638,8 +644,15 @@ async def get_voices(
     provider_key = provider.lower()
 
     # Determine active providers with master keys
-    enabled_provs = {"speaches"}
-    for p in ["elevenlabs", "cartesia", "openai", "deepgram", "google", "gemini", "azure", "sarvam", "navana", "smallest", "lmnt", "rime"]:
+    local_ai_setting = await kodewaves_db_client.get_setting("local_ai") or {}
+    local_engine_enabled = local_ai_setting.get("enable_local_ai_engine", True)
+
+    enabled_provs = set()
+    if local_engine_enabled:
+        enabled_provs.add("speaches")
+        enabled_provs.add("piper")
+
+    for p in ["elevenlabs", "cartesia", "openai", "deepgram", "google", "gemini", "azure", "azure_speech", "sarvam", "navana", "smallest", "lmnt", "rime"]:
         try:
             creds = await master_credential_service.get_master_credential(p)
             if creds and (creds.get("api_key") or creds.get("auth_token")):
@@ -647,11 +660,14 @@ async def get_voices(
                 if p in ("google", "gemini"):
                     enabled_provs.add("google")
                     enabled_provs.add("gemini")
+                if p in ("azure", "azure_speech"):
+                    enabled_provs.add("azure")
+                    enabled_provs.add("azure_speech")
         except Exception:
             pass
 
     # If asking for a specific provider outside active providers:
-    if provider_key not in ("kodewaves", "dograh", "all", "speaches") and provider_key not in enabled_provs:
+    if provider_key not in ("kodewaves", "dograh", "all", "speaches", "piper") and provider_key not in enabled_provs:
         return VoicesResponse(
             provider=provider,
             voices=[],
@@ -661,7 +677,7 @@ async def get_voices(
     if provider_key in ("kodewaves", "dograh", "all"):
         raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES if v.get("provider") in enabled_provs]
     else:
-        raw_catalog = [dict(v) for v in (UNIVERSAL_VOICE_CATALOG.get(provider_key) or []) if v.get("provider") in enabled_provs or provider_key == "speaches"]
+        raw_catalog = [dict(v) for v in (UNIVERSAL_VOICE_CATALOG.get(provider_key) or []) if v.get("provider") in enabled_provs or (local_engine_enabled and provider_key in ("speaches", "piper"))]
 
     # Annotate with working preview URL
     for v in raw_catalog:
@@ -670,7 +686,13 @@ async def get_voices(
 
     filtered = raw_catalog
     if provider_filter and provider_filter != "__all__":
-        filtered = [v for v in filtered if v.get("provider") == provider_filter]
+        pf = provider_filter.lower()
+        if pf in ("azure", "azure_speech"):
+            filtered = [v for v in filtered if v.get("provider") in ("azure", "azure_speech")]
+        elif pf in ("google", "gemini"):
+            filtered = [v for v in filtered if v.get("provider") in ("google", "gemini")]
+        else:
+            filtered = [v for v in filtered if v.get("provider") == pf]
     if gender and gender != "__all__":
         filtered = [v for v in filtered if v.get("gender") == gender]
     if accent and accent != "__all__":
@@ -709,6 +731,7 @@ async def get_voices(
 async def preview_voice(
     provider: str,
     voice_id: str,
+    user: UserModel = Depends(get_user),
 ):
     """Generate or stream audio preview for a given voice."""
     import os
@@ -717,18 +740,34 @@ async def preview_voice(
 
     provider_lower = provider.lower()
 
+    # 0. Piper (Local Hindi & Indic ONNX)
+    if provider_lower == "piper":
+        speaches_endpoint = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
+        if not speaches_endpoint.endswith("/v1"):
+            speaches_endpoint = f"{speaches_endpoint.rstrip('/')}/v1"
+        url = f"{speaches_endpoint}/audio/speech"
+        payload = {
+            "model": "piper",
+            "voice": voice_id,
+            "input": "नमस्ते! कोडवेव्स पर आपका स्वागत है।",
+            "response_format": "mp3",
+        }
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+                async with session.post(url, json=payload) as resp:
+                    if resp.status == 200:
+                        audio_data = await resp.read()
+                        return Response(content=audio_data, media_type="audio/mpeg")
+        except Exception as e:
+            logger.warning(f"[VoicePreview] Piper preview failed for {voice_id}: {e}")
+
     # 1. Speaches (Local Kokoro)
     if provider_lower == "speaches":
         speaches_endpoint = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
         if not speaches_endpoint.endswith("/v1"):
             speaches_endpoint = f"{speaches_endpoint.rstrip('/')}/v1"
         url = f"{speaches_endpoint}/audio/speech"
-        is_indic = voice_id in ("if_sara", "im_nicola")
-        prompt_text = (
-            "Namaste! Kodewaves par aapka swagat hai. Main aapki kya madad kar sakti hoon?"
-            if is_indic
-            else "Hello! This is a live preview of this voice on Kodewaves."
-        )
+        prompt_text = "Hello! This is a live preview of this voice on Kodewaves."
         payload = {
             "model": "kokoro",
             "voice": voice_id,

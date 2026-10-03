@@ -39,7 +39,13 @@ class ViolationItem(BaseModel):
     violation_type: str
     matched_text: str
     action_taken: str
+    snippet: Optional[str] = ""
+    is_reviewed: bool = False
     created_at: str
+
+
+class UpdateViolationRequest(BaseModel):
+    is_reviewed: bool = True
 
 
 @router.get("/banned-words", response_model=List[BannedWordItem])
@@ -114,10 +120,17 @@ async def delete_banned_word(word_id: str, _user=Depends(get_superuser)):
 
 
 @router.get("/violations", response_model=List[ViolationItem])
-async def list_violations(limit: int = 50, _user=Depends(get_superuser)):
+async def list_violations(
+    limit: int = 50,
+    is_reviewed: Optional[bool] = None,
+    _user=Depends(get_superuser),
+):
     """List flagged speech moderation violations from calls."""
     async with kodewaves_db_client.get_session() as session:
-        stmt = select(FlaggedCallViolationModel).order_by(desc(FlaggedCallViolationModel.created_at)).limit(limit)
+        stmt = select(FlaggedCallViolationModel)
+        if is_reviewed is not None:
+            stmt = stmt.where(FlaggedCallViolationModel.is_reviewed == is_reviewed)
+        stmt = stmt.order_by(desc(FlaggedCallViolationModel.created_at)).limit(limit)
         result = await session.execute(stmt)
         records = result.scalars().all()
         return [
@@ -128,7 +141,55 @@ async def list_violations(limit: int = 50, _user=Depends(get_superuser)):
                 violation_type=r.speaker,
                 matched_text=r.triggered_word,
                 action_taken=r.action_taken,
+                snippet=r.snippet or "",
+                is_reviewed=r.is_reviewed,
                 created_at=r.created_at.isoformat() if r.created_at else "",
             )
             for r in records
         ]
+
+
+@router.patch("/violations/{violation_id}", response_model=Dict[str, Any])
+async def update_violation(
+    violation_id: str,
+    req: UpdateViolationRequest,
+    _user=Depends(get_superuser),
+):
+    """Update or resolve a moderation violation incident."""
+    async with kodewaves_db_client.get_session() as session:
+        try:
+            v_uuid = uuid.UUID(violation_id)
+            stmt = select(FlaggedCallViolationModel).where(FlaggedCallViolationModel.id == v_uuid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid violation UUID")
+
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if not record:
+            raise HTTPException(status_code=404, detail="Violation not found")
+
+        record.is_reviewed = req.is_reviewed
+        await session.commit()
+        status_text = "reviewed/resolved" if req.is_reviewed else "unreviewed"
+        return {"message": f"Violation marked as {status_text}", "id": str(record.id), "is_reviewed": record.is_reviewed}
+
+
+@router.delete("/violations/{violation_id}", response_model=Dict[str, Any])
+async def delete_violation(violation_id: str, _user=Depends(get_superuser)):
+    """Delete a moderation violation incident log."""
+    async with kodewaves_db_client.get_session() as session:
+        try:
+            v_uuid = uuid.UUID(violation_id)
+            stmt = select(FlaggedCallViolationModel).where(FlaggedCallViolationModel.id == v_uuid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid violation UUID")
+
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if not record:
+            raise HTTPException(status_code=404, detail="Violation not found")
+
+        await session.delete(record)
+        await session.commit()
+        return {"message": "Violation log deleted successfully"}
+

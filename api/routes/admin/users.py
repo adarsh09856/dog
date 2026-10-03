@@ -480,7 +480,7 @@ async def impersonate_user(user_id: int, _user=Depends(get_superuser)):
 
 @router.delete("/{user_id}", response_model=Dict[str, Any])
 async def delete_user(user_id: int, current_user=Depends(get_superuser)):
-    """Permanently delete a user account."""
+    """Permanently delete a user account with cascading cleanup."""
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Superadmin cannot delete their own account.")
 
@@ -491,7 +491,35 @@ async def delete_user(user_id: int, current_user=Depends(get_superuser)):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
+        user_email = user.email or user.provider_id
+
+        # Clean up associations and child rows safely
+        from api.db.models import organization_users_association, UserConfigurationModel, WorkflowModel, APIKeyModel
+        from sqlalchemy import delete as sql_delete, update as sql_update
+
+        await session.execute(
+            sql_delete(organization_users_association).where(organization_users_association.c.user_id == user_id)
+        )
+        await session.execute(
+            sql_delete(UserConfigurationModel).where(UserConfigurationModel.user_id == user_id)
+        )
+        await session.execute(
+            sql_update(WorkflowModel).where(WorkflowModel.user_id == user_id).values(user_id=None)
+        )
+        await session.execute(
+            sql_update(APIKeyModel).where(APIKeyModel.created_by == user_id).values(created_by=None)
+        )
+
         await session.delete(user)
         await session.commit()
 
-        return {"message": f"User #{user_id} ({user.email}) deleted permanently."}
+        await kodewaves_db_client.record_audit_log(
+            actor_id=current_user.id,
+            actor_email=getattr(current_user, "email", None),
+            action="user.delete",
+            resource_type="user",
+            resource_id=str(user_id),
+            changes={"email": user_email},
+        )
+
+        return {"message": f"User #{user_id} ({user_email}) deleted permanently."}

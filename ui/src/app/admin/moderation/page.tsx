@@ -106,6 +106,25 @@ export default function AdminModerationPage() {
     }
   };
 
+  const handleResolveViolation = async (id: number | string, isReviewed = true) => {
+    try {
+      await adminApi.resolveViolation(id, isReviewed);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.message || "Failed to update violation status");
+    }
+  };
+
+  const handleDeleteViolation = async (id: number | string) => {
+    if (!confirm("Delete this violation incident record?")) return;
+    try {
+      await adminApi.deleteViolation(id);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete violation");
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -247,13 +266,15 @@ export default function AdminModerationPage() {
                       <TableHead className="text-xs">Violation Type</TableHead>
                       <TableHead className="text-xs">Matched Text</TableHead>
                       <TableHead className="text-xs">Action Taken</TableHead>
-                      <TableHead className="text-xs text-right">Timestamp</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                      <TableHead className="text-xs">Timestamp</TableHead>
+                      <TableHead className="text-xs text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {violations.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-sm text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-8 text-sm text-muted-foreground">
                           Zero safety violations recorded. Platform is healthy.
                         </TableCell>
                       </TableRow>
@@ -269,8 +290,53 @@ export default function AdminModerationPage() {
                           </TableCell>
                           <TableCell className="text-xs font-mono text-destructive">{v.matched_text}</TableCell>
                           <TableCell className="text-xs font-semibold">{v.action_taken}</TableCell>
-                          <TableCell className="text-xs text-right text-muted-foreground">
+                          <TableCell>
+                            {v.is_reviewed ? (
+                              <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                                Resolved
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                                Pending
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
                             {v.created_at ? new Date(v.created_at).toLocaleString() : "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {!v.is_reviewed ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+                                  onClick={() => handleResolveViolation(v.id, true)}
+                                  title="Mark as Resolved"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Resolve
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-muted-foreground hover:bg-muted/40"
+                                  onClick={() => handleResolveViolation(v.id, false)}
+                                  title="Reopen incident"
+                                >
+                                  Reopen
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleDeleteViolation(v.id)}
+                                title="Delete record"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))

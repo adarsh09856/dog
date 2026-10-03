@@ -80,7 +80,11 @@ class MasterCredentialService:
             lookup_candidates.append("azure")
         elif prov_key in ("navana", "bodhi"):
             lookup_candidates.extend(["navana", "bodhi"])
+        elif prov_key in ("azure", "azure_speech"):
+            lookup_candidates.extend(["azure_speech", "azure"])
 
+        # 1. First, check PostgreSQL database for admin-configured encrypted credentials
+        for candidate in lookup_candidates:
             try:
                 record = await kodewaves_db_client.get_master_credential(candidate)
                 if record:
@@ -92,13 +96,14 @@ class MasterCredentialService:
                             decrypted_str = self.decrypt(record.credentials_encrypted)
                             data = json.loads(decrypted_str)
                             if data and (data.get("api_key") or data.get("account_sid") or data.get("auth_token")):
+                                logger.info(f"[MasterCredentialService] Successfully resolved credentials for '{candidate}' from database.")
                                 return data
                         except Exception as e:
                             logger.error(f"[MasterCredentialService] Failed to decrypt credentials for {candidate}: {e}")
             except Exception as db_err:
                 logger.debug(f"[MasterCredentialService] DB lookup for {candidate} failed or unavailable: {db_err}")
 
-        # Fallback to environment variables if not configured in DB
+        # 2. Fallback to environment variables if not configured in DB
         env_map = {
             "openai": "OPENAI_API_KEY",
             "openai_realtime": "OPENAI_API_KEY",
@@ -111,8 +116,13 @@ class MasterCredentialService:
             "google": "GEMINI_API_KEY",
             "gemini": "GEMINI_API_KEY",
             "google_realtime": "GEMINI_API_KEY",
+            "azure": "AZURE_SPEECH_API_KEY",
+            "azure_speech": "AZURE_SPEECH_API_KEY",
             "navana": "BODHI_API_KEY",
             "bodhi": "BODHI_API_KEY",
+            "smallest": "SMALLEST_API_KEY",
+            "lmnt": "LMNT_API_KEY",
+            "rime": "RIME_API_KEY",
         }
         for candidate in lookup_candidates:
             env_var = env_map.get(candidate, f"{candidate.upper()}_API_KEY")

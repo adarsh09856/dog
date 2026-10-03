@@ -404,7 +404,7 @@ def create_stt_service(
             settings=DeepgramSTTSettings(
                 language=language,
                 profanity_filter=False,
-                endpointing=100,
+                endpointing=300,
                 model=user_config.stt.model,
                 keyterm=keyterms or [],
             ),
@@ -881,13 +881,15 @@ def create_tts_service(
                 speaches_host = f"{speaches_host.rstrip('/')}/v1"
             from pipecat.services.speaches.tts import SpeachesTTSService, SpeachesTTSSettings
             lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None)
-            default_voice = "if_sara" if lang == "hi" else "af_heart"
+            default_voice = "hi_IN-priya-medium" if lang == "hi" else "af_heart"
             voice = getattr(user_config.tts, "voice", default_voice)
             if not voice or voice in ("default", "alloy", "none") or voice.startswith(("dg_", "kw_")):
                 voice = default_voice
-            tts_model = getattr(user_config.tts, "model", None) or "kokoro"
+            tts_model = getattr(user_config.tts, "model", None)
             if not tts_model or tts_model in ("default", "none"):
-                tts_model = "kokoro"
+                tts_model = "piper" if (voice.startswith("hi_") or lang == "hi" or "piper" in voice) else "kokoro"
+            elif voice.startswith("hi_") or "piper" in voice:
+                tts_model = "piper"
             return SpeachesTTSService(
                 base_url=speaches_host,
                 settings=SpeachesTTSSettings(
@@ -896,7 +898,7 @@ def create_tts_service(
                 ),
                 text_filters=[xml_function_tag_filter],
                 skip_aggregator_types=["recording_router", "recording"],
-                silence_time_s=1.0,
+                silence_time_s=0.3,
             )
 
         # Convert HTTP URL to WebSocket URL for TTS
@@ -929,15 +931,17 @@ def create_tts_service(
         # Set language directly as BCP-47 code (bypasses Language enum conversion)
         tts._settings.language = language
         return tts
-    elif user_config.tts.provider == ServiceProviders.SPEACHES.value:
+    elif user_config.tts.provider in (ServiceProviders.SPEACHES.value, "speaches", "piper"):
         lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None)
-        default_voice = "if_sara" if lang == "hi" else "af_heart"
+        default_voice = "hi_IN-priya-medium" if lang == "hi" else "af_heart"
         voice = getattr(user_config.tts, "voice", default_voice) or default_voice
         if not voice or voice in ("default", "alloy", "none") or voice.startswith(("dg_", "kw_")):
             voice = default_voice
-        tts_model = getattr(user_config.tts, "model", "kokoro") or "kokoro"
+        tts_model = getattr(user_config.tts, "model", None)
         if not tts_model or tts_model in ("default", "none"):
-            tts_model = "kokoro"
+            tts_model = "piper" if (voice.startswith("hi_") or lang == "hi" or "piper" in voice) else "kokoro"
+        elif voice.startswith("hi_") or "piper" in voice:
+            tts_model = "piper"
         return SpeachesTTSService(
             base_url=user_config.tts.base_url,
             api_key=user_config.tts.api_key or "none",
@@ -948,7 +952,7 @@ def create_tts_service(
             ),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
+            silence_time_s=0.3,
         )
     elif user_config.tts.provider == ServiceProviders.RIME.value:
         speed = getattr(user_config.tts, "speed", None)

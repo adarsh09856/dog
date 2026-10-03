@@ -151,7 +151,10 @@ def register_event_handlers(
                         )
                     )
                     try:
-                        fetch_result = await pre_call_fetch_task
+                        fetch_result = await asyncio.wait_for(pre_call_fetch_task, timeout=10.0)
+                    except asyncio.TimeoutError:
+                        logger.warning("Pre-call fetch timed out after 10s, continuing call without external context")
+                        fetch_result = None
                     finally:
                         stop_ringer.set()
                         await ringer_task

@@ -316,13 +316,6 @@ kodewaves_render_remote_nginx_conf() {
         done
         echo "    keepalive 32;"
         echo "}"
-        echo "upstream kodewaves_api {"
-        echo "    least_conn;"
-        for ((i=0; i<FASTAPI_WORKERS; i++)); do
-            printf '    server api:%d max_fails=3 fail_timeout=10s;\n' "$((8000 + i))"
-        done
-        echo "    keepalive 32;"
-        echo "}"
     } > "$tmp_upstream"
 
     awk -v public_host="$PUBLIC_HOST" -v upstream_file="$tmp_upstream" '
