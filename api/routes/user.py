@@ -676,6 +676,10 @@ async def get_voices(
 
     if provider_key in ("kodewaves", "dograh", "all"):
         raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES if v.get("provider") in enabled_provs]
+    elif provider_key == "speaches":
+        # Speaches / Local CPU engine hosts both Kokoro and Piper voices
+        local_catalog = (UNIVERSAL_VOICE_CATALOG.get("speaches") or []) + (UNIVERSAL_VOICE_CATALOG.get("piper") or [])
+        raw_catalog = [dict(v) for v in local_catalog if local_engine_enabled]
     else:
         raw_catalog = [dict(v) for v in (UNIVERSAL_VOICE_CATALOG.get(provider_key) or []) if v.get("provider") in enabled_provs or (local_engine_enabled and provider_key in ("speaches", "piper"))]
 

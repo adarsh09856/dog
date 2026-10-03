@@ -173,8 +173,9 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         }
         let active = true;
         (async () => {
+            const targetProv = (provider === "speaches" && (value.startsWith("hi_IN") || value.startsWith("en_IN"))) ? "piper" : provider;
             const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
-                path: { provider: provider as never },
+                path: { provider: targetProv as never },
                 query: { q: value },
             });
             if (!active) return;
@@ -203,8 +204,10 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             const search = debouncedSearch.trim();
             if (search) query.q = search;
 
+            const targetProvider = (provider === "speaches" && providerFilter === "piper") ? "piper" : provider;
+
             const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
-                path: { provider: provider as never },
+                path: { provider: targetProvider as never },
                 query,
             });
             if (id !== requestId.current) return; // a newer request superseded this one
