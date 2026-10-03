@@ -254,7 +254,6 @@ KODEWAVES_SECRET_KEY=$FERNET_KEY
 OSS_JWT_SECRET=$JWT_SECRET
 JWT_SECRET=$JWT_SECRET
 KODEWAVES_DEVOPS_SECRET=$DEV_SECRET
-DOGRAH_DEVOPS_SECRET=$DEV_SECRET
 
 # Local Storage (MinIO)
 MINIO_ROOT_USER=minioadmin
@@ -342,7 +341,6 @@ ENVFILE
         grep -q '^SPEACHES_ENDPOINT=' .env || echo "SPEACHES_ENDPOINT=http://speaches:8000/v1" >> .env
         grep -q '^ENABLE_LOCAL_AI_ENGINE=' .env || echo "ENABLE_LOCAL_AI_ENGINE=true" >> .env
         grep -q '^KODEWAVES_DEVOPS_SECRET=' .env || echo "KODEWAVES_DEVOPS_SECRET=$(generate_secret)" >> .env
-        grep -q '^DOGRAH_DEVOPS_SECRET=' .env || echo "DOGRAH_DEVOPS_SECRET=$(generate_secret)" >> .env
 
         log_success "Existing .env updated with Kodewaves v2 configuration."
     fi

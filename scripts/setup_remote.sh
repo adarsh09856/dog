@@ -330,6 +330,8 @@ POSTGRES_PASSWORD=$(openssl rand -hex 32)
 REDIS_PASSWORD=$(openssl rand -hex 32)
 MINIO_ROOT_USER="kodewaves$(openssl rand -hex 6)"
 MINIO_ROOT_PASSWORD=$(openssl rand -hex 32)
+MASTER_CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32 2>/dev/null || python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null || echo "k5Zp9mR8wX2yQ4tL7vN1jF3bH6aC8eD0sU2iO4gA6cY=")
+KODEWAVES_DEVOPS_SECRET=$(openssl rand -hex 32)
 
 cat > .env << ENV_EOF
 # Remote deployments run with production signaling and HTTPS defaults
@@ -353,6 +355,11 @@ FORCE_TURN_RELAY=$FORCE_TURN_RELAY
 # JWT secret for OSS authentication
 OSS_JWT_SECRET=$OSS_JWT_SECRET
 
+# Sovereign Master Encryption Key (AES-256 Fernet)
+MASTER_CREDENTIAL_ENCRYPTION_KEY=$MASTER_CREDENTIAL_ENCRYPTION_KEY
+KODEWAVES_SECRET_KEY=$MASTER_CREDENTIAL_ENCRYPTION_KEY
+KODEWAVES_DEVOPS_SECRET=$KODEWAVES_DEVOPS_SECRET
+
 # PostgreSQL password. Used by the postgres container on first init and by the
 # API's DATABASE_URL. Do not change after the first start — the password is
 # baked into the postgres data volume when it is first created.
@@ -367,6 +374,11 @@ REDIS_PASSWORD=$REDIS_PASSWORD
 # MINIO_ACCESS_KEY / MINIO_SECRET_KEY.
 MINIO_ROOT_USER=$MINIO_ROOT_USER
 MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD
+
+# Local CPU AI Engine (Ollama + Speaches/Piper)
+ENABLE_LOCAL_AI_ENGINE=true
+OLLAMA_ENDPOINT=http://ollama:11434
+SPEACHES_ENDPOINT=http://speaches:8000/v1
 
 # Telemetry (set to false to disable)
 ENABLE_TELEMETRY=$ENABLE_TELEMETRY

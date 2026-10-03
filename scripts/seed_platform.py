@@ -319,7 +319,7 @@ async def seed_ai_model_catalog():
             "retail_price_cents_per_unit": 0.40,
             "sort_order": 24,
         },
-        # Local CPU Models (Speaches + Ollama — Zero Cloud Cost)
+        # Local CPU Models (Speaches + Ollama + Piper — Zero Cloud Cost)
         {
             "model_identifier": "speaches-whisper-tiny",
             "display_name": "Speaches Whisper Tiny (Local CPU STT)",
@@ -330,18 +330,36 @@ async def seed_ai_model_catalog():
             "sort_order": 13,
         },
         {
-            "model_identifier": "speaches-kokoro-82m",
-            "display_name": "Speaches Kokoro-82M (Local CPU TTS)",
+            "model_identifier": "faster-whisper-base",
+            "display_name": "Faster-Whisper Base (Local CPU STT - English & Hindi)",
             "provider": "speaches",
+            "category": "stt",
+            "base_cost_cents_per_unit": 0.00,
+            "retail_price_cents_per_unit": 0.00,
+            "sort_order": 14,
+        },
+        {
+            "model_identifier": "piper-hindi",
+            "display_name": "Piper TTS (Native Hindi & Indic ONNX)",
+            "provider": "piper",
             "category": "tts",
             "base_cost_cents_per_unit": 0.00,
             "retail_price_cents_per_unit": 0.00,
             "sort_order": 25,
         },
         {
+            "model_identifier": "speaches-kokoro-82m",
+            "display_name": "Speaches Kokoro-82M (Local CPU TTS)",
+            "provider": "speaches",
+            "category": "tts",
+            "base_cost_cents_per_unit": 0.00,
+            "retail_price_cents_per_unit": 0.00,
+            "sort_order": 26,
+        },
+        {
             "model_identifier": "ollama-qwen2.5:0.5b",
             "display_name": "Ollama Qwen2.5 0.5B (Local CPU LLM)",
-            "provider": "speaches",
+            "provider": "ollama",
             "category": "llm",
             "base_cost_cents_per_unit": 0.00,
             "retail_price_cents_per_unit": 0.00,

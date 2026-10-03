@@ -30,6 +30,18 @@ generate_minio_root_user() {
     printf 'kodewaves%s\n' "$(generate_secret | cut -c1-12)"
 }
 
+generate_fernet_key() {
+    if command -v python3 >/dev/null 2>&1 && python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null; then
+        python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+        return
+    fi
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -base64 32
+        return
+    fi
+    echo "k5Zp9mR8wX2yQ4tL7vN1jF3bH6aC8eD0sU2iO4gA6cY="
+}
+
 dotenv_value() {
     local key=$1
     local line
@@ -196,6 +208,28 @@ if [[ -z "$existing_minio_root_password" ]]; then
     fi
 else
     echo "MINIO_ROOT_PASSWORD is already set in $ENV_FILE."
+fi
+
+existing_fernet_key="$(dotenv_value MASTER_CREDENTIAL_ENCRYPTION_KEY || true)"
+if [[ -z "$existing_fernet_key" ]]; then
+    new_fernet_key="$(generate_fernet_key)"
+    set_dotenv_value MASTER_CREDENTIAL_ENCRYPTION_KEY "$new_fernet_key"
+    set_dotenv_value KODEWAVES_SECRET_KEY "$new_fernet_key"
+    echo "Created MASTER_CREDENTIAL_ENCRYPTION_KEY in $ENV_FILE."
+fi
+
+existing_devops_secret="$(dotenv_value KODEWAVES_DEVOPS_SECRET || true)"
+if [[ -z "$existing_devops_secret" ]]; then
+    set_dotenv_value KODEWAVES_DEVOPS_SECRET "$(generate_secret)"
+    echo "Created KODEWAVES_DEVOPS_SECRET in $ENV_FILE."
+fi
+
+existing_local_ai="$(dotenv_value ENABLE_LOCAL_AI_ENGINE || true)"
+if [[ -z "$existing_local_ai" ]]; then
+    set_dotenv_value ENABLE_LOCAL_AI_ENGINE "true"
+    set_dotenv_value OLLAMA_ENDPOINT "http://ollama:11434"
+    set_dotenv_value SPEACHES_ENDPOINT "http://speaches:8000/v1"
+    echo "Enabled Local CPU AI Engine (Ollama + Speaches/Piper) in $ENV_FILE."
 fi
 
 echo ""

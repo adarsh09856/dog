@@ -129,8 +129,8 @@ services:
       MINIO_SECURE: "false"
 
       # Process Workers & Lean Resource Allocation
-      FASTAPI_WORKERS: "1"
-      ENABLE_ARI_MANAGER: "false"
+      FASTAPI_WORKERS: "${FASTAPI_WORKERS:-1}"
+      ENABLE_ARI_MANAGER: "${ENABLE_ARI_MANAGER:-false}"
       ENABLE_CAMPAIGN_ORCHESTRATOR: "${ENABLE_CAMPAIGN_ORCHESTRATOR:-false}"
 
       # OpenMP, PyTorch, & BLAS CPU Thread Throttling (Prevents idle CPU pegging)
@@ -156,8 +156,7 @@ services:
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
 
       # DevOps / Monitoring Secret
-      KODEWAVES_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
-      DOGRAH_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
+      KODEWAVES_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-}"
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
