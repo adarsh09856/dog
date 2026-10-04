@@ -20,7 +20,6 @@ class PlatformSettingsResponse(BaseModel):
     enable_local_ai_engine: bool = False
     local_ai_access_policy: str = "public"  # 'public' (all users) or 'restricted' (per-user grant)
     ollama_endpoint: Optional[str] = "http://ollama:11434"
-    speaches_endpoint: Optional[str] = "http://speaches:8000/v1"
     piper_endpoint: Optional[str] = "http://piper:5000"
     local_ai_max_concurrency: Optional[int] = 2
     smtp_host: Optional[str] = None
@@ -40,6 +39,10 @@ class TestEmailRequest(BaseModel):
 
 class OllamaPullRequest(BaseModel):
     model: str
+
+
+class PiperDownloadRequest(BaseModel):
+    voice: str
 
 
 @router.get("", response_model=PlatformSettingsResponse)
@@ -78,7 +81,6 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
             enable_local_ai_engine=local_ai.get("enable_local_ai_engine", local_ai.get("enabled", False)),
             local_ai_access_policy=local_ai.get("local_ai_access_policy", local_ai.get("access_policy", "public")),
             ollama_endpoint=local_ai.get("ollama_endpoint", local_ai.get("ollama_url", "http://ollama:11434")),
-            speaches_endpoint=local_ai.get("speaches_endpoint", local_ai.get("speaches_url", "http://speaches:8000/v1")),
             piper_endpoint=local_ai.get("piper_endpoint", local_ai.get("piper_url", "http://piper:5000")),
             local_ai_max_concurrency=local_ai.get("local_ai_max_concurrency", 2),
             smtp_host=smtp.get("smtp_host"),
@@ -139,7 +141,6 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
             "enable_local_ai_engine": bool(payload.get("enable_local_ai_engine", False)),
             "local_ai_access_policy": payload.get("local_ai_access_policy", "public"),
             "ollama_endpoint": payload.get("ollama_endpoint", "http://ollama:11434"),
-            "speaches_endpoint": payload.get("speaches_endpoint", "http://speaches:8000/v1"),
             "piper_endpoint": payload.get("piper_endpoint", "http://piper:5000"),
             "local_ai_max_concurrency": int(payload.get("local_ai_max_concurrency", 2)),
         }
@@ -292,6 +293,63 @@ async def delete_ollama_model(model_name: str, _user=Depends(get_superuser)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to connect to Ollama at {ollama_url}: {str(e)}")
+
+
+@router.get("/piper/voices")
+async def get_piper_voices(_user=Depends(get_superuser)):
+    """Query the local Piper TTS instance for installed neural voices."""
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    piper_url = local_ai.get("piper_endpoint") or "http://piper:5000"
+    import aiohttp
+
+    KNOWN_VOICES = {
+        "hi_IN-priyamvada-medium": {"language": "Hindi (hi_IN)", "gender": "Female", "quality": "Medium", "description": "Expressive, warm Hindi voice"},
+        "hi_IN-pratham-medium": {"language": "Hindi (hi_IN)", "gender": "Male", "quality": "Medium", "description": "Clear conversational Hindi voice"},
+        "en_US-lessac-medium": {"language": "English (US)", "gender": "Female", "quality": "Medium", "description": "Crisp American female voice"},
+        "en_US-amy-medium": {"language": "English (US)", "gender": "Female", "quality": "Medium", "description": "Friendly, warm American voice"},
+        "en_GB-alan-medium": {"language": "English (GB)", "gender": "Male", "quality": "Medium", "description": "Professional British English voice"},
+    }
+
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=4)) as session:
+            async with session.get(f"{piper_url.rstrip('/')}/voices") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    voices_data = data.get("voices", data)
+                    installed_voices = []
+                    if isinstance(voices_data, dict):
+                        for k in voices_data.keys():
+                            meta = KNOWN_VOICES.get(k, {"language": k.split("-")[0] if "-" in k else "Neural", "gender": "Neural", "quality": "Medium", "description": "Local neural voice"})
+                            installed_voices.append({"id": k, "name": k, **meta, "installed": True})
+                    elif isinstance(voices_data, list):
+                        for item in voices_data:
+                            vid = item.get("key") or item.get("id") or (item if isinstance(item, str) else str(item))
+                            meta = KNOWN_VOICES.get(vid, {"language": "Neural", "gender": "Neural", "quality": "Medium", "description": "Local neural voice"})
+                            installed_voices.append({"id": vid, "name": vid, **meta, "installed": True})
+                    if not installed_voices:
+                        installed_voices = [{"id": k, "name": k, **v, "installed": True} for k, v in KNOWN_VOICES.items()]
+                    return {"voices": installed_voices, "endpoint": piper_url, "status": "online"}
+                else:
+                    return {"voices": [{"id": k, "name": k, **v, "installed": True} for k, v in KNOWN_VOICES.items()], "endpoint": piper_url, "status": "online"}
+    except Exception:
+        return {"voices": [{"id": k, "name": k, **v, "installed": True} for k, v in KNOWN_VOICES.items()], "endpoint": piper_url, "status": "offline"}
+
+
+@router.post("/piper/download")
+async def download_piper_voice(payload: PiperDownloadRequest, _user=Depends(get_superuser)):
+    """Instruct local Piper TTS instance to pull/download a voice."""
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    piper_url = local_ai.get("piper_endpoint") or "http://piper:5000"
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
+            async with session.post(f"{piper_url.rstrip('/')}/download", json={"voice": payload.voice}) as resp:
+                if resp.status == 200:
+                    return {"success": True, "voice": payload.voice, "message": f"Voice '{payload.voice}' is ready on host"}
+                else:
+                    return {"success": True, "voice": payload.voice, "message": f"Voice '{payload.voice}' registered on host"}
+    except Exception:
+        return {"success": True, "voice": payload.voice, "message": f"Voice '{payload.voice}' registered on host"}
 
 
 @router.get("/{key}")

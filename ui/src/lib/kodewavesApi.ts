@@ -214,7 +214,6 @@ export interface PlatformSettings {
   enable_local_ai_engine?: boolean;
   local_ai_access_policy?: 'public' | 'restricted';
   ollama_endpoint?: string;
-  speaches_endpoint?: string;
   piper_endpoint?: string;
   local_ai_max_concurrency?: number;
   smtp_host?: string;
@@ -418,6 +417,15 @@ export const adminApi = {
   deleteOllamaModel: (modelName: string) =>
     apiFetch<{ success: boolean; message: string }>(`/admin/settings/ollama/models/${encodeURIComponent(modelName)}`, {
       method: 'DELETE',
+    }),
+  getPiperVoices: () =>
+    apiFetch<{ voices: Array<{ id: string; name: string; language: string; gender: string; quality: string; description: string; installed: boolean }>; endpoint: string; status: string }>(
+      '/admin/settings/piper/voices'
+    ),
+  downloadPiperVoice: (voice: string) =>
+    apiFetch<{ success: boolean; voice: string; message: string }>('/admin/settings/piper/download', {
+      method: 'POST',
+      body: JSON.stringify({ voice }),
     }),
 
   // Audit Logs

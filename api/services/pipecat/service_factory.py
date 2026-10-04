@@ -369,6 +369,8 @@ def create_stt_service(
         + (f", endpoint={deepgram_base_url}" if deepgram_base_url else "")
     )
 
+    language = getattr(user_config.stt, "language", None) or "en"
+
     if is_deepgram:
         if user_config.stt.model in DEEPGRAM_FLUX_MODELS:
             settings_kwargs = {
@@ -379,7 +381,6 @@ def create_stt_service(
                 "keyterm": keyterms or [],
             }
             if user_config.stt.model == "flux-general-multi":
-                language = getattr(user_config.stt, "language", None)
                 language_hint = _resolve_deepgram_flux_language_hint(language)
                 if language_hint:
                     settings_kwargs["language_hints"] = [language_hint]
@@ -394,7 +395,7 @@ def create_stt_service(
             )
 
         # Other models than flux
-        # Use language from user config, defaulting to "multi" for multilingual support
+        # Use language from user config, defaulting to "en" or "multi"
         raw_stt_model = getattr(user_config.stt, "model", None) or "nova-3"
         if "nova-3" in raw_stt_model:
             stt_model = "nova-3"
@@ -430,7 +431,6 @@ def create_stt_service(
             **kwargs,
         )
     elif user_config.stt.provider == ServiceProviders.GOOGLE.value:
-        language = getattr(user_config.stt, "language", None) or "en-US"
         location = getattr(user_config.stt, "location", None) or "global"
         credentials = getattr(user_config.stt, "credentials", None)
         api_key = getattr(user_config.stt, "api_key", None)
@@ -440,9 +440,9 @@ def create_stt_service(
                 api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
             if api_key:
                 from api.services.pipecat.gemini_stt import GeminiSTTService
-                stt_model = getattr(user_config.stt, "model", None) or "gemini-3.8-flash"
-                if "stt" in stt_model.lower() or stt_model in ("default", "none") or "2.5" in stt_model:
-                    stt_model = "gemini-3.8-flash"
+                stt_model = getattr(user_config.stt, "model", None) or "gemini-2.5-flash"
+                if "stt" in stt_model.lower() or stt_model in ("default", "none") or "3.8" in stt_model:
+                    stt_model = "gemini-2.5-flash"
                 return GeminiSTTService(
                     api_key=api_key,
                     model=stt_model,
@@ -488,35 +488,12 @@ def create_stt_service(
         language = getattr(user_config.stt, "language", None) or "multi"
         stt_api_key = getattr(user_config.stt, "api_key", None)
 
-        if stt_api_key == "sovereign-local-cpu":
-            speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
-            if not speaches_host.endswith("/v1"):
-                speaches_host = f"{speaches_host.rstrip('/')}/v1"
-            from pipecat.services.speaches.stt import SpeachesSTTService, SpeachesSTTSettings
-            from pipecat.transcriptions.language import Language
-            stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-tiny"
-            lang_str = getattr(user_config.stt, "language", None)
-            lang_obj = None
-            if lang_str and lang_str not in ("multi", "auto", "default"):
-                try:
-                    lang_obj = Language(lang_str)
-                except ValueError:
-                    lang_obj = None
-            return SpeachesSTTService(
-                base_url=speaches_host,
-                settings=SpeachesSTTSettings(
-                    model=stt_model,
-                    language=lang_obj,
-                ),
-                sample_rate=audio_config.transport_in_sample_rate,
-            )
-
-        # Fallback to direct cloud STT from environment credentials before local CPU
-        deepgram_key = os.environ.get("DEEPGRAM_API_KEY")
+        # Direct cloud STT from master credentials or environment
+        deepgram_key = getattr(user_config.stt, "api_key", None) if getattr(user_config.stt, "api_key", None) not in ("sovereign-local-cpu", "none", None) else os.environ.get("DEEPGRAM_API_KEY")
         if deepgram_key:
             return DeepgramSTTService(
                 api_key=deepgram_key,
-                settings=DeepgramSTTSettings(model="nova-3-general"),
+                settings=DeepgramSTTSettings(model="nova-3"),
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
@@ -538,14 +515,10 @@ def create_stt_service(
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
-        # Default fallback to Local CPU Faster-Whisper
-        speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
-        if not speaches_host.endswith("/v1"):
-            speaches_host = f"{speaches_host.rstrip('/')}/v1"
-        from pipecat.services.speaches.stt import SpeachesSTTService, SpeachesSTTSettings
-        return SpeachesSTTService(
-            base_url=speaches_host,
-            settings=SpeachesSTTSettings(model="Systran/faster-whisper-tiny"),
+        # Fallback to Deepgram default
+        return DeepgramSTTService(
+            api_key=deepgram_key or "",
+            settings=DeepgramSTTSettings(model="nova-3"),
             sample_rate=audio_config.transport_in_sample_rate,
         )
     elif user_config.stt.provider == ServiceProviders.SARVAM.value:
@@ -1296,16 +1269,11 @@ def create_tts_service(
 
 
 def _migrate_deprecated_google_model(model: str) -> str:
-    """Google deprecated earlier gemini-2.0 and gemini-2.5 flash models for new keys.
-    Transparently upgrade any stored config referencing them to gemini-3.8-flash so calls succeed."""
-    if not model or model == "default":
-        return "gemini-3.8-flash"
-    if model.startswith("gemini-2.0-flash") or model == "gemini-2.5-flash":
-        migrated = "gemini-3.8-flash"
-        logger.info(
-            f"Google model '{model}' is deprecated for new keys; using '{migrated}' instead"
-        )
-        return migrated
+    """Ensure Google model ID is canonical and valid for official Gemini API."""
+    if not model or model in ("default", "none"):
+        return "gemini-2.5-flash"
+    if "3.8" in model:
+        return "gemini-2.5-flash"
     return model
 
 

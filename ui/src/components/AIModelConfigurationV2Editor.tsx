@@ -109,11 +109,7 @@ export const CLOUD_STT_MODELS = [
     { value: "azure-speech", label: "Microsoft Azure Speech STT", provider: "azure" },
 ];
 
-export const LOCAL_STT_MODELS = [
-    { value: "Systran/faster-whisper-base", label: "Faster-Whisper Base (Recommended CPU - English & Hindi)" },
-    { value: "Systran/faster-whisper-small", label: "Faster-Whisper Small (High Accuracy CPU - English & Hindi)" },
-    { value: "Systran/faster-whisper-tiny.en", label: "Faster-Whisper Tiny English (Fastest CPU)" },
-];
+export const LOCAL_STT_MODELS: any[] = [];
 
 export const CLOUD_TTS_MODELS = [
     { value: "auto", label: "Auto (Recommended - Best active engine)", provider: "auto" },
@@ -558,12 +554,10 @@ export function AIModelConfigurationV2Editor({
     }, [kodewaves.llm_engine_type, catalogManifest]);
 
     const effectiveSttModels = useMemo(() => {
-        const isLocal = kodewaves.stt_engine_type === "local_cpu";
+        const hasLocalStt = Boolean(catalogManifest?.local_stt_models && catalogManifest.local_stt_models.length > 0);
+        const isLocal = kodewaves.stt_engine_type === "local_cpu" && hasLocalStt;
         if (isLocal) {
-            if (catalogManifest?.local_stt_models && catalogManifest.local_stt_models.length > 0) {
-                return catalogManifest.local_stt_models;
-            }
-            return LOCAL_STT_MODELS;
+            return catalogManifest!.local_stt_models;
         }
         let list = (catalogManifest?.cloud_stt_models && catalogManifest.cloud_stt_models.length > 0)
             ? catalogManifest.cloud_stt_models
@@ -861,33 +855,35 @@ export function AIModelConfigurationV2Editor({
                                             <Mic className="h-4 w-4 text-primary" />
                                             Transcriber (STT) Model
                                         </Label>
-                                        <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5 text-[11px]">
-                                            <button
-                                                type="button"
-                                                onClick={() => setKodewaves({ ...kodewaves, stt_engine_type: "cloud" })}
-                                                className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
-                                                    kodewaves.stt_engine_type !== "local_cpu"
-                                                        ? "bg-primary text-primary-foreground shadow-xs"
-                                                        : "text-muted-foreground hover:text-foreground"
-                                                }`}
-                                            >
-                                                <Cloud className="h-3 w-3" /> Cloud
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
-                                                    setKodewaves({ ...kodewaves, stt_engine_type: "local_cpu" });
-                                                }}
-                                                className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
-                                                    kodewaves.stt_engine_type === "local_cpu"
-                                                        ? "bg-amber-500 text-white shadow-xs"
-                                                        : "text-muted-foreground hover:text-foreground"
-                                                }`}
-                                            >
-                                                <Cpu className="h-3 w-3" /> Local CPU
-                                            </button>
-                                        </div>
+                                        {Boolean(catalogManifest?.local_stt_models && catalogManifest.local_stt_models.length > 0) && (
+                                            <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5 text-[11px]">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setKodewaves({ ...kodewaves, stt_engine_type: "cloud" })}
+                                                    className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
+                                                        kodewaves.stt_engine_type !== "local_cpu"
+                                                            ? "bg-primary text-primary-foreground shadow-xs"
+                                                            : "text-muted-foreground hover:text-foreground"
+                                                    }`}
+                                                >
+                                                    <Cloud className="h-3 w-3" /> Cloud
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
+                                                        setKodewaves({ ...kodewaves, stt_engine_type: "local_cpu" });
+                                                    }}
+                                                    className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
+                                                        kodewaves.stt_engine_type === "local_cpu"
+                                                            ? "bg-amber-500 text-white shadow-xs"
+                                                            : "text-muted-foreground hover:text-foreground"
+                                                    }`}
+                                                >
+                                                    <Cpu className="h-3 w-3" /> Local CPU
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                     <Select
                                         disabled={effectiveSttModels.length === 0}

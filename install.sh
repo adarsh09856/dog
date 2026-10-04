@@ -270,9 +270,8 @@ ENABLE_ARI_MANAGER=false
 ENABLE_CAMPAIGN_ORCHESTRATOR=false
 ENABLE_SIGNUP=true
 
-# Local CPU AI Engine (Ollama + Speaches STT + Piper TTS — Admin Opt-In)
+# Local CPU AI Engine (Ollama + Piper TTS — Admin Opt-In)
 OLLAMA_ENDPOINT=http://ollama:11434
-SPEACHES_ENDPOINT=http://speaches:8000/v1
 PIPER_ENDPOINT=http://piper:5000
 ENABLE_LOCAL_AI_ENGINE=true
 
@@ -341,7 +340,6 @@ ENVFILE
 
         # Ensure Kodewaves v2 Local AI Engine env vars exist
         grep -q '^OLLAMA_ENDPOINT=' .env || echo "OLLAMA_ENDPOINT=http://ollama:11434" >> .env
-        grep -q '^SPEACHES_ENDPOINT=' .env || echo "SPEACHES_ENDPOINT=http://speaches:8000/v1" >> .env
         grep -q '^PIPER_ENDPOINT=' .env || echo "PIPER_ENDPOINT=http://piper:5000" >> .env
         grep -q '^ENABLE_LOCAL_AI_ENGINE=' .env || echo "ENABLE_LOCAL_AI_ENGINE=true" >> .env
         grep -q '^KODEWAVES_DEVOPS_SECRET=' .env || echo "KODEWAVES_DEVOPS_SECRET=$(generate_secret)" >> .env
@@ -388,9 +386,9 @@ deploy_containers() {
         log_warn "Superadmin creation script completed."
     }
 
-    # Start Local AI Engine containers (Ollama + Speaches + Piper) before seeding
-    log_info "Starting Local CPU AI Engine (Ollama + Speaches + Piper)..."
-    docker compose -f docker-compose.aapanel.yaml up -d ollama speaches piper || {
+    # Start Local AI Engine containers (Ollama + Piper) before seeding
+    log_info "Starting Local CPU AI Engine (Ollama + Piper)..."
+    docker compose -f docker-compose.aapanel.yaml up -d ollama piper || {
         log_warn "Local AI containers may not be available on this hardware."
     }
 
@@ -415,7 +413,7 @@ deploy_containers() {
     # 3. Prune stopped temporary containers
     docker container prune -f >/dev/null 2>&1 || true
     
-    log_success "All services are running! (API, UI, Coturn, Ollama, Speaches, Piper, PostgreSQL, Redis, MinIO)"
+    log_success "All services are running! (API, UI, Coturn, Ollama, Piper, PostgreSQL, Redis, MinIO)"
 }
 
 # 5. Output aaPanel Nginx Reverse Proxy Instructions

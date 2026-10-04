@@ -54,11 +54,7 @@ DEFAULT_CLOUD_TTS_MODELS = [
     {"value": "azure-neural", "label": "Microsoft Azure Neural Voice", "provider": "azure"},
 ]
 
-DEFAULT_LOCAL_STT_MODELS = [
-    {"value": "Systran/faster-whisper-base", "label": "Faster-Whisper Base (Recommended CPU - English & Hindi)"},
-    {"value": "Systran/faster-whisper-small", "label": "Faster-Whisper Small (High Accuracy CPU - English & Hindi)"},
-    {"value": "Systran/faster-whisper-tiny.en", "label": "Faster-Whisper Tiny English (Fastest CPU)"},
-]
+DEFAULT_LOCAL_STT_MODELS = []
 
 DEFAULT_LOCAL_TTS_MODELS = [
     {"value": "piper", "label": "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)"},

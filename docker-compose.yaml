@@ -258,9 +258,7 @@ services:
       OSS_JWT_SECRET: "${OSS_JWT_SECRET:?OSS_JWT_SECRET must be set to a strong secret}"
       JWT_SECRET: "${OSS_JWT_SECRET}"
       MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
-      KODEWAVES_SECRET_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
-      SPEACHES_ENDPOINT: "${SPEACHES_ENDPOINT:-http://speaches:8000/v1}"
       PIPER_ENDPOINT: "${PIPER_ENDPOINT:-http://piper:5000}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
 
@@ -388,30 +386,6 @@ services:
     networks:
       - app-network
 
-  speaches:
-    image: ghcr.io/speaches-ai/speaches:latest-cpu
-    container_name: kodewaves_speaches
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8765:8000"
-    volumes:
-      - speaches_cache:/home/ubuntu/.cache/huggingface/hub
-    environment:
-      - WHISPER_MODEL=Systran/faster-whisper-base
-      - DEFAULT_DEVICE=cpu
-      - OMP_NUM_THREADS=1
-      - MKL_NUM_THREADS=1
-      - OPENBLAS_NUM_THREADS=1
-      - VECLIB_MAXIMUM_THREADS=1
-      - NUMEXPR_NUM_THREADS=1
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 384M
-    networks:
-      - app-network
-
   # Piper Neural TTS HTTP Server (OHF-Voice/piper1-gpl)
   piper:
     build:
@@ -442,8 +416,6 @@ volumes:
   coturn-generated:
     driver: local
   ollama_data:
-    driver: local
-  speaches_cache:
     driver: local
   piper_data:
     driver: local

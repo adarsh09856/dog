@@ -11,12 +11,15 @@ import {
   Loader2,
   Mail,
   Palette,
+  Play,
   RefreshCw,
   Save,
   Send,
   Server,
   ShieldCheck,
+  Square,
   Trash2,
+  Volume2,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
@@ -38,6 +41,14 @@ const POPULAR_OLLAMA_MODELS = [
   { value: "mistral:7b", label: "Mistral 7B (~4.5 GB - Advanced)" },
 ];
 
+const POPULAR_PIPER_VOICES = [
+  { value: "hi_IN-priyamvada-medium", label: "Hindi Female: Priyamvada (Warm & Expressive)" },
+  { value: "hi_IN-pratham-medium", label: "Hindi Male: Pratham (Conversational & Clear)" },
+  { value: "en_US-lessac-medium", label: "English (US) Female: Lessac (Fluent & Clear)" },
+  { value: "en_US-amy-medium", label: "English (US) Female: Amy (Expressive & Friendly)" },
+  { value: "en_GB-alan-medium", label: "English (GB) Male: Alan (Formal British)" },
+];
+
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<PlatformSettings>({
     company_name: "Kodewaves",
@@ -48,7 +59,6 @@ export default function AdminSettingsPage() {
     enforce_wallet_balance: true,
     enable_local_ai_engine: false,
     ollama_endpoint: "http://ollama:11434",
-    speaches_endpoint: "http://speaches:8000/v1",
     piper_endpoint: "http://piper:5000",
     local_ai_max_concurrency: 2,
     smtp_host: "",
@@ -73,6 +83,17 @@ export default function AdminSettingsPage() {
   const [isPulling, setIsPulling] = useState(false);
   const [pullStatusMessage, setPullStatusMessage] = useState<string | null>(null);
   const [ollamaEndpointStatus, setOllamaEndpointStatus] = useState<string>("");
+
+  // Piper Voice Manager state
+  const [piperVoices, setPiperVoices] = useState<any[]>([]);
+  const [loadingVoices, setLoadingVoices] = useState(false);
+  const [downloadVoiceName, setDownloadVoiceName] = useState("hi_IN-priyamvada-medium");
+  const [customDownloadVoice, setCustomDownloadVoice] = useState("");
+  const [isDownloadingVoice, setIsDownloadingVoice] = useState(false);
+  const [voiceDownloadStatus, setVoiceDownloadStatus] = useState<string | null>(null);
+  const [piperEndpointStatus, setPiperEndpointStatus] = useState<string>("");
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
   // Test email state
   const [testEmailRecipient, setTestEmailRecipient] = useState("");
@@ -107,9 +128,68 @@ export default function AdminSettingsPage() {
     }
   };
 
+  const fetchPiperVoices = async () => {
+    setLoadingVoices(true);
+    try {
+      const res = await adminApi.getPiperVoices();
+      setPiperVoices(res.voices || []);
+      setPiperEndpointStatus(res.status || "online");
+    } catch {
+      setPiperEndpointStatus("offline");
+    } finally {
+      setLoadingVoices(false);
+    }
+  };
+
+  const handleDownloadVoice = async () => {
+    const targetVoice = customDownloadVoice.trim() || downloadVoiceName;
+    if (!targetVoice) return;
+    setIsDownloadingVoice(true);
+    setVoiceDownloadStatus(`Downloading voice ${targetVoice} to Piper container...`);
+    try {
+      const res = await adminApi.downloadPiperVoice(targetVoice);
+      setVoiceDownloadStatus(res.message || `Successfully downloaded ${targetVoice}`);
+      await fetchPiperVoices();
+      setCustomDownloadVoice("");
+    } catch (err: any) {
+      setVoiceDownloadStatus(`Download status: ${err.message || "Queued"}`);
+      await fetchPiperVoices();
+    } finally {
+      setIsDownloadingVoice(false);
+    }
+  };
+
+  const handleToggleVoiceAudio = (voiceId: string) => {
+    if (playingVoiceId === voiceId && audioElement) {
+      audioElement.pause();
+      setAudioElement(null);
+      setPlayingVoiceId(null);
+      return;
+    }
+    if (audioElement) {
+      audioElement.pause();
+    }
+    const audio = new Audio(`/api/user/voice-preview/piper/${voiceId}`);
+    setAudioElement(audio);
+    setPlayingVoiceId(voiceId);
+    audio.onended = () => {
+      setPlayingVoiceId(null);
+      setAudioElement(null);
+    };
+    audio.onerror = () => {
+      setPlayingVoiceId(null);
+      setAudioElement(null);
+    };
+    audio.play().catch(() => {
+      setPlayingVoiceId(null);
+      setAudioElement(null);
+    });
+  };
+
   useEffect(() => {
     fetchSettings();
     fetchOllamaModels();
+    fetchPiperVoices();
   }, []);
 
   const handleSave = async () => {
@@ -369,7 +449,7 @@ export default function AdminSettingsPage() {
               </div>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-1">
                 <Label className="text-xs">Ollama LLM Endpoint</Label>
                 <Input
@@ -379,17 +459,6 @@ export default function AdminSettingsPage() {
                   disabled={!settings.enable_local_ai_engine}
                 />
                 <p className="text-[10px] text-muted-foreground">Default internal Docker URL for Qwen2.5 or Phi-4-mini</p>
-              </div>
-
-              <div className="space-y-1">
-                <Label className="text-xs">Faster-Whisper STT Endpoint</Label>
-                <Input
-                  value={settings.speaches_endpoint || ""}
-                  onChange={(e) => setSettings({ ...settings, speaches_endpoint: e.target.value })}
-                  placeholder="http://speaches:8000/v1"
-                  disabled={!settings.enable_local_ai_engine}
-                />
-                <p className="text-[10px] text-muted-foreground">OpenAI-compatible endpoint for faster-whisper CTranslate2</p>
               </div>
 
               <div className="space-y-1">
@@ -557,6 +626,164 @@ export default function AdminSettingsPage() {
                         <Trash2 className="h-3.5 w-3.5" />
                         Delete
                       </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* PIPER NEURAL VOICE MANAGER */}
+        <Card className="border-border/60 md:col-span-2">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Volume2 className="h-5 w-5 text-emerald-500" />
+                  Piper Neural Voice Manager (Local TTS Suite)
+                </CardTitle>
+                <CardDescription>
+                  Download and test local neural voice models (Hindi, English, Regional Indic) directly on your host Piper container without cloud API fees.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={piperEndpointStatus === "online" ? "default" : "destructive"}
+                  className="text-xs"
+                >
+                  {piperEndpointStatus === "online" ? "● Piper Online" : `Piper ${piperEndpointStatus}`}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchPiperVoices}
+                  disabled={loadingVoices}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loadingVoices ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Pull / Download Voice Form */}
+            <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-3">
+              <div className="text-xs font-semibold flex items-center gap-2">
+                <Download className="h-4 w-4 text-primary" />
+                Download New Neural Voice Model
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Select Popular Voice</Label>
+                  <Select value={downloadVoiceName} onValueChange={setDownloadVoiceName}>
+                    <SelectTrigger className="w-full h-9 text-xs">
+                      <SelectValue placeholder="Choose Voice" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {POPULAR_PIPER_VOICES.map((v) => (
+                        <SelectItem key={v.value} value={v.value}>
+                          {v.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Or Custom Piper Voice ID</Label>
+                  <Input
+                    value={customDownloadVoice}
+                    onChange={(e) => setCustomDownloadVoice(e.target.value)}
+                    placeholder="e.g. hi_IN-rohit-medium, en_US-ryan-medium"
+                    className="h-9 text-xs"
+                  />
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    onClick={handleDownloadVoice}
+                    disabled={isDownloadingVoice}
+                    className="w-full h-9 text-xs gap-2"
+                  >
+                    {isDownloadingVoice ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-3.5 w-3.5" />
+                        Download Voice
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {voiceDownloadStatus && (
+                <div className="text-xs text-primary font-medium p-2.5 rounded-lg bg-primary/10 border border-primary/20">
+                  {voiceDownloadStatus}
+                </div>
+              )}
+            </div>
+
+            {/* Installed Voices Table */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold flex items-center gap-2">
+                <Volume2 className="h-4 w-4 text-muted-foreground" />
+                Available & Installed Neural Voices ({piperVoices.length})
+              </div>
+
+              {piperVoices.length === 0 ? (
+                <div className="p-6 text-center rounded-xl border border-dashed text-xs text-muted-foreground">
+                  {loadingVoices
+                    ? "Checking Piper voices..."
+                    : "No Piper voices installed yet. Download 'hi_IN-priyamvada-medium' above!"}
+                </div>
+              ) : (
+                <div className="border rounded-xl divide-y overflow-hidden text-xs">
+                  {piperVoices.map((v: any, idx: number) => (
+                    <div
+                      key={v.id || v.name || idx}
+                      className="p-3 flex items-center justify-between hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-semibold text-foreground flex items-center gap-2">
+                          {v.id || v.name}
+                          <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                            Ready
+                          </Badge>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {v.language || "Neural"}
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {v.description || "Local low-latency ONNX voice"} • Quality: {v.quality || "Medium"} • Gender: {v.gender || "Neural"}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleToggleVoiceAudio(v.id || v.name)}
+                          className="h-8 px-2.5 text-xs gap-1.5"
+                        >
+                          {playingVoiceId === (v.id || v.name) ? (
+                            <>
+                              <Square className="h-3 w-3 text-amber-500 fill-amber-500" />
+                              Stop
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-3 w-3 text-primary fill-primary" />
+                              Test Audio
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>

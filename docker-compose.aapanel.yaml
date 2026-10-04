@@ -150,9 +150,8 @@ services:
       TURN_HOST: "${PUBLIC_HOST:-your-domain.com}"
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
 
-      # Local CPU AI Engine (Ollama + Speaches STT + Piper TTS)
+      # Local CPU AI Engine (Ollama + Piper TTS)
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
-      SPEACHES_ENDPOINT: "${SPEACHES_ENDPOINT:-http://speaches:8000/v1}"
       PIPER_ENDPOINT: "${PIPER_ENDPOINT:-http://piper:5000}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
 
@@ -250,30 +249,6 @@ services:
     networks:
       - kodewaves-network
 
-  speaches:
-    image: ghcr.io/speaches-ai/speaches:latest-cpu
-    container_name: kodewaves_speaches
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8765:8000"
-    volumes:
-      - kodewaves_speaches_cache:/home/ubuntu/.cache/huggingface/hub
-    environment:
-      - WHISPER_MODEL=Systran/faster-whisper-base
-      - DEFAULT_DEVICE=cpu
-      - OMP_NUM_THREADS=1
-      - MKL_NUM_THREADS=1
-      - OPENBLAS_NUM_THREADS=1
-      - VECLIB_MAXIMUM_THREADS=1
-      - NUMEXPR_NUM_THREADS=1
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 384M
-    networks:
-      - kodewaves-network
-
   # Piper Neural TTS HTTP Server (OHF-Voice/piper1-gpl)
   piper:
     build:
@@ -299,7 +274,6 @@ volumes:
   kodewaves_redis_data:
   kodewaves_minio_data:
   kodewaves_ollama_data:
-  kodewaves_speaches_cache:
   kodewaves_piper_data:
 
 networks:
