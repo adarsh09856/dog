@@ -43,6 +43,11 @@ else
     echo -e "${BLUE}[1/6] Deploying from local workspace directory...${NC}"
 fi
 
+# Ensure collision-free PIPER_PORT exists in .env
+if [ -f ".env" ]; then
+    grep -q '^PIPER_PORT=' .env || echo "PIPER_PORT=8766" >> .env
+fi
+
 # 2. Rebuild and restart application containers (removes orphaned/old containers)
 echo -e "${BLUE}[2/6] Building and updating application containers...${NC}"
 docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans

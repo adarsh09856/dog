@@ -421,7 +421,7 @@ services:
     container_name: kodewaves_piper
     restart: unless-stopped
     ports:
-      - "127.0.0.1:5000:5000"
+      - "127.0.0.1:${PIPER_PORT:-8766}:5000"
     volumes:
       - piper_data:/data
     deploy:

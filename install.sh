@@ -234,6 +234,7 @@ POSTGRES_PORT=$POSTGRES_PORT
 REDIS_PORT=$REDIS_PORT
 MINIO_PORT=$MINIO_PORT
 MINIO_CONSOLE_PORT=$MINIO_CONSOLE_PORT
+PIPER_PORT=${PIPER_PORT:-8766}
 
 # Superadmin Login Credentials
 ADMIN_EMAIL=$ADMIN_EMAIL
@@ -328,6 +329,7 @@ ENVFILE
         grep -q '^REDIS_PORT=' .env || echo "REDIS_PORT=$REDIS_PORT" >> .env
         grep -q '^MINIO_PORT=' .env || echo "MINIO_PORT=$MINIO_PORT" >> .env
         grep -q '^MINIO_CONSOLE_PORT=' .env || echo "MINIO_CONSOLE_PORT=$MINIO_CONSOLE_PORT" >> .env
+        grep -q '^PIPER_PORT=' .env || echo "PIPER_PORT=8766" >> .env
 
         # Ensure encryption and secret keys exist
         EXISTING_JWT=$(grep '^OSS_JWT_SECRET=' .env 2>/dev/null | cut -d '=' -f2- || true)
