@@ -676,9 +676,7 @@ async def get_voices(
 
     # Fetch voice catalog for the requested provider or all managed voices
     if provider_key in ("kodewaves", "dograh", "all"):
-        raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES if v.get("provider") in enabled_provs]
-        if not raw_catalog:
-            raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES]
+        raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES]
     elif provider_key in ("speaches", "piper"):
         # Piper Native Hindi & Indic ONNX Local CPU engine
         local_catalog = UNIVERSAL_VOICE_CATALOG.get("piper") or []
@@ -686,12 +684,8 @@ async def get_voices(
     else:
         norm_key = "google" if provider_key == "gemini" else ("azure" if provider_key == "azure_speech" else provider_key)
         raw_catalog = [dict(v) for v in (UNIVERSAL_VOICE_CATALOG.get(norm_key) or UNIVERSAL_VOICE_CATALOG.get(provider_key) or [])]
-        if not raw_catalog and provider_key not in enabled_provs:
-            return VoicesResponse(
-                provider=provider,
-                voices=[],
-                facets=VoiceFacets(genders=[], accents=[], languages=[], providers=[]),
-            )
+        if not raw_catalog:
+            raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES if v.get("provider") in (norm_key, provider_key)]
 
     # Annotate with working preview URL
     for v in raw_catalog:
@@ -741,6 +735,58 @@ async def get_voices(
     )
 
 
+async def _resolve_tts_preview_creds(provider_alias: str, user, db_client) -> dict:
+    from api.services.credentials.master_credential_service import master_credential_service
+    prov = provider_alias.lower().strip()
+    if prov == "gemini":
+        prov = "google"
+    elif prov == "azure_speech":
+        prov = "azure"
+
+    creds = await master_credential_service.get_master_credential(prov)
+    if creds and creds.get("api_key"):
+        return dict(creds)
+
+    env_map = {
+        "google": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+        "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "deepgram": ["DEEPGRAM_API_KEY"],
+        "cartesia": ["CARTESIA_API_KEY"],
+        "elevenlabs": ["ELEVENLABS_API_KEY", "XI_API_KEY"],
+        "sarvam": ["SARVAM_API_KEY"],
+        "azure": ["AZURE_SPEECH_API_KEY", "AZURE_SPEECH_KEY", "AZURE_API_KEY"],
+        "azure_speech": ["AZURE_SPEECH_API_KEY", "AZURE_SPEECH_KEY", "AZURE_API_KEY"],
+    }
+    for env_var in env_map.get(prov, [f"{prov.upper()}_API_KEY"]):
+        val = os.environ.get(env_var)
+        if val:
+            res = {"api_key": val}
+            if prov in ("azure", "azure_speech"):
+                res["region"] = os.environ.get("AZURE_SPEECH_REGION", "eastus")
+            return res
+
+    if user and getattr(user, "selected_organization_id", None):
+        try:
+            org_keys = await db_client.get_api_keys_by_organization(user.selected_organization_id)
+            for ok in org_keys:
+                ok_prov = getattr(ok, "provider", "").lower()
+                if (
+                    ok_prov == prov
+                    or (prov in ("google", "gemini") and ok_prov in ("google", "gemini"))
+                    or (prov in ("azure", "azure_speech") and ok_prov in ("azure", "azure_speech"))
+                ):
+                    extra = getattr(ok, "extra", {}) or {}
+                    res = {"api_key": getattr(ok, "api_key", None)}
+                    if "region" in extra:
+                        res["region"] = extra["region"]
+                    return res
+        except Exception:
+            pass
+
+    return {}
+
+
 @router.get("/configurations/voices/{provider}/{voice_id}/preview")
 async def preview_voice(
     provider: str,
@@ -764,6 +810,20 @@ async def preview_voice(
     from starlette.responses import Response
 
     provider_lower = provider.lower()
+
+    # Provider auto-correction based on voice signature to prevent cross-engine mismatch
+    if voice_id in ("Journey", "Puck", "Charon", "Aoede", "Fenrir", "Kore"):
+        provider_lower = "google"
+    elif voice_id in ("alloy", "echo", "fable", "onyx", "nova", "shimmer"):
+        provider_lower = "openai"
+    elif voice_id.startswith("aura-"):
+        provider_lower = "deepgram"
+    elif voice_id.startswith(("sonic-", "barbershop", "helpful", "friendly", "brooke")):
+        provider_lower = "cartesia"
+    elif voice_id in ("arvind", "amol", "amrita", "ananya", "aditi", "abhinav", "meera"):
+        provider_lower = "sarvam"
+    elif voice_id.startswith(("hi-", "te-", "kn-", "mr-")) and "medium" not in voice_id:
+        provider_lower = "navana"
 
     # 0. Piper ONNX (OHF-Voice/piper1-gpl HTTP server, local CPU)
     if provider_lower in ("piper", "speaches"):
@@ -804,8 +864,8 @@ async def preview_voice(
 
     # 1. Sarvam Indic (Hindi)
     if provider_lower == "sarvam":
-        creds = await master_credential_service.get_master_credential("sarvam")
-        if creds and creds.get("api_key"):
+        creds = await _resolve_tts_preview_creds("sarvam", user, db_client)
+        if creds.get("api_key"):
             try:
                 headers = {"api-subscription-key": creds["api_key"]}
                 payload = {
@@ -824,12 +884,12 @@ async def preview_voice(
                                 audio_bytes = base64.b64decode(audios[0])
                                 return Response(content=audio_bytes, media_type="audio/wav")
             except Exception as e:
-                logger.debug(f"[VoicePreview] Sarvam preview failed: {e}")
+                logger.warning(f"[VoicePreview] Sarvam preview failed: {e}")
 
     # 2. Cartesia
     if provider_lower == "cartesia":
-        creds = await master_credential_service.get_master_credential("cartesia")
-        if creds and creds.get("api_key"):
+        creds = await _resolve_tts_preview_creds("cartesia", user, db_client)
+        if creds.get("api_key"):
             try:
                 headers = {
                     "X-API-Key": creds["api_key"],
@@ -848,12 +908,12 @@ async def preview_voice(
                             audio_data = await resp.read()
                             return Response(content=audio_data, media_type="audio/wav")
             except Exception as e:
-                logger.debug(f"[VoicePreview] Cartesia preview failed: {e}")
+                logger.warning(f"[VoicePreview] Cartesia preview failed: {e}")
 
     # 3. OpenAI
     if provider_lower == "openai":
-        creds = await master_credential_service.get_master_credential("openai")
-        if creds and creds.get("api_key"):
+        creds = await _resolve_tts_preview_creds("openai", user, db_client)
+        if creds.get("api_key"):
             try:
                 headers = {"Authorization": f"Bearer {creds['api_key']}", "Content-Type": "application/json"}
                 payload = {"model": "tts-1", "voice": voice_id, "input": "Hello, this is a sample preview on Kodewaves."}
@@ -863,12 +923,12 @@ async def preview_voice(
                             audio_data = await resp.read()
                             return Response(content=audio_data, media_type="audio/mpeg")
             except Exception as e:
-                logger.debug(f"[VoicePreview] OpenAI preview failed: {e}")
+                logger.warning(f"[VoicePreview] OpenAI preview failed: {e}")
 
     # 4. ElevenLabs
     if provider_lower == "elevenlabs":
-        creds = await master_credential_service.get_master_credential("elevenlabs")
-        if creds and creds.get("api_key"):
+        creds = await _resolve_tts_preview_creds("elevenlabs", user, db_client)
+        if creds.get("api_key"):
             try:
                 headers = {"xi-api-key": creds["api_key"], "Content-Type": "application/json"}
                 payload = {"text": "Hello, this is a sample preview on Kodewaves.", "model_id": "eleven_multilingual_v2"}
@@ -878,17 +938,16 @@ async def preview_voice(
                             audio_data = await resp.read()
                             return Response(content=audio_data, media_type="audio/mpeg")
             except Exception as e:
-                logger.debug(f"[VoicePreview] ElevenLabs preview failed: {e}")
+                logger.warning(f"[VoicePreview] ElevenLabs preview failed: {e}")
 
     # 5. Google / Gemini
     if provider_lower in ("google", "gemini"):
-        creds = await master_credential_service.get_master_credential("gemini")
-        if not (creds and creds.get("api_key")):
-            creds = await master_credential_service.get_master_credential("google")
-        if creds and creds.get("api_key"):
+        creds = await _resolve_tts_preview_creds("google", user, db_client)
+        api_key = creds.get("api_key")
+        if api_key:
             try:
                 gemini_voice = voice_id if voice_id in ("Journey", "Puck", "Charon", "Aoede", "Fenrir", "Kore") else "Puck"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={creds['api_key']}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={api_key}"
                 payload = {
                     "contents": [{"parts": [{"text": "Hello! This is a live preview of this Gemini voice on Kodewaves."}]}],
                     "generationConfig": {
@@ -913,16 +972,27 @@ async def preview_voice(
                                     inline_data = part.get("inlineData", {})
                                     if inline_data.get("data"):
                                         import base64
-                                        audio_bytes = base64.b64decode(inline_data["data"])
-                                        mime = inline_data.get("mimeType", "audio/wav")
-                                        return Response(content=audio_bytes, media_type=mime)
+                                        import io
+                                        import wave
+                                        raw_pcm = base64.b64decode(inline_data["data"])
+                                        # Convert raw PCM (audio/L16, 24kHz) to standard playable WAV container with RIFF header
+                                        wav_buf = io.BytesIO()
+                                        with wave.open(wav_buf, "wb") as wf:
+                                            wf.setnchannels(1)
+                                            wf.setsampwidth(2)
+                                            wf.setframerate(24000)
+                                            wf.writeframes(raw_pcm)
+                                        return Response(content=wav_buf.getvalue(), media_type="audio/wav")
+                        else:
+                            err_body = await resp.text()
+                            logger.warning(f"[VoicePreview] Gemini preview HTTP {resp.status}: {err_body[:200]}")
             except Exception as e:
-                logger.debug(f"[VoicePreview] Gemini preview failed: {e}")
+                logger.warning(f"[VoicePreview] Gemini preview failed: {e}")
 
     # 6. Deepgram Aura
     if provider_lower == "deepgram":
-        creds = await master_credential_service.get_master_credential("deepgram")
-        if creds and creds.get("api_key"):
+        creds = await _resolve_tts_preview_creds("deepgram", user, db_client)
+        if creds.get("api_key"):
             try:
                 headers = {
                     "Authorization": f"Token {creds['api_key']}",
@@ -937,14 +1007,14 @@ async def preview_voice(
                             audio_data = await resp.read()
                             return Response(content=audio_data, media_type="audio/mp3")
             except Exception as e:
-                logger.debug(f"[VoicePreview] Deepgram preview failed: {e}")
+                logger.warning(f"[VoicePreview] Deepgram preview failed: {e}")
 
     # 7. Azure Speech
     if provider_lower in ("azure", "azure_speech"):
-        creds = await master_credential_service.get_master_credential("azure")
-        if creds and creds.get("api_key") and creds.get("region"):
+        creds = await _resolve_tts_preview_creds("azure", user, db_client)
+        if creds.get("api_key"):
             try:
-                region = creds.get("region", "eastus")
+                region = creds.get("region") or os.environ.get("AZURE_SPEECH_REGION", "eastus")
                 url = f"https://{region}.tts.speech.microsoft.com/cognitiveservices/v1"
                 headers = {
                     "Ocp-Apim-Subscription-Key": creds["api_key"],
@@ -958,6 +1028,6 @@ async def preview_voice(
                             audio_data = await resp.read()
                             return Response(content=audio_data, media_type="audio/mpeg")
             except Exception as e:
-                logger.debug(f"[VoicePreview] Azure preview failed: {e}")
+                logger.warning(f"[VoicePreview] Azure preview failed: {e}")
 
     raise HTTPException(status_code=404, detail="Preview unavailable for this voice")

@@ -17,7 +17,8 @@ router = APIRouter(prefix="/catalog", tags=["catalog"])
 
 # Curated fallback cloud models if DB catalog is empty
 DEFAULT_CLOUD_LLM_MODELS = [
-    {"value": "gemini-2.5-flash", "label": "Google Gemini 2.5 Flash (Ultra Fast)", "provider": "google"},
+    {"value": "gemini-3.8-flash", "label": "Google Gemini 3.8 Flash (Ultra Fast & Low Latency)", "provider": "google"},
+    {"value": "gemini-2.5-flash", "label": "Google Gemini 2.5 Flash", "provider": "google"},
     {"value": "gemini-2.5-pro", "label": "Google Gemini 2.5 Pro (Deep Reasoning)", "provider": "google"},
     {"value": "gpt-4o-mini", "label": "OpenAI GPT-4o Mini (Fast & Cost-effective)", "provider": "openai"},
     {"value": "gpt-4o", "label": "OpenAI GPT-4o (High Intelligence)", "provider": "openai"},
@@ -27,7 +28,8 @@ DEFAULT_CLOUD_LLM_MODELS = [
 ]
 
 DEFAULT_CLOUD_STT_MODELS = [
-    {"value": "gemini-2.5-flash", "label": "Google Gemini 2.5 Flash (Multimodal Speech-to-Text)", "provider": "google"},
+    {"value": "gemini-3.8-flash", "label": "Google Gemini 3.8 Flash (Multimodal Speech-to-Text)", "provider": "google"},
+    {"value": "gemini-2.5-flash", "label": "Google Gemini 2.5 Flash STT", "provider": "google"},
     {"value": "deepgram-nova-3", "label": "Deepgram Nova-3 (Highest Accuracy & Speed)", "provider": "deepgram"},
     {"value": "whisper-1", "label": "OpenAI Whisper-1 (Accurate Multilingual)", "provider": "openai"},
     {"value": "saaras:v2", "label": "Sarvam Saaras v2 (High-accuracy Indic Speech)", "provider": "sarvam"},
@@ -63,7 +65,7 @@ async def get_available_catalog(
 ) -> Dict[str, Any]:
     """
     Returns dynamic list of models and engines actually available to this organization:
-    1. Only cloud models backed by active, admin-configured master credentials.
+    1. Returns all supported cloud models, prioritizing and tagging models backed by active master keys.
     2. Only local LLM models actually downloaded on the host Ollama instance.
     3. Engine and local AI entitlement flags for the requesting user.
     """
@@ -81,48 +83,31 @@ async def get_available_catalog(
                 active_providers.add("google")
                 active_providers.add("gemini")
 
-    # 2. Query DB AIModelCatalogModel
-    db_active_models = await kodewaves_db_client.list_active_models()
+    # Helper to prioritize active provider models without hiding other supported providers
+    def build_categorized_models(default_list: list[dict]) -> list[dict]:
+        active_items = []
+        other_items = []
+        for item in default_list:
+            prov = item.get("provider", "")
+            has_master = prov in active_providers
+            label = item["label"]
+            if has_master and "(Active" not in label and "★" not in label:
+                label = f"{label} ★"
+            entry = {**item, "label": label, "has_master_key": has_master}
+            if has_master:
+                active_items.append(entry)
+            else:
+                other_items.append(entry)
+        return active_items + other_items
 
-    cloud_llm = []
-    cloud_stt = []
-    cloud_tts = []
+    cloud_llm = build_categorized_models(DEFAULT_CLOUD_LLM_MODELS)
+    cloud_stt = build_categorized_models(DEFAULT_CLOUD_STT_MODELS)
+    cloud_tts = build_categorized_models(DEFAULT_CLOUD_TTS_MODELS)
 
-    if db_active_models:
-        for m in db_active_models:
-            # Check if model's provider has active master credentials
-            prov = (m.provider or "").lower()
-            if prov not in active_providers and prov != "local":
-                continue
-            item = {"value": m.model_identifier, "label": m.display_name, "provider": prov}
-            if m.category == "llm":
-                cloud_llm.append(item)
-            elif m.category == "stt":
-                cloud_stt.append(item)
-            elif m.category == "tts":
-                cloud_tts.append(item)
-
-    # Fallback to curated lists if DB catalog is empty or missing specific category
-    if not cloud_llm:
-        cloud_llm = [m for m in DEFAULT_CLOUD_LLM_MODELS if m["provider"] in active_providers]
-        if not cloud_llm:
-            cloud_llm = [dict(m) for m in DEFAULT_CLOUD_LLM_MODELS]
-    if not cloud_stt:
-        cloud_stt = [m for m in DEFAULT_CLOUD_STT_MODELS if m["provider"] in active_providers]
-        if not cloud_stt:
-            cloud_stt = [dict(m) for m in DEFAULT_CLOUD_STT_MODELS]
-    if not cloud_tts:
-        cloud_tts = [m for m in DEFAULT_CLOUD_TTS_MODELS if m["provider"] in active_providers]
-        if not cloud_tts:
-            cloud_tts = [dict(m) for m in DEFAULT_CLOUD_TTS_MODELS]
-
-    # Prepend Auto recommendation if any models exist
-    if cloud_llm:
-        cloud_llm.insert(0, {"value": "auto", "label": "Auto (Recommended - Best master key)", "provider": "auto"})
-    if cloud_stt:
-        cloud_stt.insert(0, {"value": "auto", "label": "Auto (Recommended - Nova-3 / Whisper)", "provider": "auto"})
-    if cloud_tts:
-        cloud_tts.insert(0, {"value": "auto", "label": "Auto (Recommended - Best matched for voice)", "provider": "auto"})
+    # Prepend Auto recommendation
+    cloud_llm.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": len(active_providers) > 0})
+    cloud_stt.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": len(active_providers) > 0})
+    cloud_tts.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": len(active_providers) > 0})
 
     # 3. Query installed Ollama models
     local_ai_setting = await kodewaves_db_client.get_setting("local_ai") or {}

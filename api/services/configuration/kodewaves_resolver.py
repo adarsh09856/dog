@@ -138,8 +138,8 @@ async def _resolve_master_llm(effective: EffectiveAIModelConfiguration) -> bool:
 
     # 2. Fallback provider priority order
     providers_priority = [
-        ("gemini", "gemini-2.5-flash"),
-        ("google", "gemini-2.5-flash"),
+        ("gemini", "gemini-3.8-flash"),
+        ("google", "gemini-3.8-flash"),
         ("openai", "gpt-4o-mini"),
         ("anthropic", "claude-3-5-sonnet-20241022"),
         ("sarvam", "sarvam-2b"),
@@ -156,7 +156,7 @@ async def _resolve_master_llm(effective: EffectiveAIModelConfiguration) -> bool:
 
 
 async def _resolve_master_stt(effective: EffectiveAIModelConfiguration) -> bool:
-    """Resolve sovereign STT master credentials (Deepgram, Navana, Gemini, Sarvam, OpenAI)."""
+    """Resolve sovereign STT master credentials (Deepgram, Gemini, Navana, Sarvam, OpenAI)."""
     current_model = getattr(effective.stt, "model", None)
     detected_prov = _detect_provider_from_stt_model(current_model)
 
@@ -164,7 +164,7 @@ async def _resolve_master_stt(effective: EffectiveAIModelConfiguration) -> bool:
     if detected_prov:
         creds = await master_credential_service.get_master_credential(detected_prov)
         if creds and creds.get("api_key"):
-            stt_model = "gemini-2.5-flash" if detected_prov in ("gemini", "google") and ("stt" in current_model.lower() or current_model == "default") else current_model
+            stt_model = "gemini-3.8-flash" if detected_prov in ("gemini", "google") and ("stt" in current_model.lower() or current_model == "default") else current_model
             effective.stt = _build_master_stt(detected_prov, stt_model, creds["api_key"])
             logger.info(f"[KodewavesResolver] Injected targeted STT: {detected_prov}/{stt_model}")
             return True
@@ -172,9 +172,9 @@ async def _resolve_master_stt(effective: EffectiveAIModelConfiguration) -> bool:
     # 2. Fallback provider priority order
     providers_priority = [
         ("deepgram", "nova-3-general"),
+        ("gemini", "gemini-3.8-flash"),
+        ("google", "gemini-3.8-flash"),
         ("navana", "hi-banking-v2-8khz"),
-        ("gemini", "gemini-2.5-flash"),
-        ("google", "gemini-2.5-flash"),
         ("sarvam", "saarika:v1"),
         ("openai", "whisper-1"),
     ]
@@ -255,17 +255,29 @@ async def _resolve_master_tts(effective: EffectiveAIModelConfiguration) -> bool:
                 "sarvam": "bulbul:v1",
                 "navana": "bodhi-tts-v1",
             }
+            default_voices = {
+                "gemini": "Puck",
+                "google": "Puck",
+                "openai": "alloy",
+                "cartesia": "3faa81ae-d3d8-4ab1-9e44-e50e46d33c30",
+                "elevenlabs": "21m00Tcm4TlvDq8ikWAM",
+                "sarvam": "meera",
+                "navana": "default_female",
+            }
             model = configured_model if (configured_model and configured_model != "default") else default_models.get(detected_prov, "default")
-            effective.tts = _build_master_tts(detected_prov, model, creds["api_key"], current_voice)
-            logger.info(f"[KodewavesResolver] Injected targeted TTS: {detected_prov}/{model}/{current_voice}")
+            # If current voice is a Piper voice, reset to valid cloud voice
+            is_local_piper_voice = current_voice and ("_IN-" in current_voice or "_US-" in current_voice or current_voice.startswith("hi_IN-"))
+            target_voice = default_voices.get(detected_prov, "Puck") if is_local_piper_voice or not current_voice else current_voice
+            effective.tts = _build_master_tts(detected_prov, model, creds["api_key"], target_voice)
+            logger.info(f"[KodewavesResolver] Injected targeted TTS: {detected_prov}/{model}/{target_voice}")
             return True
 
     # 2. Fallback provider priority order
     providers_priority = [
-        ("cartesia", "sonic-3.5", "3faa81ae-d3d8-4ab1-9e44-e50e46d33c30"),
-        ("navana", "bodhi-tts-v1", "default_female"),
         ("gemini", "gemini-2.5-flash-preview-tts", "Puck"),
         ("google", "gemini-2.5-flash-preview-tts", "Puck"),
+        ("cartesia", "sonic-3.5", "3faa81ae-d3d8-4ab1-9e44-e50e46d33c30"),
+        ("navana", "bodhi-tts-v1", "default_female"),
         ("elevenlabs", "eleven_flash_v2_5", "21m00Tcm4TlvDq8ikWAM"),
         ("sarvam", "bulbul:v1", "meera"),
         ("openai", "tts-1", "alloy"),
@@ -273,10 +285,11 @@ async def _resolve_master_tts(effective: EffectiveAIModelConfiguration) -> bool:
     for prov, default_model, fallback_voice in providers_priority:
         creds = await master_credential_service.get_master_credential(prov)
         if creds and creds.get("api_key"):
-            voice = current_voice if (current_voice and current_voice != "default" and _detect_provider_from_voice(current_voice) in (None, prov)) else fallback_voice
+            is_local_piper_voice = current_voice and ("_IN-" in current_voice or "_US-" in current_voice or current_voice.startswith("hi_IN-"))
+            voice = fallback_voice if is_local_piper_voice or not current_voice or current_voice == "default" else current_voice
             chosen_model = configured_model if (configured_model and configured_model != "default" and _detect_provider_from_tts_model(configured_model) in (None, prov)) else default_model
             effective.tts = _build_master_tts(prov, chosen_model, creds["api_key"], voice)
-            logger.info(f"[KodewavesResolver] Injected master TTS: {prov}/{chosen_model}")
+            logger.info(f"[KodewavesResolver] Injected master TTS: {prov}/{chosen_model}/{voice}")
             return True
     return False
 
@@ -431,11 +444,8 @@ async def apply_kodewaves_sovereign_resolution(
             lang = getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None) or "hi"
             default_local_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
             current_voice = getattr(effective.tts, "voice", default_local_voice)
-            voice = (
-                current_voice
-                if (current_voice and not current_voice.startswith(("dg_", "kw_", "af_", "am_")) and current_voice not in ("default", "alloy", "none", "hi_IN-priya-medium"))
-                else default_local_voice
-            )
+            is_piper_voice = current_voice and ("_IN-" in current_voice or "_US-" in current_voice or "_GB-" in current_voice or "_ES-" in current_voice or "_FR-" in current_voice or "_DE-" in current_voice or "_IT-" in current_voice or current_voice.startswith(("hi_IN-", "en_US-")))
+            voice = current_voice if is_piper_voice else default_local_voice
             local_tts_model = "piper"
             effective.tts = SpeachesTTSConfiguration(
                 api_key="local-cpu-token",
@@ -455,11 +465,8 @@ async def apply_kodewaves_sovereign_resolution(
                     lang = getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None) or "hi"
                     default_local_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
                     current_voice = getattr(effective.tts, "voice", default_local_voice)
-                    voice = (
-                        current_voice
-                        if (current_voice and not current_voice.startswith(("dg_", "kw_", "af_", "am_")) and current_voice not in ("default", "alloy", "none", "hi_IN-priya-medium"))
-                        else default_local_voice
-                    )
+                    is_piper_voice = current_voice and ("_IN-" in current_voice or "_US-" in current_voice or "_GB-" in current_voice or "_ES-" in current_voice or "_FR-" in current_voice or "_DE-" in current_voice or "_IT-" in current_voice or current_voice.startswith(("hi_IN-", "en_US-")))
+                    voice = current_voice if is_piper_voice else default_local_voice
                     local_tts_model = "piper"
                     effective.tts = SpeachesTTSConfiguration(
                         api_key="local-cpu-token",

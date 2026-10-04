@@ -26,14 +26,14 @@ class GeminiSTTService(STTService):
         self,
         *,
         api_key: str | None = None,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.8-flash",
         language: str = "en",
         sample_rate: int = 16000,
         **kwargs,
     ):
         super().__init__(sample_rate=sample_rate, **kwargs)
         self._api_key = api_key or ""
-        self._model = "gemini-2.5-flash" if (not model or "stt" in model.lower() or model in ("default", "none")) else model
+        self._model = "gemini-3.8-flash" if (not model or "stt" in model.lower() or model in ("default", "none") or "2.5" in model) else model
         self._language = language
         self._sample_rate = sample_rate
 

@@ -170,7 +170,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         }
         let active = true;
         (async () => {
-            const targetProv = (provider === "speaches" || provider === "piper") ? "piper" : provider;
+            const targetProv = (provider === "speaches" || provider === "piper") ? "piper" : "all";
             const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
                 path: { provider: targetProv as never },
                 query: { q: value },
@@ -201,7 +201,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             const search = debouncedSearch.trim();
             if (search) query.q = search;
 
-            const targetProvider = (provider === "speaches" || provider === "piper") ? "piper" : provider;
+            const targetProvider = (provider === "speaches" || provider === "piper") ? "piper" : "all";
 
             const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
                 path: { provider: targetProvider as never },

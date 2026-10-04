@@ -428,17 +428,20 @@ def create_stt_service(
         credentials = getattr(user_config.stt, "credentials", None)
         api_key = getattr(user_config.stt, "api_key", None)
 
-        if not credentials and api_key:
-            from api.services.pipecat.gemini_stt import GeminiSTTService
-            stt_model = getattr(user_config.stt, "model", None) or "gemini-2.5-flash"
-            if "stt" in stt_model.lower() or stt_model in ("default", "none"):
-                stt_model = "gemini-2.5-flash"
-            return GeminiSTTService(
-                api_key=api_key,
-                model=stt_model,
-                language=language,
-                sample_rate=audio_config.transport_in_sample_rate,
-            )
+        if not credentials:
+            if not api_key:
+                api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            if api_key:
+                from api.services.pipecat.gemini_stt import GeminiSTTService
+                stt_model = getattr(user_config.stt, "model", None) or "gemini-3.8-flash"
+                if "stt" in stt_model.lower() or stt_model in ("default", "none") or "2.5" in stt_model:
+                    stt_model = "gemini-3.8-flash"
+                return GeminiSTTService(
+                    api_key=api_key,
+                    model=stt_model,
+                    language=language,
+                    sample_rate=audio_config.transport_in_sample_rate,
+                )
 
         settings_kwargs = {"model": user_config.stt.model}
         try:
@@ -799,18 +802,21 @@ def create_tts_service(
         credentials = getattr(user_config.tts, "credentials", None)
         api_key = getattr(user_config.tts, "api_key", None)
 
-        if not credentials and api_key:
-            from api.services.pipecat.gemini_tts import GeminiTTSService
-            tts_voice = voice if voice in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
-            return GeminiTTSService(
-                api_key=api_key,
-                model="gemini-2.5-flash-preview-tts",
-                voice=tts_voice,
-                sample_rate=audio_config.transport_out_sample_rate,
-                text_filters=[xml_function_tag_filter],
-                skip_aggregator_types=["recording_router", "recording"],
-                silence_time_s=1.0,
-            )
+        if not credentials:
+            if not api_key:
+                api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+            if api_key:
+                from api.services.pipecat.gemini_tts import GeminiTTSService
+                tts_voice = voice if voice in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
+                return GeminiTTSService(
+                    api_key=api_key,
+                    model="gemini-2.5-flash-preview-tts",
+                    voice=tts_voice,
+                    sample_rate=audio_config.transport_out_sample_rate,
+                    text_filters=[xml_function_tag_filter],
+                    skip_aggregator_types=["recording_router", "recording"],
+                    silence_time_s=1.0,
+                )
 
         settings_kwargs = {
             "model": model,
@@ -1283,13 +1289,14 @@ def create_tts_service(
 
 
 def _migrate_deprecated_google_model(model: str) -> str:
-    """Google removed the ``gemini-2.0-flash*`` models. Transparently upgrade
-    any stored config that still references them to the 2.5 equivalent so old
-    user configurations keep working instead of failing at runtime."""
-    if model and model.startswith("gemini-2.0-flash"):
-        migrated = model.replace("gemini-2.0-", "gemini-2.5-", 1)
-        logger.warning(
-            f"Google model '{model}' is no longer supported; using '{migrated}' instead"
+    """Google deprecated earlier gemini-2.0 and gemini-2.5 flash models for new keys.
+    Transparently upgrade any stored config referencing them to gemini-3.8-flash so calls succeed."""
+    if not model or model == "default":
+        return "gemini-3.8-flash"
+    if model.startswith("gemini-2.0-flash") or model == "gemini-2.5-flash":
+        migrated = "gemini-3.8-flash"
+        logger.info(
+            f"Google model '{model}' is deprecated for new keys; using '{migrated}' instead"
         )
         return migrated
     return model

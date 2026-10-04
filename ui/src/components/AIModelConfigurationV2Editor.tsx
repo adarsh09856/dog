@@ -81,7 +81,8 @@ export type DograhFormState = KodewavesFormState;
 
 export const CLOUD_LLM_MODELS = [
     { value: "auto", label: "Auto (Recommended - Best master key)" },
-    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash (Ultra Fast)" },
+    { value: "gemini-3.8-flash", label: "Google Gemini 3.8 Flash (Ultra Fast & Low Latency)" },
+    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash" },
     { value: "gemini-2.5-pro", label: "Google Gemini 2.5 Pro (Deep Reasoning)" },
     { value: "gpt-4o-mini", label: "OpenAI GPT-4o Mini (Fast & Cost-effective)" },
     { value: "gpt-4o", label: "OpenAI GPT-4o (High Intelligence)" },
@@ -97,7 +98,8 @@ export const LOCAL_LLM_MODELS = [
 
 export const CLOUD_STT_MODELS = [
     { value: "auto", label: "Auto (Recommended - Best matched for language)" },
-    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash (Multimodal Speech-to-Text)" },
+    { value: "gemini-3.8-flash", label: "Google Gemini 3.8 Flash (Multimodal Speech-to-Text)" },
+    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash STT" },
     { value: "deepgram-nova-3", label: "Deepgram Nova-3 (Highest Accuracy & Speed)" },
     { value: "deepgram-nova-2", label: "Deepgram Nova-2 (Conversational English & Hindi)" },
     { value: "whisper-1", label: "OpenAI Whisper-1 (Accurate Multilingual)" },
@@ -262,8 +264,8 @@ function buildKodewavesState(
             : null;
     const cleanVoice = (v: unknown, lang?: string) => {
         const s = String(v || "");
-        if (!s || s === "default" || s === "alloy" || s.startsWith("kw_") || s.startsWith("dg_") || s.startsWith("af_") || s.startsWith("am_")) {
-            return "hi_IN-priyamvada-medium";
+        if (!s || s === "default" || s.startsWith("kw_") || s.startsWith("dg_") || s.startsWith("af_") || s.startsWith("am_")) {
+            return "Puck";
         }
         if (s === "if_sara" || s === "im_nicola" || s === "hi_IN-priya-medium") {
             return "hi_IN-priyamvada-medium";
@@ -281,18 +283,18 @@ function buildKodewavesState(
         const chosenVoice = cleanVoice(configuredKodewaves.voice || fallback.voice, lang);
 
         const llmEngineType = (configuredKodewaves.llm_engine_type as "cloud" | "local_cpu") ||
-            (llmModel && (llmModel.startsWith("qwen") || llmModel.startsWith("llama3.2") || llmModel.startsWith("phi")) ? "local_cpu" : (isLocalCpu ? "local_cpu" : "cloud"));
+            (llmModel && (llmModel.startsWith("qwen") || llmModel.startsWith("llama3.2") || llmModel.startsWith("phi")) ? "local_cpu" : "cloud");
         const sttEngineType = (configuredKodewaves.stt_engine_type as "cloud" | "local_cpu") ||
-            (sttModel && sttModel.startsWith("Systran/") ? "local_cpu" : (isLocalCpu ? "local_cpu" : "cloud"));
+            (sttModel && sttModel.startsWith("Systran/") ? "local_cpu" : "cloud");
         const ttsEngineType = (configuredKodewaves.tts_engine_type as "cloud" | "local_cpu") ||
-            (ttsModel === "piper" || chosenVoice.startsWith("hi_IN-") || chosenVoice.startsWith("en_IN-") ? (isLocalCpu ? "local_cpu" : "cloud") : (isLocalCpu ? "local_cpu" : "cloud"));
+            (ttsModel === "piper" || (chosenVoice.startsWith("hi_IN-") && !["Journey", "Puck", "Charon", "Aoede", "Fenrir", "Kore", "alloy"].includes(chosenVoice)) ? "local_cpu" : "cloud");
 
         return {
             api_key: apiKey,
             voice: chosenVoice,
             speed: numberOrDefault(configuredKodewaves.speed, fallback.speed),
             language: lang,
-            engine_type: isLocalCpu ? "local_cpu" : "cloud",
+            engine_type: (llmEngineType === "local_cpu" && sttEngineType === "local_cpu" && ttsEngineType === "local_cpu") ? "local_cpu" : "cloud",
             llm_engine_type: llmEngineType,
             stt_engine_type: sttEngineType,
             tts_engine_type: ttsEngineType,
@@ -307,7 +309,6 @@ function buildKodewavesState(
         const tts = asRecord(effectiveConfiguration?.tts);
         const stt = asRecord(effectiveConfiguration?.stt);
         const apiKey = firstApiKey(llm?.api_key || tts?.api_key || stt?.api_key);
-        const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu") || llm?.provider === "speaches";
         const lang = String(stt?.language || fallback.language);
         const llmModel = llm?.model ? String(llm.model) : undefined;
         const sttModel = stt?.model ? String(stt.model) : undefined;
@@ -316,14 +317,14 @@ function buildKodewavesState(
 
         const llmEngineType = (llm?.provider === "speaches" || (llmModel && llmModel.startsWith("qwen"))) ? "local_cpu" : "cloud";
         const sttEngineType = (stt?.provider === "speaches" || (sttModel && sttModel.startsWith("Systran/"))) ? "local_cpu" : "cloud";
-        const ttsEngineType = (tts?.provider === "speaches" || tts?.provider === "piper" || ttsModel === "piper" || chosenVoice.startsWith("hi_IN-") || chosenVoice.startsWith("en_IN-")) ? "local_cpu" : "cloud";
+        const ttsEngineType = (tts?.provider === "speaches" || tts?.provider === "piper" || ttsModel === "piper") ? "local_cpu" : "cloud";
 
         return {
             api_key: apiKey,
             voice: chosenVoice,
             speed: numberOrDefault(tts?.speed, fallback.speed),
             language: lang,
-            engine_type: isLocalCpu ? "local_cpu" : "cloud",
+            engine_type: (llmEngineType === "local_cpu" && sttEngineType === "local_cpu" && ttsEngineType === "local_cpu") ? "local_cpu" : "cloud",
             llm_engine_type: llmEngineType,
             stt_engine_type: sttEngineType,
             tts_engine_type: ttsEngineType,
@@ -580,8 +581,12 @@ export function AIModelConfigurationV2Editor({
         if (tm.includes("azure")) return "azure";
         if (tm.includes("bulbul") || tm.includes("sarvam")) return "sarvam";
         if (tm.includes("piper")) return "piper";
-        return "google";
-    }, [kodewaves.tts_engine_type, kodewaves.tts_model]);
+        const v = (kodewaves.voice || "").toLowerCase();
+        if (["journey", "puck", "charon", "aoede", "fenrir", "kore"].includes(v)) return "google";
+        if (["alloy", "echo", "fable", "onyx", "nova", "shimmer"].includes(v)) return "openai";
+        if (v.startsWith("aura-")) return "deepgram";
+        return "kodewaves";
+    }, [kodewaves.tts_engine_type, kodewaves.tts_model, kodewaves.voice]);
 
     useEffect(() => {
         const rawConfiguration = asRecord(configuration);
@@ -885,7 +890,15 @@ export function AIModelConfigurationV2Editor({
                                         <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5 text-[11px]">
                                             <button
                                                 type="button"
-                                                onClick={() => setKodewaves({ ...kodewaves, tts_engine_type: "cloud" })}
+                                                onClick={() => {
+                                                    const isPiper = (kodewaves.voice || "").startsWith("hi_IN-") || (kodewaves.voice || "").startsWith("en_US-");
+                                                    setKodewaves({
+                                                        ...kodewaves,
+                                                        tts_engine_type: "cloud",
+                                                        voice: isPiper ? "Puck" : kodewaves.voice,
+                                                        tts_model: kodewaves.tts_model === "piper" ? "auto" : kodewaves.tts_model,
+                                                    });
+                                                }}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
                                                     kodewaves.tts_engine_type !== "local_cpu"
                                                         ? "bg-primary text-primary-foreground shadow-xs"
@@ -898,7 +911,13 @@ export function AIModelConfigurationV2Editor({
                                                 type="button"
                                                 onClick={() => {
                                                     if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
-                                                    setKodewaves({ ...kodewaves, tts_engine_type: "local_cpu" });
+                                                    const isPiper = (kodewaves.voice || "").startsWith("hi_IN-") || (kodewaves.voice || "").startsWith("en_US-");
+                                                    setKodewaves({
+                                                        ...kodewaves,
+                                                        tts_engine_type: "local_cpu",
+                                                        voice: isPiper ? kodewaves.voice : "hi_IN-priyamvada-medium",
+                                                        tts_model: "piper",
+                                                    });
                                                 }}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
                                                     kodewaves.tts_engine_type === "local_cpu"
