@@ -21,6 +21,7 @@ class PlatformSettingsResponse(BaseModel):
     local_ai_access_policy: str = "public"  # 'public' (all users) or 'restricted' (per-user grant)
     ollama_endpoint: Optional[str] = "http://ollama:11434"
     speaches_endpoint: Optional[str] = "http://speaches:8000/v1"
+    piper_endpoint: Optional[str] = "http://piper:5000"
     local_ai_max_concurrency: Optional[int] = 2
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = 587
@@ -78,6 +79,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
             local_ai_access_policy=local_ai.get("local_ai_access_policy", local_ai.get("access_policy", "public")),
             ollama_endpoint=local_ai.get("ollama_endpoint", local_ai.get("ollama_url", "http://ollama:11434")),
             speaches_endpoint=local_ai.get("speaches_endpoint", local_ai.get("speaches_url", "http://speaches:8000/v1")),
+            piper_endpoint=local_ai.get("piper_endpoint", local_ai.get("piper_url", "http://piper:5000")),
             local_ai_max_concurrency=local_ai.get("local_ai_max_concurrency", 2),
             smtp_host=smtp.get("smtp_host"),
             smtp_port=smtp.get("smtp_port", 587),
@@ -138,6 +140,7 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
             "local_ai_access_policy": payload.get("local_ai_access_policy", "public"),
             "ollama_endpoint": payload.get("ollama_endpoint", "http://ollama:11434"),
             "speaches_endpoint": payload.get("speaches_endpoint", "http://speaches:8000/v1"),
+            "piper_endpoint": payload.get("piper_endpoint", "http://piper:5000"),
             "local_ai_max_concurrency": int(payload.get("local_ai_max_concurrency", 2)),
         }
         await kodewaves_db_client.set_setting(key="local_ai", value=local_ai, category="local_ai")

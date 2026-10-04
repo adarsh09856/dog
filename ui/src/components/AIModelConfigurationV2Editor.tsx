@@ -97,7 +97,7 @@ export const LOCAL_LLM_MODELS = [
 
 export const CLOUD_STT_MODELS = [
     { value: "auto", label: "Auto (Recommended - Best matched for language)" },
-    { value: "gemini-stt", label: "Google Gemini Multimodal STT (Speech-to-Text)" },
+    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash (Multimodal Speech-to-Text)" },
     { value: "deepgram-nova-3", label: "Deepgram Nova-3 (Highest Accuracy & Speed)" },
     { value: "deepgram-nova-2", label: "Deepgram Nova-2 (Conversational English & Hindi)" },
     { value: "whisper-1", label: "OpenAI Whisper-1 (Accurate Multilingual)" },
@@ -262,11 +262,11 @@ function buildKodewavesState(
             : null;
     const cleanVoice = (v: unknown, lang?: string) => {
         const s = String(v || "");
-        if (!s || s === "default" || s === "alloy" || s.startsWith("kw_") || s.startsWith("dg_") || s.startsWith("af_") || s.startsWith("am_") || s === "kokoro") {
-            return "hi_IN-priya-medium";
+        if (!s || s === "default" || s === "alloy" || s.startsWith("kw_") || s.startsWith("dg_") || s.startsWith("af_") || s.startsWith("am_")) {
+            return "hi_IN-priyamvada-medium";
         }
-        if (s === "if_sara" || s === "im_nicola") {
-            return "hi_IN-priya-medium";
+        if (s === "if_sara" || s === "im_nicola" || s === "hi_IN-priya-medium") {
+            return "hi_IN-priyamvada-medium";
         }
         return s;
     };
@@ -568,6 +568,20 @@ export function AIModelConfigurationV2Editor({
         }
         return CLOUD_TTS_MODELS;
     }, [kodewaves.tts_engine_type, catalogManifest]);
+
+    const effectiveTtsProvider = useMemo(() => {
+        if (kodewaves.tts_engine_type === "local_cpu") return "piper";
+        const tm = (kodewaves.tts_model || "").toLowerCase();
+        if (tm.includes("gemini") || tm.includes("google")) return "google";
+        if (tm.includes("sonic") || tm.includes("cartesia")) return "cartesia";
+        if (tm.includes("eleven")) return "elevenlabs";
+        if (tm.includes("tts-1") || tm.includes("openai")) return "openai";
+        if (tm.includes("aura") || tm.includes("deepgram")) return "deepgram";
+        if (tm.includes("azure")) return "azure";
+        if (tm.includes("bulbul") || tm.includes("sarvam")) return "sarvam";
+        if (tm.includes("piper")) return "piper";
+        return "google";
+    }, [kodewaves.tts_engine_type, kodewaves.tts_model]);
 
     useEffect(() => {
         const rawConfiguration = asRecord(configuration);
@@ -931,7 +945,7 @@ export function AIModelConfigurationV2Editor({
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Voice</Label>
                                     <VoiceSelectorModal
-                                        provider={kodewaves.tts_engine_type === "local_cpu" ? "piper" : "kodewaves"}
+                                        provider={effectiveTtsProvider}
                                         value={kodewaves.voice}
                                         onChange={(voice) => setKodewaves({ ...kodewaves, voice })}
                                         allowManualInput={allowCustomVoice}

@@ -194,6 +194,7 @@ services:
       KODEWAVES_SECRET_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
       SPEACHES_ENDPOINT: "${SPEACHES_ENDPOINT:-http://speaches:8000/v1}"
+      PIPER_ENDPOINT: "${PIPER_ENDPOINT:-http://piper:5000}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-false}"
       KODEWAVES_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
       DOGRAH_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
@@ -272,10 +273,24 @@ services:
       - app-network
       - traefik
 
+  piper:
+    build:
+      context: ../..
+      dockerfile: deploy/piper/Dockerfile
+    image: kodewaves-piper:latest
+    container_name: piper
+    restart: unless-stopped
+    volumes:
+      - piper-data:/data
+    networks:
+      - app-network
+
 volumes:
   postgres_data:
   redis_data:
   minio-data:
+    driver: local
+  piper-data:
     driver: local
 
 networks:

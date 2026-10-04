@@ -269,9 +269,10 @@ ENABLE_ARI_MANAGER=false
 ENABLE_CAMPAIGN_ORCHESTRATOR=false
 ENABLE_SIGNUP=true
 
-# Local CPU AI Engine (Ollama + Speaches — Admin Opt-In)
+# Local CPU AI Engine (Ollama + Speaches STT + Piper TTS — Admin Opt-In)
 OLLAMA_ENDPOINT=http://ollama:11434
 SPEACHES_ENDPOINT=http://speaches:8000/v1
+PIPER_ENDPOINT=http://piper:5000
 ENABLE_LOCAL_AI_ENGINE=true
 
 # Payment Gateways (Configure in Admin Panel → Master Keys)
@@ -339,6 +340,7 @@ ENVFILE
         # Ensure Kodewaves v2 Local AI Engine env vars exist
         grep -q '^OLLAMA_ENDPOINT=' .env || echo "OLLAMA_ENDPOINT=http://ollama:11434" >> .env
         grep -q '^SPEACHES_ENDPOINT=' .env || echo "SPEACHES_ENDPOINT=http://speaches:8000/v1" >> .env
+        grep -q '^PIPER_ENDPOINT=' .env || echo "PIPER_ENDPOINT=http://piper:5000" >> .env
         grep -q '^ENABLE_LOCAL_AI_ENGINE=' .env || echo "ENABLE_LOCAL_AI_ENGINE=true" >> .env
         grep -q '^KODEWAVES_DEVOPS_SECRET=' .env || echo "KODEWAVES_DEVOPS_SECRET=$(generate_secret)" >> .env
 
@@ -384,9 +386,9 @@ deploy_containers() {
         log_warn "Superadmin creation script completed."
     }
 
-    # Start Local AI Engine containers (Ollama + Speaches) before seeding
-    log_info "Starting Local CPU AI Engine (Ollama + Speaches)..."
-    docker compose -f docker-compose.aapanel.yaml up -d ollama speaches || {
+    # Start Local AI Engine containers (Ollama + Speaches + Piper) before seeding
+    log_info "Starting Local CPU AI Engine (Ollama + Speaches + Piper)..."
+    docker compose -f docker-compose.aapanel.yaml up -d ollama speaches piper || {
         log_warn "Local AI containers may not be available on this hardware."
     }
 
@@ -402,11 +404,16 @@ deploy_containers() {
     log_info "Building and launching full production application stack..."
     docker compose -f docker-compose.aapanel.yaml up -d --build --remove-orphans
 
-    # Clean up old unused images and dangling containers on the server
-    log_info "Cleaning up old dangling images and builder caches from the server..."
-    docker image prune -f >/dev/null 2>&1 || true
+    # Clean up old unused images, BuildKit builder caches, and dangling containers
+    log_info "Cleaning up Docker build cache, dangling layers, and temporary images..."
+    # 1. Prune BuildKit builder cache (prevents 50-100GB buildup on VPS)
+    docker builder prune -af --filter "until=24h" >/dev/null 2>&1 || docker builder prune -af >/dev/null 2>&1 || true
+    # 2. Prune dangling/untagged images
+    docker image prune -af --filter "until=72h" >/dev/null 2>&1 || docker image prune -f >/dev/null 2>&1 || true
+    # 3. Prune stopped temporary containers
+    docker container prune -f >/dev/null 2>&1 || true
     
-    log_success "All services are running! (API, UI, Coturn, Ollama, Speaches, PostgreSQL, Redis, MinIO)"
+    log_success "All services are running! (API, UI, Coturn, Ollama, Speaches, Piper, PostgreSQL, Redis, MinIO)"
 }
 
 # 5. Output aaPanel Nginx Reverse Proxy Instructions

@@ -27,7 +27,7 @@ DEFAULT_CLOUD_LLM_MODELS = [
 ]
 
 DEFAULT_CLOUD_STT_MODELS = [
-    {"value": "gemini-stt", "label": "Google Gemini Multimodal STT", "provider": "google"},
+    {"value": "gemini-2.5-flash", "label": "Google Gemini 2.5 Flash (Multimodal Speech-to-Text)", "provider": "google"},
     {"value": "deepgram-nova-3", "label": "Deepgram Nova-3 (Highest Accuracy & Speed)", "provider": "deepgram"},
     {"value": "whisper-1", "label": "OpenAI Whisper-1 (Accurate Multilingual)", "provider": "openai"},
     {"value": "saaras:v2", "label": "Sarvam Saaras v2 (High-accuracy Indic Speech)", "provider": "sarvam"},
@@ -105,10 +105,16 @@ async def get_available_catalog(
     # Fallback to curated lists if DB catalog is empty or missing specific category
     if not cloud_llm:
         cloud_llm = [m for m in DEFAULT_CLOUD_LLM_MODELS if m["provider"] in active_providers]
+        if not cloud_llm:
+            cloud_llm = [dict(m) for m in DEFAULT_CLOUD_LLM_MODELS]
     if not cloud_stt:
         cloud_stt = [m for m in DEFAULT_CLOUD_STT_MODELS if m["provider"] in active_providers]
+        if not cloud_stt:
+            cloud_stt = [dict(m) for m in DEFAULT_CLOUD_STT_MODELS]
     if not cloud_tts:
         cloud_tts = [m for m in DEFAULT_CLOUD_TTS_MODELS if m["provider"] in active_providers]
+        if not cloud_tts:
+            cloud_tts = [dict(m) for m in DEFAULT_CLOUD_TTS_MODELS]
 
     # Prepend Auto recommendation if any models exist
     if cloud_llm:

@@ -60,10 +60,14 @@ docker compose -f "$COMPOSE_FILE" exec -T api python -m scripts.seed_platform \
     || docker exec kodewaves_api python -m scripts.seed_platform \
     || echo -e "${YELLOW}⚠️ Platform seed executed with warning.${NC}"
 
-# 5. Clean up old unused/dangling artifacts on the server side
-echo -e "${BLUE}[5/6] Cleaning up old images, dangling containers, and legacy server artifacts...${NC}"
+# 5. Clean up old unused/dangling artifacts and Docker build cache on the server
+echo -e "${BLUE}[5/6] Cleaning up Docker build cache, dangling containers, and legacy server artifacts...${NC}"
+# Prune BuildKit build cache (preventing 50-100GB buildup on VPS)
+docker builder prune -af --filter "until=24h" >/dev/null 2>&1 || docker builder prune -af >/dev/null 2>&1 || true
+
 # Prune dangling/unused images left over from previous builds on the server
-docker image prune -f >/dev/null 2>&1 || true
+docker image prune -af --filter "until=72h" >/dev/null 2>&1 || docker image prune -f >/dev/null 2>&1 || true
+docker container prune -f >/dev/null 2>&1 || true
 
 # Clean up any legacy environment keys in server .env (e.g. duplicate DOGRAH keys)
 if [ -f ".env" ]; then
@@ -73,7 +77,7 @@ fi
 # Clean up any stale PID/band lock files from old host-level runs
 rm -f run/*.pid run/active_band run/*.port 2>/dev/null || true
 
-echo -e "${GREEN}✓ Server cleanup completed (freed disk space, pruned dangling images)${NC}"
+echo -e "${GREEN}✓ Server cleanup completed (freed disk space, pruned build cache & dangling images)${NC}"
 
 # 6. Service health verification
 echo -e "${BLUE}[6/6] Verifying running services and API health...${NC}"
@@ -90,7 +94,7 @@ echo -e "${GREEN}${BOLD}✓ Kodewaves Sovereign Platform successfully deployed!$
 echo -e "${GREEN}  • Web UI:      http://127.0.0.1:${UI_PORT}${NC}"
 echo -e "${GREEN}  • Backend API: http://127.0.0.1:${API_PORT}${NC}"
 echo -e "${GREEN}  • Engine:      Independent Cloud & Local CPU Mix-and-Match${NC}"
-echo -e "${GREEN}  • Local TTS:   Piper ONNX (Native Hindi) + Kokoro-82M (English)${NC}"
+echo -e "${GREEN}  • Local TTS:   Piper ONNX (Native Hindi ~40ms & International)${NC}"
 echo -e "${GREEN}  • Local STT:   Faster-Whisper Base (English & Hindi)${NC}"
 echo -e "${GREEN}  • Admin Panel: Governance, Moderation, Secret Protection & Audit Trail${NC}"
 echo ""

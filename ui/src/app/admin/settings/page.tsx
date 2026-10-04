@@ -49,6 +49,7 @@ export default function AdminSettingsPage() {
     enable_local_ai_engine: false,
     ollama_endpoint: "http://ollama:11434",
     speaches_endpoint: "http://speaches:8000/v1",
+    piper_endpoint: "http://piper:5000",
     local_ai_max_concurrency: 2,
     smtp_host: "",
     smtp_port: 587,
@@ -368,7 +369,7 @@ export default function AdminSettingsPage() {
               </div>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1">
                 <Label className="text-xs">Ollama LLM Endpoint</Label>
                 <Input
@@ -381,14 +382,25 @@ export default function AdminSettingsPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">Speaches STT/TTS Endpoint</Label>
+                <Label className="text-xs">Faster-Whisper STT Endpoint</Label>
                 <Input
                   value={settings.speaches_endpoint || ""}
                   onChange={(e) => setSettings({ ...settings, speaches_endpoint: e.target.value })}
                   placeholder="http://speaches:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">OpenAI-compatible endpoint for faster-whisper & Piper ONNX</p>
+                <p className="text-[10px] text-muted-foreground">OpenAI-compatible endpoint for faster-whisper CTranslate2</p>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Piper TTS Endpoint</Label>
+                <Input
+                  value={settings.piper_endpoint || ""}
+                  onChange={(e) => setSettings({ ...settings, piper_endpoint: e.target.value })}
+                  placeholder="http://piper:5000"
+                  disabled={!settings.enable_local_ai_engine}
+                />
+                <p className="text-[10px] text-muted-foreground">Local neural Piper ONNX TTS server (Hindi & English)</p>
               </div>
 
               <div className="space-y-1">

@@ -321,6 +321,89 @@ export default function MasterKeysAndModelsPage() {
 
         {/* TAB 1: MASTER CREDENTIALS */}
         <TabsContent value="credentials" className="space-y-6">
+          {/* Sovereign Local AI Engines (Local CPU) */}
+          <Card className="border-primary/30 bg-primary/5">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Cpu className="h-5 w-5 text-primary" />
+                    <span>Sovereign Self-Hosted Engines (Local CPU - Zero Cloud Cost)</span>
+                    <Badge variant="default" className="text-xs bg-emerald-600 hover:bg-emerald-600 text-white">
+                      Active
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Lightweight CPU-native inference services running directly on your VPS. These run locally with zero API costs, zero cloud token billing, and maximum data sovereignty.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                {/* Piper TTS */}
+                <div className="p-3.5 rounded-lg border border-border/70 bg-card space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                      Piper Neural TTS (OHF-Voice)
+                    </span>
+                    <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                      TTS
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Ultra-fast neural text-to-speech with 21+ verified voices across Hindi, Telugu, Marathi, Malayalam, Bengali, English (US/UK), Spanish, French, and German.
+                  </p>
+                  <div className="text-[11px] font-mono text-muted-foreground pt-1 flex items-center justify-between border-t border-border/40">
+                    <span>Default: hi_IN-priyamvada-medium</span>
+                    <span className="text-emerald-500">~40ms</span>
+                  </div>
+                </div>
+
+                {/* Faster-Whisper STT */}
+                <div className="p-3.5 rounded-lg border border-border/70 bg-card space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-sky-500" />
+                      Faster-Whisper STT (CTranslate2)
+                    </span>
+                    <Badge variant="outline" className="text-[10px] text-sky-600 dark:text-sky-400 border-sky-500/30">
+                      STT
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    High-accuracy offline speech-to-text transcriber powered by CTranslate2. Realtime voice transcription for English, Hindi, and 90+ languages.
+                  </p>
+                  <div className="text-[11px] font-mono text-muted-foreground pt-1 flex items-center justify-between border-t border-border/40">
+                    <span>Model: faster-whisper-small</span>
+                    <span className="text-sky-500">CPU</span>
+                  </div>
+                </div>
+
+                {/* Ollama LLM */}
+                <div className="p-3.5 rounded-lg border border-border/70 bg-card space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-xs flex items-center gap-1.5">
+                      <Cpu className="h-3.5 w-3.5 text-indigo-500" />
+                      Ollama Local Reasoning (LLM)
+                    </span>
+                    <Badge variant="outline" className="text-[10px] text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
+                      LLM
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Quantized GGUF models for low-RAM server hardware. Supports Qwen 2.5 0.5B, Llama 3.2 1B, and Phi-3 Mini for autonomous voice agents.
+                  </p>
+                  <div className="text-[11px] font-mono text-muted-foreground pt-1 flex items-center justify-between border-t border-border/40">
+                    <span>Port: 11434</span>
+                    <span className="text-indigo-500">Local</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="border-border/60">
             <CardHeader className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

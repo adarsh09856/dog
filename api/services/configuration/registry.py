@@ -88,6 +88,7 @@ class ServiceProviders(str, Enum):
     ATLASCLOUD = "atlascloud"
     DEEPGRAM = "deepgram"
     GROQ = "groq"
+    ANTHROPIC = "anthropic"
     OPENROUTER = "openrouter"
     INWORLD = "inworld"
     CARTESIA = "cartesia"
@@ -130,6 +131,7 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.ATLASCLOUD,
         ServiceProviders.DEEPGRAM,
         ServiceProviders.GROQ,
+        ServiceProviders.ANTHROPIC,
         ServiceProviders.OPENROUTER,
         ServiceProviders.INWORLD,
         ServiceProviders.ELEVENLABS,
@@ -327,6 +329,16 @@ ATLASCLOUD_PROVIDER_MODEL_CONFIG = provider_model_config(
 )
 GOOGLE_PROVIDER_MODEL_CONFIG = provider_model_config("Google")
 GROQ_PROVIDER_MODEL_CONFIG = provider_model_config("Groq")
+ANTHROPIC_PROVIDER_MODEL_CONFIG = provider_model_config(
+    "Anthropic",
+    description="Anthropic Claude LLM API.",
+    provider_docs_url="https://docs.anthropic.com",
+)
+ANTHROPIC_MODELS = [
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
+    "claude-3-opus-20240229",
+]
 OPENROUTER_PROVIDER_MODEL_CONFIG = provider_model_config("Open Router")
 AZURE_OPENAI_PROVIDER_MODEL_CONFIG = provider_model_config("Azure OpenAI")
 KODEWAVES_PROVIDER_MODEL_CONFIG = provider_model_config("Kodewaves")
@@ -549,6 +561,17 @@ class GroqLLMService(BaseLLMConfiguration):
         default="llama-3.3-70b-versatile",
         description="Groq-hosted model identifier.",
         json_schema_extra={"examples": GROQ_MODELS, "allow_custom_input": True},
+    )
+
+
+@register_llm
+class AnthropicLLMService(BaseLLMConfiguration):
+    model_config = ANTHROPIC_PROVIDER_MODEL_CONFIG
+    provider: Literal[ServiceProviders.ANTHROPIC] = ServiceProviders.ANTHROPIC
+    model: str = Field(
+        default="claude-3-5-sonnet-20241022",
+        description="Anthropic Claude model identifier.",
+        json_schema_extra={"examples": ANTHROPIC_MODELS, "allow_custom_input": True},
     )
 
 
@@ -1152,6 +1175,7 @@ LLMConfig = Annotated[
         HuggingFaceLLMConfiguration,
         MiniMaxLLMConfiguration,
         SarvamLLMConfiguration,
+        AnthropicLLMService,
     ],
     Field(discriminator="provider"),
 ]
@@ -1508,9 +1532,9 @@ class RimeTTSConfiguration(BaseTTSConfiguration):
 
 SPEACHES_TTS_MODELS = [
     "piper",
-    "piper/hi_IN-priya-medium",
-    "piper/hi_IN-rohit-medium",
-    "piper/en_IN-cpc-medium",
+    "piper/hi_IN-priyamvada-medium",
+    "piper/hi_IN-pratham-medium",
+    "piper/en_US-lessac-medium",
 ]
 
 
@@ -1527,13 +1551,13 @@ class SpeachesTTSConfiguration(BaseTTSConfiguration):
         },
     )
     voice: str = Field(
-        default="hi_IN-priya-medium",
+        default="hi_IN-priyamvada-medium",
         json_schema_extra={"allow_custom_input": True},
-        description="Voice ID for the Piper ONNX engine (e.g. hi_IN-priya-medium, hi_IN-rohit-medium, en_IN-cpc-medium).",
+        description="Voice ID for the Piper ONNX engine (e.g. hi_IN-priyamvada-medium, hi_IN-pratham-medium, en_US-lessac-medium).",
     )
     base_url: str = Field(
-        default="http://speaches:8000/v1",
-        description="OpenAI-compatible TTS endpoint (Speaches at http://speaches:8000/v1).",
+        default="http://piper:5000/synthesize",
+        description="Piper HTTP TTS endpoint (default: http://piper:5000/synthesize).",
     )
 
     speed: float = Field(
@@ -2317,7 +2341,7 @@ class SmallestAISTTConfiguration(BaseSTTConfiguration):
     )
 
 
-GEMINI_STT_MODELS = ["gemini-3.5-transcribe", "gemini-2.5-flash"]
+GEMINI_STT_MODELS = ["gemini-2.5-flash", "gemini-1.5-flash"]
 
 
 @register_stt
@@ -2325,7 +2349,7 @@ class GoogleGeminiSTTConfiguration(BaseSTTConfiguration):
     model_config = GEMINI_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.GEMINI] = ServiceProviders.GEMINI
     model: str = Field(
-        default="gemini-3.5-transcribe",
+        default="gemini-2.5-flash",
         description="Google Gemini Speech-to-Text transcription model.",
         json_schema_extra={"examples": GEMINI_STT_MODELS, "allow_custom_input": True},
     )

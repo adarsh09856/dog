@@ -33,8 +33,9 @@ class GeminiTTSService(TTSService):
     ):
         super().__init__(sample_rate=sample_rate, **kwargs)
         self._api_key = api_key or ""
-        self._model = model
-        self._voice = voice
+        valid_voices = {"Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey"}
+        self._voice = voice if voice in valid_voices else "Puck"
+        self._model = model if (model and "tts" in model.lower()) else "gemini-2.5-flash-preview-tts"
         self._sample_rate = sample_rate
 
     def can_generate_metrics(self) -> bool:

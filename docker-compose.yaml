@@ -261,6 +261,7 @@ services:
       KODEWAVES_SECRET_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
       SPEACHES_ENDPOINT: "${SPEACHES_ENDPOINT:-http://speaches:8000/v1}"
+      PIPER_ENDPOINT: "${PIPER_ENDPOINT:-http://piper:5000}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
 
       # Telephony media WebSocket capability token. The carrier dials the media
@@ -396,8 +397,7 @@ services:
     volumes:
       - speaches_cache:/home/ubuntu/.cache/huggingface/hub
     environment:
-      - WHISPER_MODEL=Systran/faster-whisper-tiny
-      - KOKORO_MODEL=hexgrad/Kokoro-82M
+      - WHISPER_MODEL=Systran/faster-whisper-small
       - DEFAULT_DEVICE=cpu
       - OMP_NUM_THREADS=1
       - MKL_NUM_THREADS=1
@@ -407,8 +407,28 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 1000M
+          cpus: "1.5"
+          memory: 1200M
+    networks:
+      - app-network
+
+  # Piper Neural TTS HTTP Server (OHF-Voice/piper1-gpl)
+  piper:
+    build:
+      context: .
+      dockerfile: deploy/piper/Dockerfile
+    image: kodewaves-piper:latest
+    container_name: kodewaves_piper
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - piper_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1024M
     networks:
       - app-network
 
@@ -424,6 +444,8 @@ volumes:
   ollama_data:
     driver: local
   speaches_cache:
+    driver: local
+  piper_data:
     driver: local
 
 networks:

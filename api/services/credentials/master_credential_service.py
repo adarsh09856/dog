@@ -251,7 +251,18 @@ class MasterCredentialService:
                             return True, "Successfully validated Plivo master account."
                         return False, f"Plivo returned HTTP status {resp.status}"
 
-                # 11. Custom OpenAI Compatible (Groq, DeepSeek, Ollama, vLLM)
+                # 11. Groq
+                elif provider_lower == "groq":
+                    api_key = creds.get("api_key")
+                    async with session.get(
+                        "https://api.groq.com/openai/v1/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    ) as resp:
+                        if resp.status == 200:
+                            return True, "Successfully connected to Groq API."
+                        return False, f"Groq returned HTTP status {resp.status}"
+
+                # 12. Custom OpenAI Compatible (DeepSeek, Ollama, vLLM)
                 elif provider_lower == "custom_openai_compatible" or "custom" in provider_lower:
                     api_key = creds.get("api_key") or ""
                     base_url = creds.get("base_url") or "http://localhost:11434/v1"

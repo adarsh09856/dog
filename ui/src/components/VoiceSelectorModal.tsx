@@ -254,6 +254,10 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     );
 
     const openModal = () => {
+        const initialFilter = (provider && provider !== "kodewaves" && provider !== "dograh" && provider !== "all")
+            ? (provider === "gemini" ? "google" : (provider === "speaches" ? "piper" : provider))
+            : "__all__";
+        setProviderFilter(initialFilter);
         setGender(DEFAULT_GENDER);
         setAccent(DEFAULT_ACCENT);
         setLanguage(DEFAULT_LANGUAGE);
@@ -265,7 +269,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         setIsOpen(true);
     };
 
-    const playPreview = (voice: VoiceInfo) => {
+    const playPreview = async (voice: VoiceInfo) => {
         if (playingVoiceId === voice.voice_id) {
             stopPreview();
             return;
@@ -274,7 +278,10 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         setPlayingVoiceId(voice.voice_id);
 
         const clear = () => {
-            if (audioRef.current) audioRef.current = null;
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current = null;
+            }
             setPlayingVoiceId(null);
         };
 
@@ -283,15 +290,48 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             return;
         }
 
-        const audio = new Audio(voice.preview_url);
-        audioRef.current = audio;
-        audio.onended = clear;
-        audio.onerror = () => {
+        try {
+            const token = typeof window !== "undefined"
+                ? (localStorage.getItem("kodewaves_auth_token") || localStorage.getItem("token"))
+                : null;
+            
+            const headers: Record<string, string> = {};
+            if (token) {
+                headers["Authorization"] = `Bearer ${token}`;
+            }
+
+            // Append query token fallback for instances where headers might be intercepted
+            let finalUrl = voice.preview_url;
+            if (token && !finalUrl.includes("token=")) {
+                const separator = finalUrl.includes("?") ? "&" : "?";
+                finalUrl = `${finalUrl}${separator}token=${encodeURIComponent(token)}`;
+            }
+
+            const response = await fetch(finalUrl, { headers });
+            if (!response.ok) {
+                console.warn(`Preview fetch failed: HTTP ${response.status}`);
+                clear();
+                return;
+            }
+
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const audio = new Audio(objectUrl);
+            audioRef.current = audio;
+
+            audio.onended = () => {
+                URL.revokeObjectURL(objectUrl);
+                clear();
+            };
+            audio.onerror = () => {
+                URL.revokeObjectURL(objectUrl);
+                clear();
+            };
+            await audio.play();
+        } catch (err) {
+            console.error("Audio preview playback failed:", err);
             clear();
-        };
-        audio.play().catch(() => {
-            clear();
-        });
+        }
     };
 
     const commitSelection = () => {

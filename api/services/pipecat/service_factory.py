@@ -6,7 +6,6 @@ import aiohttp
 from fastapi import HTTPException
 from loguru import logger
 
-from api.constants import MPS_API_URL
 from api.errors.failure import (
     ErrorSource,
     annotate_failure_metadata,
@@ -427,6 +426,19 @@ def create_stt_service(
         language = getattr(user_config.stt, "language", None) or "en-US"
         location = getattr(user_config.stt, "location", None) or "global"
         credentials = getattr(user_config.stt, "credentials", None)
+        api_key = getattr(user_config.stt, "api_key", None)
+
+        if not credentials and api_key:
+            from api.services.pipecat.gemini_stt import GeminiSTTService
+            stt_model = getattr(user_config.stt, "model", None) or "gemini-2.5-flash"
+            if "stt" in stt_model.lower() or stt_model in ("default", "none"):
+                stt_model = "gemini-2.5-flash"
+            return GeminiSTTService(
+                api_key=api_key,
+                model=stt_model,
+                language=language,
+                sample_rate=audio_config.transport_in_sample_rate,
+            )
 
         settings_kwargs = {"model": user_config.stt.model}
         try:
@@ -462,11 +474,11 @@ def create_stt_service(
         ServiceProviders.DOGRAH.value,
         "kodewaves",
     ):
-        base_url = MPS_API_URL.replace("http://", "ws://").replace("https://", "wss://")
+        import os
         language = getattr(user_config.stt, "language", None) or "multi"
+        stt_api_key = getattr(user_config.stt, "api_key", None)
 
-        if getattr(user_config.stt, "api_key", None) == "sovereign-local-cpu":
-            import os
+        if stt_api_key == "sovereign-local-cpu":
             speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
             if not speaches_host.endswith("/v1"):
                 speaches_host = f"{speaches_host.rstrip('/')}/v1"
@@ -489,37 +501,41 @@ def create_stt_service(
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
-        if kodewaves_stt_uses_flux_language(language):
-            # Kodewaves's Flux proxy only supports multilingual auto-detect and the
-            # same language hint subset as Deepgram Flux multilingual.
-            settings_kwargs = {
-                "model": "flux-general-multi",
-                "eot_timeout_ms": 3000,
-                "eot_threshold": 0.7,
-                "eager_eot_threshold": 0.5,
-                "keyterm": keyterms or [],
-            }
-            language_hint = _resolve_deepgram_flux_language_hint(language)
-            if language_hint:
-                settings_kwargs["language_hints"] = [language_hint]
-            return KodewavesFluxSTTService(
-                base_url=base_url,
-                api_key=user_config.stt.api_key,
-                correlation_id=correlation_id,
-                settings=DeepgramFluxSTTSettings(**settings_kwargs),
-                should_interrupt=False,  # external turn strategies own interruption
+        # Fallback to direct cloud STT from environment credentials before local CPU
+        deepgram_key = os.environ.get("DEEPGRAM_API_KEY")
+        if deepgram_key:
+            return DeepgramSTTService(
+                api_key=deepgram_key,
+                settings=DeepgramSTTSettings(model="nova-3-general"),
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
-        return KodewavesSTTService(
-            base_url=base_url,
-            api_key=user_config.stt.api_key or "kodewaves-sovereign-token",
-            correlation_id=correlation_id,
-            settings=KodewavesSTTSettings(
-                model=user_config.stt.model,
-                language=language,
-            ),
-            keyterms=keyterms,
+        gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if gemini_key:
+            from api.services.pipecat.gemini_stt import GeminiSTTService
+            return GeminiSTTService(
+                api_key=gemini_key,
+                model="gemini-2.5-flash",
+                language=str(language) if language not in ("multi", "auto", "default") else "en",
+                sample_rate=audio_config.transport_in_sample_rate,
+            )
+
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key:
+            return OpenAISTTService(
+                api_key=openai_key,
+                settings=OpenAISTTSettings(model="whisper-1"),
+                sample_rate=audio_config.transport_in_sample_rate,
+            )
+
+        # Default fallback to Local CPU Faster-Whisper
+        speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
+        if not speaches_host.endswith("/v1"):
+            speaches_host = f"{speaches_host.rstrip('/')}/v1"
+        from pipecat.services.speaches.stt import SpeachesSTTService, SpeachesSTTSettings
+        return SpeachesSTTService(
+            base_url=speaches_host,
+            settings=SpeachesSTTSettings(model="Systran/faster-whisper-tiny"),
             sample_rate=audio_config.transport_in_sample_rate,
         )
     elif user_config.stt.provider == ServiceProviders.SARVAM.value:
@@ -690,14 +706,16 @@ def create_stt_service(
             should_interrupt=False,
             sample_rate=audio_config.transport_in_sample_rate,
         )
-    elif user_config.stt.provider == ServiceProviders.GEMINI.value:
-        return GoogleSTTService(
-            credentials=None,
-            location="global",
-            settings=GoogleSTTSettings(
-                model=getattr(user_config.stt, "model", "latest_long"),
-                language=getattr(user_config.stt, "language", "en-US"),
-            ),
+    elif user_config.stt.provider in (ServiceProviders.GEMINI.value, "gemini"):
+        from api.services.pipecat.gemini_stt import GeminiSTTService
+
+        model = getattr(user_config.stt, "model", None) or "gemini-2.5-flash"
+        if "3.5" in model or model in ("default", "none"):
+            model = "gemini-2.5-flash"
+        return GeminiSTTService(
+            api_key=user_config.stt.api_key,
+            model=model,
+            language=getattr(user_config.stt, "language", "en"),
             sample_rate=audio_config.transport_in_sample_rate,
         )
     elif user_config.stt.provider == ServiceProviders.NAVANA.value:
@@ -779,6 +797,20 @@ def create_tts_service(
         speed = getattr(user_config.tts, "speed", None)
         location = getattr(user_config.tts, "location", None) or None
         credentials = getattr(user_config.tts, "credentials", None)
+        api_key = getattr(user_config.tts, "api_key", None)
+
+        if not credentials and api_key:
+            from api.services.pipecat.gemini_tts import GeminiTTSService
+            tts_voice = voice if voice in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
+            return GeminiTTSService(
+                api_key=api_key,
+                model="gemini-2.5-flash-preview-tts",
+                voice=tts_voice,
+                sample_rate=audio_config.transport_out_sample_rate,
+                text_filters=[xml_function_tag_filter],
+                skip_aggregator_types=["recording_router", "recording"],
+                silence_time_s=1.0,
+            )
 
         settings_kwargs = {
             "model": model,
@@ -874,47 +906,94 @@ def create_tts_service(
         ServiceProviders.DOGRAH.value,
         "kodewaves",
     ):
+        import os
+        import aiohttp
+        from pipecat.services.piper.tts import PiperHttpTTSService, PiperHttpTTSSettings
+        piper_host = os.environ.get("PIPER_ENDPOINT", "http://piper:5000").rstrip("/")
+        piper_url = piper_host if piper_host.endswith("/synthesize") else f"{piper_host}/synthesize"
+        lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None) or "hi"
+        default_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
+
         if getattr(user_config.tts, "api_key", None) == "sovereign-local-cpu":
-            import os
-            speaches_host = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
-            if not speaches_host.endswith("/v1"):
-                speaches_host = f"{speaches_host.rstrip('/')}/v1"
-            from pipecat.services.speaches.tts import SpeachesTTSService, SpeachesTTSSettings
-            lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None)
-            default_voice = "hi_IN-priya-medium" if lang == "hi" else "af_heart"
             voice = getattr(user_config.tts, "voice", default_voice)
-            if not voice or voice in ("default", "alloy", "none") or voice.startswith(("dg_", "kw_")):
+            if not voice or voice in ("default", "alloy", "none", "af_heart") or voice.startswith(("dg_", "kw_")):
                 voice = default_voice
-            tts_model = getattr(user_config.tts, "model", None)
-            if not tts_model or tts_model in ("default", "none"):
-                tts_model = "piper" if (voice.startswith("hi_") or lang == "hi" or "piper" in voice) else "kokoro"
-            elif voice.startswith("hi_") or "piper" in voice:
-                tts_model = "piper"
-            return SpeachesTTSService(
-                base_url=speaches_host,
-                settings=SpeachesTTSSettings(
-                    model=tts_model,
+            session = aiohttp.ClientSession()
+            return PiperHttpTTSService(
+                base_url=piper_url,
+                aiohttp_session=session,
+                settings=PiperHttpTTSSettings(
                     voice=voice,
+                ),
+                sample_rate=audio_config.transport_out_sample_rate,
+                text_filters=[xml_function_tag_filter],
+                skip_aggregator_types=["recording_router", "recording"],
+            )
+
+        # Fallback to direct cloud TTS from environment credentials before local CPU
+        cartesia_key = os.environ.get("CARTESIA_API_KEY")
+        if cartesia_key:
+            return CartesiaTTSService(
+                api_key=cartesia_key,
+                settings=CartesiaTTSSettings(
+                    model="sonic-3.5",
+                    voice=getattr(user_config.tts, "voice", "3faa81ae-d3d8-4ab1-9e44-e50e46d33c30") or "3faa81ae-d3d8-4ab1-9e44-e50e46d33c30",
                 ),
                 text_filters=[xml_function_tag_filter],
                 skip_aggregator_types=["recording_router", "recording"],
-                silence_time_s=0.3,
             )
 
-        # Convert HTTP URL to WebSocket URL for TTS
-        base_url = MPS_API_URL.replace("http://", "ws://").replace("https://", "wss://")
-        return KodewavesTTSService(
-            base_url=base_url,
-            api_key=user_config.tts.api_key or "kodewaves-sovereign-token",
-            correlation_id=correlation_id,
-            settings=KodewavesTTSSettings(
-                model=user_config.tts.model,
-                voice=user_config.tts.voice,
-                speed=user_config.tts.speed,
+        gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if gemini_key:
+            from api.services.pipecat.gemini_tts import GeminiTTSService
+            raw_v = getattr(user_config.tts, "voice", "Puck")
+            tts_v = raw_v if raw_v in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
+            return GeminiTTSService(
+                api_key=gemini_key,
+                model="gemini-2.5-flash-preview-tts",
+                voice=tts_v,
+                sample_rate=audio_config.transport_out_sample_rate,
+                text_filters=[xml_function_tag_filter],
+                skip_aggregator_types=["recording_router", "recording"],
+                silence_time_s=1.0,
+            )
+
+        elevenlabs_key = os.environ.get("ELEVENLABS_API_KEY")
+        if elevenlabs_key:
+            return ElevenLabsTTSService(
+                api_key=elevenlabs_key,
+                settings=ElevenLabsTTSSettings(
+                    voice=getattr(user_config.tts, "voice", "21m00Tcm4TlvDq8ikWAM") or "21m00Tcm4TlvDq8ikWAM",
+                ),
+                text_filters=[xml_function_tag_filter],
+                skip_aggregator_types=["recording_router", "recording"],
+            )
+
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key:
+            return OpenAITTSService(
+                api_key=openai_key,
+                settings=OpenAITTSSettings(model="tts-1", voice=getattr(user_config.tts, "voice", "alloy") or "alloy"),
+                sample_rate=OPENAI_SAMPLE_RATE,
+                text_filters=[xml_function_tag_filter],
+                skip_aggregator_types=["recording_router", "recording"],
+                silence_time_s=1.0,
+            )
+
+        # Default fallback to Local CPU Piper ONNX
+        voice = getattr(user_config.tts, "voice", default_voice)
+        if not voice or voice in ("default", "alloy", "none", "af_heart") or voice.startswith(("dg_", "kw_")):
+            voice = default_voice
+        session = aiohttp.ClientSession()
+        return PiperHttpTTSService(
+            base_url=piper_url,
+            aiohttp_session=session,
+            settings=PiperHttpTTSSettings(
+                voice=voice,
             ),
+            sample_rate=audio_config.transport_out_sample_rate,
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=1.0,
         )
     elif user_config.tts.provider == ServiceProviders.CAMB.value:
         from pipecat.services.camb.tts import CambTTSService
@@ -932,27 +1011,26 @@ def create_tts_service(
         tts._settings.language = language
         return tts
     elif user_config.tts.provider in (ServiceProviders.SPEACHES.value, "speaches", "piper"):
-        lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None)
-        default_voice = "hi_IN-priya-medium" if lang == "hi" else "af_heart"
+        import os
+        import aiohttp
+        from pipecat.services.piper.tts import PiperHttpTTSService, PiperHttpTTSSettings
+        piper_host = os.environ.get("PIPER_ENDPOINT", getattr(user_config.tts, "base_url", None) or "http://piper:5000").rstrip("/")
+        piper_url = piper_host if piper_host.endswith("/synthesize") else f"{piper_host}/synthesize"
+        lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None) or "hi"
+        default_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
         voice = getattr(user_config.tts, "voice", default_voice) or default_voice
-        if not voice or voice in ("default", "alloy", "none") or voice.startswith(("dg_", "kw_")):
+        if not voice or voice in ("default", "alloy", "none", "af_heart") or voice.startswith(("dg_", "kw_")):
             voice = default_voice
-        tts_model = getattr(user_config.tts, "model", None)
-        if not tts_model or tts_model in ("default", "none"):
-            tts_model = "piper" if (voice.startswith("hi_") or lang == "hi" or "piper" in voice) else "kokoro"
-        elif voice.startswith("hi_") or "piper" in voice:
-            tts_model = "piper"
-        return SpeachesTTSService(
-            base_url=user_config.tts.base_url,
-            api_key=user_config.tts.api_key or "none",
-            settings=SpeachesTTSSettings(
-                model=tts_model,
+        session = aiohttp.ClientSession()
+        return PiperHttpTTSService(
+            base_url=piper_url,
+            aiohttp_session=session,
+            settings=PiperHttpTTSSettings(
                 voice=voice,
-                speed=user_config.tts.speed,
             ),
+            sample_rate=audio_config.transport_out_sample_rate,
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
-            silence_time_s=0.3,
         )
     elif user_config.tts.provider == ServiceProviders.RIME.value:
         speed = getattr(user_config.tts, "speed", None)
@@ -1330,8 +1408,8 @@ def create_llm_service_from_provider(
         ServiceProviders.DOGRAH.value,
         "kodewaves",
     ):
+        import os
         if api_key == "sovereign-local-cpu":
-            import os
             ollama_host = os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
             if not ollama_host.endswith("/v1"):
                 ollama_host = f"{ollama_host.rstrip('/')}/v1"
@@ -1343,12 +1421,58 @@ def create_llm_service_from_provider(
                 api_key="sovereign-local-cpu",
                 settings=OpenAILLMSettings(model=llm_model),
             )
+
+        # Fallback to direct cloud LLM from environment credentials before local CPU
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key:
+            return OpenAILLMService(
+                api_key=openai_key,
+                settings=OpenAILLMSettings(model=model if model and model != "default" else "gpt-4o-mini", temperature=0.1),
+            )
+        gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if gemini_key:
+            return KodewavesGoogleLLMService(
+                api_key=gemini_key,
+                settings=GoogleLLMSettings(
+                    model="gemini-2.5-flash",
+                    temperature=0.1,
+                    extra={"automatic_function_calling": {"disable": True}},
+                ),
+            )
+        groq_key = os.environ.get("GROQ_API_KEY")
+        if groq_key:
+            return GroqLLMService(
+                api_key=groq_key,
+                settings=GroqLLMSettings(model="llama-3.3-70b-versatile", temperature=0.1),
+            )
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        if anthropic_key:
+            from pipecat.services.anthropic.llm import AnthropicLLMService, AnthropicLLMSettings
+            return AnthropicLLMService(
+                api_key=anthropic_key,
+                settings=AnthropicLLMSettings(model="claude-3-5-sonnet-20241022", temperature=0.1),
+            )
+
+        # Default fallback to Local CPU Ollama
+        ollama_host = os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
+        if not ollama_host.endswith("/v1"):
+            ollama_host = f"{ollama_host.rstrip('/')}/v1"
         return KodewavesLLMService(
-            base_url=f"{MPS_API_URL}/api/v1/llm",
-            api_key=api_key or "kodewaves-sovereign-token",
-            correlation_id=correlation_id,
-            usage_context=usage_context,
-            settings=OpenAILLMSettings(model=model),
+            base_url=ollama_host,
+            api_key="sovereign-local-cpu",
+            settings=OpenAILLMSettings(model=model or "qwen2.5:0.5b"),
+        )
+    elif provider in (ServiceProviders.ANTHROPIC.value, "anthropic"):
+        from pipecat.services.anthropic.llm import AnthropicLLMService, AnthropicLLMSettings
+        llm_model = model or "claude-3-5-sonnet-20241022"
+        if llm_model == "default":
+            llm_model = "claude-3-5-sonnet-20241022"
+        return AnthropicLLMService(
+            api_key=api_key,
+            settings=AnthropicLLMSettings(
+                model=llm_model,
+                temperature=temperature if temperature is not None else 0.1,
+            ),
         )
     elif provider == ServiceProviders.AWS_BEDROCK.value:
         return AWSBedrockLLMService(

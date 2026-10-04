@@ -4,7 +4,7 @@ from typing import List, Literal, Optional, TypedDict, Union
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, ValidationError
 
 from api.db import db_client
@@ -482,21 +482,28 @@ TTSProvider = Literal[
 
 
 UNIVERSAL_VOICE_CATALOG: dict[str, list[dict]] = {
-    "speaches": [
-        {"voice_id": "hi_IN-priya-medium", "name": "Priya (Hindi Female - Piper ONNX)", "description": "Lightweight native Hindi female voice with fast CPU synthesis.", "gender": "female", "accent": "in", "language": "hi"},
-        {"voice_id": "hi_IN-rohit-medium", "name": "Rohit (Hindi Male - Piper ONNX)", "description": "Fast conversational Hindi male voice for alerts and IVR.", "gender": "male", "accent": "in", "language": "hi"},
-        {"voice_id": "en_IN-cpc-medium", "name": "Aarav (Indian English Male - Piper ONNX)", "description": "Natural Indian English male voice with clear accent.", "gender": "male", "accent": "in", "language": "en"},
-        {"voice_id": "hi_IN-ananya-medium", "name": "Ananya (Hindi Expressive - Piper ONNX)", "description": "Conversational Hindi female voice for customer support.", "gender": "female", "accent": "in", "language": "hi"},
-        {"voice_id": "hi_IN-krrish-medium", "name": "Krrish (Hindi Professional - Piper ONNX)", "description": "Crisp conversational Hindi male voice for financial telecalling.", "gender": "male", "accent": "in", "language": "hi"},
-        {"voice_id": "en_IN-diya-medium", "name": "Diya (Indian English Female - Piper ONNX)", "description": "Clear Indian English female tone for front desk reception.", "gender": "female", "accent": "in", "language": "en"},
-    ],
     "piper": [
-        {"voice_id": "hi_IN-priya-medium", "name": "Priya (Hindi Female - Piper ONNX)", "description": "Lightweight native Hindi female voice with fast CPU synthesis.", "gender": "female", "accent": "in", "language": "hi"},
-        {"voice_id": "hi_IN-rohit-medium", "name": "Rohit (Hindi Male - Piper ONNX)", "description": "Fast conversational Hindi male voice for alerts and IVR.", "gender": "male", "accent": "in", "language": "hi"},
-        {"voice_id": "en_IN-cpc-medium", "name": "Aarav (Indian English Male - Piper ONNX)", "description": "Natural Indian English male voice with clear accent.", "gender": "male", "accent": "in", "language": "en"},
-        {"voice_id": "hi_IN-ananya-medium", "name": "Ananya (Hindi Expressive - Piper ONNX)", "description": "Conversational Hindi female voice for customer support.", "gender": "female", "accent": "in", "language": "hi"},
-        {"voice_id": "hi_IN-krrish-medium", "name": "Krrish (Hindi Professional - Piper ONNX)", "description": "Crisp conversational Hindi male voice for financial telecalling.", "gender": "male", "accent": "in", "language": "hi"},
-        {"voice_id": "en_IN-diya-medium", "name": "Diya (Indian English Female - Piper ONNX)", "description": "Clear Indian English female tone for front desk reception.", "gender": "female", "accent": "in", "language": "en"},
+        {"voice_id": "hi_IN-priyamvada-medium", "name": "Priyamvada (Hindi Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "in", "language": "hi"},
+        {"voice_id": "hi_IN-pratham-medium", "name": "Pratham (Hindi Male)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "male", "accent": "in", "language": "hi"},
+        {"voice_id": "hi_IN-rohan-medium", "name": "Rohan (Hindi Male)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "male", "accent": "in", "language": "hi"},
+        {"voice_id": "te_IN-maya-medium", "name": "Maya (Telugu Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "in", "language": "te"},
+        {"voice_id": "te_IN-padmavathi-medium", "name": "Padmavathi (Telugu Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "in", "language": "te"},
+        {"voice_id": "te_IN-venkatesh-medium", "name": "Venkatesh (Telugu Male)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "male", "accent": "in", "language": "te"},
+        {"voice_id": "ml_IN-meera-medium", "name": "Meera (Malayalam Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "in", "language": "ml"},
+        {"voice_id": "ml_IN-arjun-medium", "name": "Arjun (Malayalam Male)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "male", "accent": "in", "language": "ml"},
+        {"voice_id": "mr_IN-google-medium", "name": "Marathi (Google)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "in", "language": "mr"},
+        {"voice_id": "bn_BD-google-medium", "name": "Bengali (Google)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "bd", "language": "bn"},
+        {"voice_id": "ne_NP-google-medium", "name": "Nepali (Google)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "np", "language": "ne"},
+        {"voice_id": "en_US-lessac-medium", "name": "Lessac (US English Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "us", "language": "en"},
+        {"voice_id": "en_US-amy-medium", "name": "Amy (US English Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "us", "language": "en"},
+        {"voice_id": "en_US-ryan-medium", "name": "Ryan (US English Male)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "male", "accent": "us", "language": "en"},
+        {"voice_id": "en_US-libritts_r-medium", "name": "LibriTTS-R (US English Multi)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "us", "language": "en"},
+        {"voice_id": "en_GB-alan-medium", "name": "Alan (UK English Male)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "male", "accent": "gb", "language": "en"},
+        {"voice_id": "en_GB-alba-medium", "name": "Alba (UK English Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "gb", "language": "en"},
+        {"voice_id": "es_ES-davefx-medium", "name": "DaveFX (Spanish Male)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "male", "accent": "es", "language": "es"},
+        {"voice_id": "fr_FR-siwis-medium", "name": "Siwis (French Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "fr", "language": "fr"},
+        {"voice_id": "de_DE-thorsten-medium", "name": "Thorsten (German Male)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "male", "accent": "de", "language": "de"},
+        {"voice_id": "it_IT-paola-medium", "name": "Paola (Italian Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "it", "language": "it"},
     ],
     "openai": [
         {"voice_id": "alloy", "name": "Alloy (Neutral & Balanced)", "description": "Versatile and balanced voice suitable for general conversational agents.", "gender": "female", "accent": "us", "language": "en"},
@@ -667,22 +674,24 @@ async def get_voices(
         except Exception:
             pass
 
-    # If asking for a specific provider outside active providers:
-    if provider_key not in ("kodewaves", "dograh", "all", "speaches", "piper") and provider_key not in enabled_provs:
-        return VoicesResponse(
-            provider=provider,
-            voices=[],
-            facets=VoiceFacets(genders=[], accents=[], languages=[], providers=[]),
-        )
-
+    # Fetch voice catalog for the requested provider or all managed voices
     if provider_key in ("kodewaves", "dograh", "all"):
         raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES if v.get("provider") in enabled_provs]
+        if not raw_catalog:
+            raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES]
     elif provider_key in ("speaches", "piper"):
         # Piper Native Hindi & Indic ONNX Local CPU engine
         local_catalog = UNIVERSAL_VOICE_CATALOG.get("piper") or []
-        raw_catalog = [dict(v) for v in local_catalog if local_engine_enabled]
+        raw_catalog = [dict(v) for v in local_catalog]
     else:
-        raw_catalog = [dict(v) for v in (UNIVERSAL_VOICE_CATALOG.get(provider_key) or []) if v.get("provider") in enabled_provs or (local_engine_enabled and provider_key in ("speaches", "piper"))]
+        norm_key = "google" if provider_key == "gemini" else ("azure" if provider_key == "azure_speech" else provider_key)
+        raw_catalog = [dict(v) for v in (UNIVERSAL_VOICE_CATALOG.get(norm_key) or UNIVERSAL_VOICE_CATALOG.get(provider_key) or [])]
+        if not raw_catalog and provider_key not in enabled_provs:
+            return VoicesResponse(
+                provider=provider,
+                voices=[],
+                facets=VoiceFacets(genders=[], accents=[], languages=[], providers=[]),
+            )
 
     # Annotate with working preview URL
     for v in raw_catalog:
@@ -736,49 +745,62 @@ async def get_voices(
 async def preview_voice(
     provider: str,
     voice_id: str,
-    user: UserModel = Depends(get_user),
+    request: Request,
+    token: Optional[str] = Query(None),
 ):
     """Generate or stream audio preview for a given voice."""
+    if not request.headers.get("authorization") and token:
+        user = await get_user(authorization=f"Bearer {token}")
+    else:
+        user = await get_user(
+            authorization=request.headers.get("authorization"),
+            x_api_key=request.headers.get("x-api-key"),
+            kodewaves_auth_token=request.cookies.get("kodewaves_auth_token"),
+            dograh_auth_token=request.cookies.get("dograh_auth_token"),
+            oss_token=request.cookies.get("oss_token"),
+        )
     import os
     import aiohttp
     from starlette.responses import Response
 
     provider_lower = provider.lower()
 
-    # 0. Piper ONNX Native Hindi & Indic (Local CPU)
+    # 0. Piper ONNX (OHF-Voice/piper1-gpl HTTP server, local CPU)
     if provider_lower in ("piper", "speaches"):
-        clean_voice_id = voice_id
-        if clean_voice_id.startswith("af_") or clean_voice_id.startswith("am_") or clean_voice_id in ("kokoro", "default"):
-            clean_voice_id = "hi_IN-priya-medium"
-        speaches_endpoint = os.environ.get("SPEACHES_ENDPOINT", "http://speaches:8000/v1")
-        if not speaches_endpoint.endswith("/v1"):
-            speaches_endpoint = f"{speaches_endpoint.rstrip('/')}/v1"
-        url = f"{speaches_endpoint}/audio/speech"
-        payload = {
-            "model": "piper",
-            "voice": clean_voice_id,
-            "input": "नमस्ते! कोडवेव्स सॉवरेन वॉयस एआई पर आपका स्वागत है।",
-            "response_format": "mp3",
+        piper_url = os.environ.get("PIPER_ENDPOINT", "http://piper:5000").rstrip("/")
+        lang_prefix = voice_id.split("_")[0]
+        samples = {
+            "hi": "नमस्ते! कोडवेव्स वॉयस एआई पर आपका स्वागत है।",
+            "te": "నమస్కారం! కోడ్‌వేవ్స్ వాయిస్ ఏఐకి స్వాగతం.",
+            "ml": "നമസ്കാരം! കോഡ്‌വേവ്സ് വോയ്‌സ് എഐയിലേക്ക് സ്വാഗതം.",
+            "mr": "नमस्कार! कोडवेव्स व्हॉइस एआय मध्ये आपले स्वागत आहे.",
+            "bn": "নমস্কার! কোডওয়েভস ভয়েস এআই-তে স্বাগতম।",
         }
+        text = samples.get(lang_prefix, "Hello! This is a live preview of this voice on Kodewaves.")
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-                async with session.post(url, json=payload) as resp:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=120)) as session:
+                # Piper silently falls back to its default voice when a voice is not
+                # installed, so make sure the requested voice is downloaded first.
+                try:
+                    async with session.get(f"{piper_url}/voices") as vresp:
+                        installed = await vresp.json() if vresp.status == 200 else {}
+                    if voice_id not in installed:
+                        async with session.post(f"{piper_url}/download", json={"voice": voice_id}) as dresp:
+                            if dresp.status != 200:
+                                logger.warning(f"[VoicePreview] Piper could not download {voice_id}: HTTP {dresp.status}")
+                                raise HTTPException(status_code=404, detail=f"Piper voice {voice_id} is not available")
+                except HTTPException:
+                    raise
+                except Exception as dl_err:
+                    logger.warning(f"[VoicePreview] Piper voice check failed: {dl_err}")
+                async with session.post(f"{piper_url}/synthesize", json={"text": text, "voice": voice_id}) as resp:
                     if resp.status == 200:
-                        audio_data = await resp.read()
-                        return Response(content=audio_data, media_type="audio/mpeg")
-                    else:
-                        fallback_payload = {
-                            "model": "piper",
-                            "voice": "hi_IN-priya-medium",
-                            "input": "नमस्ते! कोडवेव्स सॉवरेन वॉयस एआई पर आपका स्वागत है।",
-                            "response_format": "mp3",
-                        }
-                        async with session.post(url, json=fallback_payload) as fb_resp:
-                            if fb_resp.status == 200:
-                                fb_audio = await fb_resp.read()
-                                return Response(content=fb_audio, media_type="audio/mpeg")
+                        return Response(content=await resp.read(), media_type="audio/wav")
+                    detail = (await resp.text())[:200]
+                    logger.warning(f"[VoicePreview] Piper HTTP {resp.status} for {voice_id}: {detail}")
         except Exception as e:
-            logger.warning(f"[VoicePreview] Piper preview failed for {voice_id}: {e}")
+            logger.warning(f"[VoicePreview] Piper server unreachable at {piper_url}: {e}")
+        raise HTTPException(status_code=503, detail="Local Piper TTS server is not reachable or voice is not installed")
 
     # 1. Sarvam Indic (Hindi)
     if provider_lower == "sarvam":
