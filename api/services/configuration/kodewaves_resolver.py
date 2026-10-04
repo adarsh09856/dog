@@ -23,6 +23,7 @@ from api.services.configuration.registry import (
     SarvamSTTConfiguration,
     SarvamTTSConfiguration,
     ServiceProviders,
+    SpeachesSTTConfiguration,
     SpeachesTTSConfiguration,
 )
 from api.services.credentials.master_credential_service import master_credential_service
@@ -388,43 +389,73 @@ async def apply_kodewaves_sovereign_resolution(
         provider = getattr(effective.stt, "provider", "deepgram")
         provider_name = getattr(provider, "value", provider)
         user_key = getattr(effective.stt, "api_key", None)
+        current_stt_model = getattr(effective.stt, "model", None)
 
-        # STT runs exclusively via Cloud Master STT (Deepgram, Gemini, Sarvam, OpenAI)
-        if str(provider_name).lower() in ("speaches", "kodewaves", "dograh", "default") or user_key in ("sovereign-local-cpu", "sovereign-managed", None) or not allow_byok:
-            resolved = await _resolve_master_stt(effective)
-            if resolved:
-                is_using_master_keys = True
-            else:
-                # Automatic graceful fallback to environment variables
-                if os.environ.get("DEEPGRAM_API_KEY"):
-                    effective.stt = DeepgramSTTConfiguration(
-                        api_key=os.environ["DEEPGRAM_API_KEY"],
-                        model="nova-3",
-                    )
-                    is_using_master_keys = True
-                elif os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
-                    effective.stt = GoogleGeminiSTTConfiguration(
-                        api_key=os.environ.get("GEMINI_API_KEY") or os.environ["GOOGLE_API_KEY"],
-                        model="gemini-2.5-flash",
-                    )
-                    is_using_master_keys = True
-                elif os.environ.get("OPENAI_API_KEY"):
-                    effective.stt = OpenAISTTConfiguration(
-                        api_key=os.environ["OPENAI_API_KEY"],
-                        model="whisper-1",
-                    )
+        whisper_base = os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1").rstrip("/")
+        whisper_v1_url = whisper_base if whisper_base.endswith("/v1") else f"{whisper_base}/v1"
+
+        # Local CPU Whisper STT
+        if str(provider_name).lower() in ("speaches", "whisper", "local_cpu") or user_key == "sovereign-local-cpu":
+            if not engine_enabled or not has_local_access:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Local CPU AI Engine access is restricted. Please contact your administrator to enable access.",
+                )
+            model_to_use = current_stt_model if (current_stt_model and current_stt_model not in ("default", "none", "auto")) else "Systran/faster-whisper-tiny"
+            raw_lang = str(getattr(effective.stt, "language", None) or "en").lower()
+            effective.stt = SpeachesSTTConfiguration(
+                api_key="local-cpu-token",
+                model=model_to_use,
+                language=raw_lang if raw_lang != "multi" else "en",
+                base_url=whisper_v1_url,
+            )
+            is_using_local_cpu_engine = True
+        elif str(provider_name).lower() in ("kodewaves", "dograh", "default") or not allow_byok or not user_key or user_key == "sovereign-managed":
+            if str(provider_name).lower() in ("kodewaves", "dograh", "default"):
+                resolved = await _resolve_master_stt(effective)
+                if resolved:
                     is_using_master_keys = True
                 else:
-                    logger.error(f"[KodewavesResolver] No cloud master STT key configured for Org {organization_id}")
-                    raise HTTPException(
-                        status_code=400,
-                        detail="No Speech-to-Text (STT) provider configured. Please configure Deepgram or Google Gemini API key in Admin > Master Keys.",
-                    )
-        else:
-            master_creds = await master_credential_service.get_master_credential(str(provider_name))
-            if master_creds and master_creds.get("api_key"):
-                effective.stt.api_key = master_creds["api_key"]
-                is_using_master_keys = True
+                    # Automatic graceful fallback to Local CPU Whisper STT if no cloud STT master key exists
+                    if engine_enabled and has_local_access:
+                        logger.info(f"[KodewavesResolver] No cloud master STT key configured; falling back to Local CPU Faster-Whisper for Org {organization_id}")
+                        model_to_use = current_stt_model if (current_stt_model and current_stt_model not in ("default", "none", "auto")) else "Systran/faster-whisper-tiny"
+                        effective.stt = SpeachesSTTConfiguration(
+                            api_key="local-cpu-token",
+                            model=model_to_use,
+                            language="en",
+                            base_url=whisper_v1_url,
+                        )
+                        is_using_local_cpu_engine = True
+                    elif os.environ.get("DEEPGRAM_API_KEY"):
+                        effective.stt = DeepgramSTTConfiguration(
+                            api_key=os.environ["DEEPGRAM_API_KEY"],
+                            model="nova-3",
+                        )
+                        is_using_master_keys = True
+                    elif os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+                        effective.stt = GoogleGeminiSTTConfiguration(
+                            api_key=os.environ.get("GEMINI_API_KEY") or os.environ["GOOGLE_API_KEY"],
+                            model="gemini-2.5-flash",
+                        )
+                        is_using_master_keys = True
+                    elif os.environ.get("OPENAI_API_KEY"):
+                        effective.stt = OpenAISTTConfiguration(
+                            api_key=os.environ["OPENAI_API_KEY"],
+                            model="whisper-1",
+                        )
+                        is_using_master_keys = True
+                    else:
+                        logger.error(f"[KodewavesResolver] No STT provider configured for Org {organization_id}")
+                        raise HTTPException(
+                            status_code=400,
+                            detail="No Speech-to-Text (STT) provider configured. Please configure Deepgram or Google Gemini API key in Admin > Master Keys, or start the local Whisper container.",
+                        )
+            else:
+                master_creds = await master_credential_service.get_master_credential(str(provider_name))
+                if master_creds and master_creds.get("api_key"):
+                    effective.stt.api_key = master_creds["api_key"]
+                    is_using_master_keys = True
 
     # 5. Resolve TTS Section
     if effective.tts:

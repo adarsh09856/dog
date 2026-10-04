@@ -488,6 +488,18 @@ def create_stt_service(
         language = getattr(user_config.stt, "language", None) or "multi"
         stt_api_key = getattr(user_config.stt, "api_key", None)
 
+        # Local CPU Whisper STT
+        if stt_api_key == "sovereign-local-cpu":
+            whisper_url = os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1").rstrip("/")
+            whisper_v1 = whisper_url if whisper_url.endswith("/v1") else f"{whisper_url}/v1"
+            stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-tiny"
+            return SpeachesSTTService(
+                base_url=whisper_v1,
+                api_key="local-cpu-token",
+                settings=SpeachesSTTSettings(model=stt_model),
+                sample_rate=audio_config.transport_in_sample_rate,
+            )
+
         # Direct cloud STT from master credentials or environment
         deepgram_key = getattr(user_config.stt, "api_key", None) if getattr(user_config.stt, "api_key", None) not in ("sovereign-local-cpu", "none", None) else os.environ.get("DEEPGRAM_API_KEY")
         if deepgram_key:
@@ -517,7 +529,7 @@ def create_stt_service(
 
         raise HTTPException(
             status_code=500,
-            detail="No Speech-to-Text (STT) credentials configured. Please configure Deepgram, Google Gemini, or OpenAI API keys in Admin > Master Keys.",
+            detail="No Speech-to-Text (STT) credentials configured. Please configure Deepgram, Google Gemini, or start the local Whisper container.",
         )
     elif user_config.stt.provider == ServiceProviders.SARVAM.value:
         language = getattr(user_config.stt, "language", None)
@@ -554,7 +566,7 @@ def create_stt_service(
             ),
             sample_rate=audio_config.transport_in_sample_rate,
         )
-    elif user_config.stt.provider == ServiceProviders.SPEACHES.value:
+    elif user_config.stt.provider in (ServiceProviders.SPEACHES.value, "speaches", "whisper"):
         lang_str = getattr(user_config.stt, "language", None)
         lang_obj = None
         if lang_str and lang_str not in ("multi", "auto", "default"):
@@ -563,12 +575,13 @@ def create_stt_service(
                 lang_obj = Language(lang_str)
             except ValueError:
                 lang_obj = None
-        _validate_runtime_service_url(user_config.stt.base_url, "base_url")
+        base_url = getattr(user_config.stt, "base_url", None) or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+        _validate_runtime_service_url(base_url, "base_url")
         return SpeachesSTTService(
-            base_url=user_config.stt.base_url,
-            api_key=user_config.stt.api_key or "none",
+            base_url=base_url,
+            api_key=getattr(user_config.stt, "api_key", None) or "none",
             settings=SpeachesSTTSettings(
-                model=user_config.stt.model,
+                model=user_config.stt.model or "Systran/faster-whisper-tiny",
                 language=lang_obj,
             ),
             sample_rate=audio_config.transport_in_sample_rate,

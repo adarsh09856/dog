@@ -43,9 +43,10 @@ else
     echo -e "${BLUE}[1/6] Deploying from local workspace directory...${NC}"
 fi
 
-# Ensure collision-free PIPER_PORT exists in .env
+# Ensure collision-free PIPER_PORT and WHISPER_PORT exist in .env
 if [ -f ".env" ]; then
     grep -q '^PIPER_PORT=' .env || echo "PIPER_PORT=8766" >> .env
+    grep -q '^WHISPER_PORT=' .env || echo "WHISPER_PORT=8765" >> .env
 fi
 
 # 2. Rebuild and restart application containers (removes orphaned/old containers)

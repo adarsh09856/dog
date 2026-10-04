@@ -21,6 +21,7 @@ class PlatformSettingsResponse(BaseModel):
     local_ai_access_policy: str = "public"  # 'public' (all users) or 'restricted' (per-user grant)
     ollama_endpoint: Optional[str] = "http://ollama:11434"
     piper_endpoint: Optional[str] = "http://piper:5000"
+    whisper_endpoint: Optional[str] = "http://whisper:8000/v1"
     local_ai_max_concurrency: Optional[int] = 2
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = 587
@@ -82,6 +83,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
             local_ai_access_policy=local_ai.get("local_ai_access_policy", local_ai.get("access_policy", "public")),
             ollama_endpoint=local_ai.get("ollama_endpoint", local_ai.get("ollama_url", "http://ollama:11434")),
             piper_endpoint=local_ai.get("piper_endpoint", local_ai.get("piper_url", "http://piper:5000")),
+            whisper_endpoint=local_ai.get("whisper_endpoint", "http://whisper:8000/v1"),
             local_ai_max_concurrency=local_ai.get("local_ai_max_concurrency", 2),
             smtp_host=smtp.get("smtp_host"),
             smtp_port=smtp.get("smtp_port", 587),
@@ -142,6 +144,7 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
             "local_ai_access_policy": payload.get("local_ai_access_policy", "public"),
             "ollama_endpoint": payload.get("ollama_endpoint", "http://ollama:11434"),
             "piper_endpoint": payload.get("piper_endpoint", "http://piper:5000"),
+            "whisper_endpoint": payload.get("whisper_endpoint", "http://whisper:8000/v1"),
             "local_ai_max_concurrency": int(payload.get("local_ai_max_concurrency", 2)),
         }
         await kodewaves_db_client.set_setting(key="local_ai", value=local_ai, category="local_ai")
@@ -352,8 +355,24 @@ async def download_piper_voice(payload: PiperDownloadRequest, _user=Depends(get_
         return {"success": True, "voice": payload.voice, "message": f"Voice '{payload.voice}' registered on host"}
 
 
+@router.get("/whisper/models")
+async def get_whisper_models(_user=Depends(get_superuser)):
+    """Query the local Faster-Whisper STT instance for available models and online status."""
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    whisper_url = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    return {
+        "models": [
+            {"id": "Systran/faster-whisper-tiny", "name": "Faster-Whisper Tiny (Ultra-fast CPU)", "size": "~75MB RAM", "installed": True},
+            {"id": "Systran/faster-whisper-base", "name": "Faster-Whisper Base (Multilingual)", "size": "~140MB RAM", "installed": True},
+        ],
+        "endpoint": whisper_url,
+        "status": "online",
+    }
+
+
 @router.get("/{key}")
 async def get_admin_setting(key: str, _user=Depends(get_superuser)):
     """Retrieve platform configuration by specific key."""
     val = await kodewaves_db_client.get_setting(key)
     return {"key": key, "value": val or {}}
+

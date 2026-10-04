@@ -269,14 +269,39 @@ services:
     networks:
       - kodewaves-network
 
+  # Faster-Whisper Local STT Server (CTranslate2 CPU inference, OpenAI-compatible /v1/audio/transcriptions)
+  whisper:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: kodewaves_whisper
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WHISPER_PORT:-8765}:8000"
+    volumes:
+      - kodewaves_whisper_cache:/home/ubuntu/.cache/huggingface/hub
+    environment:
+      - WHISPER_MODEL=Systran/faster-whisper-tiny
+      - DEFAULT_DEVICE=cpu
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 384M
+    networks:
+      - kodewaves-network
+
 volumes:
   kodewaves_postgres_data:
   kodewaves_redis_data:
   kodewaves_minio_data:
   kodewaves_ollama_data:
   kodewaves_piper_data:
+  kodewaves_whisper_cache:
 
 networks:
   kodewaves-network:
     driver: bridge
+
 

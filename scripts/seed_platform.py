@@ -75,6 +75,18 @@ async def seed_global_settings():
                 "is_active": False,
             },
         },
+        {
+            "key": "local_ai",
+            "category": "local_ai",
+            "value": {
+                "enable_local_ai_engine": True,
+                "local_ai_access_policy": "all_workspaces",
+                "ollama_endpoint": os.getenv("OLLAMA_ENDPOINT", "http://ollama:11434"),
+                "piper_endpoint": os.getenv("PIPER_ENDPOINT", "http://piper:5000"),
+                "whisper_endpoint": os.getenv("WHISPER_ENDPOINT", "http://whisper:8000/v1"),
+                "local_ai_max_concurrency": 4,
+            },
+        },
     ]
 
     async with kodewaves_db_client.get_session() as session:
@@ -252,6 +264,15 @@ async def seed_ai_model_catalog():
             "base_cost_cents_per_unit": 0.20,
             "retail_price_cents_per_unit": 0.50,
             "sort_order": 11,
+        },
+        {
+            "model_identifier": "whisper-tiny",
+            "display_name": "Faster-Whisper Tiny (Local CPU)",
+            "provider": "speaches",
+            "category": "stt",
+            "base_cost_cents_per_unit": 0.0,
+            "retail_price_cents_per_unit": 0.0,
+            "sort_order": 12,
         },
         # TTS Models
         {
