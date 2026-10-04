@@ -80,15 +80,15 @@ export interface KodewavesFormState {
 export type DograhFormState = KodewavesFormState;
 
 export const CLOUD_LLM_MODELS = [
-    { value: "auto", label: "Auto (Recommended - Best master key)" },
-    { value: "gemini-3.8-flash", label: "Google Gemini 3.8 Flash (Ultra Fast & Low Latency)" },
-    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash" },
-    { value: "gemini-2.5-pro", label: "Google Gemini 2.5 Pro (Deep Reasoning)" },
-    { value: "gpt-4o-mini", label: "OpenAI GPT-4o Mini (Fast & Cost-effective)" },
-    { value: "gpt-4o", label: "OpenAI GPT-4o (High Intelligence)" },
-    { value: "claude-3-5-sonnet-latest", label: "Anthropic Claude 3.5 Sonnet (Advanced)" },
-    { value: "llama-3.3-70b-versatile", label: "Groq Llama 3.3 70B (Ultra Low Latency)" },
-    { value: "sarvam-2b", label: "Sarvam Indic 2B (Indian Languages)" },
+    { value: "auto", label: "Auto (Recommended - Best active engine)", provider: "auto" },
+    { value: "gemini-3.8-flash", label: "Google Gemini 3.8 Flash (Ultra Fast & Low Latency)", provider: "google" },
+    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash", provider: "google" },
+    { value: "gemini-2.5-pro", label: "Google Gemini 2.5 Pro (Deep Reasoning)", provider: "google" },
+    { value: "gpt-4o-mini", label: "OpenAI GPT-4o Mini (Fast & Cost-effective)", provider: "openai" },
+    { value: "gpt-4o", label: "OpenAI GPT-4o (High Intelligence)", provider: "openai" },
+    { value: "claude-3-5-sonnet-latest", label: "Anthropic Claude 3.5 Sonnet (Advanced)", provider: "anthropic" },
+    { value: "llama-3.3-70b-versatile", label: "Groq Llama 3.3 70B (Ultra Low Latency)", provider: "groq" },
+    { value: "sarvam-2b", label: "Sarvam Indic 2B (Indian Languages)", provider: "sarvam" },
 ];
 
 export const LOCAL_LLM_MODELS = [
@@ -97,14 +97,14 @@ export const LOCAL_LLM_MODELS = [
 ];
 
 export const CLOUD_STT_MODELS = [
-    { value: "auto", label: "Auto (Recommended - Best matched for language)" },
-    { value: "gemini-3.8-flash", label: "Google Gemini 3.8 Flash (Multimodal Speech-to-Text)" },
-    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash STT" },
-    { value: "deepgram-nova-3", label: "Deepgram Nova-3 (Highest Accuracy & Speed)" },
-    { value: "deepgram-nova-2", label: "Deepgram Nova-2 (Conversational English & Hindi)" },
-    { value: "whisper-1", label: "OpenAI Whisper-1 (Accurate Multilingual)" },
-    { value: "saaras:v2", label: "Sarvam Saaras v2 (High-accuracy Indic Speech)" },
-    { value: "azure-stt", label: "Microsoft Azure Speech" },
+    { value: "auto", label: "Auto (Recommended - Best active engine)", provider: "auto" },
+    { value: "gemini-3.8-flash", label: "Google Gemini 3.8 Flash (Multimodal Speech-to-Text)", provider: "google" },
+    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash STT", provider: "google" },
+    { value: "deepgram-nova-3", label: "Deepgram Nova-3 (Highest Accuracy & Speed)", provider: "deepgram" },
+    { value: "deepgram-nova-2", label: "Deepgram Nova-2 (Conversational English & Hindi)", provider: "deepgram" },
+    { value: "whisper-1", label: "OpenAI Whisper-1 (Accurate Multilingual)", provider: "openai" },
+    { value: "saaras:v2", label: "Sarvam Saaras v2 (High-accuracy Indic Speech)", provider: "sarvam" },
+    { value: "azure-stt", label: "Microsoft Azure Speech", provider: "azure" },
 ];
 
 export const LOCAL_STT_MODELS = [
@@ -114,17 +114,17 @@ export const LOCAL_STT_MODELS = [
 ];
 
 export const CLOUD_TTS_MODELS = [
-    { value: "auto", label: "Auto (Recommended - Best matched for voice)" },
-    { value: "gemini-2.5-flash-preview-tts", label: "Google Gemini 2.5 Voice Studio (High Fidelity)" },
-    { value: "sonic-3.5", label: "Cartesia Sonic 3.5 (Ultra-low latency, 90ms)" },
-    { value: "sonic-multilingual", label: "Cartesia Sonic Multilingual" },
-    { value: "eleven_flash_v2_5", label: "ElevenLabs Flash v2.5 (High Speed & Expressive)" },
-    { value: "eleven_multilingual_v2", label: "ElevenLabs Multilingual v2 (Rich Neural)" },
-    { value: "tts-1", label: "OpenAI TTS-1 (Standard Natural Speech)" },
-    { value: "tts-1-hd", label: "OpenAI TTS-1 HD (High Definition Studio)" },
-    { value: "bulbul:v1", label: "Sarvam Bulbul v1 (Native Indian Languages)" },
-    { value: "deepgram-aura", label: "Deepgram Aura (Sub-150ms Conversational)" },
-    { value: "azure-tts", label: "Microsoft Azure Neural Voice" },
+    { value: "auto", label: "Auto (Recommended - Best active engine)", provider: "auto" },
+    { value: "gemini-2.5-flash-preview-tts", label: "Google Gemini 2.5 Voice Studio (High Fidelity)", provider: "google" },
+    { value: "sonic-3.5", label: "Cartesia Sonic 3.5 (Ultra-low latency, 90ms)", provider: "cartesia" },
+    { value: "sonic-multilingual", label: "Cartesia Sonic Multilingual", provider: "cartesia" },
+    { value: "eleven_flash_v2_5", label: "ElevenLabs Flash v2.5 (High Speed & Expressive)", provider: "elevenlabs" },
+    { value: "eleven_multilingual_v2", label: "ElevenLabs Multilingual v2 (Rich Neural)", provider: "elevenlabs" },
+    { value: "tts-1", label: "OpenAI TTS-1 (Standard Natural Speech)", provider: "openai" },
+    { value: "tts-1-hd", label: "OpenAI TTS-1 HD (High Definition Studio)", provider: "openai" },
+    { value: "bulbul:v1", label: "Sarvam Bulbul v1 (Native Indian Languages)", provider: "sarvam" },
+    { value: "deepgram-aura", label: "Deepgram Aura (Sub-150ms Conversational)", provider: "deepgram" },
+    { value: "azure-tts", label: "Microsoft Azure Neural Voice", provider: "azure" },
 ];
 
 export const LOCAL_TTS_MODELS = [
@@ -536,10 +536,21 @@ export function AIModelConfigurationV2Editor({
                 { value: "qwen2.5:0.5b", label: "Qwen 2.5 0.5B (Installed CPU, ~350MB RAM)" },
             ];
         }
-        if (catalogManifest?.cloud_llm_models && catalogManifest.cloud_llm_models.length > 0) {
-            return catalogManifest.cloud_llm_models;
+        let list = (catalogManifest?.cloud_llm_models && catalogManifest.cloud_llm_models.length > 0)
+            ? catalogManifest.cloud_llm_models
+            : CLOUD_LLM_MODELS;
+        
+        const activeProvs = catalogManifest?.active_providers;
+        if (activeProvs && activeProvs.length > 0) {
+            const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
+            if (allowed.has("gemini")) allowed.add("google");
+            if (allowed.has("google")) allowed.add("gemini");
+            list = list.filter((m: any) => {
+                const prov = (m.provider || "").toLowerCase();
+                return prov === "auto" || allowed.has(prov) || m.has_master_key;
+            });
         }
-        return CLOUD_LLM_MODELS;
+        return list;
     }, [kodewaves.llm_engine_type, catalogManifest]);
 
     const effectiveSttModels = useMemo(() => {
@@ -550,10 +561,21 @@ export function AIModelConfigurationV2Editor({
             }
             return LOCAL_STT_MODELS;
         }
-        if (catalogManifest?.cloud_stt_models && catalogManifest.cloud_stt_models.length > 0) {
-            return catalogManifest.cloud_stt_models;
+        let list = (catalogManifest?.cloud_stt_models && catalogManifest.cloud_stt_models.length > 0)
+            ? catalogManifest.cloud_stt_models
+            : CLOUD_STT_MODELS;
+        
+        const activeProvs = catalogManifest?.active_providers;
+        if (activeProvs && activeProvs.length > 0) {
+            const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
+            if (allowed.has("gemini")) allowed.add("google");
+            if (allowed.has("google")) allowed.add("gemini");
+            list = list.filter((m: any) => {
+                const prov = (m.provider || "").toLowerCase();
+                return prov === "auto" || allowed.has(prov) || m.has_master_key;
+            });
         }
-        return CLOUD_STT_MODELS;
+        return list;
     }, [kodewaves.stt_engine_type, catalogManifest]);
 
     const effectiveTtsModels = useMemo(() => {
@@ -564,10 +586,21 @@ export function AIModelConfigurationV2Editor({
             }
             return LOCAL_TTS_MODELS;
         }
-        if (catalogManifest?.cloud_tts_models && catalogManifest.cloud_tts_models.length > 0) {
-            return catalogManifest.cloud_tts_models;
+        let list = (catalogManifest?.cloud_tts_models && catalogManifest.cloud_tts_models.length > 0)
+            ? catalogManifest.cloud_tts_models
+            : CLOUD_TTS_MODELS;
+        
+        const activeProvs = catalogManifest?.active_providers;
+        if (activeProvs && activeProvs.length > 0) {
+            const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
+            if (allowed.has("gemini")) allowed.add("google");
+            if (allowed.has("google")) allowed.add("gemini");
+            list = list.filter((m: any) => {
+                const prov = (m.provider || "").toLowerCase();
+                return prov === "auto" || allowed.has(prov) || m.has_master_key;
+            });
         }
-        return CLOUD_TTS_MODELS;
+        return list;
     }, [kodewaves.tts_engine_type, catalogManifest]);
 
     const effectiveTtsProvider = useMemo(() => {
@@ -585,8 +618,12 @@ export function AIModelConfigurationV2Editor({
         if (["journey", "puck", "charon", "aoede", "fenrir", "kore"].includes(v)) return "google";
         if (["alloy", "echo", "fable", "onyx", "nova", "shimmer"].includes(v)) return "openai";
         if (v.startsWith("aura-")) return "deepgram";
-        return "kodewaves";
-    }, [kodewaves.tts_engine_type, kodewaves.tts_model, kodewaves.voice]);
+        if (v.startsWith("hi_in-") || v.startsWith("en_us-")) return "piper";
+        const activeProvs = catalogManifest?.active_providers || [];
+        if (activeProvs.includes("google") || activeProvs.includes("gemini")) return "google";
+        if (activeProvs.length > 0) return activeProvs[0];
+        return "google";
+    }, [kodewaves.tts_engine_type, kodewaves.tts_model, kodewaves.voice, catalogManifest]);
 
     useEffect(() => {
         const rawConfiguration = asRecord(configuration);
@@ -938,7 +975,37 @@ export function AIModelConfigurationV2Editor({
                                                     ? kodewaves.tts_model
                                                     : (effectiveTtsModels[0]?.value || "auto"))
                                         }
-                                        onValueChange={(tts_model) => setKodewaves({ ...kodewaves, tts_model: tts_model === "auto" || tts_model === "none" ? undefined : tts_model })}
+                                        onValueChange={(tts_model) => {
+                                            const nextModel = tts_model === "auto" || tts_model === "none" ? undefined : tts_model;
+                                            let nextVoice = kodewaves.voice;
+                                            const tm = (nextModel || "").toLowerCase();
+                                            if (tm.includes("gemini") || tm.includes("google")) {
+                                                if (!["kore", "puck", "charon", "aoede", "fenrir", "journey"].includes((nextVoice || "").toLowerCase())) {
+                                                    nextVoice = "Kore";
+                                                }
+                                            } else if (tm.includes("piper") || kodewaves.tts_engine_type === "local_cpu") {
+                                                if (!nextVoice || (!nextVoice.includes("hi_IN") && !nextVoice.includes("en_US"))) {
+                                                    nextVoice = "hi_IN-priyamvada-medium";
+                                                }
+                                            } else if (tm.includes("openai") || tm.includes("tts-1")) {
+                                                if (!["alloy", "echo", "fable", "onyx", "nova", "shimmer"].includes((nextVoice || "").toLowerCase())) {
+                                                    nextVoice = "alloy";
+                                                }
+                                            } else if (tm.includes("cartesia") || tm.includes("sonic")) {
+                                                if (!nextVoice?.startsWith("sonic")) {
+                                                    nextVoice = "sonic-english";
+                                                }
+                                            } else if (tm.includes("eleven")) {
+                                                if (nextVoice !== "21m00Tcm4TlvDq8ikWAM" && nextVoice !== "pNInz6obpgDQGcFmaJgB") {
+                                                    nextVoice = "21m00Tcm4TlvDq8ikWAM";
+                                                }
+                                            } else if (tm.includes("sarvam") || tm.includes("bulbul")) {
+                                                if (!["arvind", "amrita"].includes((nextVoice || "").toLowerCase())) {
+                                                    nextVoice = "arvind";
+                                                }
+                                            }
+                                            setKodewaves({ ...kodewaves, tts_model: nextModel, voice: nextVoice });
+                                        }}
                                     >
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder={effectiveTtsModels.length === 0 ? "No active synthesizers available" : "Select TTS model"} />

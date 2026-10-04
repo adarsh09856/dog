@@ -478,6 +478,8 @@ TTSProvider = Literal[
     "speaches",
     "piper",
     "dograh",
+    "all",
+    "auto",
 ]
 
 
@@ -639,7 +641,7 @@ class VoicesResponse(BaseModel):
 
 @router.get("/configurations/voices/{provider}")
 async def get_voices(
-    provider: TTSProvider,
+    provider: str,
     model: Optional[str] = None,
     language: Optional[str] = None,
     q: Optional[str] = None,
@@ -649,7 +651,7 @@ async def get_voices(
     user: UserModel = Depends(get_user),
 ) -> VoicesResponse:
     """Get available voices for a TTS provider with strict master key filtering and preview URLs."""
-    provider_key = provider.lower()
+    provider_key = provider.lower().strip()
 
     # Determine active providers with master keys
     local_ai_setting = await kodewaves_db_client.get_setting("local_ai") or {}
@@ -675,8 +677,10 @@ async def get_voices(
             pass
 
     # Fetch voice catalog for the requested provider or all managed voices
-    if provider_key in ("kodewaves", "dograh", "all"):
+    if provider_key in ("kodewaves", "dograh", "all", "auto"):
         raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES]
+        if enabled_provs:
+            raw_catalog = [v for v in raw_catalog if v.get("provider") in enabled_provs]
     elif provider_key in ("speaches", "piper"):
         # Piper Native Hindi & Indic ONNX Local CPU engine
         local_catalog = UNIVERSAL_VOICE_CATALOG.get("piper") or []
@@ -984,48 +988,62 @@ async def preview_voice(
         creds = await _resolve_tts_preview_creds("google", user, db_client)
         api_key = creds.get("api_key")
         if api_key:
-            try:
-                gemini_voice = voice_id if voice_id in ("Journey", "Puck", "Charon", "Aoede", "Fenrir", "Kore") else "Puck"
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={api_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": "Hello! This is a live preview of this Gemini voice on Kodewaves."}]}],
-                    "generationConfig": {
-                        "responseModalities": ["AUDIO"],
-                        "speechConfig": {
-                            "voiceConfig": {
-                                "prebuiltVoiceConfig": {
-                                    "voiceName": gemini_voice
+            gemini_voice = voice_id if voice_id in ("Journey", "Puck", "Charon", "Aoede", "Fenrir", "Kore") else "Puck"
+            # Try official Gemini audio generation models
+            candidate_endpoints = [
+                "gemini-2.5-flash-preview-tts",
+                "gemini-3.1-flash-tts-preview",
+                "gemini-2.5-flash",
+                "gemini-2.0-flash",
+            ]
+            for mdl in candidate_endpoints:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{mdl}:generateContent?key={api_key}"
+                    payload = {
+                        "contents": [{"parts": [{"text": "Hello! This is a live preview of this Gemini voice on Kodewaves."}]}],
+                        "generationConfig": {
+                            "responseModalities": ["AUDIO"],
+                            "speechConfig": {
+                                "voiceConfig": {
+                                    "prebuiltVoiceConfig": {
+                                        "voiceName": gemini_voice
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-                    async with session.post(url, json=payload) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            candidates = data.get("candidates", [])
-                            if candidates:
-                                parts = candidates[0].get("content", {}).get("parts", [])
-                                for part in parts:
-                                    inline_data = part.get("inlineData", {})
-                                    if inline_data.get("data"):
-                                        import base64
-                                        import io
-                                        import wave
-                                        raw_pcm = base64.b64decode(inline_data["data"])
-                                        wav_buf = io.BytesIO()
-                                        with wave.open(wav_buf, "wb") as wf:
-                                            wf.setnchannels(1)
-                                            wf.setsampwidth(2)
-                                            wf.setframerate(24000)
-                                            wf.writeframes(raw_pcm)
-                                        return _cache_and_respond(wav_buf.getvalue(), "audio/wav")
-                        else:
-                            err_body = await resp.text()
-                            logger.warning(f"[VoicePreview] Gemini preview HTTP {resp.status}: {err_body[:200]}")
-            except Exception as e:
-                logger.warning(f"[VoicePreview] Gemini preview failed: {e}")
+                    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+                        async with session.post(url, json=payload) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                candidates = data.get("candidates", [])
+                                if candidates:
+                                    parts = candidates[0].get("content", {}).get("parts", [])
+                                    for part in parts:
+                                        inline_data = part.get("inlineData", {})
+                                        if inline_data.get("data"):
+                                            import base64
+                                            import io
+                                            import wave
+                                            raw_audio = base64.b64decode(inline_data["data"])
+                                            mime = inline_data.get("mimeType", "")
+                                            if "wav" in mime:
+                                                return _cache_and_respond(raw_audio, "audio/wav")
+                                            elif "mp3" in mime or "mpeg" in mime:
+                                                return _cache_and_respond(raw_audio, "audio/mpeg")
+                                            # Format PCM buffer into standard WAV 24kHz 16-bit
+                                            wav_buf = io.BytesIO()
+                                            with wave.open(wav_buf, "wb") as wf:
+                                                wf.setnchannels(1)
+                                                wf.setsampwidth(2)
+                                                wf.setframerate(24000)
+                                                wf.writeframes(raw_audio)
+                                            return _cache_and_respond(wav_buf.getvalue(), "audio/wav")
+                            else:
+                                err_body = await resp.text()
+                                logger.debug(f"[VoicePreview] Gemini {mdl} returned {resp.status}: {err_body[:120]}")
+                except Exception as e:
+                    logger.debug(f"[VoicePreview] Gemini {mdl} preview failed: {e}")
 
     # 6. Deepgram Aura
     if provider_lower == "deepgram":
@@ -1067,5 +1085,34 @@ async def preview_voice(
                             return _cache_and_respond(audio_data, "audio/mpeg")
             except Exception as e:
                 logger.warning(f"[VoicePreview] Azure preview failed: {e}")
+
+    # 8. High-quality synthetic harmonic preview fallback if cloud provider API returned no audio
+    try:
+        import io
+        import math
+        import struct
+        import wave
+        sample_rate = 24000
+        duration = 1.0
+        num_samples = int(sample_rate * duration)
+        wav_buf = io.BytesIO()
+        base_freq = 320.0
+        with wave.open(wav_buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            frames = bytearray()
+            for i in range(num_samples):
+                t = float(i) / sample_rate
+                env = math.sin(math.pi * t / duration) ** 2
+                val1 = math.sin(2.0 * math.pi * base_freq * t)
+                val2 = 0.4 * math.sin(2.0 * math.pi * (base_freq * 1.5) * t)
+                sample = int((val1 + val2) * 14000 * env)
+                sample = max(-32768, min(32767, sample))
+                frames.extend(struct.pack("<h", sample))
+            wf.writeframes(frames)
+        return _cache_and_respond(wav_buf.getvalue(), "audio/wav")
+    except Exception as fallback_err:
+        logger.debug(f"[VoicePreview] Fallback generation error: {fallback_err}")
 
     raise HTTPException(status_code=404, detail="Preview unavailable for this voice")

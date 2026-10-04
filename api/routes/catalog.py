@@ -83,22 +83,24 @@ async def get_available_catalog(
                 active_providers.add("google")
                 active_providers.add("gemini")
 
-    # Helper to prioritize active provider models without hiding other supported providers
+    # Helper to return only models backed by active master keys
     def build_categorized_models(default_list: list[dict]) -> list[dict]:
         active_items = []
-        other_items = []
         for item in default_list:
             prov = item.get("provider", "")
             has_master = prov in active_providers
-            label = item["label"]
-            if has_master and "(Active" not in label and "★" not in label:
-                label = f"{label} ★"
-            entry = {**item, "label": label, "has_master_key": has_master}
             if has_master:
-                active_items.append(entry)
-            else:
-                other_items.append(entry)
-        return active_items + other_items
+                label = item["label"]
+                if "★" not in label:
+                    label = f"{label} ★"
+                active_items.append({**item, "label": label, "has_master_key": True})
+        
+        # If active master keys are configured in Admin, ONLY show models for active providers!
+        if active_items:
+            return active_items
+        
+        # If no master keys are configured anywhere yet, return default models
+        return [{**item, "has_master_key": False} for item in default_list]
 
     cloud_llm = build_categorized_models(DEFAULT_CLOUD_LLM_MODELS)
     cloud_stt = build_categorized_models(DEFAULT_CLOUD_STT_MODELS)

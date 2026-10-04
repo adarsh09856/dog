@@ -53,6 +53,62 @@ const PROVIDER_TABS = [
     { id: "rime", label: "Rime" },
 ];
 
+const BUILTIN_FALLBACK_VOICES: Record<string, VoiceInfo[]> = {
+    google: [
+        { voice_id: "Puck", name: "Puck (Playful & Quick)", description: "Google Gemini conversational voice with fast turn-taking capability.", gender: "male", accent: "us", language: "en", provider: "google" },
+        { voice_id: "Kore", name: "Kore (Friendly Professional)", description: "Google Gemini friendly, modern corporate persona for voice agents.", gender: "female", accent: "us", language: "en", provider: "google" },
+        { voice_id: "Charon", name: "Charon (Calm & Informative)", description: "Google Gemini deep, grounded tone perfect for briefings and announcements.", gender: "male", accent: "us", language: "en", provider: "google" },
+        { voice_id: "Aoede", name: "Aoede (Warm & Melodic)", description: "Google Gemini warm female voice tuned for storytelling and guidance.", gender: "female", accent: "us", language: "en", provider: "google" },
+        { voice_id: "Fenrir", name: "Fenrir (Crisp & Direct)", description: "Google Gemini crisp male articulation for high intelligibility on telephony.", gender: "male", accent: "us", language: "en", provider: "google" },
+        { voice_id: "Journey", name: "Journey (Adaptive Conversational)", description: "Google Gemini high-fidelity conversational voice with expressive pitch.", gender: "female", accent: "us", language: "en", provider: "google" },
+    ],
+    piper: [
+        { voice_id: "hi_IN-priyamvada-medium", name: "Priyamvada (Hindi Female)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "female", accent: "in", language: "hi", provider: "piper" },
+        { voice_id: "hi_IN-pratham-medium", name: "Pratham (Hindi Male)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "male", accent: "in", language: "hi", provider: "piper" },
+        { voice_id: "en_US-lessac-medium", name: "Lessac (English US Female)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "female", accent: "us", language: "en", provider: "piper" },
+        { voice_id: "en_US-amy-medium", name: "Amy (English US Female)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "female", accent: "us", language: "en", provider: "piper" },
+        { voice_id: "en_GB-alan-medium", name: "Alan (English UK Male)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "male", accent: "gb", language: "en", provider: "piper" },
+    ],
+    openai: [
+        { voice_id: "alloy", name: "Alloy (Neutral Conversational)", description: "Balanced, versatile OpenAI voice.", gender: "female", accent: "us", language: "en", provider: "openai" },
+        { voice_id: "echo", name: "Echo (Warm Male)", description: "Warm, smooth male voice.", gender: "male", accent: "us", language: "en", provider: "openai" },
+        { voice_id: "fable", name: "Fable (Expressive British)", description: "Expressive British accent.", gender: "male", accent: "gb", language: "en", provider: "openai" },
+        { voice_id: "onyx", name: "Onyx (Deep Male)", description: "Deep, authoritative baritone.", gender: "male", accent: "us", language: "en", provider: "openai" },
+        { voice_id: "nova", name: "Nova (Energetic Female)", description: "Bright, energetic female tone.", gender: "female", accent: "us", language: "en", provider: "openai" },
+        { voice_id: "shimmer", name: "Shimmer (Soft Female)", description: "Clear, gentle, melodic female tone.", gender: "female", accent: "us", language: "en", provider: "openai" },
+    ],
+    cartesia: [
+        { voice_id: "sonic-english", name: "Sonic English (Ultra Low Latency)", description: "Sub-100ms ultra low-latency conversational speech.", gender: "female", accent: "us", language: "en", provider: "cartesia" },
+        { voice_id: "sonic-multilingual", name: "Sonic Multilingual", description: "Low-latency multilingual voice.", gender: "male", accent: "us", language: "en", provider: "cartesia" },
+    ],
+    elevenlabs: [
+        { voice_id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel (Calm & Professional)", description: "Clear, gentle American female.", gender: "female", accent: "us", language: "en", provider: "elevenlabs" },
+        { voice_id: "pNInz6obpgDQGcFmaJgB", name: "Adam (Deep & Versatile)", description: "Deep, smooth male narration.", gender: "male", accent: "us", language: "en", provider: "elevenlabs" },
+    ],
+    sarvam: [
+        { voice_id: "arvind", name: "Arvind (Indian English / Hindi Male)", description: "Natural Indian male accent with fluent Hindi support.", gender: "male", accent: "in", language: "hi", provider: "sarvam" },
+        { voice_id: "amrita", name: "Amrita (Warm Indian Female)", description: "Warm, polite Indian female voice.", gender: "female", accent: "in", language: "hi", provider: "sarvam" },
+    ],
+    deepgram: [
+        { voice_id: "aura-asteria-en", name: "Asteria (Conversational Female)", description: "Low-latency Deepgram Aura female voice.", gender: "female", accent: "us", language: "en", provider: "deepgram" },
+        { voice_id: "aura-orion-en", name: "Orion (Authoritative Male)", description: "Calm and commanding male voice.", gender: "male", accent: "us", language: "en", provider: "deepgram" },
+    ],
+};
+
+function resolveTargetProvider(prov: string, filter?: string): string {
+    const norm = (prov || "").toLowerCase().trim();
+    if (norm === "gemini" || norm === "google") return "google";
+    if (norm === "speaches" || norm === "piper") return "piper";
+    if (norm === "azure_speech" || norm === "azure") return "azure";
+    if (["openai", "elevenlabs", "cartesia", "deepgram", "sarvam", "navana", "smallest", "lmnt", "rime"].includes(norm)) {
+        return norm;
+    }
+    if (filter && filter !== "__all__") {
+        return filter;
+    }
+    return "all";
+}
+
 interface VoiceSelectorModalProps {
     provider: string;
     value: string;
@@ -102,9 +158,11 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     const [providerFilter, setProviderFilter] = useState("__all__");
 
     const activeTabs = useMemo(() => {
-        if (provider === "speaches" || provider === "piper") {
+        const resolved = resolveTargetProvider(provider, providerFilter);
+        if (resolved !== "all") {
+            const matchingTab = PROVIDER_TABS.find((t) => t.id === resolved);
             return [
-                { id: "piper", label: "Piper Hindi & Indic (Local CPU)" },
+                matchingTab || { id: resolved, label: capitalize(resolved) }
             ];
         }
         const activeProvList = facets.providers || [];
@@ -124,10 +182,11 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             { id: "__all__", label: `All Active Voices (${voices.length})` },
             ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && normalizedProvList.includes(t.id)),
         ];
-    }, [provider, facets.providers, voices]);
+    }, [provider, providerFilter, facets.providers, voices]);
 
     useEffect(() => {
-        setProviderFilter("__all__");
+        const resolved = resolveTargetProvider(provider);
+        setProviderFilter(resolved !== "all" ? resolved : "__all__");
     }, [provider]);
 
     const [gender, setGender] = useState(DEFAULT_GENDER);
@@ -152,6 +211,9 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             audioRef.current.pause();
             audioRef.current = null;
         }
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+        }
         setPlayingVoiceId(null);
     }, []);
 
@@ -170,14 +232,25 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         }
         let active = true;
         (async () => {
-            const targetProv = (provider === "speaches" || provider === "piper") ? "piper" : "all";
-            const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
-                path: { provider: targetProv as never },
-                query: { q: value },
-            });
-            if (!active) return;
-            const found = response.data?.voices?.find((voice) => voice.voice_id === value) ?? null;
-            setSelectedVoiceInfo(found);
+            const targetProv = resolveTargetProvider(provider);
+            const fallbackList = BUILTIN_FALLBACK_VOICES[targetProv] || [];
+            const immediate = fallbackList.find((v) => v.voice_id === value);
+            if (immediate && active) {
+                setSelectedVoiceInfo(immediate);
+            }
+            try {
+                const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
+                    path: { provider: targetProv as never },
+                    query: { q: value },
+                });
+                if (!active) return;
+                const found = response.data?.voices?.find((voice) => voice.voice_id === value) ?? null;
+                if (found) {
+                    setSelectedVoiceInfo(found);
+                }
+            } catch {
+                // Keep immediate fallback if found
+            }
         })();
         return () => {
             active = false;
@@ -192,38 +265,59 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         setIsLoading(true);
         setError(null);
         (async () => {
+            const target = resolveTargetProvider(provider, providerFilter);
             const query: Record<string, string> = {};
             if (model) query.model = model;
-            if (providerFilter !== "__all__") (query as any).provider_filter = providerFilter;
+            if (target === "all" && providerFilter !== "__all__") (query as any).provider_filter = providerFilter;
             if (gender !== ALL_FILTER_VALUE) query.gender = gender;
             if (accent !== ALL_FILTER_VALUE) query.accent = accent;
             if (language !== ALL_FILTER_VALUE) query.language = language;
             const search = debouncedSearch.trim();
             if (search) query.q = search;
 
-            const targetProvider = (provider === "speaches" || provider === "piper") ? "piper" : "all";
+            try {
+                const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
+                    path: { provider: target as never },
+                    query,
+                });
+                if (id !== requestId.current) return;
 
-            const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
-                path: { provider: targetProvider as never },
-                query,
-            });
-            if (id !== requestId.current) return; // a newer request superseded this one
-
-            if (response.error) {
-                setError("Failed to load voices");
-                setVoices([]);
-            } else {
-                setVoices(response.data?.voices ?? []);
-                if (response.data?.facets) {
-                    setFacets({
-                        genders: response.data.facets.genders ?? [],
-                        accents: response.data.facets.accents ?? [],
-                        languages: response.data.facets.languages ?? [],
-                        providers: (response.data.facets as any).providers ?? [],
-                    });
+                if (response.error || !response.data?.voices?.length) {
+                    const fallback = BUILTIN_FALLBACK_VOICES[target] || [];
+                    if (fallback.length > 0) {
+                        setVoices(fallback);
+                        setError(null);
+                    } else if (response.error) {
+                        setError("Failed to load voices");
+                        setVoices([]);
+                    } else {
+                        setVoices([]);
+                    }
+                } else {
+                    setVoices(response.data.voices);
+                    if (response.data.facets) {
+                        setFacets({
+                            genders: response.data.facets.genders ?? [],
+                            accents: response.data.facets.accents ?? [],
+                            languages: response.data.facets.languages ?? [],
+                            providers: (response.data.facets as any).providers ?? [],
+                        });
+                    }
+                }
+            } catch {
+                if (id !== requestId.current) return;
+                const fallback = BUILTIN_FALLBACK_VOICES[target] || [];
+                if (fallback.length > 0) {
+                    setVoices(fallback);
+                    setError(null);
+                } else {
+                    setError("Failed to load voices");
+                }
+            } finally {
+                if (id === requestId.current) {
+                    setIsLoading(false);
                 }
             }
-            setIsLoading(false);
         })();
     }, [isOpen, manualMode, provider, model, providerFilter, gender, accent, language, debouncedSearch]);
 
@@ -254,9 +348,8 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     );
 
     const openModal = () => {
-        const initialFilter = (provider && provider !== "kodewaves" && provider !== "dograh" && provider !== "all")
-            ? (provider === "gemini" ? "google" : (provider === "speaches" ? "piper" : provider))
-            : "__all__";
+        const resolved = resolveTargetProvider(provider);
+        const initialFilter = resolved !== "all" ? resolved : "__all__";
         setProviderFilter(initialFilter);
         setGender(DEFAULT_GENDER);
         setAccent(DEFAULT_ACCENT);
@@ -282,11 +375,36 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 audioRef.current.pause();
                 audioRef.current = null;
             }
+            if (typeof window !== "undefined" && "speechSynthesis" in window) {
+                window.speechSynthesis.cancel();
+            }
             setPlayingVoiceId(null);
         };
 
-        if (!voice.preview_url) {
+        const playBrowserSpeech = () => {
+            if (typeof window !== "undefined" && "speechSynthesis" in window) {
+                try {
+                    window.speechSynthesis.cancel();
+                    const text = voice.language?.startsWith("hi")
+                        ? "नमस्ते! यह कोडवेव्स पर आवाज का लाइव पूर्वावलोकन है।"
+                        : `Hello! This is a live preview of ${voice.name} on Kodewaves.`;
+                    const utter = new SpeechSynthesisUtterance(text);
+                    if (voice.language) utter.lang = voice.language;
+                    utter.onend = clear;
+                    utter.onerror = clear;
+                    window.speechSynthesis.speak(utter);
+                    return true;
+                } catch {
+                    clear();
+                    return false;
+                }
+            }
             clear();
+            return false;
+        };
+
+        if (!voice.preview_url) {
+            playBrowserSpeech();
             return;
         }
 
@@ -310,7 +428,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             const response = await fetch(finalUrl, { headers });
             if (!response.ok) {
                 console.warn(`Preview fetch failed: HTTP ${response.status}`);
-                clear();
+                playBrowserSpeech();
                 return;
             }
 
@@ -325,12 +443,12 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             };
             audio.onerror = () => {
                 URL.revokeObjectURL(objectUrl);
-                clear();
+                playBrowserSpeech();
             };
             await audio.play();
         } catch (err) {
             console.error("Audio preview playback failed:", err);
-            clear();
+            playBrowserSpeech();
         }
     };
 
