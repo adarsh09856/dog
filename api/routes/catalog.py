@@ -15,37 +15,43 @@ from api.services.credentials.master_credential_service import master_credential
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
-# Curated fallback cloud models if DB catalog is empty
+# Official verified cloud models matching actual provider APIs
 DEFAULT_CLOUD_LLM_MODELS = [
-    {"value": "gemini-3.8-flash", "label": "Google Gemini 3.8 Flash (Ultra Fast & Low Latency)", "provider": "google"},
     {"value": "gemini-2.5-flash", "label": "Google Gemini 2.5 Flash", "provider": "google"},
     {"value": "gemini-2.5-pro", "label": "Google Gemini 2.5 Pro (Deep Reasoning)", "provider": "google"},
-    {"value": "gpt-4o-mini", "label": "OpenAI GPT-4o Mini (Fast & Cost-effective)", "provider": "openai"},
+    {"value": "gemini-2.0-flash", "label": "Google Gemini 2.0 Flash (Fast Production)", "provider": "google"},
     {"value": "gpt-4o", "label": "OpenAI GPT-4o (High Intelligence)", "provider": "openai"},
-    {"value": "claude-3-5-sonnet-latest", "label": "Anthropic Claude 3.5 Sonnet (Advanced)", "provider": "anthropic"},
+    {"value": "gpt-4o-mini", "label": "OpenAI GPT-4o Mini (Fast & Cost-effective)", "provider": "openai"},
+    {"value": "claude-3-5-sonnet-20241022", "label": "Anthropic Claude 3.5 Sonnet (Advanced)", "provider": "anthropic"},
+    {"value": "claude-3-5-haiku-20241022", "label": "Anthropic Claude 3.5 Haiku (Fast)", "provider": "anthropic"},
     {"value": "llama-3.3-70b-versatile", "label": "Groq Llama 3.3 70B (Ultra Low Latency)", "provider": "groq"},
+    {"value": "llama-3.1-8b-instant", "label": "Groq Llama 3.1 8B (Sub-100ms)", "provider": "groq"},
     {"value": "sarvam-2b", "label": "Sarvam Indic 2B (Indian Languages)", "provider": "sarvam"},
 ]
 
 DEFAULT_CLOUD_STT_MODELS = [
-    {"value": "gemini-3.8-flash", "label": "Google Gemini 3.8 Flash (Multimodal Speech-to-Text)", "provider": "google"},
-    {"value": "gemini-2.5-flash", "label": "Google Gemini 2.5 Flash STT", "provider": "google"},
-    {"value": "deepgram-nova-3", "label": "Deepgram Nova-3 (Highest Accuracy & Speed)", "provider": "deepgram"},
+    {"value": "gemini-2.5-flash", "label": "Google Gemini 2.5 Flash Audio STT", "provider": "google"},
+    {"value": "gemini-2.0-flash", "label": "Google Gemini 2.0 Flash Audio STT", "provider": "google"},
+    {"value": "nova-3", "label": "Deepgram Nova-3 (Conversational)", "provider": "deepgram"},
+    {"value": "nova-2", "label": "Deepgram Nova-2 (Conversational & Telephony)", "provider": "deepgram"},
     {"value": "whisper-1", "label": "OpenAI Whisper-1 (Accurate Multilingual)", "provider": "openai"},
     {"value": "saaras:v2", "label": "Sarvam Saaras v2 (High-accuracy Indic Speech)", "provider": "sarvam"},
-    {"value": "azure-stt", "label": "Microsoft Azure Speech", "provider": "azure"},
+    {"value": "azure-speech", "label": "Microsoft Azure Speech STT", "provider": "azure"},
 ]
 
 DEFAULT_CLOUD_TTS_MODELS = [
     {"value": "gemini-2.5-flash-preview-tts", "label": "Google Gemini 2.5 Voice Studio", "provider": "google"},
-    {"value": "sonic-3.5", "label": "Cartesia Sonic 3.5 (Ultra-low latency, 90ms)", "provider": "cartesia"},
+    {"value": "sonic-3.5", "label": "Cartesia Sonic 3.5 (Ultra-low latency, ~90ms)", "provider": "cartesia"},
     {"value": "sonic-multilingual", "label": "Cartesia Sonic Multilingual", "provider": "cartesia"},
-    {"value": "eleven_flash_v2_5", "label": "ElevenLabs Flash v2.5 (High Speed & Expressive)", "provider": "elevenlabs"},
     {"value": "eleven_multilingual_v2", "label": "ElevenLabs Multilingual v2 (Rich Neural)", "provider": "elevenlabs"},
+    {"value": "eleven_flash_v2_5", "label": "ElevenLabs Flash v2.5 (High Speed & Expressive)", "provider": "elevenlabs"},
+    {"value": "eleven_turbo_v2_5", "label": "ElevenLabs Turbo v2.5", "provider": "elevenlabs"},
     {"value": "tts-1", "label": "OpenAI TTS-1 (Standard Natural Speech)", "provider": "openai"},
     {"value": "tts-1-hd", "label": "OpenAI TTS-1 HD (High Definition Studio)", "provider": "openai"},
     {"value": "bulbul:v1", "label": "Sarvam Bulbul v1 (Native Indian Languages)", "provider": "sarvam"},
-    {"value": "deepgram-aura", "label": "Deepgram Aura (Conversational TTS)", "provider": "deepgram"},
+    {"value": "aura-asteria-en", "label": "Deepgram Aura Asteria (Female Conversational)", "provider": "deepgram"},
+    {"value": "aura-orion-en", "label": "Deepgram Aura Orion (Male Authoritative)", "provider": "deepgram"},
+    {"value": "azure-neural", "label": "Microsoft Azure Neural Voice", "provider": "azure"},
 ]
 
 DEFAULT_LOCAL_STT_MODELS = [

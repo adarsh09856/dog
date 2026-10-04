@@ -395,7 +395,14 @@ def create_stt_service(
 
         # Other models than flux
         # Use language from user config, defaulting to "multi" for multilingual support
-        language = getattr(user_config.stt, "language", None) or "multi"
+        raw_stt_model = getattr(user_config.stt, "model", None) or "nova-3"
+        if "nova-3" in raw_stt_model:
+            stt_model = "nova-3"
+        elif "nova-2" in raw_stt_model:
+            stt_model = "nova-2"
+        else:
+            stt_model = raw_stt_model
+
         return DeepgramSTTService(
             api_key=user_config.stt.api_key,
             # Takes the host and derives the wss and https URLs itself.
@@ -404,7 +411,7 @@ def create_stt_service(
                 language=language,
                 profanity_filter=False,
                 endpointing=300,
-                model=user_config.stt.model,
+                model=stt_model,
                 keyterm=keyterms or [],
             ),
             should_interrupt=False,  # Let UserAggregator take care of sending InterruptionFrame
