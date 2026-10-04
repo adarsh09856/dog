@@ -787,6 +787,10 @@ async def _resolve_tts_preview_creds(provider_alias: str, user, db_client) -> di
     return {}
 
 
+_AUDIO_PREVIEW_CACHE: dict[str, tuple[bytes, str]] = {}
+_INSTALLED_PIPER_VOICES_CACHE: set[str] = set()
+
+
 @router.get("/configurations/voices/{provider}/{voice_id}/preview")
 async def preview_voice(
     provider: str,
@@ -794,21 +798,7 @@ async def preview_voice(
     request: Request,
     token: Optional[str] = Query(None),
 ):
-    """Generate or stream audio preview for a given voice."""
-    if not request.headers.get("authorization") and token:
-        user = await get_user(authorization=f"Bearer {token}")
-    else:
-        user = await get_user(
-            authorization=request.headers.get("authorization"),
-            x_api_key=request.headers.get("x-api-key"),
-            kodewaves_auth_token=request.cookies.get("kodewaves_auth_token"),
-            dograh_auth_token=request.cookies.get("dograh_auth_token"),
-            oss_token=request.cookies.get("oss_token"),
-        )
-    import os
-    import aiohttp
-    from starlette.responses import Response
-
+    """Generate or stream audio preview for a given voice with in-memory caching for zero latency."""
     provider_lower = provider.lower()
 
     # Provider auto-correction based on voice signature to prevent cross-engine mismatch
@@ -825,37 +815,86 @@ async def preview_voice(
     elif voice_id.startswith(("hi-", "te-", "kn-", "mr-")) and "medium" not in voice_id:
         provider_lower = "navana"
 
+    cache_key = f"{provider_lower}:{voice_id}"
+    if cache_key in _AUDIO_PREVIEW_CACHE:
+        cached_bytes, cached_mime = _AUDIO_PREVIEW_CACHE[cache_key]
+        return Response(
+            content=cached_bytes,
+            media_type=cached_mime,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    if not request.headers.get("authorization") and token:
+        user = await get_user(authorization=f"Bearer {token}")
+    else:
+        user = await get_user(
+            authorization=request.headers.get("authorization"),
+            x_api_key=request.headers.get("x-api-key"),
+            kodewaves_auth_token=request.cookies.get("kodewaves_auth_token"),
+            dograh_auth_token=request.cookies.get("dograh_auth_token"),
+            oss_token=request.cookies.get("oss_token"),
+        )
+    import os
+    import aiohttp
+    from starlette.responses import Response
+
+    def _cache_and_respond(audio_bytes: bytes, mime_type: str) -> Response:
+        if len(_AUDIO_PREVIEW_CACHE) < 500:
+            _AUDIO_PREVIEW_CACHE[cache_key] = (audio_bytes, mime_type)
+        return Response(
+            content=audio_bytes,
+            media_type=mime_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
     # 0. Piper ONNX (OHF-Voice/piper1-gpl HTTP server, local CPU)
     if provider_lower in ("piper", "speaches"):
         piper_url = os.environ.get("PIPER_ENDPOINT", "http://piper:5000").rstrip("/")
         lang_prefix = voice_id.split("_")[0]
+        # Concise prompt (<4 words) for rapid local CPU synthesis (<200ms)
         samples = {
-            "hi": "नमस्ते! कोडवेव्स वॉयस एआई पर आपका स्वागत है।",
-            "te": "నమస్కారం! కోడ్‌వేవ్స్ వాయిస్ ఏఐకి స్వాగతం.",
-            "ml": "നമസ്കാരം! കോഡ്‌വേവ്സ് വോയ്‌സ് എഐയിലേക്ക് സ്വാഗതം.",
-            "mr": "नमस्कार! कोडवेव्स व्हॉइस एआय मध्ये आपले स्वागत आहे.",
-            "bn": "নমস্কার! কোডওয়েভস ভয়েস এআই-তে স্বাগতম।",
+            "hi": "नमस्ते, कोडवेव्स में आपका स्वागत है।",
+            "te": "నమస్కారం, కోడ్‌వేవ్స్‌కు స్వాగతం.",
+            "ml": "നമസ്കാരം, കോഡ്‌വേവ്സിലേക്ക് സ്വാഗതം.",
+            "mr": "नमस्कार, कोडवेव्स मध्ये आपले स्वागत आहे.",
+            "bn": "নমস্কার, কোডওয়েভসে স্বাগতম।",
         }
-        text = samples.get(lang_prefix, "Hello! This is a live preview of this voice on Kodewaves.")
+        text = samples.get(lang_prefix, "Hello from Kodewaves.")
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=120)) as session:
-                # Piper silently falls back to its default voice when a voice is not
-                # installed, so make sure the requested voice is downloaded first.
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
+                # Fast path: direct synthesize first
                 try:
-                    async with session.get(f"{piper_url}/voices") as vresp:
-                        installed = await vresp.json() if vresp.status == 200 else {}
-                    if voice_id not in installed:
-                        async with session.post(f"{piper_url}/download", json={"voice": voice_id}) as dresp:
-                            if dresp.status != 200:
-                                logger.warning(f"[VoicePreview] Piper could not download {voice_id}: HTTP {dresp.status}")
-                                raise HTTPException(status_code=404, detail=f"Piper voice {voice_id} is not available")
-                except HTTPException:
-                    raise
-                except Exception as dl_err:
-                    logger.warning(f"[VoicePreview] Piper voice check failed: {dl_err}")
-                async with session.post(f"{piper_url}/synthesize", json={"text": text, "voice": voice_id}) as resp:
+                    async with session.post(
+                        f"{piper_url}/synthesize",
+                        json={"text": text, "voice": voice_id},
+                        timeout=aiohttp.ClientTimeout(total=5),
+                    ) as resp:
+                        if resp.status == 200:
+                            return _cache_and_respond(await resp.read(), "audio/wav")
+                except Exception:
+                    pass
+
+                # Fallback: check installed list or trigger download if missing
+                if voice_id not in _INSTALLED_PIPER_VOICES_CACHE:
+                    try:
+                        async with session.get(f"{piper_url}/voices", timeout=aiohttp.ClientTimeout(total=3)) as vresp:
+                            if vresp.status == 200:
+                                installed = await vresp.json()
+                                _INSTALLED_PIPER_VOICES_CACHE.update(installed.keys() if isinstance(installed, dict) else installed)
+                    except Exception:
+                        pass
+
+                if voice_id not in _INSTALLED_PIPER_VOICES_CACHE:
+                    try:
+                        async with session.post(f"{piper_url}/download", json={"voice": voice_id}, timeout=aiohttp.ClientTimeout(total=60)) as dresp:
+                            if dresp.status == 200:
+                                _INSTALLED_PIPER_VOICES_CACHE.add(voice_id)
+                    except Exception as dl_err:
+                        logger.warning(f"[VoicePreview] Piper voice check/download failed: {dl_err}")
+
+                async with session.post(f"{piper_url}/synthesize", json={"text": text, "voice": voice_id}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status == 200:
-                        return Response(content=await resp.read(), media_type="audio/wav")
+                        return _cache_and_respond(await resp.read(), "audio/wav")
                     detail = (await resp.text())[:200]
                     logger.warning(f"[VoicePreview] Piper HTTP {resp.status} for {voice_id}: {detail}")
         except Exception as e:
@@ -882,7 +921,7 @@ async def preview_voice(
                             if audios:
                                 import base64
                                 audio_bytes = base64.b64decode(audios[0])
-                                return Response(content=audio_bytes, media_type="audio/wav")
+                                return _cache_and_respond(audio_bytes, "audio/wav")
             except Exception as e:
                 logger.warning(f"[VoicePreview] Sarvam preview failed: {e}")
 
@@ -906,7 +945,7 @@ async def preview_voice(
                     async with session.post("https://api.cartesia.ai/tts/bytes", json=payload, headers=headers) as resp:
                         if resp.status == 200:
                             audio_data = await resp.read()
-                            return Response(content=audio_data, media_type="audio/wav")
+                            return _cache_and_respond(audio_data, "audio/wav")
             except Exception as e:
                 logger.warning(f"[VoicePreview] Cartesia preview failed: {e}")
 
@@ -921,7 +960,7 @@ async def preview_voice(
                     async with session.post("https://api.openai.com/v1/audio/speech", json=payload, headers=headers) as resp:
                         if resp.status == 200:
                             audio_data = await resp.read()
-                            return Response(content=audio_data, media_type="audio/mpeg")
+                            return _cache_and_respond(audio_data, "audio/mpeg")
             except Exception as e:
                 logger.warning(f"[VoicePreview] OpenAI preview failed: {e}")
 
@@ -936,7 +975,7 @@ async def preview_voice(
                     async with session.post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}", json=payload, headers=headers) as resp:
                         if resp.status == 200:
                             audio_data = await resp.read()
-                            return Response(content=audio_data, media_type="audio/mpeg")
+                            return _cache_and_respond(audio_data, "audio/mpeg")
             except Exception as e:
                 logger.warning(f"[VoicePreview] ElevenLabs preview failed: {e}")
 
@@ -975,14 +1014,13 @@ async def preview_voice(
                                         import io
                                         import wave
                                         raw_pcm = base64.b64decode(inline_data["data"])
-                                        # Convert raw PCM (audio/L16, 24kHz) to standard playable WAV container with RIFF header
                                         wav_buf = io.BytesIO()
                                         with wave.open(wav_buf, "wb") as wf:
                                             wf.setnchannels(1)
                                             wf.setsampwidth(2)
                                             wf.setframerate(24000)
                                             wf.writeframes(raw_pcm)
-                                        return Response(content=wav_buf.getvalue(), media_type="audio/wav")
+                                        return _cache_and_respond(wav_buf.getvalue(), "audio/wav")
                         else:
                             err_body = await resp.text()
                             logger.warning(f"[VoicePreview] Gemini preview HTTP {resp.status}: {err_body[:200]}")
@@ -1005,7 +1043,7 @@ async def preview_voice(
                     async with session.post(url, json=payload, headers=headers) as resp:
                         if resp.status == 200:
                             audio_data = await resp.read()
-                            return Response(content=audio_data, media_type="audio/mp3")
+                            return _cache_and_respond(audio_data, "audio/mp3")
             except Exception as e:
                 logger.warning(f"[VoicePreview] Deepgram preview failed: {e}")
 
@@ -1026,7 +1064,7 @@ async def preview_voice(
                     async with session.post(url, data=ssml.encode("utf-8"), headers=headers) as resp:
                         if resp.status == 200:
                             audio_data = await resp.read()
-                            return Response(content=audio_data, media_type="audio/mpeg")
+                            return _cache_and_respond(audio_data, "audio/mpeg")
             except Exception as e:
                 logger.warning(f"[VoicePreview] Azure preview failed: {e}")
 

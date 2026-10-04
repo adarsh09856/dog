@@ -698,9 +698,10 @@ async def authorize_workflow_run_start(
             or getattr(getattr(user_config, "tts", None), "api_key", None) == "sovereign-local-cpu"
         )
 
-        # If using Local CPU engine or BYOK personal keys, no platform minutes are required
+        # If using Local CPU engine or BYOK personal keys or admin/superuser, no platform minutes are required
         # If using Sovereign Platform Managed cloud keys, require > 0 minutes
-        if total_minutes > 0 or not is_managed or is_local_cpu:
+        is_admin = getattr(actor_user, "is_superuser", False) or getattr(actor_user, "is_admin", False)
+        if total_minutes > 0 or not is_managed or is_local_cpu or is_admin:
             if workflow_run_id is not None:
                 try:
                     await _store_run_correlation_id(

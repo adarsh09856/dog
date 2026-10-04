@@ -18,9 +18,11 @@ WORKDIR /app
 COPY deploy/piper/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Pre-download starter voices for instant startup (Hindi Priyamvada, US English Lessac, UK English Alan)
+# Pre-download starter voices for instant startup (Hindi Priyamvada, Hindi Pratham, US English Lessac, Amy, UK English Alan)
 RUN python -m piper.download_voices --data-dir /data hi_IN-priyamvada-medium || true
+RUN python -m piper.download_voices --data-dir /data hi_IN-pratham-medium || true
 RUN python -m piper.download_voices --data-dir /data en_US-lessac-medium || true
+RUN python -m piper.download_voices --data-dir /data en_US-amy-medium || true
 RUN python -m piper.download_voices --data-dir /data en_GB-alan-medium || true
 
 EXPOSE 5000

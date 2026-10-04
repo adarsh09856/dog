@@ -12,10 +12,20 @@ if [ ! -f "$DATA_DIR/$DEFAULT_VOICE.onnx" ]; then
     python -m piper.download_voices --data-dir "$DATA_DIR" "$DEFAULT_VOICE" || true
 fi
 
+if [ ! -f "$DATA_DIR/hi_IN-pratham-medium.onnx" ]; then
+    echo "Downloading hi_IN-pratham-medium into $DATA_DIR..."
+    python -m piper.download_voices --data-dir "$DATA_DIR" "hi_IN-pratham-medium" || true
+fi
+
 # Ensure English starter voices are present
 if [ ! -f "$DATA_DIR/en_US-lessac-medium.onnx" ]; then
     echo "Downloading en_US-lessac-medium into $DATA_DIR..."
     python -m piper.download_voices --data-dir "$DATA_DIR" "en_US-lessac-medium" || true
+fi
+
+if [ ! -f "$DATA_DIR/en_US-amy-medium.onnx" ]; then
+    echo "Downloading en_US-amy-medium into $DATA_DIR..."
+    python -m piper.download_voices --data-dir "$DATA_DIR" "en_US-amy-medium" || true
 fi
 
 if [ ! -f "$DATA_DIR/en_GB-alan-medium.onnx" ]; then

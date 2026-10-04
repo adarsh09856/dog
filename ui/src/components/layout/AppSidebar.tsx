@@ -494,7 +494,13 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
 
-        {Boolean(user?.is_superuser || (user as any)?.role === 'admin') && (
+        {Boolean(
+          user?.is_superuser ||
+          (user as any)?.is_admin ||
+          (user as any)?.role === 'admin' ||
+          (user as any)?.role === 'superadmin' ||
+          config?.deploymentMode === 'oss'
+        ) && (
           <SidebarGroup className="mt-6">
             <SidebarGroupLabel
               className={cn(
@@ -545,7 +551,13 @@ export function AppSidebar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {Boolean(user?.is_superuser || (user as any)?.role === 'admin') && (
+                  {Boolean(
+                    user?.is_superuser ||
+                    (user as any)?.is_admin ||
+                    (user as any)?.role === 'admin' ||
+                    (user as any)?.role === 'superadmin' ||
+                    config?.deploymentMode === 'oss'
+                  ) && (
                     <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-purple-600 dark:text-purple-400 font-medium">
                       <ShieldCheck className="mr-2 h-4 w-4" />
                       Sovereign Admin
