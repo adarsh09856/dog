@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, CheckCircle2, Cloud, Cpu, Info, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
+import { Bot, CheckCircle2, Cloud, Cpu, Info, Key, Layers, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -76,6 +76,9 @@ export interface KodewavesFormState {
     llm_model?: string;
     stt_model?: string;
     tts_model?: string;
+    is_realtime?: boolean;
+    realtime_provider?: string;
+    realtime_model?: string;
 }
 export type DograhFormState = KodewavesFormState;
 
@@ -129,6 +132,32 @@ export const CLOUD_TTS_MODELS = [
 
 export const LOCAL_TTS_MODELS = [
     { value: "piper", label: "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)" },
+];
+
+export const DEFAULT_S2S_MODELS = [
+    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash Live (Sub-300ms)", provider: "google", description: "Ultra-low latency audio-in/audio-out Gemini Live" },
+    { value: "gemini-2.0-flash", label: "Google Gemini 2.0 Flash Live", provider: "google", description: "Standard Gemini 2.0 Live speech-to-speech" },
+    { value: "gpt-4o-realtime-preview", label: "OpenAI GPT-4o Realtime", provider: "openai", description: "Native OpenAI Realtime bidirectional voice" },
+    { value: "gpt-4o-mini-realtime-preview", label: "OpenAI GPT-4o Mini Realtime", provider: "openai", description: "Fast, cost-effective OpenAI Realtime voice" },
+];
+
+export const GEMINI_LIVE_VOICES = [
+    { value: "Puck", label: "Puck (Natural & Conversational)" },
+    { value: "Charon", label: "Charon (Warm & Confident)" },
+    { value: "Kore", label: "Kore (Bright & Engaging)" },
+    { value: "Fenrir", label: "Fenrir (Authoritative & Deep)" },
+    { value: "Aoede", label: "Aoede (Melodic & Expressive)" },
+];
+
+export const OPENAI_REALTIME_VOICES = [
+    { value: "alloy", label: "Alloy (Neutral & Balanced)" },
+    { value: "echo", label: "Echo (Smooth & Warm)" },
+    { value: "shimmer", label: "Shimmer (Expressive & Clear)" },
+    { value: "ash", label: "Ash (Casual & Friendly)" },
+    { value: "ballad", label: "Ballad (Resonant & Melodic)" },
+    { value: "coral", label: "Coral (Energetic & Friendly)" },
+    { value: "sage", label: "Sage (Calm & Wise)" },
+    { value: "verse", label: "Verse (Dynamic & Crisp)" },
 ];
 
 interface AIModelConfigurationV2EditorProps {
@@ -289,6 +318,10 @@ function buildKodewavesState(
         const ttsEngineType = (configuredKodewaves.tts_engine_type as "cloud" | "local_cpu") ||
             (ttsModel === "piper" || (chosenVoice.startsWith("hi_IN-") && !["Journey", "Puck", "Charon", "Aoede", "Fenrir", "Kore", "alloy"].includes(chosenVoice)) ? "local_cpu" : "cloud");
 
+        const isRealtime = Boolean(configuredKodewaves.is_realtime);
+        const realtimeProvider = configuredKodewaves.realtime_provider ? String(configuredKodewaves.realtime_provider) : "google";
+        const realtimeModel = configuredKodewaves.realtime_model ? String(configuredKodewaves.realtime_model) : "gemini-2.5-flash";
+
         return {
             api_key: apiKey,
             voice: chosenVoice,
@@ -301,6 +334,9 @@ function buildKodewavesState(
             llm_model: llmModel,
             stt_model: sttModel,
             tts_model: ttsModel,
+            is_realtime: isRealtime,
+            realtime_provider: realtimeProvider,
+            realtime_model: realtimeModel,
         };
     }
 
@@ -331,6 +367,9 @@ function buildKodewavesState(
             llm_model: llmModel,
             stt_model: sttModel,
             tts_model: ttsModel,
+            is_realtime: false,
+            realtime_provider: "google",
+            realtime_model: "gemini-2.5-flash",
         };
     }
 
@@ -346,6 +385,9 @@ function buildKodewavesState(
         llm_model: undefined,
         stt_model: undefined,
         tts_model: undefined,
+        is_realtime: false,
+        realtime_provider: "google",
+        realtime_model: "gemini-2.5-flash",
     };
 }
 const buildDograhState = buildKodewavesState;
@@ -354,12 +396,16 @@ function preferredMode(
     configuration: Record<string, unknown> | null,
     effectiveConfiguration: Record<string, unknown> | null,
 ): ModelMode {
-    if (configuration?.mode === "kodewaves" || configuration?.mode === "dograh") return "kodewaves";
+    if (configuration?.mode === "kodewaves" || configuration?.mode === "dograh") {
+        const kw = asRecord(configuration.kodewaves || configuration.dograh);
+        if (kw?.is_realtime) return "realtime";
+        return "kodewaves";
+    }
     if (configuration?.mode === "byok") {
         return asRecord(configuration.byok)?.mode === "realtime" ? "realtime" : "byok";
     }
     if (isKodewavesEffectiveConfig(effectiveConfiguration)) return "kodewaves";
-    return Boolean(effectiveConfiguration?.is_realtime) ? "realtime" : "byok";
+    return Boolean(effectiveConfiguration?.is_realtime) ? "realtime" : "kodewaves";
 }
 
 function hasRequiredApiKey(
@@ -623,6 +669,31 @@ export function AIModelConfigurationV2Editor({
         return "google";
     }, [kodewaves.tts_engine_type, kodewaves.tts_model, kodewaves.voice, catalogManifest]);
 
+    const effectiveS2sModels = useMemo(() => {
+        let list = (catalogManifest?.cloud_s2s_models && catalogManifest.cloud_s2s_models.length > 0)
+            ? catalogManifest.cloud_s2s_models
+            : DEFAULT_S2S_MODELS;
+        const activeProvs = catalogManifest?.active_providers;
+        if (activeProvs && activeProvs.length > 0) {
+            const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
+            if (allowed.has("gemini")) allowed.add("google");
+            if (allowed.has("google")) allowed.add("gemini");
+            list = list.filter((m: any) => {
+                const prov = (m.provider || "").toLowerCase();
+                return allowed.has(prov) || m.has_master_key;
+            });
+        }
+        return list;
+    }, [catalogManifest]);
+
+    const effectiveS2sVoices = useMemo(() => {
+        const prov = (kodewaves.realtime_provider || "google").toLowerCase();
+        if (prov === "openai") return OPENAI_REALTIME_VOICES;
+        return GEMINI_LIVE_VOICES;
+    }, [kodewaves.realtime_provider]);
+
+    const [showRealtimeByok, setShowRealtimeByok] = useState(false);
+
     useEffect(() => {
         const rawConfiguration = asRecord(configuration);
         const rawEffectiveConfiguration = asRecord(effectiveConfiguration);
@@ -633,7 +704,7 @@ export function AIModelConfigurationV2Editor({
         setPipelineInitialConfig(getByokInitialConfig(rawConfiguration, rawEffectiveConfiguration, false));
     }, [configuration, defaults, effectiveConfiguration, allowCustomVoice]);
 
-    const saveKodewavesConfiguration = async () => {
+    const saveKodewavesConfiguration = async (overrideRealtime?: boolean) => {
         setIsSavingKodewaves(true);
         setError(null);
         try {
@@ -648,33 +719,28 @@ export function AIModelConfigurationV2Editor({
             }
             const isAllLocal = kodewaves.llm_engine_type === "local_cpu" && kodewaves.stt_engine_type === "local_cpu" && kodewaves.tts_engine_type === "local_cpu";
             const apiKey = isAllLocal ? "sovereign-local-cpu" : "sovereign-managed";
+            const isRt = overrideRealtime !== undefined ? overrideRealtime : Boolean(kodewaves.is_realtime);
+
+            const payload = {
+                api_key: apiKey,
+                voice: kodewaves.voice,
+                speed: kodewaves.speed,
+                language: kodewaves.language,
+                llm_engine_type: kodewaves.llm_engine_type,
+                stt_engine_type: kodewaves.stt_engine_type,
+                tts_engine_type: kodewaves.tts_engine_type,
+                llm_model: kodewaves.llm_model || undefined,
+                stt_model: kodewaves.stt_model || undefined,
+                tts_model: kodewaves.tts_model || undefined,
+                is_realtime: isRt,
+                realtime_provider: kodewaves.realtime_provider || "google",
+                realtime_model: kodewaves.realtime_model || "gemini-2.5-flash",
+            };
             await onSave({
                 version: 2,
                 mode: "kodewaves",
-                kodewaves: {
-                    api_key: apiKey,
-                    voice: kodewaves.voice,
-                    speed: kodewaves.speed,
-                    language: kodewaves.language,
-                    llm_engine_type: kodewaves.llm_engine_type,
-                    stt_engine_type: kodewaves.stt_engine_type,
-                    tts_engine_type: kodewaves.tts_engine_type,
-                    llm_model: kodewaves.llm_model || undefined,
-                    stt_model: kodewaves.stt_model || undefined,
-                    tts_model: kodewaves.tts_model || undefined,
-                },
-                dograh: {
-                    api_key: apiKey,
-                    voice: kodewaves.voice,
-                    speed: kodewaves.speed,
-                    language: kodewaves.language,
-                    llm_engine_type: kodewaves.llm_engine_type,
-                    stt_engine_type: kodewaves.stt_engine_type,
-                    tts_engine_type: kodewaves.tts_engine_type,
-                    llm_model: kodewaves.llm_model || undefined,
-                    stt_model: kodewaves.stt_model || undefined,
-                    tts_model: kodewaves.tts_model || undefined,
-                },
+                kodewaves: payload,
+                dograh: payload,
             });
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save configuration");
@@ -727,27 +793,191 @@ export function AIModelConfigurationV2Editor({
 
             <Tabs value={activeTab} onValueChange={(value) => setMode(value as ModelMode)} className="space-y-6">
                 <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="realtime">Speech to Speech</TabsTrigger>
-                    <TabsTrigger value="kodewaves">Managed Voice</TabsTrigger>
-                    <TabsTrigger value="byok">BYOK</TabsTrigger>
+                    <TabsTrigger value="kodewaves" className="gap-2">
+                        <Layers className="h-4 w-4" />
+                        General (STT + LLM + TTS)
+                    </TabsTrigger>
+                    <TabsTrigger value="realtime" className="gap-2">
+                        <Sparkles className="h-4 w-4" />
+                        Speech to Speech (S2S / STS)
+                    </TabsTrigger>
+                    <TabsTrigger value="byok" className="gap-2">
+                        <Key className="h-4 w-4" />
+                        BYOK (Custom Keys)
+                    </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="realtime" className="mt-0">
-                    <p className="mb-4 text-sm text-muted-foreground">
-                        A single speech-to-speech model handles the conversation in realtime (no separate transcriber or voice). An LLM is still required for variable extraction and QA.
+                <TabsContent value="realtime" className="mt-0 space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                        Native speech-to-speech architecture (Gemini Live &amp; OpenAI Realtime). Single bidirectional WebSocket connection with direct audio streaming, bypassing multi-step cascade delays for sub-300ms conversational latency.
                     </p>
-                    <PricingSummary pricing={pricing} includeManagedModel={false} thirdPartyModels />
-                    <ServiceConfigurationForm
-                        key={`realtime-${JSON.stringify(realtimeInitialConfig)}`}
-                        mode="global"
-                        forceRealtime
-                        configurationDefaults={defaultsForByok}
-                        initialConfig={realtimeInitialConfig}
-                        submitLabel={submitLabel}
-                        onSave={saveByokConfiguration}
-                    />
-                    <ThirdPartyProviderNotice />
+                    <PricingSummary pricing={pricing} includeManagedModel thirdPartyModels />
+                    <Card>
+                        <CardContent className="pt-6">
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 sm:col-span-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <Sparkles className="h-4 w-4 text-primary" />
+                                            <span className="text-xs font-semibold text-foreground">Sovereign Speech-to-Speech (S2S / STS)</span>
+                                        </div>
+                                        <span className="rounded-md border border-primary/30 bg-background px-2 py-0.5 font-mono text-[11px] font-bold text-primary">
+                                            ⚡ Sub-300ms Bidirectional Audio
+                                        </span>
+                                    </div>
+                                    <p className="mt-1 text-[11px] text-muted-foreground">
+                                        Powered by the platform&apos;s central master credentials (Google Gemini / OpenAI). Zero API key setup required.
+                                    </p>
+                                </div>
+
+                                {/* S2S Model Selector */}
+                                <div className="space-y-2 sm:col-span-2">
+                                    <Label className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                                        <Bot className="h-4 w-4 text-primary" />
+                                        Realtime S2S Model
+                                    </Label>
+                                    <Select
+                                        disabled={effectiveS2sModels.length === 0}
+                                        value={
+                                            effectiveS2sModels.length === 0
+                                                ? "none"
+                                                : (kodewaves.realtime_model && effectiveS2sModels.some((m) => m.value === kodewaves.realtime_model)
+                                                    ? kodewaves.realtime_model
+                                                    : (effectiveS2sModels[0]?.value || "gemini-2.5-flash"))
+                                        }
+                                        onValueChange={(val) => {
+                                            const chosen = effectiveS2sModels.find((m) => m.value === val);
+                                            const prov = chosen?.provider || (val.includes("gemini") ? "google" : "openai");
+                                            const nextVoice = prov === "openai" ? "alloy" : "Puck";
+                                            setKodewaves({
+                                                ...kodewaves,
+                                                realtime_model: val,
+                                                realtime_provider: prov,
+                                                voice: nextVoice,
+                                            });
+                                        }}
+                                    >
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder={effectiveS2sModels.length === 0 ? "No realtime models available" : "Select Realtime Model"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {effectiveS2sModels.length === 0 ? (
+                                                <SelectItem key="none" value="none" disabled>
+                                                    No active master keys for Gemini Live or OpenAI Realtime (Configure in Admin &gt; Models)
+                                                </SelectItem>
+                                            ) : (
+                                                effectiveS2sModels.map((m) => (
+                                                    <SelectItem key={m.value} value={m.value}>
+                                                        {m.label}
+                                                    </SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* S2S Voice Selector */}
+                                <div className="space-y-2 sm:col-span-2">
+                                    <Label className="flex items-center gap-1.5 font-semibold text-xs text-foreground">
+                                        <Volume2 className="h-4 w-4 text-primary" />
+                                        Realtime Voice
+                                    </Label>
+                                    <Select
+                                        value={
+                                            effectiveS2sVoices.some((v) => v.value === kodewaves.voice)
+                                                ? kodewaves.voice
+                                                : (effectiveS2sVoices[0]?.value || "Puck")
+                                        }
+                                        onValueChange={(v) => setKodewaves({ ...kodewaves, voice: v })}
+                                    >
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Select voice" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {effectiveS2sVoices.map((v) => (
+                                                <SelectItem key={v.value} value={v.value}>
+                                                    {v.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {/* Language Selector */}
+                                <div className="space-y-2 sm:col-span-2">
+                                    <Label className="text-xs font-semibold">Language</Label>
+                                    <Select value={kodewaves.language} onValueChange={(language) => setKodewaves({ ...kodewaves, language })}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue placeholder="Select language" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {kodewavesDefaults.languages.map((language) => (
+                                                <SelectItem key={language} value={language}>
+                                                    {LANGUAGE_DISPLAY_NAMES[language] || language}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && multilingualLanguageNames && (
+                                        <p className="text-xs text-muted-foreground">
+                                            Auto-detects {multilingualLanguageNames}.
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="sm:col-span-2 p-4 rounded-xl border border-primary/20 bg-primary/5 flex items-start gap-3">
+                                    <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                                    <div className="space-y-1 text-xs">
+                                        <div className="font-semibold text-foreground text-sm">
+                                            Sovereign Realtime Execution
+                                        </div>
+                                        <p className="text-muted-foreground leading-relaxed">
+                                            Speech-to-Speech runs automatically using the central master credentials configured in your Admin Panel. Minutes are deducted from your balance as calls take place.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <Button
+                                type="button"
+                                className="mt-6 w-full"
+                                onClick={() => saveKodewavesConfiguration(true)}
+                                disabled={isSavingKodewaves}
+                            >
+                                <Save className="mr-2 h-4 w-4" />
+                                {isSavingKodewaves ? "Saving..." : submitLabel || "Save Speech to Speech Configuration"}
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Collapsible BYOK for Realtime */}
+                    <div className="pt-2 border-t border-border/40">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowRealtimeByok(!showRealtimeByok)}
+                        >
+                            {showRealtimeByok ? "▲ Hide Custom BYOK Realtime Keys" : "▼ Need to use your own private API keys instead? Click to configure BYOK Realtime"}
+                        </Button>
+                        {showRealtimeByok && (
+                            <div className="mt-3 p-4 rounded-xl border bg-muted/20">
+                                <ServiceConfigurationForm
+                                    key={`realtime-${JSON.stringify(realtimeInitialConfig)}`}
+                                    mode="global"
+                                    forceRealtime
+                                    configurationDefaults={defaultsForByok}
+                                    initialConfig={realtimeInitialConfig}
+                                    submitLabel={submitLabel}
+                                    onSave={saveByokConfiguration}
+                                />
+                                <ThirdPartyProviderNotice />
+                            </div>
+                        )}
+                    </div>
                 </TabsContent>
+
 
                 <TabsContent value="kodewaves" className="mt-0">
                     <p className="mb-4 text-sm text-muted-foreground">
@@ -1089,7 +1319,7 @@ export function AIModelConfigurationV2Editor({
                                                 </span>
                                             </div>
                                             <p className="text-muted-foreground leading-relaxed">
-                                                Voice pipeline calls run exclusively on your server CPU via Ollama (Qwen2.5) and Speaches (Faster-Whisper STT & Piper Native Indic ONNX TTS). Completely sovereign, reliable, and consumes zero wallet minutes.
+                                                Voice pipeline calls run exclusively on your server CPU via Ollama (Qwen2.5) and Piper Native Indic ONNX TTS. Completely sovereign, reliable, and consumes zero wallet minutes.
                                             </p>
                                         </div>
                                     </div>
@@ -1108,7 +1338,7 @@ export function AIModelConfigurationV2Editor({
                                 )}
                             </div>
 
-                            <Button type="button" className="mt-6 w-full" onClick={saveKodewavesConfiguration} disabled={isSavingKodewaves}>
+                            <Button type="button" className="mt-6 w-full" onClick={() => saveKodewavesConfiguration(false)} disabled={isSavingKodewaves}>
                                 <Save className="mr-2 h-4 w-4" />
                                 {isSavingKodewaves ? "Saving..." : submitLabel}
                             </Button>

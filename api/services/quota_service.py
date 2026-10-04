@@ -320,21 +320,25 @@ async def _authorize_hosted_workflow_run_start(
             error_message="Your organization wallet has been suspended or frozen by the administrator.",
         )
 
-    # In sovereign deployment, local CPU and unmetered agents run free
+    # In sovereign deployment, local CPU agents run free without draining credits
     requires_correlation = bool(
         workflow_run_id and uses_managed_model_services_v2(user_config)
     )
     service_key = (
         get_kodewaves_service_api_key(user_config) if requires_correlation else None
     )
-    if service_key in ("sovereign-local-cpu", "sovereign-managed", "default", "managed", "kodewaves-sovereign"):
+    if service_key == "sovereign-local-cpu":
         return QuotaCheckResult(has_quota=True)
 
-    total_minutes = wallet.credit_balance_minutes + wallet.bonus_minutes
+    total_minutes = (wallet.credit_balance_minutes or 0) + (wallet.bonus_minutes or 0)
     if total_minutes > 0:
         return QuotaCheckResult(has_quota=True)
 
-    return QuotaCheckResult(has_quota=True)
+    return QuotaCheckResult(
+        has_quota=False,
+        error_code="insufficient_quota",
+        error_message="Insufficient wallet minutes. Please top up your balance in Sovereign Wallet or contact your administrator.",
+    )
 
 
 async def _authorize_oss_kodewaves_keys(

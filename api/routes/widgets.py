@@ -205,7 +205,7 @@ async def update_widget(widget_id: str, req: WidgetCreateRequest, user: UserMode
             w.position = req.position
         if req.avatar_url is not None:
             w.avatar_url = req.avatar_url
-        if req.allowed_domains:
+        if req.allowed_domains is not None:
             w.allowed_domains = req.allowed_domains
         if req.is_active is not None:
             w.is_active = req.is_active

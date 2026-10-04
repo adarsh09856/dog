@@ -399,7 +399,7 @@ export default function AdminSettingsPage() {
                   Local AI Engine (Self-Hosted CPU Stack)
                 </CardTitle>
                 <CardDescription>
-                  Host ultra-lightweight LLM, STT, and TTS directly on your VPS (Ollama + Speaches/Whisper/Piper) with zero third-party cloud bills.
+                  Host ultra-lightweight LLM and TTS directly on your VPS (Ollama CPU + Piper Neural TTS) with zero third-party cloud bills.
                 </CardDescription>
               </div>
               <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">

@@ -98,6 +98,21 @@ class KodewavesDBClient(BaseDBClient):
             await session.refresh(record)
             return record
 
+    async def update_master_credential_health(self, provider: str, health_status: str) -> bool:
+        """Update health status of master credentials without modifying credentials or category."""
+        async with self.get_session() as session:
+            stmt = select(PlatformMasterCredentialModel).where(
+                PlatformMasterCredentialModel.provider == provider.lower().strip()
+            )
+            result = await session.execute(stmt)
+            record = result.scalar_one_or_none()
+            if record:
+                record.health_status = health_status
+                record.updated_at = datetime.now(UTC)
+                await session.commit()
+                return True
+            return False
+
     # ------------------------------------------------------------------------
     # Model Catalog
     # ------------------------------------------------------------------------
@@ -144,18 +159,29 @@ class KodewavesDBClient(BaseDBClient):
             wallet = result.scalar_one_or_none()
 
             if not wallet:
-                wallet = OrganizationWalletModel(organization_id=organization_id, credit_balance_minutes=0)
+                wallet = OrganizationWalletModel(organization_id=organization_id, credit_balance_minutes=0, bonus_minutes=0)
                 session.add(wallet)
 
-            new_balance = max(0, wallet.credit_balance_minutes - minutes)
-            wallet.credit_balance_minutes = new_balance
+            credit_bal = wallet.credit_balance_minutes or 0
+            bonus_bal = wallet.bonus_minutes or 0
+
+            remaining_to_deduct = minutes
+            if credit_bal >= remaining_to_deduct:
+                wallet.credit_balance_minutes = credit_bal - remaining_to_deduct
+                remaining_to_deduct = 0
+            else:
+                remaining_to_deduct -= credit_bal
+                wallet.credit_balance_minutes = 0
+                wallet.bonus_minutes = max(0, bonus_bal - remaining_to_deduct)
+
+            total_remaining = (wallet.credit_balance_minutes or 0) + (wallet.bonus_minutes or 0)
             wallet.updated_at = datetime.now(UTC)
 
             # Record in ledger
             ledger_entry = WalletLedgerModel(
                 organization_id=organization_id,
                 amount_minutes=-minutes,
-                balance_after=new_balance,
+                balance_after=total_remaining,
                 reason=reason,
                 reference_id=reference_id,
             )

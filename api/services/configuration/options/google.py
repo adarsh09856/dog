@@ -34,7 +34,11 @@ GOOGLE_VERTEX_MODELS = (
 )
 
 
-GOOGLE_REALTIME_MODELS = ("gemini-3.1-flash-live-preview",)
+GOOGLE_REALTIME_MODELS = (
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-3.1-flash-live-preview",
+)
 GOOGLE_REALTIME_VOICES = ("Puck", "Charon", "Kore", "Fenrir", "Aoede")
 GOOGLE_REALTIME_LANGUAGES = (
     "ar",

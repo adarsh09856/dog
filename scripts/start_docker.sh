@@ -228,10 +228,9 @@ existing_local_ai="$(dotenv_value ENABLE_LOCAL_AI_ENGINE || true)"
 if [[ -z "$existing_local_ai" ]]; then
     set_dotenv_value ENABLE_LOCAL_AI_ENGINE "true"
     set_dotenv_value OLLAMA_ENDPOINT "http://ollama:11434"
-    set_dotenv_value SPEACHES_ENDPOINT "http://speaches:8000/v1"
     set_dotenv_value PIPER_ENDPOINT "http://piper:5000"
     set_dotenv_value PIPER_PORT "8766"
-    echo "Enabled Local CPU AI Engine (Ollama + Speaches/Piper) in $ENV_FILE."
+    echo "Enabled Local CPU AI Engine (Ollama + Piper TTS) in $ENV_FILE."
 fi
 
 echo ""

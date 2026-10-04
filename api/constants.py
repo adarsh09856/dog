@@ -271,7 +271,13 @@ TURN_CREDENTIAL_TTL = int(os.getenv("TURN_CREDENTIAL_TTL", "86400"))
 FORCE_TURN_RELAY = os.getenv("FORCE_TURN_RELAY", "false").lower() == "true"
 
 # OSS Email/Password Auth
-OSS_JWT_SECRET = os.getenv("OSS_JWT_SECRET", "change-me-in-production")
+_oss_jwt = os.getenv("OSS_JWT_SECRET")
+if not _oss_jwt or _oss_jwt == "change-me-in-production":
+    if os.getenv("DEPLOYMENT_MODE", "").lower() in ("production", "prod") or os.getenv("KODEWAVES_ENV", "").lower() in ("production", "prod"):
+        raise RuntimeError("CRITICAL SECURITY ERROR: OSS_JWT_SECRET environment variable must be set to a secure secret in production!")
+    OSS_JWT_SECRET = _oss_jwt or "kodewaves-dev-secret-do-not-use-in-production"
+else:
+    OSS_JWT_SECRET = _oss_jwt
 OSS_JWT_EXPIRY_HOURS = int(os.getenv("OSS_JWT_EXPIRY_HOURS", "720"))  # 30 days
 
 TUNER_BASE_URL = os.getenv("TUNER_BASE_URL", "https://api.usetuner.ai")

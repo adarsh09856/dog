@@ -23,8 +23,6 @@ from api.services.configuration.registry import (
     SarvamSTTConfiguration,
     SarvamTTSConfiguration,
     ServiceProviders,
-    SpeachesLLMConfiguration,
-    SpeachesSTTConfiguration,
     SpeachesTTSConfiguration,
 )
 from api.services.credentials.master_credential_service import master_credential_service
@@ -138,8 +136,8 @@ async def _resolve_master_llm(effective: EffectiveAIModelConfiguration) -> bool:
 
     # 2. Fallback provider priority order
     providers_priority = [
-        ("gemini", "gemini-3.8-flash"),
-        ("google", "gemini-3.8-flash"),
+        ("gemini", "gemini-2.5-flash"),
+        ("google", "gemini-2.5-flash"),
         ("openai", "gpt-4o-mini"),
         ("anthropic", "claude-3-5-sonnet-20241022"),
         ("sarvam", "sarvam-2b"),
@@ -164,7 +162,7 @@ async def _resolve_master_stt(effective: EffectiveAIModelConfiguration) -> bool:
     if detected_prov:
         creds = await master_credential_service.get_master_credential(detected_prov)
         if creds and creds.get("api_key"):
-            stt_model = "gemini-3.8-flash" if detected_prov in ("gemini", "google") and ("stt" in current_model.lower() or current_model == "default") else current_model
+            stt_model = "gemini-2.5-flash" if detected_prov in ("gemini", "google") and ("stt" in current_model.lower() or current_model == "default") else current_model
             effective.stt = _build_master_stt(detected_prov, stt_model, creds["api_key"])
             logger.info(f"[KodewavesResolver] Injected targeted STT: {detected_prov}/{stt_model}")
             return True
@@ -172,8 +170,8 @@ async def _resolve_master_stt(effective: EffectiveAIModelConfiguration) -> bool:
     # 2. Fallback provider priority order
     providers_priority = [
         ("deepgram", "nova-3-general"),
-        ("gemini", "gemini-3.8-flash"),
-        ("google", "gemini-3.8-flash"),
+        ("gemini", "gemini-2.5-flash"),
+        ("google", "gemini-2.5-flash"),
         ("navana", "hi-banking-v2-8khz"),
         ("sarvam", "saarika:v1"),
         ("openai", "whisper-1"),
@@ -336,8 +334,6 @@ async def apply_kodewaves_sovereign_resolution(
 
     ollama_base = local_engine.get("ollama_endpoint", local_engine.get("ollama_url", "http://ollama:11434")) if local_engine else "http://ollama:11434"
     ollama_v1_url = ollama_base if ollama_base.endswith("/v1") else f"{ollama_base.rstrip('/')}/v1"
-    speaches_base = local_engine.get("speaches_endpoint", local_engine.get("speaches_url", "http://speaches:8000")) if local_engine else "http://speaches:8000"
-    speaches_v1_url = speaches_base if speaches_base.endswith("/v1") else f"{speaches_base.rstrip('/')}/v1"
     piper_base = os.environ.get("PIPER_ENDPOINT", "http://piper:5000/synthesize").rstrip("/")
     piper_endpoint = piper_base if piper_base.endswith("/synthesize") else f"{piper_base}/synthesize"
 
@@ -348,7 +344,7 @@ async def apply_kodewaves_sovereign_resolution(
         provider_name = getattr(provider, "value", provider)
         user_key = getattr(effective.llm, "api_key", None)
 
-        if str(provider_name).lower() == "speaches" or user_key == "sovereign-local-cpu":
+        if str(provider_name).lower() in ("speaches", "ollama") or user_key == "sovereign-local-cpu":
             if not engine_enabled or not has_local_access:
                 logger.warning(f"[KodewavesResolver] Org {organization_id} attempted to use Local AI Engine without admin permission")
                 raise HTTPException(
@@ -357,8 +353,8 @@ async def apply_kodewaves_sovereign_resolution(
                 )
             current_llm_model = getattr(effective.llm, "model", None)
             model_to_use = current_llm_model if (current_llm_model and current_llm_model != "default") else "qwen2.5:0.5b"
-            effective.llm = SpeachesLLMConfiguration(
-                api_key="local-cpu-token",
+            effective.llm = OpenAILLMService(
+                api_key="sovereign-local-cpu",
                 model=model_to_use,
                 base_url=ollama_v1_url,
             )
@@ -373,8 +369,8 @@ async def apply_kodewaves_sovereign_resolution(
                     logger.info(f"[KodewavesResolver] No cloud master LLM key configured; falling back to Local CPU Ollama for Org {organization_id}")
                     current_llm_model = getattr(effective.llm, "model", None)
                     model_to_use = current_llm_model if (current_llm_model and current_llm_model != "default") else "qwen2.5:0.5b"
-                    effective.llm = SpeachesLLMConfiguration(
-                        api_key="local-cpu-token",
+                    effective.llm = OpenAILLMService(
+                        api_key="sovereign-local-cpu",
                         model=model_to_use,
                         base_url=ollama_v1_url,
                     )
@@ -393,41 +389,42 @@ async def apply_kodewaves_sovereign_resolution(
         provider_name = getattr(provider, "value", provider)
         user_key = getattr(effective.stt, "api_key", None)
 
-        if str(provider_name).lower() == "speaches" or user_key == "sovereign-local-cpu":
-            if not engine_enabled or not has_local_access:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Local CPU AI Engine access is restricted. Please contact your administrator to enable access.",
-                )
-            current_stt_model = getattr(effective.stt, "model", None)
-            stt_model_to_use = current_stt_model if (current_stt_model and current_stt_model != "default") else "Systran/faster-whisper-tiny"
-            effective.stt = SpeachesSTTConfiguration(
-                api_key="local-cpu-token",
-                model=stt_model_to_use,
-                base_url=speaches_v1_url,
-            )
-            is_using_local_cpu_engine = True
-        elif str(provider_name).lower() in ("kodewaves", "dograh", "default") or not allow_byok or not user_key or user_key == "sovereign-managed":
-            if str(provider_name).lower() in ("kodewaves", "dograh", "default"):
-                resolved = await _resolve_master_stt(effective)
-                if resolved:
+        # STT runs exclusively via Cloud Master STT (Deepgram, Gemini, Sarvam, OpenAI)
+        if str(provider_name).lower() in ("speaches", "kodewaves", "dograh", "default") or user_key in ("sovereign-local-cpu", "sovereign-managed", None) or not allow_byok:
+            resolved = await _resolve_master_stt(effective)
+            if resolved:
+                is_using_master_keys = True
+            else:
+                # Automatic graceful fallback to environment variables
+                if os.environ.get("DEEPGRAM_API_KEY"):
+                    effective.stt = DeepgramSTTConfiguration(
+                        api_key=os.environ["DEEPGRAM_API_KEY"],
+                        model="nova-3",
+                    )
+                    is_using_master_keys = True
+                elif os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+                    effective.stt = GoogleGeminiSTTConfiguration(
+                        api_key=os.environ.get("GEMINI_API_KEY") or os.environ["GOOGLE_API_KEY"],
+                        model="gemini-2.5-flash",
+                    )
+                    is_using_master_keys = True
+                elif os.environ.get("OPENAI_API_KEY"):
+                    effective.stt = OpenAISTTConfiguration(
+                        api_key=os.environ["OPENAI_API_KEY"],
+                        model="whisper-1",
+                    )
                     is_using_master_keys = True
                 else:
-                    # Automatic graceful fallback to Local CPU Speaches Whisper STT
-                    logger.info(f"[KodewavesResolver] No cloud master STT key configured; falling back to Local CPU Speaches STT for Org {organization_id}")
-                    current_stt_model = getattr(effective.stt, "model", None)
-                    stt_model_to_use = current_stt_model if (current_stt_model and current_stt_model != "default") else "Systran/faster-whisper-tiny"
-                    effective.stt = SpeachesSTTConfiguration(
-                        api_key="local-cpu-token",
-                        model=stt_model_to_use,
-                        base_url=speaches_v1_url,
+                    logger.error(f"[KodewavesResolver] No cloud master STT key configured for Org {organization_id}")
+                    raise HTTPException(
+                        status_code=400,
+                        detail="No Speech-to-Text (STT) provider configured. Please configure Deepgram or Google Gemini API key in Admin > Master Keys.",
                     )
-                    is_using_local_cpu_engine = True
-            else:
-                master_creds = await master_credential_service.get_master_credential(str(provider_name))
-                if master_creds and master_creds.get("api_key"):
-                    effective.stt.api_key = master_creds["api_key"]
-                    is_using_master_keys = True
+        else:
+            master_creds = await master_credential_service.get_master_credential(str(provider_name))
+            if master_creds and master_creds.get("api_key"):
+                effective.stt.api_key = master_creds["api_key"]
+                is_using_master_keys = True
 
     # 5. Resolve TTS Section
     if effective.tts:
@@ -435,14 +432,15 @@ async def apply_kodewaves_sovereign_resolution(
         provider_name = getattr(provider, "value", provider)
         user_key = getattr(effective.tts, "api_key", None)
 
-        if str(provider_name).lower() == "speaches" or user_key == "sovereign-local-cpu":
+        if str(provider_name).lower() in ("speaches", "piper") or user_key == "sovereign-local-cpu":
             if not engine_enabled or not has_local_access:
                 raise HTTPException(
                     status_code=403,
                     detail="Local CPU AI Engine access is restricted. Please contact your administrator to enable access.",
                 )
-            lang = getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None) or "hi"
-            default_local_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
+            raw_lang = str(getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None) or "hi").lower()
+            is_indic = any(raw_lang.startswith(prefix) for prefix in ("hi", "te", "ta", "mr", "gu", "kn", "bn", "ml", "pa", "or", "ur"))
+            default_local_voice = "hi_IN-priyamvada-medium" if is_indic else "en_US-lessac-medium"
             current_voice = getattr(effective.tts, "voice", default_local_voice)
             is_piper_voice = current_voice and ("_IN-" in current_voice or "_US-" in current_voice or "_GB-" in current_voice or "_ES-" in current_voice or "_FR-" in current_voice or "_DE-" in current_voice or "_IT-" in current_voice or current_voice.startswith(("hi_IN-", "en_US-")))
             voice = current_voice if is_piper_voice else default_local_voice
@@ -462,8 +460,9 @@ async def apply_kodewaves_sovereign_resolution(
                 else:
                     # Automatic graceful fallback to Local CPU Piper ONNX TTS
                     logger.info(f"[KodewavesResolver] No cloud master TTS key configured; falling back to Local CPU Piper TTS for Org {organization_id}")
-                    lang = getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None) or "hi"
-                    default_local_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
+                    raw_lang = str(getattr(effective.stt, "language", None) or getattr(effective.tts, "language", None) or "hi").lower()
+                    is_indic = any(raw_lang.startswith(prefix) for prefix in ("hi", "te", "ta", "mr", "gu", "kn", "bn", "ml", "pa", "or", "ur"))
+                    default_local_voice = "hi_IN-priyamvada-medium" if is_indic else "en_US-lessac-medium"
                     current_voice = getattr(effective.tts, "voice", default_local_voice)
                     is_piper_voice = current_voice and ("_IN-" in current_voice or "_US-" in current_voice or "_GB-" in current_voice or "_ES-" in current_voice or "_FR-" in current_voice or "_DE-" in current_voice or "_IT-" in current_voice or current_voice.startswith(("hi_IN-", "en_US-")))
                     voice = current_voice if is_piper_voice else default_local_voice

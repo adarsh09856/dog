@@ -60,6 +60,46 @@ DEFAULT_LOCAL_TTS_MODELS = [
     {"value": "piper", "label": "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)"},
 ]
 
+# Official verified speech-to-speech (S2S / Realtime) models
+DEFAULT_CLOUD_S2S_MODELS = [
+    {
+        "value": "gemini-2.5-flash",
+        "label": "Google Gemini 2.5 Flash Live (Bidirectional S2S)",
+        "provider": "google",
+        "voices": ["Puck", "Charon", "Kore", "Fenrir", "Aoede"],
+    },
+    {
+        "value": "gemini-2.0-flash",
+        "label": "Google Gemini 2.0 Flash Live (Ultra Fast S2S)",
+        "provider": "google",
+        "voices": ["Puck", "Charon", "Kore", "Fenrir", "Aoede"],
+    },
+    {
+        "value": "gpt-4o-realtime-preview",
+        "label": "OpenAI GPT-4o Realtime (Low-Latency S2S)",
+        "provider": "openai",
+        "voices": ["alloy", "echo", "shimmer", "ash", "ballad", "coral", "sage", "verse"],
+    },
+    {
+        "value": "gpt-4o-mini-realtime-preview",
+        "label": "OpenAI GPT-4o Mini Realtime (Cost-effective S2S)",
+        "provider": "openai",
+        "voices": ["alloy", "echo", "shimmer", "ash", "ballad", "coral", "sage", "verse"],
+    },
+    {
+        "value": "amazon.nova-sonic-v1:0",
+        "label": "AWS Bedrock Nova Sonic S2S",
+        "provider": "aws",
+        "voices": ["en-US-Jenny", "en-US-Guy"],
+    },
+    {
+        "value": "fixie-ai/ultravox-v0_5-llama-3_3-70b",
+        "label": "Ultravox 70B Realtime",
+        "provider": "ultravox",
+        "voices": ["terrence", "mark", "jessica"],
+    },
+]
+
 
 @router.get("/available")
 async def get_available_catalog(
@@ -107,11 +147,20 @@ async def get_available_catalog(
     cloud_llm = build_categorized_models(DEFAULT_CLOUD_LLM_MODELS)
     cloud_stt = build_categorized_models(DEFAULT_CLOUD_STT_MODELS)
     cloud_tts = build_categorized_models(DEFAULT_CLOUD_TTS_MODELS)
+    cloud_s2s = build_categorized_models(DEFAULT_CLOUD_S2S_MODELS)
 
     # Prepend Auto recommendation
+    has_gemini = "google" in active_providers or "gemini" in active_providers
     cloud_llm.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": len(active_providers) > 0})
     cloud_stt.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": len(active_providers) > 0})
     cloud_tts.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": len(active_providers) > 0})
+    cloud_s2s.insert(0, {
+        "value": "auto",
+        "label": "Auto (Google Gemini 2.5 Live)" if has_gemini else "Auto (Recommended S2S)",
+        "provider": "google",
+        "has_master_key": has_gemini,
+        "voices": ["Puck", "Charon", "Kore", "Fenrir", "Aoede"],
+    })
 
     # 3. Query installed Ollama models
     local_ai_setting = await kodewaves_db_client.get_setting("local_ai") or {}
@@ -148,9 +197,11 @@ async def get_available_catalog(
         "cloud_llm_models": cloud_llm,
         "cloud_stt_models": cloud_stt,
         "cloud_tts_models": cloud_tts,
+        "cloud_s2s_models": cloud_s2s,
         "local_llm_models": installed_local_llm,
         "local_stt_models": DEFAULT_LOCAL_STT_MODELS,
         "local_tts_models": DEFAULT_LOCAL_TTS_MODELS,
         "local_engine_enabled": engine_enabled,
         "has_local_ai_access": has_local_access,
+        "supported_modes": ["general", "realtime"],
     }

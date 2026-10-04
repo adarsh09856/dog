@@ -496,8 +496,14 @@ async def save_model_configuration_v2(
         organization_id,
         configuration,
     )
-    if configuration.mode == "dograh" and configuration.dograh:
-        is_local_cpu = configuration.dograh.api_key == "sovereign-local-cpu"
+    cfg = configuration.kodewaves or configuration.dograh
+    if cfg and configuration.mode in ("kodewaves", "dograh"):
+        is_local_cpu = (
+            getattr(cfg, "api_key", None) == "sovereign-local-cpu"
+            or getattr(cfg, "llm_engine_type", None) == "local_cpu"
+            or getattr(cfg, "tts_engine_type", None) == "local_cpu"
+            or getattr(cfg, "stt_engine_type", None) == "local_cpu"
+        )
         await kodewaves_db_client.set_setting(
             f"local_ai_org_{organization_id}",
             {"enabled": is_local_cpu},

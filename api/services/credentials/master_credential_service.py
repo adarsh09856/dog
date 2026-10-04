@@ -131,6 +131,9 @@ class MasterCredentialService:
                 return {"api_key": val}
         return None
 
+    # Backward compatibility alias
+    get_decrypted_credential = get_master_credential
+
     async def test_connection(self, provider: str) -> Tuple[bool, str]:
         """Test active API connectivity to an upstream provider using master credentials."""
         creds = await self.get_master_credential(provider)

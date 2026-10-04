@@ -152,15 +152,7 @@ COPY --chown=kodewaves:kodewaves ./pipecat ./pipecat
 #     with the command:[] entries in deploy/helm/kodewaves/templates/*.yaml.
 #   drain_web.sh             — web pod preStop hook (call-safe scale-down); see
 #     lifecycle.preStop in deploy/helm/kodewaves/templates/web-deployment.yaml.
-COPY --chown=kodewaves:kodewaves \
-     ./scripts/start_services_docker.sh \
-     ./scripts/run_migrate.sh \
-     ./scripts/run_web.sh \
-     ./scripts/run_arq_worker.sh \
-     ./scripts/run_ari_manager.sh \
-     ./scripts/run_campaign_orchestrator.sh \
-     ./scripts/drain_web.sh \
-     ./scripts/
+COPY --chown=kodewaves:kodewaves ./scripts/ ./scripts/
 
 # ts_validator Node deps (built in ts-deps stage with full node:22-slim image).
 # The validator runs as a short-lived subprocess from api/mcp_server/ts_bridge.py.

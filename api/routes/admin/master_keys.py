@@ -56,7 +56,7 @@ async def list_master_keys(_user=Depends(get_superuser)):
         masked = None
         if r.credentials_encrypted:
             try:
-                dec = await master_credential_service.get_decrypted_credential(r.provider)
+                dec = await master_credential_service.get_master_credential(r.provider)
                 if dec:
                     raw_k = dec.get("api_key") or dec.get("key") or dec.get("auth_token") or ""
                     if raw_k:
@@ -140,11 +140,8 @@ async def test_master_key_post(req: TestConnectionRequest, _user=Depends(get_sup
     status_str = "healthy" if success else "invalid"
     # Update health status in DB
     try:
-        await kodewaves_db_client.upsert_master_credential(
+        await kodewaves_db_client.update_master_credential_health(
             provider=req.provider.lower().strip(),
-            category="llm",
-            credentials_encrypted="",
-            is_enabled=True,
             health_status=status_str,
         )
     except Exception:
@@ -162,11 +159,8 @@ async def test_master_key_connection_path(provider: str, _user=Depends(get_super
 
     status_str = "healthy" if success else "invalid"
     try:
-        await kodewaves_db_client.upsert_master_credential(
+        await kodewaves_db_client.update_master_credential_health(
             provider=provider.lower().strip(),
-            category="llm",
-            credentials_encrypted="",
-            is_enabled=True,
             health_status=status_str,
         )
     except Exception:

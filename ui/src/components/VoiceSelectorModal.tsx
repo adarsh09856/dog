@@ -204,12 +204,17 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     // Preview playback.
     const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const audioObjectUrlRef = useRef<string | null>(null);
     const requestId = useRef(0);
 
     const stopPreview = useCallback(() => {
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current = null;
+        }
+        if (audioObjectUrlRef.current) {
+            URL.revokeObjectURL(audioObjectUrlRef.current);
+            audioObjectUrlRef.current = null;
         }
         if (typeof window !== "undefined" && "speechSynthesis" in window) {
             window.speechSynthesis.cancel();
@@ -418,14 +423,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 headers["Authorization"] = `Bearer ${token}`;
             }
 
-            // Append query token fallback for instances where headers might be intercepted
-            let finalUrl = voice.preview_url;
-            if (token && !finalUrl.includes("token=")) {
-                const separator = finalUrl.includes("?") ? "&" : "?";
-                finalUrl = `${finalUrl}${separator}token=${encodeURIComponent(token)}`;
-            }
-
-            const response = await fetch(finalUrl, { headers });
+            const response = await fetch(voice.preview_url, { headers });
             if (!response.ok) {
                 console.warn(`Preview fetch failed: HTTP ${response.status}`);
                 playBrowserSpeech();
@@ -433,16 +431,26 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             }
 
             const blob = await response.blob();
+            if (audioObjectUrlRef.current) {
+                URL.revokeObjectURL(audioObjectUrlRef.current);
+            }
             const objectUrl = URL.createObjectURL(blob);
+            audioObjectUrlRef.current = objectUrl;
             const audio = new Audio(objectUrl);
             audioRef.current = audio;
 
             audio.onended = () => {
-                URL.revokeObjectURL(objectUrl);
+                if (audioObjectUrlRef.current) {
+                    URL.revokeObjectURL(audioObjectUrlRef.current);
+                    audioObjectUrlRef.current = null;
+                }
                 clear();
             };
             audio.onerror = () => {
-                URL.revokeObjectURL(objectUrl);
+                if (audioObjectUrlRef.current) {
+                    URL.revokeObjectURL(audioObjectUrlRef.current);
+                    audioObjectUrlRef.current = null;
+                }
                 playBrowserSpeech();
             };
             await audio.play();

@@ -346,25 +346,7 @@ async def seed_ai_model_catalog():
             "retail_price_cents_per_unit": 0.40,
             "sort_order": 25,
         },
-        # Local CPU Models (Faster-Whisper + Piper ONNX — Zero Cloud Cost)
-        {
-            "model_identifier": "speaches-whisper-tiny",
-            "display_name": "Speaches Whisper Tiny (Local CPU STT)",
-            "provider": "speaches",
-            "category": "stt",
-            "base_cost_cents_per_unit": 0.00,
-            "retail_price_cents_per_unit": 0.00,
-            "sort_order": 13,
-        },
-        {
-            "model_identifier": "faster-whisper-base",
-            "display_name": "Faster-Whisper Base (Local CPU STT - English & Hindi)",
-            "provider": "speaches",
-            "category": "stt",
-            "base_cost_cents_per_unit": 0.00,
-            "retail_price_cents_per_unit": 0.00,
-            "sort_order": 14,
-        },
+        # Local CPU Models (Ollama LLM + Piper ONNX TTS — Zero Cloud Cost)
         {
             "model_identifier": "piper-hindi",
             "display_name": "Piper TTS (Native Hindi & Indic ONNX)",
@@ -382,6 +364,43 @@ async def seed_ai_model_catalog():
             "base_cost_cents_per_unit": 0.00,
             "retail_price_cents_per_unit": 0.00,
             "sort_order": 7,
+        },
+        # Speech-to-Speech (S2S / STS Realtime) Models
+        {
+            "model_identifier": "gemini-2.5-flash-live",
+            "display_name": "Google Gemini 2.5 Flash Live (Bidirectional S2S)",
+            "provider": "google",
+            "category": "sts",
+            "base_cost_cents_per_unit": 0.10,
+            "retail_price_cents_per_unit": 0.20,
+            "sort_order": 30,
+        },
+        {
+            "model_identifier": "gemini-2.0-flash-live",
+            "display_name": "Google Gemini 2.0 Flash Live (Low-Latency S2S)",
+            "provider": "google",
+            "category": "sts",
+            "base_cost_cents_per_unit": 0.08,
+            "retail_price_cents_per_unit": 0.18,
+            "sort_order": 31,
+        },
+        {
+            "model_identifier": "gpt-4o-realtime-preview",
+            "display_name": "OpenAI GPT-4o Realtime (Bidirectional S2S)",
+            "provider": "openai",
+            "category": "sts",
+            "base_cost_cents_per_unit": 0.60,
+            "retail_price_cents_per_unit": 1.20,
+            "sort_order": 32,
+        },
+        {
+            "model_identifier": "gpt-4o-mini-realtime-preview",
+            "display_name": "OpenAI GPT-4o Mini Realtime (Cost-effective S2S)",
+            "provider": "openai",
+            "category": "sts",
+            "base_cost_cents_per_unit": 0.20,
+            "retail_price_cents_per_unit": 0.45,
+            "sort_order": 33,
         },
     ]
 

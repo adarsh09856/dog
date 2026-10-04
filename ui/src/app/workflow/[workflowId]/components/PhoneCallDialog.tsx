@@ -301,7 +301,16 @@ export const PhoneCallDialog = ({
                 if (typeof response.error === "string") {
                     errMsg = response.error;
                 } else if (response.error && typeof response.error === "object") {
-                    errMsg = (response.error as unknown as { detail: string }).detail || JSON.stringify(response.error);
+                    const detail = (response.error as any).detail;
+                    if (typeof detail === "string") {
+                        errMsg = detail;
+                    } else if (Array.isArray(detail)) {
+                        errMsg = detail.map((d: any) => d.msg || d.message || JSON.stringify(d)).join("; ");
+                    } else if (detail && typeof detail === "object") {
+                        errMsg = (detail as any).message || (detail as any).msg || JSON.stringify(detail);
+                    } else {
+                        errMsg = (response.error as any).message || JSON.stringify(response.error);
+                    }
                 }
                 setCallError(errMsg);
             } else {

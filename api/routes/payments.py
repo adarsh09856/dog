@@ -320,15 +320,13 @@ async def verify_payment(req: VerifyPaymentRequest, user: UserModel = Depends(ge
 
     # Signature verification for Razorpay
     if req.gateway.lower() == "razorpay":
-        secret = creds["razorpay_key_secret"]
-        if secret:
-            if not req.signature:
-                raise HTTPException(status_code=400, detail="Razorpay signature is required for payment verification")
-            if not verify_razorpay_signature(req.order_id, req.payment_id, req.signature, secret):
-                raise HTTPException(status_code=400, detail="Invalid Razorpay payment signature")
-        elif not req.order_id.startswith("order_kw_"):
-            # When gateway is not yet configured, allow sandbox orders but warn
-            logger.warning(f"[Payments] Non-sandbox order verified without razorpay_key_secret: {req.order_id}")
+        secret = creds.get("razorpay_key_secret")
+        if not secret:
+            raise HTTPException(status_code=400, detail="Razorpay gateway is not configured on this platform")
+        if not req.signature:
+            raise HTTPException(status_code=400, detail="Razorpay signature is required for payment verification")
+        if not verify_razorpay_signature(req.order_id, req.payment_id, req.signature, secret):
+            raise HTTPException(status_code=400, detail="Invalid Razorpay payment signature")
 
     minutes_to_add = 0
     assigned_plan_code = None
@@ -456,8 +454,10 @@ async def stripe_webhook(
     creds = await get_gateway_credentials()
     webhook_secret = creds["stripe_webhook_secret"]
 
-    # Basic HMAC verification if webhook secret configured
-    if webhook_secret and stripe_signature:
+    # Strict HMAC verification if webhook secret configured
+    if webhook_secret:
+        if not stripe_signature:
+            raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
         try:
             # Parse timestamp and signature from header
             sig_dict = dict(x.split("=", 1) for x in stripe_signature.split(",") if "=" in x)
@@ -467,8 +467,12 @@ async def stripe_webhook(
             computed = hmac.new(webhook_secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
             if not hmac.compare_digest(computed, v1):
                 logger.warning("[Payments] Stripe webhook signature mismatch")
+                raise HTTPException(status_code=400, detail="Invalid Stripe webhook signature")
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"[Payments] Stripe signature check error: {e}")
+            raise HTTPException(status_code=400, detail="Error validating Stripe webhook signature")
 
     try:
         event = json.loads(body.decode("utf-8"))

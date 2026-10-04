@@ -19,6 +19,7 @@ fileConfig(config.config_file_name)
 
 # Import your model's MetaData object for 'autogenerate' support.
 from api.db.models import Base  # noqa: E402 ensure this points to your models.py
+import api.db.kodewaves_models  # noqa: F401 registers all 20 sovereign and AgentLabs models
 
 target_metadata = Base.metadata
 

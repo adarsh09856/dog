@@ -5,9 +5,3 @@ upstream kodewaves_backend {
 
 {{UVICORN_UPSTREAM_SERVERS}}
 }
-
-upstream kodewaves_backend {
-    least_conn;
-
-{{UVICORN_UPSTREAM_SERVERS}}
-}

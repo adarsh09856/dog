@@ -734,11 +734,13 @@ export interface AvailableCatalogResponse {
   cloud_llm_models: CatalogModelOption[];
   cloud_stt_models: CatalogModelOption[];
   cloud_tts_models: CatalogModelOption[];
+  cloud_s2s_models?: CatalogModelOption[];
   local_llm_models: CatalogModelOption[];
   local_stt_models: CatalogModelOption[];
   local_tts_models: CatalogModelOption[];
   local_engine_enabled: boolean;
   has_local_ai_access: boolean;
+  supported_modes?: string[];
 }
 
 export const catalogApi = {

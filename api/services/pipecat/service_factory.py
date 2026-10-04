@@ -1,3 +1,4 @@
+import os
 from functools import wraps
 from typing import TYPE_CHECKING
 from urllib.parse import urlencode, urlparse, urlunparse
@@ -484,7 +485,6 @@ def create_stt_service(
         ServiceProviders.DOGRAH.value,
         "kodewaves",
     ):
-        import os
         language = getattr(user_config.stt, "language", None) or "multi"
         stt_api_key = getattr(user_config.stt, "api_key", None)
 
@@ -515,11 +515,9 @@ def create_stt_service(
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
-        # Fallback to Deepgram default
-        return DeepgramSTTService(
-            api_key=deepgram_key or "",
-            settings=DeepgramSTTSettings(model="nova-3"),
-            sample_rate=audio_config.transport_in_sample_rate,
+        raise HTTPException(
+            status_code=500,
+            detail="No Speech-to-Text (STT) credentials configured. Please configure Deepgram, Google Gemini, or OpenAI API keys in Admin > Master Keys.",
         )
     elif user_config.stt.provider == ServiceProviders.SARVAM.value:
         language = getattr(user_config.stt, "language", None)

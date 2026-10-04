@@ -235,8 +235,8 @@ async def list_public_packages():
 
 
 @router.get("/plans", response_model=List[SaaSPlanPublicItem])
-async def list_authenticated_plans():
-    """Alias for list_public_plans to support frontend billing client."""
+async def list_authenticated_plans(_user: UserModel = Depends(get_user)):
+    """Authenticated endpoint for SaaS plans with current user session."""
     return await list_public_plans()
 
 

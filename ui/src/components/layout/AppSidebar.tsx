@@ -498,8 +498,7 @@ export function AppSidebar() {
           user?.is_superuser ||
           (user as any)?.is_admin ||
           (user as any)?.role === 'admin' ||
-          (user as any)?.role === 'superadmin' ||
-          config?.deploymentMode === 'oss'
+          (user as any)?.role === 'superadmin'
         ) && (
           <SidebarGroup className="mt-6">
             <SidebarGroupLabel

@@ -71,6 +71,9 @@ class KodewavesManagedAIModelConfiguration(BaseModel):
     llm_engine_type: Optional[str] = None
     stt_engine_type: Optional[str] = None
     tts_engine_type: Optional[str] = None
+    is_realtime: Optional[bool] = False
+    realtime_provider: Optional[str] = None
+    realtime_model: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -196,6 +199,61 @@ def _compile_kodewaves_configuration(
     configuration: KodewavesManagedAIModelConfiguration,
 ) -> EffectiveAIModelConfiguration:
     api_key = configuration.api_key or "sovereign-managed"
+
+    # S2S / Realtime compilation
+    if configuration.is_realtime:
+        prov = str(configuration.realtime_provider or "google").lower()
+        rt_model = configuration.realtime_model or "auto"
+        rt_voice = configuration.voice or "Puck"
+        from api.services.configuration.registry import (
+            GoogleRealtimeLLMConfiguration,
+            OpenAIRealtimeLLMConfiguration,
+            AWSNovaSonicRealtimeLLMConfiguration,
+            UltravoxRealtimeLLMConfiguration,
+        )
+        if prov in ("openai", "openai_realtime"):
+            realtime_service = OpenAIRealtimeLLMConfiguration(
+                api_key=api_key,
+                model="gpt-4o-realtime-preview" if rt_model in ("default", "auto") else rt_model,
+                voice=rt_voice if rt_voice in ("alloy", "echo", "shimmer", "ash", "ballad", "coral", "sage", "verse") else "alloy",
+            )
+        elif prov in ("aws", "aws_bedrock", "aws_nova_sonic"):
+            realtime_service = AWSNovaSonicRealtimeLLMConfiguration(
+                api_key=api_key,
+                model="amazon.nova-sonic-v1:0" if rt_model in ("default", "auto") else rt_model,
+                voice=rt_voice or "en-US-Jenny",
+            )
+        elif prov in ("ultravox", "ultravox_realtime"):
+            realtime_service = UltravoxRealtimeLLMConfiguration(
+                api_key=api_key,
+                model="fixie-ai/ultravox-v0_5-llama-3_3-70b" if rt_model in ("default", "auto") else rt_model,
+                voice=rt_voice or "terrence",
+            )
+        else:
+            # Default to Google Gemini 2.5 Live
+            realtime_service = GoogleRealtimeLLMConfiguration(
+                api_key=api_key,
+                model="gemini-2.5-flash" if rt_model in ("default", "auto") else rt_model,
+                voice=rt_voice if rt_voice in ("Puck", "Charon", "Kore", "Fenrir", "Aoede") else "Puck",
+                language=configuration.language if configuration.language != "multi" else "en",
+            )
+
+        return EffectiveAIModelConfiguration(
+            realtime=realtime_service,
+            llm=KodewavesLLMService(
+                provider=ServiceProviders.KODEWAVES,
+                api_key=api_key,
+                model="gemini-2.5-flash",
+            ),
+            embeddings=KodewavesEmbeddingsConfiguration(
+                provider=ServiceProviders.KODEWAVES,
+                api_key=api_key,
+                model="kodewaves_embedding_v1",
+            ),
+            is_realtime=True,
+            managed_service_version=2,
+        )
+
     llm_key = "sovereign-local-cpu" if configuration.llm_engine_type == "local_cpu" else api_key
     tts_key = "sovereign-local-cpu" if configuration.tts_engine_type == "local_cpu" else api_key
     stt_key = "sovereign-local-cpu" if configuration.stt_engine_type == "local_cpu" else api_key

@@ -138,6 +138,10 @@ async def delete_template(template_id: str, _user=Depends(get_user)):
         if not record:
             raise HTTPException(status_code=404, detail="Template not found")
 
+        is_super = getattr(_user, "is_superuser", False) or getattr(_user, "role", "") in ("admin", "superadmin")
+        if record.is_system_template and not is_super:
+            raise HTTPException(status_code=403, detail="Cannot delete a system prompt template")
+
         await session.delete(record)
         await session.commit()
         return {"message": "Prompt template deleted successfully"}

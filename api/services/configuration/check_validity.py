@@ -211,6 +211,8 @@ class UserConfigurationValidator:
                 ]
 
         api_key = service_config.api_key
+        if not api_key or api_key in ("sovereign-managed", "sovereign-local-cpu", "default", "managed", "kodewaves-sovereign"):
+            return []
 
         try:
             if not self._check_api_key(provider, api_key, service_config):
