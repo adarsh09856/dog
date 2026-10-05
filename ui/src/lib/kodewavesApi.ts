@@ -784,4 +784,42 @@ export const catalogApi = {
   getAvailableCatalog: () => apiFetch<AvailableCatalogResponse>('/catalog/available'),
 };
 
+export interface OverviewStatsResponse {
+  wallet: {
+    credit_balance_minutes: number;
+    bonus_minutes: number;
+    total_minutes: number;
+  };
+  calls: {
+    active_calls: number;
+    calls_today: number;
+    calls_this_week: number;
+    success_rate_percent: number;
+  };
+  agents: {
+    active_agents_count: number;
+    total_agents_count: number;
+  };
+  recent_runs: Array<{
+    id: number;
+    workflow_id?: number;
+    workflow_name: string;
+    status: string;
+    duration_seconds: number;
+    created_at?: string;
+  }>;
+  model_health: {
+    has_llm: boolean;
+    has_stt: boolean;
+    has_tts: boolean;
+    has_s2s: boolean;
+    total_models: number;
+    warnings: string[];
+  };
+}
+
+export const overviewApi = {
+  getStats: () => apiFetch<OverviewStatsResponse>('/organizations/overview/stats'),
+};
+
 

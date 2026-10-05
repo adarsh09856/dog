@@ -246,6 +246,131 @@ async def get_current_organization_context(user: UserModel = Depends(get_user)):
     return await get_organization_context(user)
 
 
+@router.get("/overview/stats")
+async def get_organization_overview_stats(user: UserModel = Depends(get_user)):
+    """Return aggregated platform metrics, wallet balance, active agents, and model health for Overview."""
+    org_id = user.selected_organization_id
+    if not org_id:
+        raise HTTPException(status_code=400, detail="No organization selected")
+
+    from api.db.kodewaves_client import kodewaves_db_client
+    from api.services.catalog.catalog_service import catalog_service
+    from datetime import datetime, UTC, timedelta
+
+    # 1. Wallet Balance
+    wallet = await kodewaves_db_client.get_or_create_wallet(org_id)
+    credit_mins = float(wallet.credit_balance_minutes) if wallet else 60.0
+    bonus_mins = float(wallet.bonus_minutes) if wallet else 0.0
+
+    # 2. Concurrent Calls
+    active_calls = 0
+    try:
+        from api.services.call_concurrency import call_concurrency
+        active_calls = await call_concurrency.get_org_active_calls(org_id)
+    except Exception:
+        pass
+
+    # 3. Workflows / Agents
+    workflows = []
+    try:
+        workflows = await db_client.get_all_workflows(organization_id=org_id)
+    except Exception:
+        pass
+    active_workflows = [w for w in workflows if getattr(w, "status", None) == "active" or getattr(w, "is_active", False)]
+
+    # 4. Runs and Call stats
+    runs = []
+    total_runs_count = 0
+    now = datetime.now(UTC)
+    start_today = datetime(now.year, now.month, now.day, tzinfo=UTC)
+    start_week = start_today - timedelta(days=7)
+
+    try:
+        runs, total_runs_count, _, _ = await db_client.get_usage_history(
+            org_id,
+            limit=50,
+            offset=0,
+        )
+    except Exception:
+        runs = []
+
+    calls_today = 0
+    calls_week = 0
+    successful_calls = 0
+    for r in runs:
+        created_at_val = r.get("created_at")
+        dt = None
+        if isinstance(created_at_val, str):
+            try:
+                dt = datetime.fromisoformat(created_at_val.replace("Z", "+00:00"))
+            except Exception:
+                pass
+        elif isinstance(created_at_val, datetime):
+            dt = created_at_val
+        if dt:
+            if dt >= start_today:
+                calls_today += 1
+            if dt >= start_week:
+                calls_week += 1
+        if r.get("status") in ("completed", "success"):
+            successful_calls += 1
+
+    success_rate = round((successful_calls / len(runs) * 100), 1) if runs else 100.0
+
+    # 5. Catalog Model Health Banner
+    catalog = await catalog_service.get_available_catalog(org_id)
+    has_llm = len(catalog.get("llm", [])) > 0
+    has_stt = len(catalog.get("stt", [])) > 0
+    has_tts = len(catalog.get("tts", [])) > 0
+    has_s2s = len(catalog.get("realtime", [])) > 0
+
+    warnings = []
+    if not has_llm:
+        warnings.append("No active LLM model is available. Please add master provider keys in Admin or configure BYOK.")
+    if not has_stt:
+        warnings.append("No active Speech-to-Text (STT) model is available.")
+    if not has_tts:
+        warnings.append("No active Text-to-Speech (TTS) voice engine is available.")
+
+    recent_runs = []
+    for r in runs[:5]:
+        recent_runs.append({
+            "id": r.get("id") or r.get("workflow_run_id"),
+            "workflow_id": r.get("workflow_id"),
+            "workflow_name": r.get("workflow_name") or f"Agent #{r.get('workflow_id')}",
+            "status": r.get("status") or "completed",
+            "duration_seconds": r.get("total_duration_seconds") or r.get("duration_seconds") or 0,
+            "created_at": r.get("created_at"),
+        })
+
+    return {
+        "wallet": {
+            "credit_balance_minutes": credit_mins,
+            "bonus_minutes": bonus_mins,
+            "total_minutes": round(credit_mins + bonus_mins, 1),
+        },
+        "calls": {
+            "active_calls": active_calls,
+            "calls_today": calls_today,
+            "calls_this_week": calls_week,
+            "success_rate_percent": success_rate,
+        },
+        "agents": {
+            "active_agents_count": len(active_workflows),
+            "total_agents_count": len(workflows),
+        },
+        "recent_runs": recent_runs,
+        "model_health": {
+            "has_llm": has_llm,
+            "has_stt": has_stt,
+            "has_tts": has_tts,
+            "has_s2s": has_s2s,
+            "total_models": sum(len(m) for m in catalog.values() if isinstance(m, list)),
+            "warnings": warnings,
+        },
+    }
+
+
 @router.get(
     "/telephony-providers/metadata",
     response_model=TelephonyProvidersMetadataResponse,

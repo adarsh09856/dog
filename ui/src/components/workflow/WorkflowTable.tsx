@@ -8,9 +8,10 @@ import {
     Inbox,
     Pencil,
     RotateCcw,
+    AlertTriangle,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -18,8 +19,10 @@ import {
     updateWorkflowStatusApiV1WorkflowWorkflowIdStatusPut,
 } from '@/client/sdk.gen';
 import type { FolderResponse } from '@/client/types.gen';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { catalogApi, type AvailableCatalogResponse } from '@/lib/kodewavesApi';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -71,6 +74,20 @@ export function WorkflowTable({
     const [isPending, startTransition] = useTransition();
     const [loadingWorkflowId, setLoadingWorkflowId] = useState<number | null>(null);
     const [movingWorkflowId, setMovingWorkflowId] = useState<number | null>(null);
+    const [catalog, setCatalog] = useState<AvailableCatalogResponse | null>(null);
+
+    useEffect(() => {
+        catalogApi.getAvailableCatalog()
+            .then(setCatalog)
+            .catch(() => {});
+    }, []);
+
+    const isCatalogEmpty = Boolean(
+        catalog &&
+        (catalog.cloud_llm_models?.length ?? 0) === 0 &&
+        (catalog.local_llm_models?.length ?? 0) === 0 &&
+        (catalog.s2s_models?.length ?? 0) === 0
+    );
 
     const handleEdit = (id: number) => {
         router.push(`/workflow/${id}`);
@@ -131,41 +148,55 @@ export function WorkflowTable({
     };
 
     return (
-        <Card className="overflow-hidden">
-            <CardContent className="p-0">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="font-semibold">ID</TableHead>
-                            <TableHead className="font-semibold">Agent Name</TableHead>
-                            <TableHead className="font-semibold">Created At</TableHead>
-                            <TableHead className="font-semibold text-center">Total Runs</TableHead>
-                            <TableHead className="font-semibold text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {workflows.map((workflow) => (
-                            <TableRow
-                                key={workflow.id}
-                                role="link"
-                                tabIndex={0}
-                                aria-label={`Edit ${workflow.name}`}
-                                className={`cursor-pointer hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring transition-colors ${showArchived ? 'opacity-60' : ''}`}
-                                onClick={() => handleEdit(workflow.id)}
-                                onKeyDown={(event) => {
-                                    if (event.target !== event.currentTarget) return;
-                                    if (event.key === 'Enter' || event.key === ' ') {
-                                        event.preventDefault();
-                                        handleEdit(workflow.id);
-                                    }
-                                }}
-                            >
-                                <TableCell className="text-muted-foreground">
-                                    {workflow.id}
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                    {workflow.name}
-                                </TableCell>
+        <div className="space-y-3">
+            {isCatalogEmpty && !showArchived && (
+                <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                    <span>No active models found in catalog. Agents will fail until a provider key is configured in Admin or Model Settings.</span>
+                </div>
+            )}
+            <Card className="overflow-hidden">
+                <CardContent className="p-0">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="font-semibold">ID</TableHead>
+                                <TableHead className="font-semibold">Agent Name</TableHead>
+                                <TableHead className="font-semibold">Created At</TableHead>
+                                <TableHead className="font-semibold text-center">Total Runs</TableHead>
+                                <TableHead className="font-semibold text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {workflows.map((workflow) => (
+                                <TableRow
+                                    key={workflow.id}
+                                    role="link"
+                                    tabIndex={0}
+                                    aria-label={`Edit ${workflow.name}`}
+                                    className={`cursor-pointer hover:bg-muted/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring transition-colors ${showArchived ? 'opacity-60' : ''}`}
+                                    onClick={() => handleEdit(workflow.id)}
+                                    onKeyDown={(event) => {
+                                        if (event.target !== event.currentTarget) return;
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            handleEdit(workflow.id);
+                                        }
+                                    }}
+                                >
+                                    <TableCell className="text-muted-foreground">
+                                        {workflow.id}
+                                    </TableCell>
+                                    <TableCell className="font-medium">
+                                        <div className="flex items-center gap-2">
+                                            <span>{workflow.name}</span>
+                                            {isCatalogEmpty && workflow.status === 'active' && (
+                                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
+                                                    Catalog Inactive
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    </TableCell>
                                 <TableCell>
                                     {formatDate(workflow.created_at, organizationTimezone)}
                                 </TableCell>

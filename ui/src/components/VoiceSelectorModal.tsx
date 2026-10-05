@@ -176,9 +176,6 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             URL.revokeObjectURL(audioObjectUrlRef.current);
             audioObjectUrlRef.current = null;
         }
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-            window.speechSynthesis.cancel();
-        }
         setPlayingVoiceId(null);
     }, []);
 
@@ -324,9 +321,6 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 audioRef.current.pause();
                 audioRef.current = null;
             }
-            if (typeof window !== "undefined" && "speechSynthesis" in window) {
-                window.speechSynthesis.cancel();
-            }
             setPlayingVoiceId(null);
         };
 
@@ -440,26 +434,28 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                     </DialogHeader>
 
                     {/* Provider Filter Tabs */}
-                    <div
-                        className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/20 px-6 py-3 scrollbar-none no-scrollbar shrink-0 select-none"
-                        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                    >
-                        {activeTabs.map((tab) => (
-                            <button
-                                key={tab.id}
-                                type="button"
-                                onClick={() => setProviderFilter(tab.id)}
-                                className={cn(
-                                    "whitespace-nowrap shrink-0 rounded-md px-3.5 py-1.5 text-xs font-medium transition-colors",
-                                    providerFilter === tab.id
-                                        ? "bg-primary text-primary-foreground shadow-sm"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                                )}
-                            >
-                                {tab.label}
-                            </button>
-                        ))}
-                    </div>
+                    {activeTabs.length > 1 && (
+                        <div
+                            className="flex items-center gap-1.5 overflow-x-auto border-b bg-muted/20 px-6 py-3 scrollbar-none no-scrollbar shrink-0 select-none"
+                            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+                        >
+                            {activeTabs.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    type="button"
+                                    onClick={() => setProviderFilter(tab.id)}
+                                    className={cn(
+                                        "whitespace-nowrap shrink-0 rounded-md px-3.5 py-1.5 text-xs font-medium transition-colors",
+                                        providerFilter === tab.id
+                                            ? "bg-primary text-primary-foreground shadow-sm"
+                                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                    )}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Filter row: Gender · Accent · Language · Search */}
                     <div className="flex flex-wrap items-center gap-2 border-b px-6 py-3">

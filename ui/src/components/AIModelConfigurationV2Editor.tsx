@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, CheckCircle2, Cloud, Cpu, Info, Key, Layers, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
+import { AlertTriangle, Bot, CheckCircle2, Cloud, Cpu, Info, Key, Layers, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -879,6 +879,12 @@ export function AIModelConfigurationV2Editor({
                                             )}
                                         </SelectContent>
                                     </Select>
+                                    {kodewaves.realtime_model && effectiveS2sModels.length > 0 && !effectiveS2sModels.some((m) => m.value === kodewaves.realtime_model) && (
+                                        <div className="flex items-center gap-1.5 text-xs text-destructive font-medium mt-1">
+                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                            Selected model &quot;{kodewaves.realtime_model}&quot; is no longer active in the catalog.
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* S2S Voice Selector */}
@@ -1081,6 +1087,12 @@ export function AIModelConfigurationV2Editor({
                                             )}
                                         </SelectContent>
                                     </Select>
+                                    {kodewaves.llm_model && effectiveLlmModels.length > 0 && !effectiveLlmModels.some((m) => m.value === kodewaves.llm_model) && (
+                                        <div className="flex items-center gap-1.5 text-xs text-destructive font-medium mt-1">
+                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                            Selected model &quot;{kodewaves.llm_model}&quot; is no longer active in the catalog.
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* STT Model Selector */}
@@ -1148,6 +1160,12 @@ export function AIModelConfigurationV2Editor({
                                             )}
                                         </SelectContent>
                                     </Select>
+                                    {kodewaves.stt_model && effectiveSttModels.length > 0 && !effectiveSttModels.some((m) => m.value === kodewaves.stt_model) && (
+                                        <div className="flex items-center gap-1.5 text-xs text-destructive font-medium mt-1">
+                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                            Selected transcriber &quot;{kodewaves.stt_model}&quot; is no longer active in the catalog.
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* TTS Model Selector */}
@@ -1259,6 +1277,12 @@ export function AIModelConfigurationV2Editor({
                                             )}
                                         </SelectContent>
                                     </Select>
+                                    {kodewaves.tts_model && effectiveTtsModels.length > 0 && !effectiveTtsModels.some((m) => m.value === kodewaves.tts_model) && (
+                                        <div className="flex items-center gap-1.5 text-xs text-destructive font-medium mt-1">
+                                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                            Selected voice model &quot;{kodewaves.tts_model}&quot; is no longer active in the catalog.
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">

@@ -18,9 +18,11 @@ import {
     UtensilsCrossed,
     Volume2,
     Wand2,
+    AlertTriangle,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { createWorkflowApiV1WorkflowCreateDefinitionPost } from '@/client/sdk.gen';
@@ -46,6 +48,7 @@ import {
     TEMPLATE_CATEGORIES,
 } from '@/constants/agentTemplates';
 import { useAuth } from '@/lib/auth';
+import { catalogApi, type AvailableCatalogResponse } from '@/lib/kodewavesApi';
 import logger from '@/lib/logger';
 import { getRandomId } from '@/lib/utils';
 
@@ -178,10 +181,27 @@ export default function CreateWorkflowPage() {
     const [customCompanyName, setCustomCompanyName] = useState('');
     const [isCreating, setIsCreating] = useState(false);
 
-    // Custom prompt builder state
     const [customBuilderName, setCustomBuilderName] = useState('');
     const [customBuilderDescription, setCustomBuilderDescription] = useState('');
     const [customBuilderPrompt, setCustomBuilderPrompt] = useState('');
+
+    const [catalog, setCatalog] = useState<AvailableCatalogResponse | null>(null);
+    const [catalogLoading, setCatalogLoading] = useState(true);
+
+    useEffect(() => {
+        catalogApi.getAvailableCatalog()
+            .then((data) => setCatalog(data))
+            .catch((err) => console.warn('[CreateWorkflow] Failed to fetch catalog:', err))
+            .finally(() => setCatalogLoading(false));
+    }, []);
+
+    const isCatalogEmpty = useMemo(() => {
+        if (catalogLoading || !catalog) return false;
+        const total = (catalog.cloud_llm_models?.length ?? 0) +
+            (catalog.local_llm_models?.length ?? 0) +
+            (catalog.s2s_models?.length ?? 0);
+        return total === 0;
+    }, [catalog, catalogLoading]);
 
     const filteredTemplates = useMemo(() => {
         return AGENT_TEMPLATES.filter((tpl) => {
@@ -367,6 +387,29 @@ export default function CreateWorkflowPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Empty Catalog Warning */}
+                {isCatalogEmpty && (
+                    <div className="mb-8 p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-red-900 dark:text-red-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="font-semibold text-sm">No Active AI Models Available in Catalog</p>
+                                <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">
+                                    Your platform currently has no verified AI models configured. Agents require at least one active LLM or S2S engine to function. Configure master provider keys in Admin or enter your BYOK credentials.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                            <Button size="sm" variant="outline" asChild className="border-red-500/30 hover:bg-red-500/20">
+                                <Link href="/model-configurations">Configure BYOK</Link>
+                            </Button>
+                            <Button size="sm" asChild className="bg-red-600 hover:bg-red-700 text-white">
+                                <Link href="/admin/models">Admin Settings</Link>
+                            </Button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Main Tabs */}
                 <Tabs defaultValue="templates" className="space-y-6">
