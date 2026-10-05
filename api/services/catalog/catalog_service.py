@@ -472,22 +472,25 @@ class CatalogService:
         latency_ms = int((time.monotonic() - start_time) * 1000)
         status_str = "PASS" if success else "FAIL"
 
-        # Record test run
-        await kodewaves_db_client.record_verify_run(
-            provider=prov_norm,
-            layer=layer_norm,
-            status=status_str,
-            latency_ms=latency_ms,
-            error_message=error_msg,
-        )
+        # Record test run in DB if reachable
+        try:
+            await kodewaves_db_client.record_verify_run(
+                provider=prov_norm,
+                layer=layer_norm,
+                status=status_str,
+                latency_ms=latency_ms,
+                error_message=error_msg,
+            )
 
-        # Update models in database
-        models = await kodewaves_db_client.list_models(layer=layer_norm, provider=prov_norm, enabled_only=False)
-        for m in models:
-            m.status = status_str
-            m.latency_ms = latency_ms
-            m.last_verified_at = datetime.now(UTC)
-            m.last_error = error_msg if not success else None
+            # Update models in database
+            models = await kodewaves_db_client.list_models(layer=layer_norm, provider=prov_norm, enabled_only=False)
+            for m in models:
+                m.status = status_str
+                m.latency_ms = latency_ms
+                m.last_verified_at = datetime.now(UTC)
+                m.last_error = error_msg if not success else None
+        except Exception as dberr:
+            logger.debug(f"[CatalogService] DB logging skipped (offline): {dberr}")
 
         self.invalidate_cache()
         return success, latency_ms, error_msg

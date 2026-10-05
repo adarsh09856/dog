@@ -151,7 +151,7 @@ export default function AdminDashboardPage() {
               Master Credentials & Models
             </CardTitle>
             <CardDescription>
-              Configure sovereign OpenAI, Gemini, Sarvam, Krutrim, and Exotel master keys.
+              Configure sovereign OpenAI, Gemini, Sarvam, Anthropic, and Exotel master keys.
             </CardDescription>
           </CardHeader>
           <CardContent>

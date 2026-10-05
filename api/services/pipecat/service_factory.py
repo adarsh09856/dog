@@ -521,7 +521,7 @@ def create_stt_service(
         if deepgram_key:
             return DeepgramSTTService(
                 api_key=deepgram_key,
-                settings=DeepgramSTTSettings(model="nova-3"),
+                settings=DeepgramSTTSettings(model="nova-3", language=str(language) if language not in ("multi", "auto", "default", None) else "en"),
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
@@ -530,7 +530,7 @@ def create_stt_service(
             from api.services.pipecat.gemini_stt import GeminiSTTService
             return GeminiSTTService(
                 api_key=gemini_key,
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
                 language=str(language) if language not in ("multi", "auto", "default") else "en",
                 sample_rate=audio_config.transport_in_sample_rate,
             )
@@ -1296,11 +1296,14 @@ def create_tts_service(
 
 
 def _migrate_deprecated_google_model(model: str) -> str:
-    """Ensure Google model ID is canonical and valid for official Gemini API."""
+    """Ensure Google model ID is canonical and valid for official Gemini API (Gemini 3.5)."""
     if not model or model in ("default", "none"):
-        return "gemini-2.5-flash"
-    if "3.8" in model:
-        return "gemini-2.5-flash"
+        return "gemini-3.5-flash"
+    m = model.strip().lower()
+    if m in ("gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-flash-exp", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro"):
+        return "gemini-3.5-flash"
+    if "3.8" in m:
+        return "gemini-3.5-flash"
     return model
 
 
@@ -1412,6 +1415,19 @@ def create_llm_service_from_provider(
             endpoint=endpoint,
             settings=AzureLLMSettings(model=model, temperature=0.1),
         )
+    elif provider in (ServiceProviders.OLLAMA.value, "ollama"):
+        import os
+        ollama_host = base_url or os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
+        if not ollama_host.endswith("/v1"):
+            ollama_host = f"{ollama_host.rstrip('/')}/v1"
+        llm_model = model or "qwen2.5:0.5b"
+        if llm_model == "default":
+            llm_model = "qwen2.5:0.5b"
+        return KodewavesLLMService(
+            base_url=ollama_host,
+            api_key=api_key or "ollama",
+            settings=OpenAILLMSettings(model=llm_model, temperature=temperature if temperature is not None else 0.1),
+        )
     elif provider in (
         ServiceProviders.KODEWAVES.value,
         ServiceProviders.DOGRAH.value,
@@ -1443,7 +1459,7 @@ def create_llm_service_from_provider(
             return KodewavesGoogleLLMService(
                 api_key=gemini_key,
                 settings=GoogleLLMSettings(
-                    model="gemini-2.5-flash",
+                    model="gemini-3.5-flash",
                     temperature=0.1,
                     extra={"automatic_function_calling": {"disable": True}},
                 ),

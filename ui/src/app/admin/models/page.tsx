@@ -126,13 +126,7 @@ const DEFAULT_PROVIDERS: ProviderMeta[] = [
     region: "Global 🌐",
     description: "Claude 3.5 Sonnet & Claude 3.5 Haiku enterprise conversational reasoning.",
   },
-  {
-    provider: "krutrim",
-    name: "Krutrim Cloud",
-    categories: ["llm"],
-    region: "India 🇮🇳",
-    description: "Indian Indic foundation models and multilingual conversational intelligence.",
-  },
+
   {
     provider: "smallest",
     name: "Smallest AI",

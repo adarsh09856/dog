@@ -10,6 +10,7 @@ import {
   KeyRound,
   Loader2,
   Mail,
+  Mic,
   Palette,
   Play,
   RefreshCw,
@@ -96,6 +97,21 @@ export default function AdminSettingsPage() {
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
 
+  // Whisper STT Manager state
+  const [whisperModels, setWhisperModels] = useState<any[]>([]);
+  const [loadingWhisperModels, setLoadingWhisperModels] = useState(false);
+  const [downloadWhisperName, setDownloadWhisperName] = useState("Systran/faster-whisper-base");
+  const [isDownloadingWhisper, setIsDownloadingWhisper] = useState(false);
+  const [whisperDownloadStatus, setWhisperDownloadStatus] = useState<string | null>(null);
+  const [whisperEndpointStatus, setWhisperEndpointStatus] = useState<string>("");
+  const [testingWhisperLang, setTestingWhisperLang] = useState("hi");
+  const [isTestingWhisper, setIsTestingWhisper] = useState(false);
+  const [whisperTestResult, setWhisperTestResult] = useState<any | null>(null);
+
+  // Ollama test state
+  const [testingOllamaModel, setTestingOllamaModel] = useState<string | null>(null);
+  const [ollamaTestResult, setOllamaTestResult] = useState<any | null>(null);
+
   // Test email state
   const [testEmailRecipient, setTestEmailRecipient] = useState("");
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
@@ -160,7 +176,7 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const handleToggleVoiceAudio = (voiceId: string) => {
+  const handleToggleVoiceAudio = async (voiceId: string) => {
     if (playingVoiceId === voiceId && audioElement) {
       audioElement.pause();
       setAudioElement(null);
@@ -170,27 +186,110 @@ export default function AdminSettingsPage() {
     if (audioElement) {
       audioElement.pause();
     }
-    const audio = new Audio(`/api/user/voice-preview/piper/${voiceId}`);
-    setAudioElement(audio);
     setPlayingVoiceId(voiceId);
-    audio.onended = () => {
+    try {
+      const res = await adminApi.testPiperVoice(voiceId);
+      if (res.success && res.audio_base64) {
+        const audio = new Audio(`data:audio/wav;base64,${res.audio_base64}`);
+        setAudioElement(audio);
+        audio.onended = () => {
+          setPlayingVoiceId(null);
+          setAudioElement(null);
+        };
+        audio.onerror = () => {
+          setPlayingVoiceId(null);
+          setAudioElement(null);
+        };
+        await audio.play();
+      } else {
+        alert(res.error || "Failed to synthesize test audio.");
+        setPlayingVoiceId(null);
+      }
+    } catch (err: any) {
+      alert(`Audio synthesis failed: ${err.message}`);
       setPlayingVoiceId(null);
-      setAudioElement(null);
-    };
-    audio.onerror = () => {
-      setPlayingVoiceId(null);
-      setAudioElement(null);
-    };
-    audio.play().catch(() => {
-      setPlayingVoiceId(null);
-      setAudioElement(null);
-    });
+    }
+  };
+
+  const handleDeletePiperVoice = async (voiceId: string) => {
+    if (!confirm(`Are you sure you want to remove voice ${voiceId}?`)) return;
+    try {
+      await adminApi.deletePiperVoice(voiceId);
+      await fetchPiperVoices();
+    } catch (err: any) {
+      alert(`Failed to remove voice: ${err.message}`);
+    }
+  };
+
+  const fetchWhisperModels = async () => {
+    setLoadingWhisperModels(true);
+    try {
+      const res = await adminApi.getWhisperModels();
+      setWhisperModels(res.models || []);
+      setWhisperEndpointStatus(res.status || "online");
+    } catch {
+      setWhisperEndpointStatus("offline");
+    } finally {
+      setLoadingWhisperModels(false);
+    }
+  };
+
+  const handleDownloadWhisper = async () => {
+    if (!downloadWhisperName) return;
+    setIsDownloadingWhisper(true);
+    setWhisperDownloadStatus(`Downloading Whisper model ${downloadWhisperName}...`);
+    try {
+      const res = await adminApi.downloadWhisperModel(downloadWhisperName);
+      setWhisperDownloadStatus(res.message || `Model ${downloadWhisperName} ready`);
+      await fetchWhisperModels();
+    } catch (err: any) {
+      setWhisperDownloadStatus(`Status: ${err.message || "Initiated"}`);
+    } finally {
+      setIsDownloadingWhisper(false);
+    }
+  };
+
+  const handleDeleteWhisper = async (modelId: string) => {
+    if (!confirm(`Are you sure you want to unload ${modelId}?`)) return;
+    try {
+      await adminApi.deleteWhisperModel(modelId);
+      await fetchWhisperModels();
+    } catch (err: any) {
+      alert(`Failed to unload model: ${err.message}`);
+    }
+  };
+
+  const handleTestWhisper = async () => {
+    setIsTestingWhisper(true);
+    setWhisperTestResult(null);
+    try {
+      const res = await adminApi.testWhisper(testingWhisperLang);
+      setWhisperTestResult(res);
+    } catch (err: any) {
+      setWhisperTestResult({ success: false, error: err.message || "Test failed" });
+    } finally {
+      setIsTestingWhisper(false);
+    }
+  };
+
+  const handleTestOllama = async (modelName: string) => {
+    setTestingOllamaModel(modelName);
+    setOllamaTestResult(null);
+    try {
+      const res = await adminApi.testOllama(modelName);
+      setOllamaTestResult(res);
+    } catch (err: any) {
+      setOllamaTestResult({ success: false, error: err.message || "Test failed" });
+    } finally {
+      setTestingOllamaModel(null);
+    }
   };
 
   useEffect(() => {
     fetchSettings();
     fetchOllamaModels();
     fetchPiperVoices();
+    fetchWhisperModels();
   }, []);
 
   const handleSave = async () => {
@@ -629,17 +728,52 @@ export default function AdminSettingsPage() {
                         </div>
                       </div>
 
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteModel(m.name)}
-                        className="text-destructive hover:bg-destructive/10 h-8 px-2.5 text-xs gap-1"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Delete
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={testingOllamaModel === m.name}
+                          onClick={() => handleTestOllama(m.name)}
+                          className="h-8 px-2.5 text-xs gap-1.5"
+                        >
+                          {testingOllamaModel === m.name ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Play className="h-3.5 w-3.5 text-indigo-500 fill-indigo-500" />
+                          )}
+                          Test Tools
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteModel(m.name)}
+                          className="text-destructive hover:bg-destructive/10 h-8 px-2.5 text-xs gap-1"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </Button>
+                      </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {ollamaTestResult && (
+                <div
+                  className={`text-xs p-3 rounded-xl border mt-3 ${
+                    ollamaTestResult.success
+                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                      : "bg-destructive/10 border-destructive/20 text-destructive"
+                  }`}
+                >
+                  <div className="font-semibold flex items-center gap-2">
+                    {ollamaTestResult.success ? "✓ Ollama Test Passed" : "✕ Ollama Test Failed"}
+                    {ollamaTestResult.latency_ms && <Badge variant="outline">{ollamaTestResult.latency_ms}ms</Badge>}
+                    {ollamaTestResult.supports_tools && <Badge className="bg-indigo-500/10 text-indigo-600 border-indigo-500/20">Tools Supported</Badge>}
+                  </div>
+                  <div className="text-[11px] mt-1 text-muted-foreground">
+                    {ollamaTestResult.message || ollamaTestResult.error || ollamaTestResult.response}
+                  </div>
                 </div>
               )}
             </div>
@@ -795,11 +929,216 @@ export default function AdminSettingsPage() {
                             </>
                           )}
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeletePiperVoice(v.id || v.name)}
+                          className="text-destructive hover:bg-destructive/10 h-8 px-2.5 text-xs gap-1"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </Button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* FASTER-WHISPER STT LOCAL MANAGER */}
+        <Card className="border-border/60 md:col-span-2">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Mic className="h-5 w-5 text-sky-500" />
+                  Faster-Whisper STT Manager (Local Speech-to-Text Suite)
+                </CardTitle>
+                <CardDescription>
+                  Host CTranslate2 CPU Faster-Whisper (Speaches) STT directly on your VPS with zero cloud API fees.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant={whisperEndpointStatus === "online" ? "default" : "destructive"}
+                  className="text-xs"
+                >
+                  {whisperEndpointStatus === "online" ? "● Whisper Online" : `Whisper ${whisperEndpointStatus}`}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchWhisperModels}
+                  disabled={loadingWhisperModels}
+                  className="h-8 gap-1.5 text-xs"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loadingWhisperModels ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Download Model Form */}
+            <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-3">
+              <div className="text-xs font-semibold flex items-center gap-2">
+                <Download className="h-4 w-4 text-primary" />
+                Download / Preload Faster-Whisper Model
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Select Model Tier</Label>
+                  <Select value={downloadWhisperName} onValueChange={setDownloadWhisperName}>
+                    <SelectTrigger className="w-full h-9 text-xs">
+                      <SelectValue placeholder="Choose Whisper Model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Systran/faster-whisper-tiny">
+                        Faster-Whisper Tiny (~75MB RAM - Fast CPU)
+                      </SelectItem>
+                      <SelectItem value="Systran/faster-whisper-base">
+                        Faster-Whisper Base (~140MB RAM - Recommended Multilingual)
+                      </SelectItem>
+                      <SelectItem value="Systran/faster-whisper-small">
+                        Faster-Whisper Small (~460MB RAM - High Accuracy)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-end">
+                  <Button
+                    onClick={handleDownloadWhisper}
+                    disabled={isDownloadingWhisper}
+                    className="w-full h-9 text-xs gap-2"
+                  >
+                    {isDownloadingWhisper ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Downloading Model...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-3.5 w-3.5" />
+                        Download Model to Host
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              {whisperDownloadStatus && (
+                <div className="text-xs text-primary font-medium p-2.5 rounded-lg bg-primary/10 border border-primary/20">
+                  {whisperDownloadStatus}
+                </div>
+              )}
+            </div>
+
+            {/* Test Transcription Section */}
+            <div className="p-4 rounded-xl border border-sky-500/30 bg-sky-500/5 space-y-3">
+              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Mic className="h-3.5 w-3.5 text-sky-500" />
+                Live STT Audio Verification (Bundled Clips)
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="w-48">
+                  <Select value={testingWhisperLang} onValueChange={setTestingWhisperLang}>
+                    <SelectTrigger className="w-full h-9 text-xs bg-background">
+                      <SelectValue placeholder="Select Language" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="hi">🇮🇳 Hindi Sample (hi_sample.wav)</SelectItem>
+                      <SelectItem value="en">🇺🇸 English Sample (en_sample.wav)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  onClick={handleTestWhisper}
+                  disabled={isTestingWhisper}
+                  variant="outline"
+                  className="shrink-0 h-9 text-xs gap-2"
+                >
+                  {isTestingWhisper ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5 text-sky-500 fill-sky-500" />
+                  )}
+                  Run STT Audio Test
+                </Button>
+              </div>
+
+              {whisperTestResult && (
+                <div
+                  className={`text-xs p-3 rounded-xl border ${
+                    whisperTestResult.success
+                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                      : "bg-destructive/10 border-destructive/20 text-destructive"
+                  }`}
+                >
+                  <div className="font-semibold flex items-center gap-2">
+                    {whisperTestResult.success ? "✓ Faster-Whisper Test Passed" : "✕ Faster-Whisper Test Failed"}
+                    {whisperTestResult.latency_ms && <Badge variant="outline">{whisperTestResult.latency_ms}ms</Badge>}
+                    <Badge variant="secondary" className="uppercase text-[10px]">{whisperTestResult.language}</Badge>
+                  </div>
+                  <div className="text-[11px] mt-1 text-foreground">
+                    {whisperTestResult.transcript ? (
+                      <span className="italic">"{whisperTestResult.transcript}"</span>
+                    ) : (
+                      whisperTestResult.error
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Installed Models List */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold flex items-center gap-2">
+                <HardDrive className="h-4 w-4 text-muted-foreground" />
+                Available & Installed Whisper Models ({whisperModels.length})
+              </div>
+
+              <div className="border rounded-xl divide-y overflow-hidden text-xs">
+                {whisperModels.map((m: any, idx: number) => (
+                  <div
+                    key={m.id || idx}
+                    className="p-3 flex items-center justify-between hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="font-semibold text-foreground flex items-center gap-2">
+                        {m.name || m.id}
+                        {m.installed ? (
+                          <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                            Installed
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Available
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px]">
+                          {m.size}
+                        </Badge>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Model ID: {m.id}
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteWhisper(m.id)}
+                      className="text-destructive hover:bg-destructive/10 h-8 px-2.5 text-xs gap-1"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Unload
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>

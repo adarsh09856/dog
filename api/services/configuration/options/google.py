@@ -14,29 +14,18 @@ GOOGLE_VERTEX_DEFAULT_LOCATION = "global"
 GOOGLE_VERTEX_LOCATIONS = (GOOGLE_VERTEX_DEFAULT_LOCATION, "eu", "us")
 
 GOOGLE_MODELS = (
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
 )
 GOOGLE_VERTEX_MODELS = (
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
-    "gemini-3.1-flash-lite",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
 )
 
 
 GOOGLE_REALTIME_MODELS = (
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
     "gemini-3.1-flash-live-preview",
 )
 GOOGLE_REALTIME_VOICES = ("Puck", "Charon", "Kore", "Fenrir", "Aoede")
@@ -247,7 +236,7 @@ GOOGLE_STT_LANGUAGES = (
     "zu-ZA",
 )
 
-GOOGLE_TTS_MODELS = ("chirp_3_hd",)
+GOOGLE_TTS_MODELS = ("gemini-3.1-flash-tts-preview", "chirp_3_hd")
 GOOGLE_TTS_VOICES = ("en-US-Chirp3-HD-Charon",)
 GOOGLE_TTS_LANGUAGES = (
     "ar-XA",

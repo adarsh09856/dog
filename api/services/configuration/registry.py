@@ -123,6 +123,9 @@ class ServiceProviders(str, Enum):
     SPEECHIFY = "speechify"
     GEMINI = "gemini"
     NAVANA = "navana"
+    OLLAMA = "ollama"
+    PIPER = "piper"
+    WHISPER = "whisper"
 
 
 class BaseServiceConfiguration(BaseModel):

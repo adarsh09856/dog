@@ -428,6 +428,42 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify({ voice }),
     }),
+  testOllama: (model?: string) =>
+    apiFetch<{ success: boolean; model: string; latency_ms: number; supports_tools: boolean; message: string; response?: string }>('/admin/settings/ollama/test', {
+      method: 'POST',
+      body: JSON.stringify({ model }),
+    }),
+  getPiperAllVoices: (language?: string) =>
+    apiFetch<Array<{ id: string; name: string; language: string; language_name: string; gender: string; quality: string; size: string }>>(
+      `/admin/settings/piper/all-voices${language ? `?language=${encodeURIComponent(language)}` : ''}`
+    ),
+  testPiperVoice: (voice: string, text?: string) =>
+    apiFetch<{ success: boolean; voice: string; latency_ms: number; sample_rate: number; duration_s: number; audio_base64?: string; error?: string }>('/admin/settings/piper/test', {
+      method: 'POST',
+      body: JSON.stringify({ voice, text }),
+    }),
+  deletePiperVoice: (voiceId: string) =>
+    apiFetch<{ success: boolean; message: string }>(`/admin/settings/piper/voices/${encodeURIComponent(voiceId)}`, {
+      method: 'DELETE',
+    }),
+  getWhisperModels: () =>
+    apiFetch<{ models: Array<{ id: string; name: string; size: string; installed: boolean }>; endpoint: string; status: string }>(
+      '/admin/settings/whisper/models'
+    ),
+  downloadWhisperModel: (model: string) =>
+    apiFetch<{ success: boolean; model: string; message: string }>('/admin/settings/whisper/download', {
+      method: 'POST',
+      body: JSON.stringify({ model }),
+    }),
+  deleteWhisperModel: (modelId: string) =>
+    apiFetch<{ success: boolean; message: string }>(`/admin/settings/whisper/models/${encodeURIComponent(modelId)}`, {
+      method: 'DELETE',
+    }),
+  testWhisper: (language?: string) =>
+    apiFetch<{ success: boolean; transcript?: string; latency_ms: number; error?: string; language: string }>('/admin/settings/whisper/test', {
+      method: 'POST',
+      body: JSON.stringify({ language: language || 'hi' }),
+    }),
 
   // Audit Logs
   getAuditLogs: (params?: {

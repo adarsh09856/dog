@@ -49,13 +49,36 @@ if [ -f ".env" ]; then
     grep -q '^WHISPER_PORT=' .env || echo "WHISPER_PORT=8765" >> .env
 fi
 
+# Check ENABLE_LOCAL_AI_ENGINE configuration
+ENABLE_LOCAL="${ENABLE_LOCAL_AI_ENGINE:-}"
+if [ -z "$ENABLE_LOCAL" ] && [ -f ".env" ]; then
+    ENABLE_LOCAL="$(grep '^ENABLE_LOCAL_AI_ENGINE=' .env 2>/dev/null | cut -d '=' -f2- | tr -d '\"' || true)"
+fi
+
+PROFILE_FLAGS=""
+if [ "$ENABLE_LOCAL" = "true" ]; then
+    echo -e "${BLUE}Local AI Engine profile active: starting Ollama, Whisper, and Piper...${NC}"
+    PROFILE_FLAGS="--profile local"
+else
+    echo -e "${YELLOW}Local AI Engine profile inactive: keeping Ollama, Whisper, and Piper OFF (saving host RAM)${NC}"
+fi
+
 # 2. Rebuild and restart application containers (removes orphaned/old containers)
 echo -e "${BLUE}[2/6] Building and updating application containers...${NC}"
-docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
+docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --build --remove-orphans
 
-# 3. Apply Alembic database migrations
-echo -e "${BLUE}[3/6] Applying database migrations (Alembic)...${NC}"
+if [ "$ENABLE_LOCAL" != "true" ]; then
+    # Ensure local engine containers are stopped if they were left running
+    docker compose -f "$COMPOSE_FILE" stop ollama whisper piper >/dev/null 2>&1 || true
+fi
+
+# 3. Apply Alembic database migrations (with safe pre-migration pg_dump)
+echo -e "${BLUE}[3/6] Backing up database and applying migrations (Alembic)...${NC}"
 sleep 5
+docker compose -f "$COMPOSE_FILE" exec -T postgres pg_dump -U postgres postgres > "db_backup_pre_migration_$(date +%Y%m%d_%H%M%S).sql" 2>/dev/null \
+    || docker exec kodewaves_postgres pg_dump -U postgres postgres > "db_backup_pre_migration_$(date +%Y%m%d_%H%M%S).sql" 2>/dev/null \
+    || echo -e "${YELLOW}⚠️ Pre-migration database dump skipped (offline or not running).${NC}"
+
 docker compose -f "$COMPOSE_FILE" exec -T api python -m alembic -c api/alembic.ini upgrade head \
     || docker exec kodewaves_api python -m alembic -c api/alembic.ini upgrade head \
     || echo -e "${YELLOW}⚠️ Alembic migration execution skipped or reported warning.${NC}"

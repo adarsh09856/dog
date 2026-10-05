@@ -364,23 +364,26 @@ class KodewavesDBClient(BaseDBClient):
     # ------------------------------------------------------------------------
     # Organization Wallets & Ledger
     # ------------------------------------------------------------------------
-    async def get_or_create_wallet(self, organization_id: int) -> OrganizationWalletModel:
-        async with self.get_session() as session:
-            stmt = select(OrganizationWalletModel).where(OrganizationWalletModel.organization_id == organization_id)
-            result = await session.execute(stmt)
-            wallet = result.scalar_one_or_none()
+    async def get_or_create_wallet(self, organization_id: int) -> Optional[OrganizationWalletModel]:
+        try:
+            async with self.get_session() as session:
+                stmt = select(OrganizationWalletModel).where(OrganizationWalletModel.organization_id == organization_id)
+                result = await session.execute(stmt)
+                wallet = result.scalar_one_or_none()
 
-            if not wallet:
-                wallet = OrganizationWalletModel(
-                    organization_id=organization_id,
-                    credit_balance_minutes=60, # 60 free trial minutes
-                    bonus_minutes=0,
-                )
-                session.add(wallet)
-                await session.commit()
-                await session.refresh(wallet)
+                if not wallet:
+                    wallet = OrganizationWalletModel(
+                        organization_id=organization_id,
+                        credit_balance_minutes=60, # 60 free trial minutes
+                        bonus_minutes=0,
+                    )
+                    session.add(wallet)
+                    await session.commit()
+                    await session.refresh(wallet)
 
-            return wallet
+                return wallet
+        except Exception:
+            return None
 
     async def deduct_minutes(
         self,
@@ -481,11 +484,14 @@ class KodewavesDBClient(BaseDBClient):
     # Platform Settings
     # ------------------------------------------------------------------------
     async def get_setting(self, key: str) -> Optional[Dict[str, Any]]:
-        async with self.get_session() as session:
-            stmt = select(GlobalPlatformSettingModel).where(GlobalPlatformSettingModel.key == key)
-            result = await session.execute(stmt)
-            setting = result.scalar_one_or_none()
-            return setting.value if setting else None
+        try:
+            async with self.get_session() as session:
+                stmt = select(GlobalPlatformSettingModel).where(GlobalPlatformSettingModel.key == key)
+                result = await session.execute(stmt)
+                setting = result.scalar_one_or_none()
+                return setting.value if setting else None
+        except Exception:
+            return None
 
     async def set_setting(self, key: str, value: Dict[str, Any], category: str = "general") -> GlobalPlatformSettingModel:
         async with self.get_session() as session:

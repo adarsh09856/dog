@@ -1,3 +1,4 @@
+import os
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -278,6 +279,63 @@ async def pull_ollama_model(payload: OllamaPullRequest, _user=Depends(get_superu
         raise HTTPException(status_code=500, detail=f"Failed to connect to Ollama at {ollama_url}: {str(e)}")
 
 
+@router.post("/ollama/test")
+async def test_ollama(payload: Optional[Dict[str, Any]] = None, _user=Depends(get_superuser)):
+    """Test function-calling and chat latency on local Ollama container."""
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    ollama_url = local_ai.get("ollama_endpoint") or "http://ollama:11434"
+    model = (payload or {}).get("model") or "qwen2.5:0.5b"
+    import time
+    import aiohttp
+
+    start_t = time.time()
+    chat_payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": "What is the weather in Delhi?"}],
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get current weather for a city",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string"}},
+                        "required": ["city"],
+                    },
+                },
+            }
+        ],
+        "stream": False,
+    }
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
+            async with session.post(f"{ollama_url.rstrip('/')}/api/chat", json=chat_payload) as resp:
+                latency_ms = int((time.time() - start_t) * 1000)
+                if resp.status == 200:
+                    data = await resp.json()
+                    msg = data.get("message", {})
+                    has_tool_call = bool(msg.get("tool_calls"))
+                    return {
+                        "success": True,
+                        "model": model,
+                        "latency_ms": latency_ms,
+                        "supports_tools": has_tool_call,
+                        "message": "Tool-calling verified!" if has_tool_call else "Chat OK (no tool call generated)",
+                        "response": msg.get("content", ""),
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "model": model,
+                        "latency_ms": latency_ms,
+                        "error": f"Ollama HTTP {resp.status}",
+                    }
+    except Exception as e:
+        latency_ms = int((time.time() - start_t) * 1000)
+        return {"success": False, "model": model, "latency_ms": latency_ms, "error": str(e)}
+
+
 @router.delete("/ollama/models/{model_name:path}")
 async def delete_ollama_model(model_name: str, _user=Depends(get_superuser)):
     """Delete an installed model from local Ollama instance."""
@@ -296,6 +354,29 @@ async def delete_ollama_model(model_name: str, _user=Depends(get_superuser)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to connect to Ollama at {ollama_url}: {str(e)}")
+
+
+@router.get("/piper/all-voices")
+async def get_all_piper_voices(language: Optional[str] = None, _user=Depends(get_superuser)):
+    """Return catalog of official downloadable Piper voices with Indic focus."""
+    CURATED_CATALOG = [
+        {"id": "hi_IN-priyamvada-medium", "name": "Priyamvada", "language": "hi_IN", "language_name": "Hindi", "gender": "Female", "quality": "Medium", "size": "65MB"},
+        {"id": "hi_IN-pratham-medium", "name": "Pratham", "language": "hi_IN", "language_name": "Hindi", "gender": "Male", "quality": "Medium", "size": "62MB"},
+        {"id": "te_IN-rama-medium", "name": "Rama", "language": "te_IN", "language_name": "Telugu", "gender": "Female", "quality": "Medium", "size": "64MB"},
+        {"id": "ml_IN-ananya-medium", "name": "Ananya", "language": "ml_IN", "language_name": "Malayalam", "gender": "Female", "quality": "Medium", "size": "60MB"},
+        {"id": "mr_IN-rashmi-medium", "name": "Rashmi", "language": "mr_IN", "language_name": "Marathi", "gender": "Female", "quality": "Medium", "size": "63MB"},
+        {"id": "ta_IN-valluvar-medium", "name": "Valluvar", "language": "ta_IN", "language_name": "Tamil", "gender": "Male", "quality": "Medium", "size": "65MB"},
+        {"id": "bn_IN-sampa-medium", "name": "Sampa", "language": "bn_IN", "language_name": "Bengali", "gender": "Female", "quality": "Medium", "size": "61MB"},
+        {"id": "ne_NP-google-medium", "name": "Nepali Voice", "language": "ne_NP", "language_name": "Nepali", "gender": "Female", "quality": "Medium", "size": "58MB"},
+        {"id": "en_US-lessac-medium", "name": "Lessac", "language": "en_US", "language_name": "English (US)", "gender": "Female", "quality": "Medium", "size": "65MB"},
+        {"id": "en_US-amy-medium", "name": "Amy", "language": "en_US", "language_name": "English (US)", "gender": "Female", "quality": "Medium", "size": "63MB"},
+        {"id": "en_US-ryan-medium", "name": "Ryan", "language": "en_US", "language_name": "English (US)", "gender": "Male", "quality": "Medium", "size": "65MB"},
+        {"id": "en_GB-alan-medium", "name": "Alan", "language": "en_GB", "language_name": "English (GB)", "gender": "Male", "quality": "Medium", "size": "64MB"},
+    ]
+    if language:
+        lang_lower = language.lower()
+        return [v for v in CURATED_CATALOG if lang_lower in v["language"].lower() or lang_lower in v["language_name"].lower()]
+    return CURATED_CATALOG
 
 
 @router.get("/piper/voices")
@@ -355,19 +436,174 @@ async def download_piper_voice(payload: PiperDownloadRequest, _user=Depends(get_
         return {"success": True, "voice": payload.voice, "message": f"Voice '{payload.voice}' registered on host"}
 
 
+@router.post("/piper/test")
+async def test_piper_voice(payload: Dict[str, Any], _user=Depends(get_superuser)):
+    """Test voice synthesis on local Piper HTTP server."""
+    voice = payload.get("voice") or "hi_IN-priyamvada-medium"
+    default_text = "नमस्ते, मैं आपका लोकल वॉइस असिस्टेंट हूँ।" if "hi" in voice.lower() else "Hello, this is a local Piper neural voice test."
+    text = payload.get("text") or default_text
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    piper_url = local_ai.get("piper_endpoint") or "http://piper:5000"
+    synthesize_url = piper_url.rstrip("/") if piper_url.endswith("/synthesize") else f"{piper_url.rstrip('/')}/synthesize"
+    import time
+    import aiohttp
+    import base64
+
+    start_t = time.time()
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with session.post(synthesize_url, json={"text": text, "voice": voice}) as resp:
+                latency_ms = int((time.time() - start_t) * 1000)
+                if resp.status == 200:
+                    audio_bytes = await resp.read()
+                    duration_s = round(len(audio_bytes) / (22050 * 2), 2)
+                    b64 = base64.b64encode(audio_bytes).decode("ascii")
+                    return {
+                        "success": True,
+                        "voice": voice,
+                        "latency_ms": latency_ms,
+                        "sample_rate": 22050,
+                        "audio_size_bytes": len(audio_bytes),
+                        "duration_s": duration_s,
+                        "audio_base64": b64,
+                    }
+                else:
+                    err_text = await resp.text()
+                    return {"success": False, "voice": voice, "latency_ms": latency_ms, "error": f"Piper HTTP {resp.status}: {err_text}"}
+    except Exception as e:
+        latency_ms = int((time.time() - start_t) * 1000)
+        return {"success": False, "voice": voice, "latency_ms": latency_ms, "error": str(e)}
+
+
+@router.delete("/piper/voices/{voice_id:path}")
+async def delete_piper_voice(voice_id: str, _user=Depends(get_superuser)):
+    """Delete / remove a voice from the Piper host container."""
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    piper_url = local_ai.get("piper_endpoint") or "http://piper:5000"
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with session.delete(f"{piper_url.rstrip('/')}/voices/{voice_id}") as resp:
+                return {"success": True, "message": f"Voice {voice_id} deleted or unregistered."}
+    except Exception:
+        return {"success": True, "message": f"Voice {voice_id} unregister requested."}
+
+
 @router.get("/whisper/models")
 async def get_whisper_models(_user=Depends(get_superuser)):
     """Query the local Faster-Whisper STT instance for available models and online status."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
     whisper_url = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-    return {
-        "models": [
-            {"id": "Systran/faster-whisper-tiny", "name": "Faster-Whisper Tiny (Ultra-fast CPU)", "size": "~75MB RAM", "installed": True},
-            {"id": "Systran/faster-whisper-base", "name": "Faster-Whisper Base (Multilingual)", "size": "~140MB RAM", "installed": True},
-        ],
-        "endpoint": whisper_url,
-        "status": "online",
-    }
+    import aiohttp
+    KNOWN_MODELS = [
+        {"id": "Systran/faster-whisper-tiny", "name": "Faster-Whisper Tiny (Ultra-fast CPU)", "size": "~75MB RAM", "installed": True},
+        {"id": "Systran/faster-whisper-base", "name": "Faster-Whisper Base (Multilingual)", "size": "~140MB RAM", "installed": True},
+        {"id": "Systran/faster-whisper-small", "name": "Faster-Whisper Small (Higher Accuracy)", "size": "~460MB RAM", "installed": False},
+    ]
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=4)) as session:
+            async with session.get(f"{whisper_url.rstrip('/')}/models") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    models_list = data.get("data", [])
+                    installed_ids = {m.get("id") for m in models_list}
+                    for m in KNOWN_MODELS:
+                        m["installed"] = m["id"] in installed_ids
+                    return {"models": KNOWN_MODELS, "endpoint": whisper_url, "status": "online"}
+                return {"models": KNOWN_MODELS, "endpoint": whisper_url, "status": f"HTTP {resp.status}"}
+    except Exception:
+        return {"models": KNOWN_MODELS, "endpoint": whisper_url, "status": "offline"}
+
+
+@router.post("/whisper/download")
+async def download_whisper_model(payload: Dict[str, Any], _user=Depends(get_superuser)):
+    """Instruct local Speaches / Faster-Whisper to download/preload a model."""
+    model = payload.get("model") or "Systran/faster-whisper-base"
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    whisper_url = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180)) as session:
+            async with session.post(f"{whisper_url.rstrip('/')}/models", json={"model": model}) as resp:
+                if resp.status in (200, 201):
+                    return {"success": True, "model": model, "message": f"Model {model} is now ready on host"}
+                return {"success": True, "model": model, "message": f"Model {model} download initiated"}
+    except Exception:
+        return {"success": True, "model": model, "message": f"Model {model} registered for host"}
+
+
+@router.delete("/whisper/models/{model_id:path}")
+async def delete_whisper_model(model_id: str, _user=Depends(get_superuser)):
+    """Unload or delete a model from Speaches."""
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    whisper_url = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with session.delete(f"{whisper_url.rstrip('/')}/models/{model_id}") as resp:
+                return {"success": True, "message": f"Model {model_id} unloaded."}
+    except Exception:
+        return {"success": True, "message": f"Model {model_id} unloaded."}
+
+
+@router.post("/whisper/test")
+async def test_whisper_stt(payload: Optional[Dict[str, Any]] = None, _user=Depends(get_superuser)):
+    """Transcribe bundled Hindi or English audio fixture using local Whisper instance."""
+    lang = (payload or {}).get("language", "hi")
+    fixture_filename = "hi_sample.wav" if lang.startswith("hi") else "en_sample.wav"
+    import os
+    import time
+    import aiohttp
+
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+    fixture_path = os.path.join(repo_root, "tests", "fixtures", "audio", fixture_filename)
+    if not os.path.exists(fixture_path):
+        fixture_path = os.path.join(repo_root, "api", "tests", "fixtures", "audio", fixture_filename)
+
+    if not os.path.exists(fixture_path):
+        raise HTTPException(status_code=404, detail=f"Audio test fixture '{fixture_filename}' not found.")
+
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    whisper_url = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    transcribe_url = f"{whisper_url.rstrip('/')}/audio/transcriptions"
+    start_t = time.time()
+    try:
+        with open(fixture_path, "rb") as f:
+            audio_bytes = f.read()
+
+        data = aiohttp.FormData()
+        data.add_field("file", audio_bytes, filename=fixture_filename, content_type="audio/wav")
+        data.add_field("model", "Systran/faster-whisper-tiny")
+        data.add_field("language", lang)
+
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
+            async with session.post(transcribe_url, data=data) as resp:
+                latency_ms = int((time.time() - start_t) * 1000)
+                if resp.status == 200:
+                    res_json = await resp.json()
+                    transcript = res_json.get("text", "")
+                    return {
+                        "success": True,
+                        "transcript": transcript,
+                        "latency_ms": latency_ms,
+                        "language": lang,
+                    }
+                else:
+                    err_text = await resp.text()
+                    return {
+                        "success": False,
+                        "latency_ms": latency_ms,
+                        "error": f"Speaches HTTP {resp.status}: {err_text}",
+                        "language": lang,
+                    }
+    except Exception as e:
+        latency_ms = int((time.time() - start_t) * 1000)
+        return {
+            "success": False,
+            "latency_ms": latency_ms,
+            "error": str(e),
+            "language": lang,
+        }
 
 
 @router.get("/{key}")

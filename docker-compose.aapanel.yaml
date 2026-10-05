@@ -234,6 +234,7 @@ services:
     image: ollama/ollama:latest
     container_name: kodewaves_ollama
     restart: unless-stopped
+    profiles: ["local"]
     ports:
       - "127.0.0.1:11434:11434"
     volumes:
@@ -241,11 +242,18 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=5m
       - OLLAMA_NUM_PARALLEL=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits:
           cpus: "2.0"
-          memory: 1024M
+          memory: 4096M
+        reservations:
+          memory: 2048M
     networks:
       - kodewaves-network
 
@@ -257,15 +265,23 @@ services:
     image: kodewaves-piper:latest
     container_name: kodewaves_piper
     restart: unless-stopped
+    profiles: ["local"]
     ports:
       - "127.0.0.1:${PIPER_PORT:-8766}:5000"
     volumes:
       - kodewaves_piper_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/voices"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits:
           cpus: "1.0"
-          memory: 384M
+          memory: 768M
+        reservations:
+          memory: 512M
     networks:
       - kodewaves-network
 
@@ -274,21 +290,29 @@ services:
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     container_name: kodewaves_whisper
     restart: unless-stopped
+    profiles: ["local"]
     ports:
       - "127.0.0.1:${WHISPER_PORT:-8765}:8000"
     volumes:
       - kodewaves_whisper_cache:/home/ubuntu/.cache/huggingface/hub
     environment:
-      - WHISPER_MODEL=Systran/faster-whisper-tiny
+      - PRELOAD_MODELS=Systran/faster-whisper-tiny
       - DEFAULT_DEVICE=cpu
       - OMP_NUM_THREADS=1
       - MKL_NUM_THREADS=1
       - OPENBLAS_NUM_THREADS=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits:
-          cpus: "1.0"
-          memory: 384M
+          cpus: "2.0"
+          memory: 1536M
+        reservations:
+          memory: 768M
     networks:
       - kodewaves-network
 

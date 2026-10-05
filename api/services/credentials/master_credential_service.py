@@ -31,6 +31,7 @@ class MasterCredentialService:
             # Otherwise derive 32-byte key via SHA-256
             key = base64.urlsafe_b64encode(hashlib.sha256(raw_secret.encode()).digest())
             self._cipher = Fernet(key)
+        self._db_unavailable_until: float = 0.0
 
     def encrypt(self, plain_text: str) -> str:
         """Encrypt plain text to base64 string."""
@@ -84,24 +85,28 @@ class MasterCredentialService:
             lookup_candidates.extend(["azure_speech", "azure"])
 
         # 1. First, check PostgreSQL database for admin-configured encrypted credentials
-        for candidate in lookup_candidates:
-            try:
-                record = await kodewaves_db_client.get_master_credential(candidate)
-                if record:
-                    if not record.is_enabled:
-                        logger.info(f"[MasterCredentialService] Provider '{candidate}' is explicitly disabled in DB.")
-                        return None
-                    if record.credentials_encrypted:
-                        try:
-                            decrypted_str = self.decrypt(record.credentials_encrypted)
-                            data = json.loads(decrypted_str)
-                            if data and (data.get("api_key") or data.get("account_sid") or data.get("auth_token")):
-                                logger.info(f"[MasterCredentialService] Successfully resolved credentials for '{candidate}' from database.")
-                                return data
-                        except Exception as e:
-                            logger.error(f"[MasterCredentialService] Failed to decrypt credentials for {candidate}: {e}")
-            except Exception as db_err:
-                logger.debug(f"[MasterCredentialService] DB lookup for {candidate} failed or unavailable: {db_err}")
+        import time
+        if time.time() > self._db_unavailable_until:
+            for candidate in lookup_candidates:
+                try:
+                    record = await kodewaves_db_client.get_master_credential(candidate)
+                    if record:
+                        if not record.is_enabled:
+                            logger.info(f"[MasterCredentialService] Provider '{candidate}' is explicitly disabled in DB.")
+                            return None
+                        if record.credentials_encrypted:
+                            try:
+                                decrypted_str = self.decrypt(record.credentials_encrypted)
+                                data = json.loads(decrypted_str)
+                                if data and (data.get("api_key") or data.get("account_sid") or data.get("auth_token")):
+                                    logger.info(f"[MasterCredentialService] Successfully resolved credentials for '{candidate}' from database.")
+                                    return data
+                            except Exception as e:
+                                logger.error(f"[MasterCredentialService] Failed to decrypt credentials for {candidate}: {e}")
+                except Exception as db_err:
+                    self._db_unavailable_until = time.time() + 30.0
+                    logger.debug(f"[MasterCredentialService] DB lookup for {candidate} failed or unavailable: {db_err}")
+                    break
 
         # 2. Fallback to environment variables if not configured in DB
         env_map = {
@@ -274,6 +279,70 @@ class MasterCredentialService:
                         if resp.status == 200:
                             return True, f"Successfully connected to custom endpoint at {base_url}."
                         return False, f"Custom endpoint returned HTTP status {resp.status}"
+
+                # 13. Azure Speech & Cognitive Services
+                elif provider_lower in ("azure", "azure_speech"):
+                    api_key = creds.get("api_key") or creds.get("subscription_key") or ""
+                    region = creds.get("region") or creds.get("azure_speech_region") or os.environ.get("AZURE_SPEECH_REGION", "eastus")
+                    headers = {"Ocp-Apim-Subscription-Key": api_key}
+                    async with session.get(f"https://{region}.tts.speech.microsoft.com/cognitiveservices/voices/list", headers=headers) as resp:
+                        if resp.status == 200:
+                            return True, f"Successfully connected to Azure Speech in region {region}."
+                        return False, f"Azure Speech returned HTTP status {resp.status}"
+
+                # 14. Smallest AI
+                elif provider_lower == "smallest":
+                    api_key = creds.get("api_key") or ""
+                    headers = {"Authorization": f"Bearer {api_key}"}
+                    async with session.get("https://waves-api.smallest.ai/api/v1/lightning/get_voices", headers=headers) as resp:
+                        if resp.status in (200, 400):
+                            return True, "Successfully connected to Smallest AI API."
+                        return False, f"Smallest AI returned HTTP status {resp.status}"
+
+                # 15. LMNT
+                elif provider_lower == "lmnt":
+                    api_key = creds.get("api_key") or ""
+                    headers = {"X-API-Key": api_key}
+                    async with session.get("https://api.lmnt.com/v1/ai/voice/list", headers=headers) as resp:
+                        if resp.status == 200:
+                            return True, "Successfully connected to LMNT Speech API."
+                        return False, f"LMNT returned HTTP status {resp.status}"
+
+                # 16. Rime Labs
+                elif provider_lower == "rime":
+                    api_key = creds.get("api_key") or ""
+                    headers = {"Authorization": f"Bearer {api_key}"}
+                    async with session.get("https://users.rime.ai/v1/data/voices", headers=headers) as resp:
+                        if resp.status in (200, 400, 404):
+                            return True, "Successfully connected to Rime Labs Speech API."
+                        return False, f"Rime Labs returned HTTP status {resp.status}"
+
+                # 17. xAI Grok
+                elif provider_lower in ("grok", "xai"):
+                    api_key = creds.get("api_key") or ""
+                    headers = {"Authorization": f"Bearer {api_key}"}
+                    async with session.get("https://api.x.ai/v1/models", headers=headers) as resp:
+                        if resp.status == 200:
+                            return True, "Successfully connected to xAI Grok API."
+                        return False, f"xAI Grok returned HTTP status {resp.status}"
+
+                # 18. Ultravox
+                elif provider_lower == "ultravox":
+                    api_key = creds.get("api_key") or ""
+                    headers = {"X-API-Key": api_key}
+                    async with session.get("https://api.ultravox.ai/api/voices", headers=headers) as resp:
+                        if resp.status == 200:
+                            return True, "Successfully connected to Ultravox Realtime API."
+                        return False, f"Ultravox returned HTTP status {resp.status}"
+
+                # 19. OpenRouter
+                elif provider_lower == "openrouter":
+                    api_key = creds.get("api_key") or ""
+                    headers = {"Authorization": f"Bearer {api_key}"}
+                    async with session.get("https://openrouter.ai/api/v1/models", headers=headers) as resp:
+                        if resp.status == 200:
+                            return True, "Successfully connected to OpenRouter API."
+                        return False, f"OpenRouter returned HTTP status {resp.status}"
 
                 return False, f"No connection test routine defined for provider '{provider}'"
 

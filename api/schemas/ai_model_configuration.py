@@ -48,6 +48,7 @@ class EffectiveAIModelConfiguration(BaseModel):
     test_phone_number: str | None = None
     timezone: str | None = None
     last_validated_at: datetime | None = None
+    resolution_info: dict | None = None
 
     @model_validator(mode="before")
     @classmethod
