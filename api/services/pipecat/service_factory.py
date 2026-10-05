@@ -28,24 +28,44 @@ from api.services.pipecat.minimax_tts import (
 )
 from api.services.pipecat.tts_cache.runtime import get_speech_cache
 from api.utils.url_security import validate_user_configured_service_url
-from pipecat.services.assemblyai.stt import AssemblyAISTTService, AssemblyAISTTSettings
-from pipecat.services.aws.llm import AWSBedrockLLMService, AWSBedrockLLMSettings
-from pipecat.services.azure.llm import AzureLLMService, AzureLLMSettings
-from pipecat.services.azure.stt import AzureSTTService, AzureSTTSettings
-from pipecat.services.azure.tts import AzureTTSService, AzureTTSSettings
-from pipecat.services.cartesia.stt import CartesiaSTTService, CartesiaSTTSettings
-from pipecat.services.cartesia.tts import (
-    CartesiaTTSService,
-    CartesiaTTSSettings,
-    GenerationConfig,
+
+def _optional_import(module_path: str, *names):
+    res = []
+    try:
+        mod = __import__(module_path, fromlist=list(names))
+        for n in names:
+            res.append(getattr(mod, n))
+    except Exception as e:
+        err_msg = str(e)
+        for n in names:
+            def _make_cls(name, mod_p, msg):
+                class _Unavailable:
+                    def __init__(self, *args, **kwargs):
+                        raise RuntimeError(f"Service {name} ({mod_p}) is unavailable: {msg}")
+                _Unavailable.__name__ = name
+                return _Unavailable
+            res.append(_make_cls(n, module_path, err_msg))
+    return res if len(res) > 1 else res[0]
+
+AssemblyAISTTService, AssemblyAISTTSettings = _optional_import("pipecat.services.assemblyai.stt", "AssemblyAISTTService", "AssemblyAISTTSettings")
+AWSBedrockLLMService, AWSBedrockLLMSettings = _optional_import("pipecat.services.aws.llm", "AWSBedrockLLMService", "AWSBedrockLLMSettings")
+AzureLLMService, AzureLLMSettings = _optional_import("pipecat.services.azure.llm", "AzureLLMService", "AzureLLMSettings")
+AzureSTTService, AzureSTTSettings = _optional_import("pipecat.services.azure.stt", "AzureSTTService", "AzureSTTSettings")
+AzureTTSService, AzureTTSSettings = _optional_import("pipecat.services.azure.tts", "AzureTTSService", "AzureTTSSettings")
+CartesiaSTTService, CartesiaSTTSettings = _optional_import("pipecat.services.cartesia.stt", "CartesiaSTTService", "CartesiaSTTSettings")
+CartesiaTTSService, CartesiaTTSSettings, GenerationConfig = _optional_import(
+    "pipecat.services.cartesia.tts", "CartesiaTTSService", "CartesiaTTSSettings", "GenerationConfig"
 )
-from pipecat.services.cartesia.turns.stt import CartesiaTurnsSTTService
-from pipecat.services.deepgram.flux.stt import (
-    DeepgramFluxSTTService,
-    DeepgramFluxSTTSettings,
+CartesiaTurnsSTTService = _optional_import("pipecat.services.cartesia.turns.stt", "CartesiaTurnsSTTService")
+DeepgramFluxSTTService, DeepgramFluxSTTSettings = _optional_import(
+    "pipecat.services.deepgram.flux.stt", "DeepgramFluxSTTService", "DeepgramFluxSTTSettings"
 )
-from pipecat.services.deepgram.stt import DeepgramSTTService, DeepgramSTTSettings
-from pipecat.services.deepgram.tts import DeepgramTTSService, DeepgramTTSSettings
+DeepgramSTTService, DeepgramSTTSettings = _optional_import(
+    "pipecat.services.deepgram.stt", "DeepgramSTTService", "DeepgramSTTSettings"
+)
+DeepgramTTSService, DeepgramTTSSettings = _optional_import(
+    "pipecat.services.deepgram.tts", "DeepgramTTSService", "DeepgramTTSSettings"
+)
 from pipecat.services.kodewaves.flux.stt import KodewavesFluxSTTService
 
 DograhFluxSTTService = KodewavesFluxSTTService
@@ -54,32 +74,29 @@ from pipecat.services.kodewaves.tts import KodewavesTTSService, KodewavesTTSSett
 from pipecat.services.kodewaves.llm import KodewavesLLMService
 
 DograhLLMService = KodewavesLLMService
-from pipecat.services.elevenlabs.stt import (
-    CommitStrategy,
-    ElevenLabsRealtimeSTTService,
-    ElevenLabsRealtimeSTTSettings,
+CommitStrategy, ElevenLabsRealtimeSTTService, ElevenLabsRealtimeSTTSettings = _optional_import(
+    "pipecat.services.elevenlabs.stt", "CommitStrategy", "ElevenLabsRealtimeSTTService", "ElevenLabsRealtimeSTTSettings"
 )
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService, ElevenLabsTTSSettings
-from pipecat.services.gladia.stt import GladiaSTTService, GladiaSTTSettings
-from pipecat.services.google.llm import GoogleLLMService, GoogleLLMSettings
-from pipecat.services.google.stt import GoogleSTTService, GoogleSTTSettings
-from pipecat.services.google.tts import GoogleTTSService, GoogleTTSSettings
-from pipecat.services.google.vertex.llm import (
-    GoogleVertexLLMService,
-    GoogleVertexLLMSettings,
+ElevenLabsTTSService, ElevenLabsTTSSettings = _optional_import(
+    "pipecat.services.elevenlabs.tts", "ElevenLabsTTSService", "ElevenLabsTTSSettings"
 )
-from pipecat.services.groq.llm import GroqLLMService, GroqLLMSettings
-from pipecat.services.huggingface.llm import (
-    HuggingFaceLLMService,
-    HuggingFaceLLMSettings,
+GladiaSTTService, GladiaSTTSettings = _optional_import("pipecat.services.gladia.stt", "GladiaSTTService", "GladiaSTTSettings")
+GoogleLLMService, GoogleLLMSettings = _optional_import("pipecat.services.google.llm", "GoogleLLMService", "GoogleLLMSettings")
+GoogleSTTService, GoogleSTTSettings = _optional_import("pipecat.services.google.stt", "GoogleSTTService", "GoogleSTTSettings")
+GoogleTTSService, GoogleTTSSettings = _optional_import("pipecat.services.google.tts", "GoogleTTSService", "GoogleTTSSettings")
+GoogleVertexLLMService, GoogleVertexLLMSettings = _optional_import(
+    "pipecat.services.google.vertex.llm", "GoogleVertexLLMService", "GoogleVertexLLMSettings"
 )
-from pipecat.services.huggingface.stt import (
-    HuggingFaceSTTService,
-    HuggingFaceSTTSettings,
+GroqLLMService, GroqLLMSettings = _optional_import("pipecat.services.groq.llm", "GroqLLMService", "GroqLLMSettings")
+HuggingFaceLLMService, HuggingFaceLLMSettings = _optional_import(
+    "pipecat.services.huggingface.llm", "HuggingFaceLLMService", "HuggingFaceLLMSettings"
 )
-from pipecat.services.inworld.tts import InworldTTSService, InworldTTSSettings
-from pipecat.services.minimax.llm import MiniMaxLLMService
-from pipecat.services.minimax.tts import MiniMaxTTSSettings
+HuggingFaceSTTService, HuggingFaceSTTSettings = _optional_import(
+    "pipecat.services.huggingface.stt", "HuggingFaceSTTService", "HuggingFaceSTTSettings"
+)
+InworldTTSService, InworldTTSSettings = _optional_import("pipecat.services.inworld.tts", "InworldTTSService", "InworldTTSSettings")
+MiniMaxLLMService = _optional_import("pipecat.services.minimax.llm", "MiniMaxLLMService")
+MiniMaxTTSSettings = _optional_import("pipecat.services.minimax.tts", "MiniMaxTTSSettings")
 from pipecat.services.openai._constants import OPENAI_SAMPLE_RATE
 from pipecat.services.openai.base_llm import OpenAILLMSettings
 from pipecat.services.openai.llm import OpenAILLMService
@@ -88,21 +105,20 @@ from pipecat.services.openai.stt import (
     OpenAISTTSettings,
 )
 from pipecat.services.openai.tts import OpenAITTSService, OpenAITTSSettings
-from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMSettings
-from pipecat.services.rime.tts import RimeTTSService, RimeTTSSettings
-from pipecat.services.sarvam.llm import SarvamLLMService, SarvamLLMSettings
-from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings
-from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings
-from pipecat.services.smallest.stt import SmallestSTTService, SmallestSTTSettings
-from pipecat.services.smallest.tts import SmallestTTSService, SmallestTTSSettings
-from pipecat.services.speaches.llm import SpeachesLLMService, SpeachesLLMSettings
-from pipecat.services.speaches.stt import SpeachesSTTService, SpeachesSTTSettings
-from pipecat.services.speaches.tts import SpeachesTTSService, SpeachesTTSSettings
-from pipecat.services.speechmatics.stt import (
-    SpeechmaticsSTTService,
-    SpeechmaticsSTTSettings,
+OpenRouterLLMService, OpenRouterLLMSettings = _optional_import("pipecat.services.openrouter.llm", "OpenRouterLLMService", "OpenRouterLLMSettings")
+RimeTTSService, RimeTTSSettings = _optional_import("pipecat.services.rime.tts", "RimeTTSService", "RimeTTSSettings")
+SarvamLLMService, SarvamLLMSettings = _optional_import("pipecat.services.sarvam.llm", "SarvamLLMService", "SarvamLLMSettings")
+SarvamSTTService, SarvamSTTSettings = _optional_import("pipecat.services.sarvam.stt", "SarvamSTTService", "SarvamSTTSettings")
+SarvamTTSService, SarvamTTSSettings = _optional_import("pipecat.services.sarvam.tts", "SarvamTTSService", "SarvamTTSSettings")
+SmallestSTTService, SmallestSTTSettings = _optional_import("pipecat.services.smallest.stt", "SmallestSTTService", "SmallestSTTSettings")
+SmallestTTSService, SmallestTTSSettings = _optional_import("pipecat.services.smallest.tts", "SmallestTTSService", "SmallestTTSSettings")
+SpeachesLLMService, SpeachesLLMSettings = _optional_import("pipecat.services.speaches.llm", "SpeachesLLMService", "SpeachesLLMSettings")
+SpeachesSTTService, SpeachesSTTSettings = _optional_import("pipecat.services.speaches.stt", "SpeachesSTTService", "SpeachesSTTSettings")
+SpeachesTTSService, SpeachesTTSSettings = _optional_import("pipecat.services.speaches.tts", "SpeachesTTSService", "SpeachesTTSSettings")
+SpeechmaticsSTTService, SpeechmaticsSTTSettings = _optional_import(
+    "pipecat.services.speechmatics.stt", "SpeechmaticsSTTService", "SpeechmaticsSTTSettings"
 )
-from pipecat.services.xai.tts import XAITTSService, XAIWebsocketTTSSettings
+XAITTSService, XAIWebsocketTTSSettings = _optional_import("pipecat.services.xai.tts", "XAITTSService", "XAIWebsocketTTSSettings")
 from pipecat.transcriptions.language import Language
 from pipecat.utils.text.xml_function_tag_filter import XMLFunctionTagFilter
 

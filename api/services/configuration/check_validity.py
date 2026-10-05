@@ -2,8 +2,16 @@ from typing import Optional, TypedDict
 
 import httpx
 import openai
-from deepgram import DeepgramClient
-from groq import Groq
+
+try:
+    from deepgram import DeepgramClient
+except ImportError:
+    DeepgramClient = None
+
+try:
+    from groq import Groq
+except ImportError:
+    Groq = None
 
 # try:
 #     from pyneuphonic import Neuphonic

@@ -12,6 +12,7 @@ from api.db.kodewaves_models import (
     AppointmentSettingsModel,
     AuditLogModel,
     BannedWordModel,
+    CatalogVerifyRunModel,
     ContactModel,
     CreditPackageModel,
     FlaggedCallViolationModel,
@@ -20,10 +21,12 @@ from api.db.kodewaves_models import (
     GoogleCalendarCredentialModel,
     LeadActivityModel,
     LeadStageModel,
+    OrgAIPolicyModel,
     OrganizationWalletModel,
     PlatformMasterCredentialModel,
     PromptTemplateModel,
     SaaSPlanModel,
+    VoiceCatalogModel,
     WalletLedgerModel,
     WebsiteWidgetModel,
     GlobalPlatformSettingModel,
@@ -114,16 +117,249 @@ class KodewavesDBClient(BaseDBClient):
             return False
 
     # ------------------------------------------------------------------------
-    # Model Catalog
+    # Model Catalog (Truth Layer)
     # ------------------------------------------------------------------------
-    async def list_active_models(self, category: Optional[str] = None) -> List[AIModelCatalogModel]:
+    async def list_models(
+        self,
+        layer: Optional[str] = None,
+        provider: Optional[str] = None,
+        enabled_only: bool = True,
+    ) -> List[AIModelCatalogModel]:
         async with self.get_session() as session:
-            stmt = select(AIModelCatalogModel).where(AIModelCatalogModel.is_active == True)
-            if category:
-                stmt = stmt.where(AIModelCatalogModel.category == category)
-            stmt = stmt.order_by(AIModelCatalogModel.sort_order)
+            stmt = select(AIModelCatalogModel)
+            if enabled_only:
+                stmt = stmt.where((AIModelCatalogModel.is_active == True) & (AIModelCatalogModel.enabled == True))
+            if layer:
+                stmt = stmt.where((AIModelCatalogModel.layer == layer) | (AIModelCatalogModel.category == layer))
+            if provider:
+                stmt = stmt.where(AIModelCatalogModel.provider == provider.lower().strip())
+            stmt = stmt.order_by(AIModelCatalogModel.sort_order, AIModelCatalogModel.display_name)
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def list_active_models(self, category: Optional[str] = None) -> List[AIModelCatalogModel]:
+        return await self.list_models(layer=category, enabled_only=True)
+
+    async def get_model(self, model_identifier: str) -> Optional[AIModelCatalogModel]:
+        async with self.get_session() as session:
+            stmt = select(AIModelCatalogModel).where(AIModelCatalogModel.model_identifier == model_identifier)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def upsert_model(
+        self,
+        model_identifier: str,
+        display_name: str,
+        provider: str,
+        layer: str,
+        enabled: bool = True,
+        recommended: bool = False,
+        is_default: bool = False,
+        source: str = "built-in",
+        status: str = "UNTESTED",
+        latency_ms: Optional[int] = None,
+        languages: Optional[List[str]] = None,
+        supports_tools: bool = False,
+        supports_streaming: bool = True,
+        wholesale_cost: float = 0.0,
+        markup_percent: float = 0.0,
+        custom_base_url: Optional[str] = None,
+    ) -> AIModelCatalogModel:
+        async with self.get_session() as session:
+            stmt = select(AIModelCatalogModel).where(AIModelCatalogModel.model_identifier == model_identifier)
+            result = await session.execute(stmt)
+            model = result.scalar_one_or_none()
+
+            if model:
+                model.display_name = display_name
+                model.provider = provider.lower().strip()
+                model.layer = layer
+                model.category = layer
+                model.enabled = enabled
+                model.is_active = enabled
+                model.recommended = recommended
+                model.is_default = is_default
+                model.source = source
+                model.status = status
+                if latency_ms is not None:
+                    model.latency_ms = latency_ms
+                if languages is not None:
+                    model.languages = languages
+                model.supports_tools = supports_tools
+                model.supports_streaming = supports_streaming
+                model.wholesale_cost = wholesale_cost
+                model.markup_percent = markup_percent
+                if custom_base_url is not None:
+                    model.custom_base_url = custom_base_url
+            else:
+                model = AIModelCatalogModel(
+                    model_identifier=model_identifier,
+                    display_name=display_name,
+                    provider=provider.lower().strip(),
+                    category=layer,
+                    layer=layer,
+                    enabled=enabled,
+                    is_active=enabled,
+                    recommended=recommended,
+                    is_default=is_default,
+                    source=source,
+                    status=status,
+                    latency_ms=latency_ms,
+                    languages=languages or [],
+                    supports_tools=supports_tools,
+                    supports_streaming=supports_streaming,
+                    wholesale_cost=wholesale_cost,
+                    markup_percent=markup_percent,
+                    custom_base_url=custom_base_url,
+                )
+                session.add(model)
+            await session.commit()
+            await session.refresh(model)
+            return model
+
+    # ------------------------------------------------------------------------
+    # Voice Catalog (Truth Layer)
+    # ------------------------------------------------------------------------
+    async def list_voices(
+        self,
+        provider: Optional[str] = None,
+        tts_model: Optional[str] = None,
+        language: Optional[str] = None,
+        active_only: bool = True,
+    ) -> List[VoiceCatalogModel]:
+        async with self.get_session() as session:
+            stmt = select(VoiceCatalogModel)
+            if active_only:
+                stmt = stmt.where(VoiceCatalogModel.is_active == True)
+            if provider:
+                stmt = stmt.where(VoiceCatalogModel.provider == provider.lower().strip())
+            if tts_model:
+                stmt = stmt.where(VoiceCatalogModel.tts_model == tts_model)
+            result = await session.execute(stmt)
+            voices = list(result.scalars().all())
+            if language:
+                lang_clean = language.lower().strip()
+                voices = [v for v in voices if any(lang_clean in str(l).lower() for l in (v.languages or []))]
+            return voices
+
+    async def upsert_voice(
+        self,
+        provider: str,
+        voice_id: str,
+        name: str,
+        tts_model: Optional[str] = None,
+        gender: Optional[str] = None,
+        languages: Optional[List[str]] = None,
+        preview_url: Optional[str] = None,
+        preview_ok: bool = True,
+        is_active: bool = True,
+    ) -> VoiceCatalogModel:
+        async with self.get_session() as session:
+            stmt = select(VoiceCatalogModel).where(
+                VoiceCatalogModel.provider == provider.lower().strip(),
+                VoiceCatalogModel.tts_model == tts_model,
+                VoiceCatalogModel.voice_id == voice_id,
+            )
+            result = await session.execute(stmt)
+            voice = result.scalar_one_or_none()
+
+            if voice:
+                voice.name = name
+                voice.gender = gender
+                if languages is not None:
+                    voice.languages = languages
+                if preview_url:
+                    voice.preview_url = preview_url
+                voice.preview_ok = preview_ok
+                voice.is_active = is_active
+                voice.updated_at = datetime.now(UTC)
+            else:
+                voice = VoiceCatalogModel(
+                    provider=provider.lower().strip(),
+                    tts_model=tts_model,
+                    voice_id=voice_id,
+                    name=name,
+                    gender=gender,
+                    languages=languages or [],
+                    preview_url=preview_url,
+                    preview_ok=preview_ok,
+                    is_active=is_active,
+                )
+                session.add(voice)
+            await session.commit()
+            await session.refresh(voice)
+            return voice
+
+    # ------------------------------------------------------------------------
+    # Verification Runs & Org Policy
+    # ------------------------------------------------------------------------
+    async def record_verify_run(
+        self,
+        provider: str,
+        layer: str,
+        status: str,
+        latency_ms: Optional[int] = None,
+        model_id: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ) -> CatalogVerifyRunModel:
+        async with self.get_session() as session:
+            run = CatalogVerifyRunModel(
+                provider=provider.lower().strip(),
+                layer=layer.lower().strip(),
+                model_id=model_id,
+                status=status.upper().strip(),
+                latency_ms=latency_ms,
+                error_message=error_message,
+            )
+            session.add(run)
+            await session.commit()
+            await session.refresh(run)
+            return run
+
+    async def get_org_ai_policy(self, organization_id: int) -> Optional[OrgAIPolicyModel]:
+        async with self.get_session() as session:
+            stmt = select(OrgAIPolicyModel).where(OrgAIPolicyModel.organization_id == organization_id)
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+
+    async def upsert_org_ai_policy(
+        self,
+        organization_id: int,
+        allowed_providers: Optional[List[str]] = None,
+        local_allowed: bool = True,
+        byok_allowed: bool = True,
+        s2s_allowed: bool = True,
+        fallback_chain: Optional[List[dict]] = None,
+        concurrency_cap: int = 5,
+    ) -> OrgAIPolicyModel:
+        async with self.get_session() as session:
+            stmt = select(OrgAIPolicyModel).where(OrgAIPolicyModel.organization_id == organization_id)
+            result = await session.execute(stmt)
+            policy = result.scalar_one_or_none()
+            if policy:
+                if allowed_providers is not None:
+                    policy.allowed_providers = allowed_providers
+                policy.local_allowed = local_allowed
+                policy.byok_allowed = byok_allowed
+                policy.s2s_allowed = s2s_allowed
+                if fallback_chain is not None:
+                    policy.fallback_chain = fallback_chain
+                policy.concurrency_cap = concurrency_cap
+                policy.updated_at = datetime.now(UTC)
+            else:
+                policy = OrgAIPolicyModel(
+                    organization_id=organization_id,
+                    allowed_providers=allowed_providers or [],
+                    local_allowed=local_allowed,
+                    byok_allowed=byok_allowed,
+                    s2s_allowed=s2s_allowed,
+                    fallback_chain=fallback_chain or [],
+                    concurrency_cap=concurrency_cap,
+                )
+                session.add(policy)
+            await session.commit()
+            await session.refresh(policy)
+            return policy
 
     # ------------------------------------------------------------------------
     # Organization Wallets & Ledger

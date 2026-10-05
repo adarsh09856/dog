@@ -32,8 +32,12 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SDK_PY_SRC = REPO_ROOT / "sdk" / "python" / "src"
-if str(SDK_PY_SRC) not in sys.path:
-    sys.path.insert(0, str(SDK_PY_SRC))
+PIPECAT_SRC = REPO_ROOT / "pipecat" / "src"
+PIPECAT_ROOT = REPO_ROOT / "pipecat"
+for p in [REPO_ROOT, SDK_PY_SRC, PIPECAT_SRC, PIPECAT_ROOT]:
+    p_str = str(p)
+    if p_str not in sys.path:
+        sys.path.insert(0, p_str)
 
 from api.constants import APP_ROOT_DIR  # noqa: E402
 

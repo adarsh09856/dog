@@ -53,47 +53,7 @@ const PROVIDER_TABS = [
     { id: "rime", label: "Rime" },
 ];
 
-const BUILTIN_FALLBACK_VOICES: Record<string, VoiceInfo[]> = {
-    google: [
-        { voice_id: "Puck", name: "Puck (Playful & Quick)", description: "Google Gemini conversational voice with fast turn-taking capability.", gender: "male", accent: "us", language: "en", provider: "google", preview_url: "/api/v1/user/configurations/voices/google/Puck/preview" },
-        { voice_id: "Kore", name: "Kore (Friendly Professional)", description: "Google Gemini friendly, modern corporate persona for voice agents.", gender: "female", accent: "us", language: "en", provider: "google", preview_url: "/api/v1/user/configurations/voices/google/Kore/preview" },
-        { voice_id: "Charon", name: "Charon (Calm & Informative)", description: "Google Gemini deep, grounded tone perfect for briefings and announcements.", gender: "male", accent: "us", language: "en", provider: "google", preview_url: "/api/v1/user/configurations/voices/google/Charon/preview" },
-        { voice_id: "Aoede", name: "Aoede (Warm & Melodic)", description: "Google Gemini warm female voice tuned for storytelling and guidance.", gender: "female", accent: "us", language: "en", provider: "google", preview_url: "/api/v1/user/configurations/voices/google/Aoede/preview" },
-        { voice_id: "Fenrir", name: "Fenrir (Crisp & Direct)", description: "Google Gemini crisp male articulation for high intelligibility on telephony.", gender: "male", accent: "us", language: "en", provider: "google", preview_url: "/api/v1/user/configurations/voices/google/Fenrir/preview" },
-        { voice_id: "Journey", name: "Journey (Adaptive Conversational)", description: "Google Gemini high-fidelity conversational voice with expressive pitch.", gender: "female", accent: "us", language: "en", provider: "google", preview_url: "/api/v1/user/configurations/voices/google/Journey/preview" },
-    ],
-    piper: [
-        { voice_id: "hi_IN-priyamvada-medium", name: "Priyamvada (Hindi Female)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "female", accent: "in", language: "hi", provider: "piper", preview_url: "/api/v1/user/configurations/voices/piper/hi_IN-priyamvada-medium/preview" },
-        { voice_id: "hi_IN-pratham-medium", name: "Pratham (Hindi Male)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "male", accent: "in", language: "hi", provider: "piper", preview_url: "/api/v1/user/configurations/voices/piper/hi_IN-pratham-medium/preview" },
-        { voice_id: "en_US-lessac-medium", name: "Lessac (English US Female)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "female", accent: "us", language: "en", provider: "piper", preview_url: "/api/v1/user/configurations/voices/piper/en_US-lessac-medium/preview" },
-        { voice_id: "en_US-amy-medium", name: "Amy (English US Female)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "female", accent: "us", language: "en", provider: "piper", preview_url: "/api/v1/user/configurations/voices/piper/en_US-amy-medium/preview" },
-        { voice_id: "en_GB-alan-medium", name: "Alan (English UK Male)", description: "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", gender: "male", accent: "gb", language: "en", provider: "piper", preview_url: "/api/v1/user/configurations/voices/piper/en_GB-alan-medium/preview" },
-    ],
-    openai: [
-        { voice_id: "alloy", name: "Alloy (Neutral Conversational)", description: "Balanced, versatile OpenAI voice.", gender: "female", accent: "us", language: "en", provider: "openai", preview_url: "/api/v1/user/configurations/voices/openai/alloy/preview" },
-        { voice_id: "echo", name: "Echo (Warm Male)", description: "Warm, smooth male voice.", gender: "male", accent: "us", language: "en", provider: "openai", preview_url: "/api/v1/user/configurations/voices/openai/echo/preview" },
-        { voice_id: "fable", name: "Fable (Expressive British)", description: "Expressive British accent.", gender: "male", accent: "gb", language: "en", provider: "openai", preview_url: "/api/v1/user/configurations/voices/openai/fable/preview" },
-        { voice_id: "onyx", name: "Onyx (Deep Male)", description: "Deep, authoritative baritone.", gender: "male", accent: "us", language: "en", provider: "openai", preview_url: "/api/v1/user/configurations/voices/openai/onyx/preview" },
-        { voice_id: "nova", name: "Nova (Energetic Female)", description: "Bright, energetic female tone.", gender: "female", accent: "us", language: "en", provider: "openai", preview_url: "/api/v1/user/configurations/voices/openai/nova/preview" },
-        { voice_id: "shimmer", name: "Shimmer (Soft Female)", description: "Clear, gentle, melodic female tone.", gender: "female", accent: "us", language: "en", provider: "openai", preview_url: "/api/v1/user/configurations/voices/openai/shimmer/preview" },
-    ],
-    cartesia: [
-        { voice_id: "sonic-english", name: "Sonic English (Ultra Low Latency)", description: "Sub-100ms ultra low-latency conversational speech.", gender: "female", accent: "us", language: "en", provider: "cartesia", preview_url: "/api/v1/user/configurations/voices/cartesia/sonic-english/preview" },
-        { voice_id: "sonic-multilingual", name: "Sonic Multilingual", description: "Low-latency multilingual voice.", gender: "male", accent: "us", language: "en", provider: "cartesia", preview_url: "/api/v1/user/configurations/voices/cartesia/sonic-multilingual/preview" },
-    ],
-    elevenlabs: [
-        { voice_id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel (Calm & Professional)", description: "Clear, gentle American female.", gender: "female", accent: "us", language: "en", provider: "elevenlabs", preview_url: "/api/v1/user/configurations/voices/elevenlabs/21m00Tcm4TlvDq8ikWAM/preview" },
-        { voice_id: "pNInz6obpgDQGcFmaJgB", name: "Adam (Deep & Versatile)", description: "Deep, smooth male narration.", gender: "male", accent: "us", language: "en", provider: "elevenlabs", preview_url: "/api/v1/user/configurations/voices/elevenlabs/pNInz6obpgDQGcFmaJgB/preview" },
-    ],
-    sarvam: [
-        { voice_id: "arvind", name: "Arvind (Indian English / Hindi Male)", description: "Natural Indian male accent with fluent Hindi support.", gender: "male", accent: "in", language: "hi", provider: "sarvam", preview_url: "/api/v1/user/configurations/voices/sarvam/arvind/preview" },
-        { voice_id: "amrita", name: "Amrita (Warm Indian Female)", description: "Warm, polite Indian female voice.", gender: "female", accent: "in", language: "hi", provider: "sarvam", preview_url: "/api/v1/user/configurations/voices/sarvam/amrita/preview" },
-    ],
-    deepgram: [
-        { voice_id: "aura-asteria-en", name: "Asteria (Conversational Female)", description: "Low-latency Deepgram Aura female voice.", gender: "female", accent: "us", language: "en", provider: "deepgram", preview_url: "/api/v1/user/configurations/voices/deepgram/aura-asteria-en/preview" },
-        { voice_id: "aura-orion-en", name: "Orion (Authoritative Male)", description: "Calm and commanding male voice.", gender: "male", accent: "us", language: "en", provider: "deepgram", preview_url: "/api/v1/user/configurations/voices/deepgram/aura-orion-en/preview" },
-    ],
-};
+
 
 function resolveTargetProvider(prov: string, filter?: string): string {
     const norm = (prov || "").toLowerCase().trim();
@@ -238,11 +198,6 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         let active = true;
         (async () => {
             const targetProv = resolveTargetProvider(provider);
-            const fallbackList = BUILTIN_FALLBACK_VOICES[targetProv] || [];
-            const immediate = fallbackList.find((v) => v.voice_id === value);
-            if (immediate && active) {
-                setSelectedVoiceInfo(immediate);
-            }
             try {
                 const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
                     path: { provider: targetProv as never },
@@ -254,7 +209,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                     setSelectedVoiceInfo(found);
                 }
             } catch {
-                // Keep immediate fallback if found
+                // Keep selected label as fallback
             }
         })();
         return () => {
@@ -288,15 +243,9 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 if (id !== requestId.current) return;
 
                 if (response.error || !response.data?.voices?.length) {
-                    const fallback = BUILTIN_FALLBACK_VOICES[target] || [];
-                    if (fallback.length > 0) {
-                        setVoices(fallback);
-                        setError(null);
-                    } else if (response.error) {
+                    setVoices([]);
+                    if (response.error) {
                         setError("Failed to load voices");
-                        setVoices([]);
-                    } else {
-                        setVoices([]);
                     }
                 } else {
                     setVoices(response.data.voices);
@@ -311,13 +260,8 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 }
             } catch {
                 if (id !== requestId.current) return;
-                const fallback = BUILTIN_FALLBACK_VOICES[target] || [];
-                if (fallback.length > 0) {
-                    setVoices(fallback);
-                    setError(null);
-                } else {
-                    setError("Failed to load voices");
-                }
+                setVoices([]);
+                setError("Failed to load voices");
             } finally {
                 if (id === requestId.current) {
                     setIsLoading(false);

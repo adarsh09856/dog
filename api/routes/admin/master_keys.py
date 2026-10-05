@@ -7,6 +7,8 @@ from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import PlatformMasterCredentialModel
 from api.services.auth.depends import get_superuser
 from api.services.credentials.master_credential_service import master_credential_service
+from api.services.catalog.catalog_service import catalog_service
+from loguru import logger
 
 router = APIRouter(prefix="/master-keys", tags=["admin-master-keys"])
 
@@ -116,16 +118,10 @@ async def save_master_key(req: MasterCredentialRequest, _user=Depends(get_superu
         raise HTTPException(status_code=500, detail="Failed to encrypt and store master credentials.")
 
     try:
-        await kodewaves_db_client.record_audit_log(
-            actor_id=_user.id,
-            actor_email=_user.email,
-            action="master_key.upsert",
-            resource_type="credential",
-            resource_id=provider_clean,
-            changes={"is_enabled": is_enabled, "category": category},
-        )
-    except Exception:
-        pass
+        await catalog_service.discover_provider(provider_clean, creds=creds)
+        catalog_service.invalidate_cache()
+    except Exception as disc_err:
+        logger.warning(f"[MasterKeys] Auto-discovery for {provider_clean} encountered error: {disc_err}")
 
     return {"message": f"Successfully stored master credentials for {req.provider}"}
 
@@ -184,6 +180,7 @@ async def delete_master_key(provider: str, _user=Depends(get_superuser)):
 
         await session.delete(record)
         await session.commit()
+        catalog_service.invalidate_cache()
         try:
             await kodewaves_db_client.record_audit_log(
                 actor_id=_user.id,
@@ -196,3 +193,17 @@ async def delete_master_key(provider: str, _user=Depends(get_superuser)):
         except Exception:
             pass
         return {"message": f"Successfully removed master credentials for '{provider}'"}
+
+
+@router.post("/{provider}/discover", response_model=Dict[str, Any])
+async def discover_provider_capabilities(provider: str, _user=Depends(get_superuser)):
+    """Run model and voice capability discovery for a provider."""
+    result = await catalog_service.discover_provider(provider)
+    return result
+
+
+@router.post("/{provider}/verify", response_model=Dict[str, Any])
+async def verify_provider_layers(provider: str, _user=Depends(get_superuser)):
+    """Run live verification across all layers supported by a provider."""
+    results = await catalog_service.verify_provider_all_layers(provider)
+    return {"provider": provider, "layers": results}

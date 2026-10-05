@@ -677,8 +677,29 @@ async def get_voices(
         except Exception:
             pass
 
-    # Fetch voice catalog for the requested provider or all managed voices
-    if provider_key in ("kodewaves", "dograh", "all", "auto"):
+    # Fetch voice catalog from Database Truth Layer (voice_catalog table)
+    norm_key = "google" if provider_key == "gemini" else ("azure" if provider_key == "azure_speech" else ("navana" if provider_key == "bodhi" else provider_key))
+    db_voices = await kodewaves_db_client.list_voices(
+        provider=None if provider_key in ("kodewaves", "dograh", "all", "auto") else norm_key,
+        tts_model=model,
+        language=language,
+    )
+
+    if db_voices:
+        raw_catalog = [
+            {
+                "voice_id": v.voice_id,
+                "name": v.name,
+                "gender": v.gender,
+                "language": (v.languages[0] if v.languages else "en-US"),
+                "provider": v.provider,
+                "preview_url": v.preview_url or f"/api/v1/user/configurations/voices/{v.provider}/{v.voice_id}/preview",
+            }
+            for v in db_voices
+            if (provider_key in ("kodewaves", "dograh", "all", "auto") and (not enabled_provs or v.provider in enabled_provs))
+            or (v.provider in (norm_key, provider_key))
+        ]
+    elif provider_key in ("kodewaves", "dograh", "all", "auto"):
         raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES]
         if enabled_provs:
             raw_catalog = [v for v in raw_catalog if v.get("provider") in enabled_provs]
@@ -687,7 +708,6 @@ async def get_voices(
         local_catalog = UNIVERSAL_VOICE_CATALOG.get("piper") or []
         raw_catalog = [dict(v) for v in local_catalog]
     else:
-        norm_key = "google" if provider_key == "gemini" else ("azure" if provider_key == "azure_speech" else provider_key)
         raw_catalog = [dict(v) for v in (UNIVERSAL_VOICE_CATALOG.get(norm_key) or UNIVERSAL_VOICE_CATALOG.get(provider_key) or [])]
         if not raw_catalog:
             raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES if v.get("provider") in (norm_key, provider_key)]

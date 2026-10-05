@@ -31,8 +31,10 @@ class PlatformMasterCredentialModel(Base):
     provider = Column(String(50), unique=True, index=True, nullable=False) # 'openai', 'anthropic', 'sarvam', 'deepgram', 'elevenlabs', 'exotel', 'twilio', 'tata'
     category = Column(String(20), nullable=False)                          # 'llm', 'tts', 'stt', 'sts', 'telephony'
     credentials_encrypted = Column(Text, nullable=False)                   # Encrypted JSON string
+    extra_config = Column(JSON, default=dict, nullable=False)
     is_enabled = Column(Boolean, default=True, nullable=False)
     health_status = Column(String(20), default="unknown", nullable=False)  # 'healthy', 'invalid', 'error'
+    last_status = Column(String(20), default="UNTESTED", nullable=False)   # 'PASS', 'FAIL', 'UNTESTED'
     last_tested_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
@@ -49,13 +51,81 @@ class AIModelCatalogModel(Base):
     display_name = Column(String(100), nullable=False)
     provider = Column(String(50), nullable=False, index=True)                       # 'openai', 'sarvam', 'anthropic', 'custom_openai_compatible'
     category = Column(String(20), nullable=False, index=True)                       # 'llm', 'stt', 'tts', 'sts'
+    layer = Column(String(20), default="llm", nullable=False, index=True)           # 'llm', 'stt', 'tts', 'embeddings', 's2s'
     base_cost_cents_per_unit = Column(Float, default=0.0, nullable=False)
     retail_price_cents_per_unit = Column(Float, default=0.0, nullable=False)
     custom_base_url = Column(String(255), nullable=True)                            # For Ollama / vLLM / Groq custom endpoints
     allowed_plan_ids = Column(JSON, default=list, nullable=False)                   # JSON list of plan codes allowed to use this model
     is_active = Column(Boolean, default=True, index=True, nullable=False)
+    enabled = Column(Boolean, default=True, index=True, nullable=False)
+    recommended = Column(Boolean, default=False, nullable=False)
+    is_default = Column(Boolean, default=False, nullable=False)
+    source = Column(String(30), default="built-in", nullable=False)                 # 'built-in', 'discovered', 'custom'
+    status = Column(String(20), default="UNTESTED", nullable=False)                 # 'PASS', 'FAIL', 'UNTESTED', 'UNAVAILABLE'
+    latency_ms = Column(Integer, nullable=True)
+    last_verified_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(Text, nullable=True)
+    languages = Column(JSON, default=list, nullable=False)                          # e.g. ["hi", "en"]
+    supports_tools = Column(Boolean, default=False, nullable=False)
+    supports_streaming = Column(Boolean, default=True, nullable=False)
+    wholesale_cost = Column(Float, default=0.0, nullable=False)
+    markup_percent = Column(Float, default=0.0, nullable=False)
     sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class VoiceCatalogModel(Base):
+    """Voice catalog per provider, tts model and language with preview testing"""
+    __tablename__ = "voice_catalog"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider = Column(String(50), nullable=False, index=True)
+    tts_model = Column(String(100), nullable=True, index=True)
+    voice_id = Column(String(100), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    gender = Column(String(20), nullable=True)
+    languages = Column(JSON, default=list, nullable=False)
+    preview_url = Column(Text, nullable=True)
+    preview_ok = Column(Boolean, default=True, nullable=False)
+    is_active = Column(Boolean, default=True, index=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        UniqueConstraint("provider", "tts_model", "voice_id", name="uq_voice_provider_model_voice"),
+    )
+
+
+class CatalogVerifyRunModel(Base):
+    """History of Verify test executions and latency/error tracking"""
+    __tablename__ = "catalog_verify_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider = Column(String(50), nullable=False, index=True)
+    layer = Column(String(20), nullable=False, index=True)
+    model_id = Column(String(100), nullable=True, index=True)
+    status = Column(String(20), nullable=False)
+    latency_ms = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
+    tested_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
+
+
+class OrgAIPolicyModel(Base):
+    """Organization-level AI provider & capability policy"""
+    __tablename__ = "org_ai_policy"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), unique=True, nullable=False, index=True)
+    allowed_providers = Column(JSON, default=list, nullable=False)
+    local_allowed = Column(Boolean, default=True, nullable=False)
+    byok_allowed = Column(Boolean, default=True, nullable=False)
+    s2s_allowed = Column(Boolean, default=True, nullable=False)
+    fallback_chain = Column(JSON, default=list, nullable=False)
+    concurrency_cap = Column(Integer, default=5, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    organization = relationship("OrganizationModel")
 
 
 # ============================================================================
