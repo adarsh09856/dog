@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Download,
   FileText,
   Filter,
   RefreshCw,
@@ -51,6 +52,29 @@ export default function AdminAuditLogsPage() {
       (l.user_email && l.user_email.toLowerCase().includes(search.toLowerCase()))
   );
 
+  const exportCsv = () => {
+    const headers = ["Timestamp", "Admin / Actor", "Action", "Target Resource", "Payload Details", "IP Address"];
+    const rows = filteredLogs.map((l) => [
+      l.created_at ? new Date(l.created_at).toISOString() : "",
+      l.user_email || "System",
+      l.action,
+      l.target_resource,
+      l.details ? JSON.stringify(l.details).replace(/"/g, '""') : "",
+      l.ip_address || "127.0.0.1",
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [
+      headers.join(","),
+      ...rows.map((e) => e.map((x) => `"${x}"`).join(",")),
+    ].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `kodewaves_audit_logs_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -71,6 +95,10 @@ export default function AdminAuditLogsPage() {
               className="pl-8 h-9 text-xs"
             />
           </div>
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={filteredLogs.length === 0} className="gap-2">
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </Button>
           <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading} className="gap-2">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh

@@ -83,6 +83,36 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
+      {/* Provider Verification & Catalog Alerts */}
+      {((stats?.failed_verifications?.length ?? 0) > 0 || (stats?.retired_model_alerts?.length ?? 0) > 0 || (stats?.disk_usage_percent ?? 0) > 85) && (
+        <div className="space-y-2">
+          {stats?.failed_verifications && stats.failed_verifications.length > 0 && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+                <span><strong>Provider Verification Alerts:</strong> The following master keys need attention: {stats.failed_verifications.join(", ")}</span>
+              </div>
+              <Link href="/admin/models" className="underline font-semibold shrink-0 ml-2">Resolve in Master Keys</Link>
+            </div>
+          )}
+          {stats?.retired_model_alerts && stats.retired_model_alerts.length > 0 && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+                <span><strong>Unavailable Model Alerts:</strong> {stats.retired_model_alerts.length} models marked unavailable or retired in catalog ({stats.retired_model_alerts.slice(0, 3).join(", ")})</span>
+              </div>
+              <Link href="/admin/models" className="underline font-semibold shrink-0 ml-2">Review Catalog</Link>
+            </div>
+          )}
+          {(stats?.disk_usage_percent ?? 0) > 85 && (
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span><strong>Storage Warning:</strong> Disk usage at {stats?.disk_usage_percent}% ({stats?.disk_free_gb} GB remaining). Clean recordings or expand VPS volume.</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Real KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-border/60">

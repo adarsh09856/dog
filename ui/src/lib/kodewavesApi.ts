@@ -169,6 +169,25 @@ export interface MonitoringStats {
   total_revenue_inr: number;
   gross_margin_percent: number;
   system_health: 'healthy' | 'degraded' | 'critical';
+  total_users?: number;
+  total_organizations?: number;
+  failed_verifications_count?: number;
+  failed_verifications?: string[];
+  retired_model_alerts?: string[];
+  disk_usage_percent?: number;
+  disk_free_gb?: number;
+}
+
+export interface SystemResources {
+  active_concurrency: number;
+  concurrency_cap: number;
+  queue_size: number;
+  cpu_percent: number;
+  memory_used_mb: number;
+  memory_total_mb: number;
+  memory_percent: number;
+  disk_free_gb: number;
+  disk_usage_percent: number;
 }
 
 export interface LiveCallItem {
@@ -254,6 +273,14 @@ export const adminApi = {
   deleteMasterKey: (provider: string) =>
     apiFetch<{ message: string }>(`/admin/master-keys/${provider}`, {
       method: 'DELETE',
+    }),
+  discoverProvider: (provider: string) =>
+    apiFetch<Record<string, any>>(`/admin/master-keys/${provider}/discover`, {
+      method: 'POST',
+    }),
+  verifyProvider: (provider: string) =>
+    apiFetch<{ provider: string; layers: Record<string, any> }>(`/admin/master-keys/${provider}/verify`, {
+      method: 'POST',
     }),
 
   // Model Catalog
@@ -365,6 +392,7 @@ export const adminApi = {
   // Monitoring
   getStats: () => apiFetch<MonitoringStats>('/admin/monitoring/stats'),
   getLiveCalls: () => apiFetch<LiveCallItem[]>('/admin/monitoring/live-calls'),
+  getSystemResources: () => apiFetch<SystemResources>('/admin/monitoring/system-resources'),
   killCall: (runId: number, reason?: string) =>
     apiFetch<{ message: string }>('/admin/monitoring/kill-call', {
       method: 'POST',

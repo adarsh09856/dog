@@ -50,14 +50,16 @@ class PiperDownloadRequest(BaseModel):
 @router.get("", response_model=PlatformSettingsResponse)
 async def get_all_platform_settings(_user=Depends(get_superuser)):
     """Retrieve all consolidated sovereign platform settings."""
-    async with kodewaves_db_client.get_session() as session:
-        stmt = select(GlobalPlatformSettingModel)
-        result = await session.execute(stmt)
-        records = result.scalars().all()
-
-        settings_map: Dict[str, Any] = {}
-        for r in records:
-            settings_map[r.key] = r.value
+    settings_map: Dict[str, Any] = {}
+    try:
+        async with kodewaves_db_client.get_session() as session:
+            stmt = select(GlobalPlatformSettingModel)
+            result = await session.execute(stmt)
+            records = result.scalars().all()
+            for r in records:
+                settings_map[r.key] = r.value
+    except Exception:
+        pass
 
         branding = settings_map.get("branding") or {}
         byok = settings_map.get("byok_policy") or {}

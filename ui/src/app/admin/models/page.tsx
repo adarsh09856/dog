@@ -68,63 +68,63 @@ const DEFAULT_PROVIDERS: ProviderMeta[] = [
     name: "Google Gemini",
     categories: ["llm", "stt", "tts", "realtime"],
     region: "Global 🌐",
-    description: "Multimodal LLM (2.5 Flash), Gemini Multimodal STT, Voice Studio TTS (Puck, Journey, etc.) & Live Audio.",
+    description: "Multimodal LLM reasoning, Gemini native streaming STT, Voice Studio neural TTS & Live Audio S2S.",
   },
   {
     provider: "openai",
     name: "OpenAI",
     categories: ["llm", "stt", "tts", "realtime"],
     region: "Global 🌐",
-    description: "GPT-4o / GPT-4o mini reasoning, Whisper STT, OpenAI TTS (Alloy, Echo) & Realtime WebRTC.",
+    description: "Reasoning LLMs, Whisper speech-to-text, neural TTS & Realtime WebRTC sessions.",
   },
   {
     provider: "sarvam",
     name: "Sarvam AI (Indian Sovereign AI)",
     categories: ["llm", "stt", "tts"],
     region: "India 🇮🇳",
-    description: "Sarvam 2B Indic LLM, Saaras Indic STT, and Bulbul Hindi/Indic text-to-speech voices.",
+    description: "Sovereign Indic LLM, Saaras Indic STT, and Bulbul Indic text-to-speech voices across 11+ languages.",
   },
   {
     provider: "deepgram",
     name: "Deepgram",
     categories: ["stt", "tts"],
     region: "Global 🌐",
-    description: "Nova-3 & Nova-2 ultra-fast streaming STT transcribers and Aura conversational neural TTS voices.",
+    description: "Ultra-fast streaming STT transcribers and Aura conversational neural TTS voices.",
   },
   {
     provider: "azure",
     name: "Microsoft Azure Speech",
     categories: ["stt", "tts"],
     region: "Global 🌐",
-    description: "Azure Speech-to-Text & Neural TTS voices (Swara, Neerja, Prabhat, Jenny, etc.).",
+    description: "Azure Speech-to-Text & Neural TTS multilingual voices for telephony.",
   },
   {
     provider: "cartesia",
     name: "Cartesia Sonic",
     categories: ["tts"],
     region: "Global 🌐",
-    description: "Ultra-low latency (90ms) sonic streaming voice synthesis (Sonic English, Multilingual, Barbershop).",
+    description: "Ultra-low latency sonic streaming voice synthesis for realtime conversational pipelines.",
   },
   {
     provider: "elevenlabs",
     name: "ElevenLabs",
     categories: ["tts"],
     region: "Global 🌐",
-    description: "Multilingual v2, Flash v2.5 expressive neural studio voices and conversational agents.",
+    description: "Expressive neural studio voices and conversational voice synthesis.",
   },
   {
     provider: "navana",
     name: "Navana.ai Indic Speech",
     categories: ["stt", "tts"],
     region: "India 🇮🇳",
-    description: "Acoustically tuned Indic speech recognition & 8kHz Indian telephony TTS (Hindi, Telugu, Kannada).",
+    description: "Acoustically tuned Indic speech recognition & 8kHz Indian telephony TTS.",
   },
   {
     provider: "anthropic",
     name: "Anthropic Claude",
     categories: ["llm"],
     region: "Global 🌐",
-    description: "Claude 3.5 Sonnet & Claude 3.5 Haiku enterprise conversational reasoning.",
+    description: "Enterprise conversational reasoning and structured JSON output via Claude models.",
   },
 
   {
@@ -226,6 +226,38 @@ export default function MasterKeysAndModelsPage() {
       }));
     } finally {
       setTestingProvider(null);
+    }
+  };
+
+  const [verifyingProvider, setVerifyingProvider] = useState<string | null>(null);
+  const [discoveringProvider, setDiscoveringProvider] = useState<string | null>(null);
+
+  const handleVerify = async (provider: string) => {
+    setVerifyingProvider(provider);
+    try {
+      const res = await adminApi.verifyProvider(provider);
+      const layersSummary = Object.entries(res.layers || {})
+        .map(([k, v]: [string, any]) => `${k.toUpperCase()}: ${v.verified ? "VERIFIED (" + (v.model || v.voice || "") + ")" : "FAILED - " + (v.error || "")}`)
+        .join("\n");
+      alert(`Capability Verification for ${provider.toUpperCase()}:\n\n${layersSummary}`);
+      await fetchData();
+    } catch (err: any) {
+      alert(`Verification failed for ${provider}: ${err.message || err}`);
+    } finally {
+      setVerifyingProvider(null);
+    }
+  };
+
+  const handleDiscover = async (provider: string) => {
+    setDiscoveringProvider(provider);
+    try {
+      const res = await adminApi.discoverProvider(provider);
+      alert(`Discovery completed for ${provider.toUpperCase()}:\nDiscovered ${res.discovered_count ?? 0} active models/voices across supported layers.`);
+      await fetchData();
+    } catch (err: any) {
+      alert(`Discovery failed for ${provider}: ${err.message || err}`);
+    } finally {
+      setDiscoveringProvider(null);
     }
   };
 
@@ -464,9 +496,17 @@ export default function MasterKeysAndModelsPage() {
                           ))}
                         </div>
 
-                        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                          {item.description}
-                        </p>
+                        {(() => {
+                          const providerModels = models.filter((m) => m.provider.toLowerCase() === item.provider.toLowerCase());
+                          const desc = providerModels.length > 0
+                            ? `${providerModels.length} active models in catalog (${providerModels.slice(0, 3).map((m) => m.display_name || m.model_id).join(", ")}${providerModels.length > 3 ? "..." : ""})`
+                            : item.description;
+                          return (
+                            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                              {desc}
+                            </p>
+                          );
+                        })()}
 
                         <div className="pt-0.5">
                           {saved?.api_key_masked || (saved as any)?.has_credentials ? (
@@ -502,11 +542,11 @@ export default function MasterKeysAndModelsPage() {
                         )}
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between gap-2">
+                      <div className="mt-4 pt-3 border-t border-border/40 flex flex-wrap items-center justify-between gap-1.5">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 text-xs gap-1"
+                          className="h-7 text-xs px-2 gap-1"
                           onClick={() => {
                             setSelectedKey(saved || { provider: item.provider, display_name: item.name, category: item.categories[0] as any, is_active: true });
                             setKeyInput("");
@@ -514,18 +554,40 @@ export default function MasterKeysAndModelsPage() {
                           }}
                         >
                           <Edit className="h-3 w-3" />
-                          {saved?.api_key_masked || (saved as any)?.has_credentials ? "Update Key" : "Configure Key"}
+                          {saved?.api_key_masked || (saved as any)?.has_credentials ? "Update" : "Configure"}
                         </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 text-xs gap-1"
-                          disabled={(!saved?.api_key_masked && !(saved as any)?.has_credentials) || isTesting}
-                          onClick={() => handleTestKey(item.provider)}
-                        >
-                          {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-                          Test
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] px-2"
+                            disabled={(!saved?.api_key_masked && !(saved as any)?.has_credentials) || verifyingProvider === item.provider}
+                            onClick={() => handleVerify(item.provider)}
+                            title="Verify all layers"
+                          >
+                            {verifyingProvider === item.provider ? <Loader2 className="h-3 w-3 animate-spin" /> : "Verify"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] px-2"
+                            disabled={(!saved?.api_key_masked && !(saved as any)?.has_credentials) || discoveringProvider === item.provider}
+                            onClick={() => handleDiscover(item.provider)}
+                            title="Discover models & voices"
+                          >
+                            {discoveringProvider === item.provider ? <Loader2 className="h-3 w-3 animate-spin" /> : "Discover"}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 text-xs px-2 gap-1"
+                            disabled={(!saved?.api_key_masked && !(saved as any)?.has_credentials) || isTesting}
+                            onClick={() => handleTestKey(item.provider)}
+                          >
+                            {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                            Test
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   );

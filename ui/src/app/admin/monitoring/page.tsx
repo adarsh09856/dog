@@ -4,6 +4,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  Cpu,
+  HardDrive,
+  Layers,
   PhoneCall,
   PhoneOff,
   Radio,
@@ -24,17 +27,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { adminApi, LiveCallItem } from "@/lib/kodewavesApi";
+import { adminApi, LiveCallItem, SystemResources } from "@/lib/kodewavesApi";
 
 export default function AdminMonitoringPage() {
   const [calls, setCalls] = useState<LiveCallItem[]>([]);
+  const [resources, setResources] = useState<SystemResources | null>(null);
   const [loading, setLoading] = useState(true);
   const [killingId, setKillingId] = useState<number | null>(null);
 
   const fetchCalls = async () => {
     try {
-      const data = await adminApi.getLiveCalls();
-      setCalls(data);
+      const [callsData, resData] = await Promise.all([
+        adminApi.getLiveCalls(),
+        adminApi.getSystemResources().catch(() => null),
+      ]);
+      setCalls(callsData);
+      if (resData) setResources(resData);
     } catch (err) {
       console.error("Failed to load live calls:", err);
     } finally {
@@ -87,6 +95,67 @@ export default function AdminMonitoringPage() {
             Refresh
           </Button>
         </div>
+      </div>
+
+      {/* Real Container & Concurrency Stats */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Concurrency vs Cap</CardTitle>
+            <Radio className="h-4 w-4 text-emerald-500 animate-pulse" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-extrabold">
+              {resources?.active_concurrency ?? calls.length} <span className="text-sm font-normal text-muted-foreground">/ {resources?.concurrency_cap ?? 50} cap</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Active concurrent voice channels in flight
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Pipeline Queue Depth</CardTitle>
+            <Layers className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-extrabold">{resources?.queue_size ?? 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Calls awaiting worker dispatch
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Host / Container Memory</CardTitle>
+            <Cpu className="h-4 w-4 text-indigo-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-extrabold text-indigo-500">
+              {resources?.memory_percent ? `${resources.memory_percent}%` : "Normal"}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {resources?.memory_used_mb ? `${resources.memory_used_mb} MB used` : "Operating within limits"}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Available Storage</CardTitle>
+            <HardDrive className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-extrabold text-amber-500">
+              {resources?.disk_free_gb ? `${resources.disk_free_gb} GB` : "Adequate"}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {resources?.disk_usage_percent ? `${resources.disk_usage_percent}% volume used` : "Free space for recording cache"}
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="border-border/60">

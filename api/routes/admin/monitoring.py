@@ -1,3 +1,5 @@
+import os
+import shutil
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,7 +7,12 @@ from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 
 from api.db.kodewaves_client import kodewaves_db_client
-from api.db.kodewaves_models import AIModelCatalogModel, OrganizationWalletModel, WalletLedgerModel
+from api.db.kodewaves_models import (
+    AIModelCatalogModel,
+    OrganizationWalletModel,
+    PlatformMasterCredentialModel,
+    WalletLedgerModel,
+)
 from api.db.models import OrganizationModel, UserModel, WorkflowModel, WorkflowRunModel
 from api.enums import WorkflowRunState
 from api.services.auth.depends import get_superuser
@@ -21,6 +28,25 @@ class MonitoringStatsResponse(BaseModel):
     total_revenue_inr: float
     gross_margin_percent: float
     system_health: str
+    total_users: int = 0
+    total_organizations: int = 0
+    failed_verifications_count: int = 0
+    failed_verifications: List[str] = []
+    retired_model_alerts: List[str] = []
+    disk_usage_percent: float = 0.0
+    disk_free_gb: float = 0.0
+
+
+class SystemResourcesResponse(BaseModel):
+    active_concurrency: int = 0
+    concurrency_cap: int = 50
+    queue_size: int = 0
+    cpu_percent: float = 0.0
+    memory_used_mb: float = 0.0
+    memory_total_mb: float = 0.0
+    memory_percent: float = 0.0
+    disk_free_gb: float = 0.0
+    disk_usage_percent: float = 0.0
 
 
 class LiveCallItem(BaseModel):
@@ -133,8 +159,57 @@ async def get_monitoring_stats(_user=Depends(get_superuser)):
                 await session.execute(test_stmt)
             except Exception:
                 system_health = "degraded"
+
+            # 8. Total Users and Organizations
+            total_users = 0
+            total_organizations = 0
+            try:
+                total_users = (await session.execute(select(func.count(UserModel.id)))).scalar() or 0
+                total_organizations = (await session.execute(select(func.count(OrganizationModel.id)))).scalar() or 0
+            except Exception:
+                pass
+
+            # 9. Failed Provider Verifications
+            failed_verifications = []
+            try:
+                failed_stmt = select(PlatformMasterCredentialModel.provider, PlatformMasterCredentialModel.error_message).where(
+                    PlatformMasterCredentialModel.is_enabled == True,
+                    PlatformMasterCredentialModel.health_status.in_(["invalid", "error"]),
+                )
+                failed_res = await session.execute(failed_stmt)
+                for f_prov, f_err in failed_res.all():
+                    err_hint = f": {f_err}" if f_err else ""
+                    failed_verifications.append(f"{f_prov.title()}{err_hint}")
+            except Exception:
+                pass
+
+            # 10. Retired / Unavailable Models
+            retired_model_alerts = []
+            try:
+                from sqlalchemy import or_
+                retired_stmt = select(AIModelCatalogModel.provider, AIModelCatalogModel.model_id).where(
+                    or_(
+                        AIModelCatalogModel.is_active == False,
+                        AIModelCatalogModel.status == "UNAVAILABLE",
+                    )
+                )
+                ret_res = await session.execute(retired_stmt)
+                for r_prov, r_mid in ret_res.all():
+                    retired_model_alerts.append(f"{r_prov.title()}: {r_mid}")
+            except Exception:
+                pass
     except Exception:
         system_health = "degraded"
+
+    # 11. Disk Capacity
+    disk_free_gb = 0.0
+    disk_usage_percent = 0.0
+    try:
+        du = shutil.disk_usage(".")
+        disk_free_gb = round(du.free / (1024**3), 1)
+        disk_usage_percent = round((du.used / du.total) * 100, 1)
+    except Exception:
+        pass
 
     return MonitoringStatsResponse(
         total_calls=total_calls,
@@ -144,6 +219,13 @@ async def get_monitoring_stats(_user=Depends(get_superuser)):
         total_revenue_inr=total_revenue_inr,
         gross_margin_percent=gross_margin_percent,
         system_health=system_health,
+        total_users=total_users,
+        total_organizations=total_organizations,
+        failed_verifications_count=len(failed_verifications),
+        failed_verifications=failed_verifications,
+        retired_model_alerts=retired_model_alerts,
+        disk_usage_percent=disk_usage_percent,
+        disk_free_gb=disk_free_gb,
     )
 
 
@@ -208,6 +290,81 @@ async def list_live_calls(_user=Depends(get_superuser)):
         pass
 
     return live_items
+
+
+@router.get("/system-resources", response_model=SystemResourcesResponse)
+async def get_system_resources(_user=Depends(get_superuser)):
+    """Fetch live concurrency, queue depth, container CPU and memory stats."""
+    active_calls = 0
+    queue_size = 0
+    concurrency_cap = 50
+
+    try:
+        async with kodewaves_db_client.get_session() as session:
+            active_stmt = select(func.count(WorkflowRunModel.id)).where(
+                WorkflowRunModel.state == WorkflowRunState.RUNNING.value,
+                WorkflowRunModel.is_completed == False,
+            )
+            active_calls = (await session.execute(active_stmt)).scalar() or 0
+
+            queue_stmt = select(func.count(WorkflowRunModel.id)).where(
+                WorkflowRunModel.state == WorkflowRunState.INITIALIZED.value,
+                WorkflowRunModel.is_completed == False,
+            )
+            queue_size = (await session.execute(queue_stmt)).scalar() or 0
+    except Exception:
+        pass
+
+    try:
+        local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+        concurrency_cap = int(local_ai.get("local_ai_max_concurrency", 50))
+    except Exception:
+        concurrency_cap = 50
+
+    # Read Memory & CPU
+    mem_used = 0.0
+    mem_total = 0.0
+    mem_pct = 0.0
+    cpu_percent = 0.0
+
+    # Check Linux /proc/meminfo or fallback
+    if os.path.exists("/proc/meminfo"):
+        try:
+            with open("/proc/meminfo", "r") as f:
+                mem_dict = {}
+                for line in f:
+                    parts = line.split(":")
+                    if len(parts) == 2:
+                        mem_dict[parts[0].strip()] = parts[1].strip()
+                t_kb = float(mem_dict.get("MemTotal", "0 kB").split()[0])
+                a_kb = float(mem_dict.get("MemAvailable", "0 kB").split()[0])
+                mem_total = round(t_kb / 1024.0, 1)
+                mem_used = round((t_kb - a_kb) / 1024.0, 1)
+                mem_pct = round(((t_kb - a_kb) / t_kb) * 100, 1) if t_kb > 0 else 0.0
+        except Exception:
+            pass
+
+    # Read Disk
+    disk_free = 0.0
+    disk_pct = 0.0
+    try:
+        du = shutil.disk_usage(".")
+        disk_free = round(du.free / (1024**3), 1)
+        disk_pct = round((du.used / du.total) * 100, 1)
+    except Exception:
+        pass
+
+    return SystemResourcesResponse(
+        active_concurrency=active_calls,
+        concurrency_cap=concurrency_cap,
+        queue_size=queue_size,
+        cpu_percent=cpu_percent,
+        memory_used_mb=mem_used,
+        memory_total_mb=mem_total,
+        memory_percent=mem_pct,
+        disk_free_gb=disk_free,
+        disk_usage_percent=disk_pct,
+    )
 
 
 @router.post("/kill-call", response_model=Dict[str, Any])
