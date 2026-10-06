@@ -38,3 +38,6 @@ docs/superpowers/
 # Standalone plugin repositories
 dograh-plugins/
 kodewaves-plugins/
+
+# Claude local config
+.claude/
