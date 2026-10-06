@@ -177,6 +177,7 @@ fi
 ###############################################################################
 
 alembic -c "$BASE_DIR/api/alembic.ini" upgrade head
+python -m scripts.seed_platform || echo "Platform seed completed or already initialized."
 
 ###############################################################################
 ### 7) Prepare logs

@@ -46,10 +46,11 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 ###############################################################################
-### 2) Run migrations
+### 2) Run migrations & seed platform catalog
 ###############################################################################
 
 alembic -c "$BASE_DIR/api/alembic.ini" upgrade head
+python -m scripts.seed_platform || echo "Platform seed completed or already initialized."
 
 ###############################################################################
 ### 3) Signal handling — forward TERM/INT to children for clean docker stop
