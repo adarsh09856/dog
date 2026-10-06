@@ -37,7 +37,7 @@ echo -e "${BLUE}Using Docker Compose configuration: ${BOLD}${COMPOSE_FILE}${NC}"
 
 # 1. Pull latest code if git repo
 if [ -d ".git" ]; then
-    CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || echo "main")"
+    CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "stabilize")"
     echo -e "${BLUE}[1/6] Pulling latest updates from Git (${CURRENT_BRANCH})...${NC}"
     git pull origin "${CURRENT_BRANCH}" || echo -e "${YELLOW}⚠️ Git pull failed or working offline, proceeding with local changes.${NC}"
 else
@@ -81,12 +81,14 @@ docker compose -f "$COMPOSE_FILE" exec -T postgres pg_dump -U postgres postgres 
     || echo -e "${YELLOW}⚠️ Pre-migration database dump skipped (offline or not running).${NC}"
 
 docker compose -f "$COMPOSE_FILE" exec -T api python -m alembic -c api/alembic.ini upgrade head \
+    || docker compose -f "$COMPOSE_FILE" run --rm api python -m alembic -c api/alembic.ini upgrade head \
     || docker exec kodewaves_api python -m alembic -c api/alembic.ini upgrade head \
     || echo -e "${YELLOW}⚠️ Alembic migration execution skipped or reported warning.${NC}"
 
 # 4. Bootstrap platform catalog seed
-echo -e "${BLUE}[4/6] Bootstrapping platform catalog (Piper Hindi TTS, Ollama, Models, Wallets)...${NC}"
+echo -e "${BLUE}[4/6] Bootstrapping platform catalog (AI Model Catalog, Plans, Packages, Templates, Wallets)...${NC}"
 docker compose -f "$COMPOSE_FILE" exec -T api python -m scripts.seed_platform \
+    || docker compose -f "$COMPOSE_FILE" run --rm api python -m scripts.seed_platform \
     || docker exec kodewaves_api python -m scripts.seed_platform \
     || echo -e "${YELLOW}⚠️ Platform seed executed with warning.${NC}"
 

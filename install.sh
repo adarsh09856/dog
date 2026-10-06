@@ -403,18 +403,32 @@ ENVFILE
 deploy_containers() {
     log_info "Preparing production environment and infrastructure..."
     
+    local compose_file="${COMPOSE_FILE:-}"
+    if [ -z "$compose_file" ]; then
+        if [ -f "docker-compose.aapanel.yaml" ]; then
+            compose_file="docker-compose.aapanel.yaml"
+        elif [ -f "docker-compose.yaml" ]; then
+            compose_file="docker-compose.yaml"
+        else
+            compose_file="docker-compose.aapanel.yaml"
+        fi
+    fi
+    log_info "Using Docker Compose file: $compose_file"
+
     if [ "$RESET_DB" = true ]; then
         log_warn "⚠️ RESETTING CONTAINERS: Stopping and recreating existing containers (volumes preserved)..."
-        docker compose -f docker-compose.aapanel.yaml down || true
+        docker compose -f "$compose_file" down || true
         log_success "Existing containers stopped cleanly."
     fi
 
     # Start infrastructure services first (database, cache, storage)
-    docker compose -f docker-compose.aapanel.yaml up -d postgres redis minio
+    docker compose -f "$compose_file" up -d postgres redis minio
 
     log_info "Waiting for PostgreSQL database container to become healthy..."
     local attempts=0
-    until docker exec kodewaves_postgres pg_isready -U postgres >/dev/null 2>&1 || [ $attempts -ge 20 ]; do
+    until docker compose -f "$compose_file" exec -T postgres pg_isready -U postgres >/dev/null 2>&1 \
+          || docker exec kodewaves_postgres pg_isready -U postgres >/dev/null 2>&1 \
+          || [ $attempts -ge 20 ]; do
         sleep 2
         attempts=$((attempts + 1))
     done
@@ -426,20 +440,20 @@ deploy_containers() {
     fi
 
     log_info "Applying database schema migrations (Alembic)..."
-    docker compose -f docker-compose.aapanel.yaml run --rm api python -m alembic -c api/alembic.ini upgrade head || {
+    docker compose -f "$compose_file" run --rm api python -m alembic -c api/alembic.ini upgrade head || {
         log_error "Alembic migrations failed! Check database container logs."
         exit 1
     }
     log_success "Database schema & tables verified."
 
     log_info "Initializing Superadmin account in database..."
-    docker compose -f docker-compose.aapanel.yaml run --rm api python -m scripts.create_superuser --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" || {
+    docker compose -f "$compose_file" run --rm api python -m scripts.create_superuser --email "$ADMIN_EMAIL" --password "$ADMIN_PASSWORD" || {
         log_warn "Superadmin creation script completed."
     }
 
     # Start Local AI Engine containers (Ollama + Piper + Whisper STT) before seeding
     log_info "Starting Local CPU AI Engine (Ollama + Piper + Whisper STT)..."
-    docker compose -f docker-compose.aapanel.yaml up -d ollama piper whisper || {
+    docker compose -f "$compose_file" up -d ollama piper whisper 2>/dev/null || {
         log_warn "Local AI containers may not be available on this hardware."
     }
 
@@ -447,13 +461,13 @@ deploy_containers() {
     sleep 5
 
     log_info "Bootstrapping platform defaults (AI Catalog, SaaS Plans, Templates, Wallets, Local AI Model)..."
-    docker compose -f docker-compose.aapanel.yaml run --rm api python -m scripts.seed_platform || {
+    docker compose -f "$compose_file" run --rm api python -m scripts.seed_platform || {
         log_warn "Platform seed bootstrap completed with notice."
     }
     log_success "Platform defaults, models catalog, plans, templates, and wallets verified."
 
     log_info "Building and launching full production application stack..."
-    docker compose -f docker-compose.aapanel.yaml up -d --build --remove-orphans
+    docker compose -f "$compose_file" up -d --build --remove-orphans
 
     # Clean up old unused images, BuildKit builder caches, and dangling containers
     log_info "Cleaning up Docker build cache, dangling layers, and temporary images..."
