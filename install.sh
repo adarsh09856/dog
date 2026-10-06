@@ -93,6 +93,51 @@ check_docker() {
     log_success "Docker Compose is verified."
 }
 
+# 2b. Preflight System Resource Floors Check
+check_system_floors() {
+    log_info "Performing preflight system resource floor checks..."
+    
+    # 1. CPU cores
+    local cpu_cores
+    cpu_cores=$(nproc 2>/dev/null || echo 1)
+    if [ "$cpu_cores" -lt 1 ]; then
+        log_warn "Detected fewer than 1 CPU core ($cpu_cores). Platform requires at least 1 core."
+    else
+        log_success "CPU Cores: $cpu_cores (Floor met: >= 1 core)."
+    fi
+
+    # 2. Total RAM
+    local mem_total_kb=0
+    if [ -f /proc/meminfo ]; then
+        mem_total_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+    fi
+    local mem_total_mb=$((mem_total_kb / 1024))
+    if [ "$mem_total_mb" -lt 1800 ] && [ "$mem_total_mb" -gt 0 ]; then
+        log_warn "Total RAM is ${mem_total_mb}MB. Minimum recommended for Core stack is 2048MB (2GB)."
+    else
+        log_success "Memory: ${mem_total_mb}MB (Floor met: >= 2GB)."
+    fi
+
+    # Local AI Engine warning if RAM < 4GB
+    if [ "$mem_total_mb" -lt 3800 ] && [ "$mem_total_mb" -gt 0 ]; then
+        log_warn "RAM is below 4GB. Self-hosted Local AI (Ollama + Whisper + Piper) is resource intensive."
+        log_warn "Cloud cascade mode (OpenAI, Gemini, Deepgram, Cartesia, Sarvam) is strongly recommended for low-RAM hosts."
+    fi
+
+    # 3. Available Disk Space
+    local free_disk_kb
+    free_disk_kb=$(df -k . 2>/dev/null | awk 'NR==2 {print $4}' || echo 10485760)
+    local free_disk_gb=$((free_disk_kb / 1024 / 1024))
+    if [ "$free_disk_gb" -lt 5 ]; then
+        log_error "Available disk space is only ${free_disk_gb}GB. Platform requires at least 5GB free space."
+        exit 1
+    elif [ "$free_disk_gb" -lt 10 ]; then
+        log_warn "Available disk space is ${free_disk_gb}GB (Recommended: >= 10GB)."
+    else
+        log_success "Disk space: ${free_disk_gb}GB free (Floor met: >= 5GB)."
+    fi
+}
+
 # Helper: Generate random secure token
 generate_secret() {
     if command -v openssl >/dev/null 2>&1; then
@@ -359,9 +404,9 @@ deploy_containers() {
     log_info "Preparing production environment and infrastructure..."
     
     if [ "$RESET_DB" = true ]; then
-        log_warn "⚠️ RESETTING DATABASE: Stopping existing containers and wiping database volume..."
-        docker compose -f docker-compose.aapanel.yaml down -v || true
-        log_success "Database volume wiped clean."
+        log_warn "⚠️ RESETTING CONTAINERS: Stopping and recreating existing containers (volumes preserved)..."
+        docker compose -f docker-compose.aapanel.yaml down || true
+        log_success "Existing containers stopped cleanly."
     fi
 
     # Start infrastructure services first (database, cache, storage)
@@ -519,6 +564,7 @@ main() {
     print_banner
     check_root
     check_docker
+    check_system_floors
     prompt_configuration
     deploy_containers
     print_aapanel_instructions

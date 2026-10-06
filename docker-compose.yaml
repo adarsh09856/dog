@@ -28,8 +28,9 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -42,8 +43,9 @@ services:
 
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     command: >
       --requirepass ${REDIS_PASSWORD:-redissecret}
     volumes:
@@ -299,7 +301,11 @@ services:
       - app-network
 
   ui:
+    build:
+      context: .
+      dockerfile: ui/Dockerfile
     image: ${REGISTRY:-kodewaves}/kodewaves-ui:latest
+    restart: unless-stopped
     environment:
       # Bind the Next.js standalone server to all interfaces
       HOSTNAME: "0.0.0.0"
@@ -315,7 +321,7 @@ services:
       POSTHOG_KEY: "phc_ItizB1dP6yv7ZYobbcqrpxTdbomDA8hJFSEmAMdYvIr"
       POSTHOG_HOST: "https://us.posthog.com"
     ports:
-      - "3010:3010"
+      - "127.0.0.1:${UI_PORT:-3010}:3010"
     depends_on:
       api:
         condition: service_healthy
@@ -323,12 +329,12 @@ services:
       test:
         [
           "CMD-SHELL",
-          "wget --no-verbose --tries=1 --spider http://127.0.0.1:3010 || exit 1",
+          "wget --no-verbose --tries=1 --spider http://127.0.0.1:3010/api/health || curl -f http://127.0.0.1:3010/api/health || exit 1",
         ]
-      interval: 30s
-      timeout: 10s
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 20s
     networks:
       - app-network
 
@@ -343,7 +349,7 @@ services:
   #     *.trycloudflare.com URL the API discovers from the metrics endpoint
   #     (api/utils/tunnel.py). Convenient for local dev.
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2025.2.0
     container_name: cloudflared-tunnel
     profiles: ["tunnel"]
     restart: unless-stopped
@@ -368,7 +374,7 @@ services:
   # Ultra-Lightweight Self-Hosted CPU Local AI Engine (Optional / Admin Opt-In)
   # ==============================================================================
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.6.2
     container_name: kodewaves_ollama
     restart: unless-stopped
     profiles: ["local"]
@@ -424,7 +430,7 @@ services:
 
   # Faster-Whisper Local STT Server (CTranslate2 CPU inference, OpenAI-compatible /v1/audio/transcriptions)
   whisper:
-    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    image: ghcr.io/speaches-ai/speaches:0.4.1-cpu
     container_name: kodewaves_whisper
     restart: unless-stopped
     profiles: ["local"]
