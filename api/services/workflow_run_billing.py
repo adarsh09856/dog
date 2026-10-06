@@ -86,21 +86,61 @@ async def report_workflow_run_platform_usage(workflow_run) -> None:
         )
         return
 
+    init_ctx = getattr(workflow_run, "initial_context", {}) or {}
+    gath_ctx = getattr(workflow_run, "gathered_context", {}) or {}
+
+    # Invariant (Part 8): Admin test calls are free
+    if init_ctx.get("is_admin_test") or gath_ctx.get("is_admin_test"):
+        logger.info(
+            f"[KodewavesBilling] Run {workflow_run.id} is an admin test call — 0 minutes charged"
+        )
+        return
+
+    # Invariant (Part 8): 100% Local sovereign calls are free
+    if (
+        getattr(workflow_run, "mode", None) == "local"
+        or init_ctx.get("is_local")
+        or gath_ctx.get("is_local")
+        or init_ctx.get("source") == "local"
+    ):
+        logger.info(
+            f"[KodewavesBilling] Run {workflow_run.id} is a sovereign local call — 0 minutes charged"
+        )
+        return
+
     try:
         # Local Kodewaves Sovereign Wallet Deduction
         from api.db.kodewaves_client import kodewaves_db_client
 
         billable_secs = duration_seconds or 0.0
         if billable_secs > 0:
-            billable_minutes = max(1, int((billable_secs + 59) // 60))
+            base_minutes = max(1, int((billable_secs + 59) // 60))
+
+            # Invariant (Part 8): S2S rate as an admin setting
+            is_s2s = (
+                getattr(workflow_run, "mode", None) == "s2s"
+                or init_ctx.get("is_realtime")
+                or init_ctx.get("mode") == "s2s"
+            )
+            multiplier = 1.0
+            if is_s2s:
+                pricing_settings = await kodewaves_db_client.get_setting("pricing") or {}
+                try:
+                    multiplier = float(pricing_settings.get("s2s_multiplier", 1.0) or 1.0)
+                except (ValueError, TypeError):
+                    multiplier = 1.0
+
+            billable_minutes = max(1, int(round(base_minutes * multiplier)))
+            reason = "s2s_call_usage" if is_s2s else "call_usage"
+
             await kodewaves_db_client.deduct_minutes(
                 organization_id=organization_id,
                 minutes=billable_minutes,
-                reason="call_usage",
+                reason=reason,
                 reference_id=str(workflow_run.id),
             )
             logger.info(
-                f"[KodewavesBilling] Deducted {billable_minutes} minute(s) for run {workflow_run.id} from org {organization_id}"
+                f"[KodewavesBilling] Deducted {billable_minutes} minute(s) (s2s={is_s2s}, mult={multiplier}) for run {workflow_run.id} from org {organization_id}"
             )
     except Exception as e:
         logger.error(

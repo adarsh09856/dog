@@ -33,6 +33,7 @@ class PlatformSettingsResponse(BaseModel):
     razorpay_key_secret: Optional[str] = None
     stripe_publishable_key: Optional[str] = None
     stripe_secret_key: Optional[str] = None
+    s2s_multiplier: Optional[float] = 1.0
 
 
 class TestEmailRequest(BaseModel):
@@ -67,6 +68,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
         local_ai = settings_map.get("local_ai") or settings_map.get("local_ai_engine") or {}
         smtp = settings_map.get("smtp") or {}
         payments = settings_map.get("payments") or {}
+        pricing = settings_map.get("pricing") or {}
 
         def _mask_secret(val: Optional[str]) -> Optional[str]:
             if not val:
@@ -97,6 +99,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
             razorpay_key_secret=_mask_secret(payments.get("razorpay_key_secret")),
             stripe_publishable_key=payments.get("stripe_publishable_key"),
             stripe_secret_key=_mask_secret(payments.get("stripe_secret_key")),
+            s2s_multiplier=float(pricing.get("s2s_multiplier", 1.0) or 1.0),
         )
 
 
@@ -168,6 +171,15 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
             "stripe_secret_key": st_secret if st_secret is not None else existing_payments.get("stripe_secret_key"),
         }
         await kodewaves_db_client.set_setting(key="payments", value=payments, category="payments")
+
+        # 7. Pricing & S2S Multiplier
+        if "s2s_multiplier" in payload:
+            try:
+                mult = float(payload.get("s2s_multiplier", 1.0) or 1.0)
+            except (ValueError, TypeError):
+                mult = 1.0
+            pricing = {"s2s_multiplier": mult}
+            await kodewaves_db_client.set_setting(key="pricing", value=pricing, category="pricing")
 
         try:
             await kodewaves_db_client.record_audit_log(
