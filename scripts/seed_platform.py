@@ -10,6 +10,7 @@ Idempotently initializes:
 """
 
 import asyncio
+import os
 from datetime import UTC, datetime
 from typing import Any, Dict, List
 from sqlalchemy import select
