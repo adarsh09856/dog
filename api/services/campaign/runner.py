@@ -99,6 +99,18 @@ class CampaignRunnerService:
 
         logger.info(f"Campaign {campaign_id} resumed")
 
+    async def cancel_campaign(self, campaign_id: int) -> None:
+        """Cancels campaign execution and sets state to completed/halted"""
+        campaign = await db_client.get_campaign_by_id(campaign_id)
+        if not campaign:
+            raise ValueError(f"Campaign {campaign_id} not found")
+
+        if campaign.state in ["completed"]:
+            return
+
+        await db_client.update_campaign(campaign_id=campaign_id, state="completed")
+        logger.info(f"Campaign {campaign_id} cancelled / stopped")
+
     async def get_campaign_status(self, campaign_id: int) -> Dict[str, Any]:
         """Returns detailed campaign status"""
         campaign = await db_client.get_campaign_by_id(campaign_id)

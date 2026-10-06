@@ -46,6 +46,21 @@ from api.services.telephony.outbound_readiness import (
 router = APIRouter(prefix="/campaign")
 
 
+class CampaignPreflightItem(BaseModel):
+    category: str
+    status: str
+    message: str
+    fix_action: Optional[str] = None
+    fix_link: Optional[str] = None
+
+
+class CampaignPreflightResponse(BaseModel):
+    can_start: bool
+    blockers: List[CampaignPreflightItem]
+    warnings: List[CampaignPreflightItem]
+    checks: List[CampaignPreflightItem]
+
+
 async def _get_org_concurrent_limit(organization_id: int) -> int:
     """Get the concurrent call limit for an organization."""
     try:
@@ -767,6 +782,215 @@ async def pause_campaign(
         executed,
         total,
         telephony_configuration_name=cfg_name,
+    )
+
+
+@router.post("/{campaign_id}/cancel")
+async def cancel_campaign(
+    campaign_id: int,
+    user: UserModel = Depends(get_user),
+) -> CampaignResponse:
+    """Cancel campaign execution and halt any future calling tasks."""
+    campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    try:
+        await campaign_runner_service.cancel_campaign(campaign_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
+    workflow_name = await db_client.get_workflow_name(
+        campaign.workflow_id, organization_id=user.selected_organization_id
+    )
+
+    executed, total = await _get_campaign_stats(campaign.id)
+    cfg_name = await _get_telephony_configuration_name(
+        campaign.telephony_configuration_id, user.selected_organization_id
+    )
+    return await _build_campaign_response(
+        campaign,
+        workflow_name or "Unknown",
+        executed,
+        total,
+        telephony_configuration_name=cfg_name,
+    )
+
+
+@router.delete("/{campaign_id}")
+async def delete_campaign_endpoint(
+    campaign_id: int,
+    user: UserModel = Depends(get_user),
+) -> Dict[str, Any]:
+    """Delete or archive campaign."""
+    campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    if campaign.state in ["running", "syncing"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete an actively running campaign. Please pause or cancel first.",
+        )
+
+    deleted = await db_client.delete_campaign(campaign_id, user.selected_organization_id)
+    if not deleted:
+        raise HTTPException(status_code=500, detail="Failed to delete campaign")
+
+    return {"message": "Successfully deleted campaign", "id": campaign_id}
+
+
+@router.get("/{campaign_id}/preflight", response_model=CampaignPreflightResponse)
+async def get_campaign_preflight(
+    campaign_id: int,
+    user: UserModel = Depends(get_user),
+) -> CampaignPreflightResponse:
+    """Pre-flight check assessing whether a campaign is ready to start with actionable fix links."""
+    campaign = await db_client.get_campaign(campaign_id, user.selected_organization_id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    checks: List[CampaignPreflightItem] = []
+    blockers: List[CampaignPreflightItem] = []
+    warnings: List[CampaignPreflightItem] = []
+
+    # 1. Telephony Config & Caller IDs
+    if not campaign.telephony_configuration_id:
+        item = CampaignPreflightItem(
+            category="telephony",
+            status="block",
+            message="No telephony configuration is linked to this campaign.",
+            fix_action="Select Telephony",
+            fix_link=f"/campaigns?edit={campaign_id}",
+        )
+        blockers.append(item)
+        checks.append(item)
+    else:
+        caller_count = await _get_from_numbers_count(user.selected_organization_id, campaign.telephony_configuration_id)
+        if caller_count == 0:
+            item = CampaignPreflightItem(
+                category="telephony",
+                status="block",
+                message="Linked telephony configuration has no active caller ID phone numbers.",
+                fix_action="Add Phone Numbers",
+                fix_link="/telephony-configurations",
+            )
+            blockers.append(item)
+            checks.append(item)
+        else:
+            checks.append(CampaignPreflightItem(
+                category="telephony",
+                status="pass",
+                message=f"Telephony configured with {caller_count} active caller ID(s).",
+            ))
+
+    # 2. Agent / Workflow Publication
+    workflow = await db_client.get_workflow(campaign.workflow_id)
+    if not workflow:
+        item = CampaignPreflightItem(
+            category="agent",
+            status="block",
+            message="Agent workflow not found.",
+            fix_action="Select Agent",
+            fix_link=f"/campaigns?edit={campaign_id}",
+        )
+        blockers.append(item)
+        checks.append(item)
+    elif not getattr(workflow, "is_published", True):
+        item = CampaignPreflightItem(
+            category="agent",
+            status="block",
+            message=f"Agent '{workflow.name}' has unpublished draft changes.",
+            fix_action="Publish Agent",
+            fix_link=f"/workflow/{workflow.id}",
+        )
+        blockers.append(item)
+        checks.append(item)
+    else:
+        checks.append(CampaignPreflightItem(
+            category="agent",
+            status="pass",
+            message=f"Agent '{workflow.name}' is published and ready.",
+        ))
+
+    # 3. Campaign Orchestrator Process Health (Redis Heartbeat)
+    try:
+        import os
+        import redis.asyncio as aioredis
+        from api.constants import REDIS_URL
+        r = await aioredis.from_url(REDIS_URL, decode_responses=True)
+        heartbeat = await r.get("campaign:orchestrator:heartbeat")
+        await r.aclose()
+        if not heartbeat:
+            item = CampaignPreflightItem(
+                category="orchestrator",
+                status="warn",
+                message="Campaign dialer background worker is currently offline. Calls will queue until it starts.",
+                fix_action="Check Monitoring",
+                fix_link="/admin/monitoring",
+            )
+            warnings.append(item)
+            checks.append(item)
+        else:
+            checks.append(CampaignPreflightItem(
+                category="orchestrator",
+                status="pass",
+                message="Campaign dialer background worker is running and responsive.",
+            ))
+    except Exception:
+        pass
+
+    # 4. Wallet & Minutes Balance
+    try:
+        from api.db.kodewaves_client import kodewaves_db_client
+        wallet = await kodewaves_db_client.get_or_create_wallet(user.selected_organization_id)
+        balance = (wallet.credit_balance_minutes + wallet.bonus_minutes) if wallet else 0
+        if balance <= 0:
+            item = CampaignPreflightItem(
+                category="quota",
+                status="block",
+                message=f"Voice credit balance is {balance} minutes. Please top up your wallet to dial.",
+                fix_action="Top Up Minutes",
+                fix_link="/billing",
+            )
+            blockers.append(item)
+            checks.append(item)
+        else:
+            checks.append(CampaignPreflightItem(
+                category="quota",
+                status="pass",
+                message=f"Wallet balance has {balance} minute(s) available.",
+            ))
+    except Exception:
+        pass
+
+    # 5. Contacts Count
+    executed, total = await _get_campaign_stats(campaign.id)
+    if total == 0:
+        item = CampaignPreflightItem(
+            category="contacts",
+            status="block",
+            message="No contacts are loaded in this campaign list.",
+            fix_action="Upload Contacts",
+            fix_link=f"/campaigns?edit={campaign_id}",
+        )
+        blockers.append(item)
+        checks.append(item)
+    else:
+        remaining = max(0, total - executed)
+        checks.append(CampaignPreflightItem(
+            category="contacts",
+            status="pass",
+            message=f"{remaining} contact(s) queued to dial ({executed}/{total} completed).",
+        ))
+
+    can_start = len(blockers) == 0
+    return CampaignPreflightResponse(
+        can_start=can_start,
+        blockers=blockers,
+        warnings=warnings,
+        checks=checks,
     )
 
 

@@ -871,6 +871,21 @@ class CampaignClient(BaseDBClient):
             await session.refresh(campaign)
         return campaign
 
+    async def delete_campaign(self, campaign_id: int, organization_id: int) -> bool:
+        """Delete campaign by ID for organization"""
+        async with self.async_session() as session:
+            query = select(CampaignModel).where(
+                CampaignModel.id == campaign_id,
+                CampaignModel.organization_id == organization_id,
+            )
+            result = await session.execute(query)
+            campaign = result.scalar_one_or_none()
+            if not campaign:
+                return False
+            await session.delete(campaign)
+            await session.commit()
+            return True
+
     async def update_campaign_settings(
         self,
         campaign_id: int,
