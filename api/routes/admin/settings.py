@@ -7,6 +7,7 @@ from sqlalchemy import select
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import GlobalPlatformSettingModel
 from api.services.auth.depends import get_superuser
+from api.services.catalog.catalog_service import catalog_service
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
@@ -64,48 +65,48 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
     except Exception:
         pass
 
-        branding = settings_map.get("branding") or {}
-        byok = settings_map.get("byok_policy") or {}
-        wallet = settings_map.get("wallet_policy") or {}
-        local_ai = settings_map.get("local_ai") or settings_map.get("local_ai_engine") or {}
-        smtp = settings_map.get("smtp") or {}
-        payments = settings_map.get("payments") or {}
-        pricing = settings_map.get("pricing") or {}
-        concurrency = settings_map.get("concurrency") or {}
+    branding = settings_map.get("branding") or {}
+    byok = settings_map.get("byok_policy") or {}
+    wallet = settings_map.get("wallet_policy") or {}
+    local_ai = settings_map.get("local_ai") or settings_map.get("local_ai_engine") or {}
+    smtp = settings_map.get("smtp") or {}
+    payments = settings_map.get("payments") or {}
+    pricing = settings_map.get("pricing") or {}
+    concurrency = settings_map.get("concurrency") or {}
 
-        def _mask_secret(val: Optional[str]) -> Optional[str]:
-            if not val:
-                return None
-            if len(val) <= 8:
-                return "••••••••"
-            return "••••••••" + val[-4:]
+    def _mask_secret(val: Optional[str]) -> Optional[str]:
+        if not val:
+            return None
+        if len(val) <= 8:
+            return "••••••••"
+        return "••••••••" + val[-4:]
 
-        return PlatformSettingsResponse(
-            company_name=branding.get("company_name", "Kodewaves"),
-            logo_url=branding.get("logo_url", "/kodewaves-logo.png"),
-            support_email=branding.get("support_email", "support@kodewaves.in"),
-            primary_color=branding.get("primary_color", "#4f46e5"),
-            allow_user_byok=byok.get("allow_user_byok", False),
-            enforce_wallet_balance=wallet.get("enforce_wallet_balance", True),
-            enable_local_ai_engine=local_ai.get("enable_local_ai_engine", local_ai.get("enabled", False)),
-            local_ai_access_policy=local_ai.get("local_ai_access_policy", local_ai.get("access_policy", "public")),
-            ollama_endpoint=local_ai.get("ollama_endpoint", local_ai.get("ollama_url", "http://ollama:11434")),
-            piper_endpoint=local_ai.get("piper_endpoint", local_ai.get("piper_url", "http://piper:5000")),
-            whisper_endpoint=local_ai.get("whisper_endpoint", "http://whisper:8000/v1"),
-            local_ai_max_concurrency=local_ai.get("local_ai_max_concurrency", 2),
-            smtp_host=smtp.get("smtp_host"),
-            smtp_port=smtp.get("smtp_port", 587),
-            smtp_user=smtp.get("smtp_user"),
-            smtp_password=_mask_secret(smtp.get("smtp_password")),
-            smtp_from=smtp.get("smtp_from"),
-            razorpay_key_id=payments.get("razorpay_key_id"),
-            razorpay_key_secret=_mask_secret(payments.get("razorpay_key_secret")),
-            stripe_publishable_key=payments.get("stripe_publishable_key"),
-            stripe_secret_key=_mask_secret(payments.get("stripe_secret_key")),
-            s2s_multiplier=float(pricing.get("s2s_multiplier", 1.0) or 1.0),
-            default_org_concurrency_limit=int(concurrency.get("default_org_concurrency_limit", 10)),
-            max_concurrent_calls=int(concurrency.get("max_concurrent_calls", 50)),
-        )
+    return PlatformSettingsResponse(
+        company_name=branding.get("company_name", "Kodewaves"),
+        logo_url=branding.get("logo_url", "/kodewaves-logo.png"),
+        support_email=branding.get("support_email", "support@kodewaves.in"),
+        primary_color=branding.get("primary_color", "#4f46e5"),
+        allow_user_byok=byok.get("allow_user_byok", False),
+        enforce_wallet_balance=wallet.get("enforce_wallet_balance", True),
+        enable_local_ai_engine=local_ai.get("enable_local_ai_engine", local_ai.get("enabled", False)),
+        local_ai_access_policy=local_ai.get("local_ai_access_policy", local_ai.get("access_policy", "public")),
+        ollama_endpoint=local_ai.get("ollama_endpoint", local_ai.get("ollama_url", "http://ollama:11434")),
+        piper_endpoint=local_ai.get("piper_endpoint", local_ai.get("piper_url", "http://piper:5000")),
+        whisper_endpoint=local_ai.get("whisper_endpoint", "http://whisper:8000/v1"),
+        local_ai_max_concurrency=local_ai.get("local_ai_max_concurrency", 2),
+        smtp_host=smtp.get("smtp_host"),
+        smtp_port=smtp.get("smtp_port", 587),
+        smtp_user=smtp.get("smtp_user"),
+        smtp_password=_mask_secret(smtp.get("smtp_password")),
+        smtp_from=smtp.get("smtp_from"),
+        razorpay_key_id=payments.get("razorpay_key_id"),
+        razorpay_key_secret=_mask_secret(payments.get("razorpay_key_secret")),
+        stripe_publishable_key=payments.get("stripe_publishable_key"),
+        stripe_secret_key=_mask_secret(payments.get("stripe_secret_key")),
+        s2s_multiplier=float(pricing.get("s2s_multiplier", 1.0) or 1.0),
+        default_org_concurrency_limit=int(concurrency.get("default_org_concurrency_limit", 10)),
+        max_concurrent_calls=int(concurrency.get("max_concurrent_calls", 50)),
+    )
 
 
 @router.post("")
@@ -212,6 +213,7 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
         except Exception:
             pass
 
+        catalog_service.invalidate_cache()
         return {"message": "Successfully saved sovereign platform settings"}
 
     # Fallback to key-value update if structured as { category, key, value }
@@ -220,8 +222,10 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
     category = payload.get("category", "general")
     if key and value is not None:
         await kodewaves_db_client.set_setting(key=key, value=value, category=category)
+        catalog_service.invalidate_cache()
         return {"message": f"Successfully updated setting '{key}'"}
 
+    catalog_service.invalidate_cache()
     return {"message": "Settings updated"}
 
 

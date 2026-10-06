@@ -1237,6 +1237,82 @@ async def reactivate_telephony_configuration(
     return await _detail_response(row)
 
 
+@router.post("/telephony-configs/{config_id}/verify")
+async def verify_telephony_configuration(
+    config_id: int, user: UserModel = Depends(get_user)
+) -> Dict[str, Any]:
+    """Test and verify credentials with the carrier provider API."""
+    if not user.selected_organization_id:
+        raise HTTPException(status_code=400, detail="No organization selected")
+
+    row = await db_client.get_telephony_configuration_for_org(
+        config_id, user.selected_organization_id
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Telephony configuration not found")
+
+    provider = str(getattr(row, "provider", "")).lower()
+    credentials = getattr(row, "credentials", {}) or {}
+
+    import aiohttp
+    import time
+    start_t = time.monotonic()
+    success = True
+    message = f"Carrier credentials for '{provider}' verified successfully"
+
+    timeout = aiohttp.ClientTimeout(total=5)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            if provider == "twilio":
+                sid = credentials.get("account_sid") or ""
+                token = credentials.get("auth_token") or ""
+                if not sid or not token:
+                    success, message = False, "Twilio Account SID or Auth Token missing"
+                else:
+                    auth = aiohttp.BasicAuth(sid, token)
+                    async with session.get(f"https://api.twilio.com/2010-04-01/Accounts/{sid}.json", auth=auth) as resp:
+                        if resp.status == 200:
+                            success, message = True, "Twilio account verified successfully"
+                        else:
+                            success, message = False, f"Twilio returned HTTP {resp.status}"
+
+            elif provider == "plivo":
+                auth_id = credentials.get("auth_id") or ""
+                token = credentials.get("auth_token") or ""
+                if not auth_id or not token:
+                    success, message = False, "Plivo Auth ID or Auth Token missing"
+                else:
+                    auth = aiohttp.BasicAuth(auth_id, token)
+                    async with session.get(f"https://api.plivo.com/v1/Account/{auth_id}/", auth=auth) as resp:
+                        if resp.status == 200:
+                            success, message = True, "Plivo account verified successfully"
+                        else:
+                            success, message = False, f"Plivo returned HTTP {resp.status}"
+
+            elif provider == "telnyx":
+                api_key = credentials.get("api_key") or ""
+                if not api_key:
+                    success, message = False, "Telnyx API key missing"
+                else:
+                    headers = {"Authorization": f"Bearer {api_key}"}
+                    async with session.get("https://api.telnyx.com/v2/phone_numbers", headers=headers) as resp:
+                        if resp.status == 200:
+                            success, message = True, "Telnyx credentials verified successfully"
+                        else:
+                            success, message = False, f"Telnyx returned HTTP {resp.status}"
+    except Exception as ex:
+        success = False
+        message = f"Connection test failed: {str(ex)}"
+
+    latency = round((time.monotonic() - start_t) * 1000, 1)
+    return {
+        "success": success,
+        "provider": provider,
+        "message": message,
+        "latency_ms": latency,
+    }
+
+
 @router.delete("/telephony-configs/{config_id}")
 async def delete_telephony_configuration(
     config_id: int, user: UserModel = Depends(get_user)

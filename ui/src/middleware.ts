@@ -4,8 +4,8 @@ import { NextResponse } from 'next/server';
 import { LEGACY_OSS_TOKEN_COOKIE, OSS_TOKEN_COOKIE } from '@/lib/auth/cookies';
 
 // Paths that don't require authentication.
-// '/' (Landing page), '/pricing' (SaaS pricing), and '/embed' (widget) are public.
-const PUBLIC_PATHS = ['/', '/pricing', '/auth', '/handler', '/embed'];
+// '/' (Landing page), '/pricing' (SaaS pricing), '/embed' (widget), and '/widget.js' are public.
+const PUBLIC_PATHS = ['/', '/pricing', '/auth', '/handler', '/embed', '/widget.js'];
 
 function isTokenValid(token?: string): boolean {
   if (!token || typeof token !== 'string') return false;
@@ -97,6 +97,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public static assets (anything with a file extension, e.g. /kodewaves-logo.png)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf)).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|widget\\.js|.*\\.(?:png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf)).*)',
   ],
 };

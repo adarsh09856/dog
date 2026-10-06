@@ -34,6 +34,15 @@ class PromptTemplateCreateRequest(BaseModel):
     is_featured: bool = False
 
 
+class PromptTemplateUpdateRequest(BaseModel):
+    category: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    system_prompt: Optional[str] = None
+    first_message: Optional[str] = None
+    recommended_tools: Optional[List[str]] = None
+
+
 @router.get("", response_model=List[PromptTemplateItem])
 async def list_templates(category: Optional[str] = None, _user=Depends(get_user)):
     """List pre-configured voice agent prompt templates."""
@@ -145,3 +154,39 @@ async def delete_template(template_id: str, _user=Depends(get_user)):
         await session.delete(record)
         await session.commit()
         return {"message": "Prompt template deleted successfully"}
+
+
+@router.put("/{template_id}", response_model=Dict[str, Any])
+async def update_template(template_id: str, req: PromptTemplateUpdateRequest, _user=Depends(get_user)):
+    """Update an existing prompt template."""
+    async with kodewaves_db_client.get_session() as session:
+        try:
+            t_uuid = uuid.UUID(template_id)
+            stmt = select(PromptTemplateModel).where(PromptTemplateModel.id == t_uuid)
+        except ValueError:
+            stmt = select(PromptTemplateModel).where(PromptTemplateModel.title == template_id)
+
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if not record:
+            raise HTTPException(status_code=404, detail="Template not found")
+
+        is_super = getattr(_user, "is_superuser", False) or getattr(_user, "role", "") in ("admin", "superadmin")
+        if record.is_system_template and not is_super:
+            raise HTTPException(status_code=403, detail="Cannot modify a system prompt template")
+
+        if req.category is not None:
+            record.category = req.category
+        if req.title is not None:
+            record.title = req.title
+        if req.description is not None:
+            record.description = req.description
+        if req.system_prompt is not None:
+            record.system_prompt = req.system_prompt
+        if req.first_message is not None:
+            record.first_message = req.first_message
+        if req.recommended_tools is not None:
+            record.recommended_tools = req.recommended_tools
+
+        await session.commit()
+        return {"id": str(record.id), "title": record.title, "message": "Prompt template updated successfully"}
