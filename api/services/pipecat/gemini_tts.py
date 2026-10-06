@@ -1,6 +1,6 @@
 """Google Gemini Direct Audio Text-to-Speech service for Pipecat.
 
-Allows using Google AI Studio API keys directly for gemini-2.5-flash-preview-tts
+Allows using Google AI Studio API keys directly for gemini-3.1-flash-tts-preview
 without requiring Google Cloud service account JSON credentials.
 """
 
@@ -26,7 +26,7 @@ class GeminiTTSService(TTSService):
         self,
         *,
         api_key: str | None = None,
-        model: str = "gemini-2.5-flash-preview-tts",
+        model: str = "gemini-3.1-flash-tts-preview",
         voice: str = "Puck",
         sample_rate: int = 24000,
         **kwargs,
@@ -35,7 +35,7 @@ class GeminiTTSService(TTSService):
         self._api_key = api_key or ""
         valid_voices = {"Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey"}
         self._voice = voice if voice in valid_voices else "Puck"
-        self._model = model if (model and "tts" in model.lower()) else "gemini-2.5-flash-preview-tts"
+        self._model = model if (model and "tts" in model.lower()) else "gemini-3.1-flash-tts-preview"
         self._sample_rate = sample_rate
 
     def can_generate_metrics(self) -> bool:

@@ -39,7 +39,7 @@ Phase 2 verifies and enforces the dynamic provider and layer capability matrix a
 | Alias Normalization | All 14 alias mappings match canonical names | PASS | `openai_realtime`, `google_realtime`, `bodhi`, `azure_speech`, etc. |
 | Gemini Models | 3.5 & 3.1 modern endpoints only; no 2.0/2.5 | PASS | `gemini-3.5-flash`, `gemini-3.1-flash-live-preview` |
 | Krutrim Card Purge | Zero mentions of Krutrim in admin UI | PASS | Purged from admin UI |
-| Disabled Key Leakage | Returns `None`, refuses environment fallback | PASS | Verified with mock disabled DB record |
+| Disabled Key Leakage | Returns `None`, refuses environment fallback | PASS | `test_disabled_key_does_not_fallback_to_env` |
 | Deepgram Language | Validated against language enum | PASS | Prevents runtime crash |
 
 ---

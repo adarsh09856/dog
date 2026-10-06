@@ -45,6 +45,7 @@ class TestConnectionResponse(BaseModel):
     success: bool
     message: str
     latency_ms: Optional[float] = None
+    details: Optional[Dict[str, Any]] = None
 
 
 @router.get("", response_model=List[MasterCredentialResponse])
@@ -128,10 +129,22 @@ async def save_master_key(req: MasterCredentialRequest, _user=Depends(get_superu
 
 @router.post("/test", response_model=TestConnectionResponse)
 async def test_master_key_post(req: TestConnectionRequest, _user=Depends(get_superuser)):
-    """Perform live connectivity check to upstream provider (via JSON body)."""
+    """Perform live capability verification across all provider layers (via JSON body)."""
     start_time = datetime.now(UTC)
-    success, message = await master_credential_service.test_connection(req.provider)
+    creds = {"api_key": req.api_key} if req.api_key else None
+    results = await catalog_service.verify_provider_all_layers(req.provider, creds=creds)
     latency = round((datetime.now(UTC) - start_time).total_seconds() * 1000, 1)
+
+    if results:
+        success = all(r.get("success", False) for r in results.values())
+        passed = [l for l, r in results.items() if r.get("success")]
+        failed = [f"{l}: {r.get('error')}" for l, r in results.items() if not r.get("success")]
+        if success:
+            message = f"All {len(results)} layers verified successfully ({', '.join(passed)})"
+        else:
+            message = f"Verification failed for {len(failed)}/{len(results)} layers: {'; '.join(failed)}"
+    else:
+        success, message = await master_credential_service.test_connection(req.provider)
 
     status_str = "healthy" if success else "invalid"
     # Update health status in DB
@@ -143,15 +156,26 @@ async def test_master_key_post(req: TestConnectionRequest, _user=Depends(get_sup
     except Exception:
         pass
 
-    return TestConnectionResponse(success=success, message=message, latency_ms=latency)
+    return TestConnectionResponse(success=success, message=message, latency_ms=latency, details=results)
 
 
 @router.post("/{provider}/test", response_model=TestConnectionResponse)
 async def test_master_key_connection_path(provider: str, _user=Depends(get_superuser)):
-    """Perform live connectivity check to upstream provider (via path param)."""
+    """Perform live capability verification across all provider layers (via path param)."""
     start_time = datetime.now(UTC)
-    success, message = await master_credential_service.test_connection(provider)
+    results = await catalog_service.verify_provider_all_layers(provider)
     latency = round((datetime.now(UTC) - start_time).total_seconds() * 1000, 1)
+
+    if results:
+        success = all(r.get("success", False) for r in results.values())
+        passed = [l for l, r in results.items() if r.get("success")]
+        failed = [f"{l}: {r.get('error')}" for l, r in results.items() if not r.get("success")]
+        if success:
+            message = f"All {len(results)} layers verified successfully ({', '.join(passed)})"
+        else:
+            message = f"Verification failed for {len(failed)}/{len(results)} layers: {'; '.join(failed)}"
+    else:
+        success, message = await master_credential_service.test_connection(provider)
 
     status_str = "healthy" if success else "invalid"
     try:
@@ -162,7 +186,7 @@ async def test_master_key_connection_path(provider: str, _user=Depends(get_super
     except Exception:
         pass
 
-    return TestConnectionResponse(success=success, message=message, latency_ms=latency)
+    return TestConnectionResponse(success=success, message=message, latency_ms=latency, details=results)
 
 
 @router.delete("/{provider}", response_model=Dict[str, Any])

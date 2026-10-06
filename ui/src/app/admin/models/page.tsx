@@ -888,7 +888,7 @@ export default function MasterKeysAndModelsPage() {
             <div className="space-y-1">
               <Label className="text-xs">Display Name</Label>
               <Input
-                placeholder="e.g. Sarvam 2B Indic Voice"
+                placeholder="e.g. High Performance Indic Voice"
                 value={editingModel?.display_name || ""}
                 onChange={(e) => setEditingModel((prev) => prev ? { ...prev, display_name: e.target.value } : null)}
               />
@@ -897,7 +897,7 @@ export default function MasterKeysAndModelsPage() {
             <div className="space-y-1">
               <Label className="text-xs">Provider Model ID</Label>
               <Input
-                placeholder="e.g. sarvam-2b-v0.5, gpt-4o-mini"
+                placeholder="e.g. llama-3.3-70b-versatile, gpt-4o-mini"
                 value={editingModel?.model_id || ""}
                 onChange={(e) => setEditingModel((prev) => prev ? { ...prev, model_id: e.target.value } : null)}
               />

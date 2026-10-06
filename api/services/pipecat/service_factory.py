@@ -457,9 +457,9 @@ def create_stt_service(
                 api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
             if api_key:
                 from api.services.pipecat.gemini_stt import GeminiSTTService
-                stt_model = getattr(user_config.stt, "model", None) or "gemini-2.5-flash"
-                if "stt" in stt_model.lower() or stt_model in ("default", "none") or "3.8" in stt_model:
-                    stt_model = "gemini-2.5-flash"
+                stt_model = getattr(user_config.stt, "model", None)
+                if not stt_model or "stt" in stt_model.lower() or stt_model in ("default", "none") or "3.8" in stt_model:
+                    stt_model = "gemini-3.5-flash"
                 return GeminiSTTService(
                     api_key=api_key,
                     model=stt_model,
@@ -719,9 +719,9 @@ def create_stt_service(
     elif user_config.stt.provider in (ServiceProviders.GEMINI.value, "gemini"):
         from api.services.pipecat.gemini_stt import GeminiSTTService
 
-        model = getattr(user_config.stt, "model", None) or "gemini-2.5-flash"
-        if "3.5" in model or model in ("default", "none"):
-            model = "gemini-2.5-flash"
+        model = getattr(user_config.stt, "model", None)
+        if not model or "3.5" in model or model in ("default", "none"):
+            model = "gemini-3.5-flash"
         return GeminiSTTService(
             api_key=user_config.stt.api_key,
             model=model,
@@ -817,7 +817,7 @@ def create_tts_service(
                 tts_voice = voice if voice in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
                 return GeminiTTSService(
                     api_key=api_key,
-                    model="gemini-2.5-flash-preview-tts",
+                    model=getattr(user_config.tts, "model", None) or "gemini-3.1-flash-tts-preview",
                     voice=tts_voice,
                     sample_rate=audio_config.transport_out_sample_rate,
                     text_filters=[xml_function_tag_filter],
@@ -963,7 +963,7 @@ def create_tts_service(
             tts_v = raw_v if raw_v in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
             return GeminiTTSService(
                 api_key=gemini_key,
-                model="gemini-2.5-flash-preview-tts",
+                model=getattr(user_config.tts, "model", None) or "gemini-3.1-flash-tts-preview",
                 voice=tts_v,
                 sample_rate=audio_config.transport_out_sample_rate,
                 text_filters=[xml_function_tag_filter],
@@ -1268,7 +1268,7 @@ def create_tts_service(
 
         return GeminiTTSService(
             api_key=user_config.tts.api_key,
-            model=getattr(user_config.tts, "model", "gemini-2.5-flash-preview-tts"),
+            model=getattr(user_config.tts, "model", None) or "gemini-3.1-flash-tts-preview",
             voice=getattr(user_config.tts, "voice", "Puck"),
             sample_rate=audio_config.transport_out_sample_rate,
             text_filters=[xml_function_tag_filter],
@@ -1300,9 +1300,7 @@ def _migrate_deprecated_google_model(model: str) -> str:
     if not model or model in ("default", "none"):
         return "gemini-3.5-flash"
     m = model.strip().lower()
-    if m in ("gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-flash-exp", "gemini-2.5-pro", "gemini-1.5-flash", "gemini-1.5-pro"):
-        return "gemini-3.5-flash"
-    if "3.8" in m:
+    if m.startswith("gemini-2.") or m.startswith("gemini-1.") or "3.8" in m:
         return "gemini-3.5-flash"
     return model
 
@@ -1475,7 +1473,7 @@ def create_llm_service_from_provider(
             from pipecat.services.anthropic.llm import AnthropicLLMService, AnthropicLLMSettings
             return AnthropicLLMService(
                 api_key=anthropic_key,
-                settings=AnthropicLLMSettings(model="claude-3-5-sonnet-20241022", temperature=0.1),
+                settings=AnthropicLLMSettings(model="claude-haiku-4-5-20251001", temperature=0.1),
             )
 
         # Default fallback to Local CPU Ollama
@@ -1489,9 +1487,9 @@ def create_llm_service_from_provider(
         )
     elif provider in (ServiceProviders.ANTHROPIC.value, "anthropic"):
         from pipecat.services.anthropic.llm import AnthropicLLMService, AnthropicLLMSettings
-        llm_model = model or "claude-3-5-sonnet-20241022"
+        llm_model = model or "claude-haiku-4-5-20251001"
         if llm_model == "default":
-            llm_model = "claude-3-5-sonnet-20241022"
+            llm_model = "claude-haiku-4-5-20251001"
         return AnthropicLLMService(
             api_key=api_key,
             settings=AnthropicLLMSettings(

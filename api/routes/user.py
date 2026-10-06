@@ -1011,7 +1011,7 @@ async def preview_voice(
                     "inputs": ["नमस्ते, यह कोडवेव्स पर आवाज का पूर्वावलोकन है।"],
                     "target_language_code": "hi-IN",
                     "speaker": voice_id,
-                    "model": "bulbul:v1",
+                    "model": "bulbul:v3",
                 }
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
                     async with session.post("https://api.sarvam.ai/text-to-speech", json=payload, headers=headers) as resp:
@@ -1103,9 +1103,6 @@ async def preview_voice(
 
         candidate_endpoints = [
             "gemini-3.1-flash-tts-preview",
-            "gemini-2.5-flash-preview-tts",
-            "gemini-2.0-flash",
-            "gemini-2.5-flash",
         ]
         last_error = "Unknown error"
         for mdl in candidate_endpoints:

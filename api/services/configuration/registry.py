@@ -338,8 +338,8 @@ ANTHROPIC_PROVIDER_MODEL_CONFIG = provider_model_config(
     provider_docs_url="https://docs.anthropic.com",
 )
 ANTHROPIC_MODELS = [
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-5-5",
     "claude-3-opus-20240229",
 ]
 OPENROUTER_PROVIDER_MODEL_CONFIG = provider_model_config("Open Router")
@@ -455,7 +455,7 @@ OPENROUTER_MODELS = [
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
     "anthropic/claude-sonnet-4",
-    "google/gemini-2.5-flash",
+    "google/gemini-3.5-flash",
     "meta-llama/llama-3.3-70b-instruct",
     "deepseek/deepseek-chat-v3-0324",
 ]
@@ -466,7 +466,7 @@ AWS_BEDROCK_MODELS = [
     "us.amazon.nova-lite-v1:0",
     "us.amazon.nova-micro-v1:0",
     "us.anthropic.claude-sonnet-4-20250514-v1:0",
-    "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "us.anthropic.claude-sonnet-5-5-v1:0",
     "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 ]
 
@@ -572,7 +572,7 @@ class AnthropicLLMService(BaseLLMConfiguration):
     model_config = ANTHROPIC_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.ANTHROPIC] = ServiceProviders.ANTHROPIC
     model: str = Field(
-        default="claude-3-5-sonnet-20241022",
+        default="claude-haiku-4-5-20251001",
         description="Anthropic Claude model identifier.",
         json_schema_extra={"examples": ANTHROPIC_MODELS, "allow_custom_input": True},
     )
@@ -1029,7 +1029,7 @@ class GoogleRealtimeLLMConfiguration(BaseLLMConfiguration):
         ServiceProviders.GOOGLE_REALTIME
     )
     model: str = Field(
-        default="gemini-2.5-flash",
+        default="gemini-3.1-flash-live-preview",
         description="Gemini Live model on Google AI Studio (not Vertex).",
         json_schema_extra={
             "examples": GOOGLE_REALTIME_MODELS,
@@ -1614,7 +1614,7 @@ class MiniMaxTTSConfiguration(BaseTTSConfiguration):
     )
 
 
-GEMINI_TTS_MODELS = ["gemini-2.5-flash-preview-tts"]
+GEMINI_TTS_MODELS = ["gemini-3.1-flash-tts-preview"]
 GEMINI_TTS_VOICES = [
     "Puck",
     "Charon",
@@ -1632,7 +1632,7 @@ class GoogleGeminiTTSConfiguration(BaseTTSConfiguration):
     model_config = GEMINI_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.GEMINI] = ServiceProviders.GEMINI
     model: str = Field(
-        default="gemini-2.5-flash-preview-tts",
+        default="gemini-3.1-flash-tts-preview",
         description="Google Gemini Direct Audio TTS model.",
         json_schema_extra={"examples": GEMINI_TTS_MODELS, "allow_custom_input": True},
     )
@@ -2344,7 +2344,7 @@ class SmallestAISTTConfiguration(BaseSTTConfiguration):
     )
 
 
-GEMINI_STT_MODELS = ["gemini-2.5-flash", "gemini-1.5-flash"]
+GEMINI_STT_MODELS = ["gemini-3.5-flash", "gemini-1.5-flash"]
 
 
 @register_stt
@@ -2352,7 +2352,7 @@ class GoogleGeminiSTTConfiguration(BaseSTTConfiguration):
     model_config = GEMINI_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.GEMINI] = ServiceProviders.GEMINI
     model: str = Field(
-        default="gemini-2.5-flash",
+        default="gemini-3.5-flash",
         description="Google Gemini Speech-to-Text transcription model.",
         json_schema_extra={"examples": GEMINI_STT_MODELS, "allow_custom_input": True},
     )

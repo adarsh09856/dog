@@ -44,8 +44,6 @@ CURATED_PROVIDER_MODELS: Dict[str, List[Dict[str, Any]]] = {
     "anthropic": [
         {"model_identifier": "claude-haiku-4-5-20251001", "display_name": "Anthropic Claude Haiku 4.5", "layer": "llm", "recommended": True, "supports_tools": True},
         {"model_identifier": "claude-sonnet-5-5", "display_name": "Anthropic Claude Sonnet 5.5", "layer": "llm", "recommended": False, "supports_tools": True},
-        {"model_identifier": "claude-3-5-sonnet-20241022", "display_name": "Anthropic Claude 3.5 Sonnet", "layer": "llm", "recommended": True, "supports_tools": True},
-        {"model_identifier": "claude-3-5-haiku-20241022", "display_name": "Anthropic Claude 3.5 Haiku", "layer": "llm", "recommended": False, "supports_tools": True},
     ],
     "groq": [
         {"model_identifier": "llama-3.3-70b-versatile", "display_name": "Groq Llama 3.3 70B", "layer": "llm", "recommended": True, "supports_tools": True},
@@ -314,6 +312,109 @@ class CatalogService:
             "discovered_voices": discovered_voices,
         }
 
+    async def _get_test_model_for_layer(
+        self,
+        provider: str,
+        layer: str,
+        creds: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """
+        Dynamically determine an active, valid model identifier to verify a provider's capability layer.
+        1. Checks DB ai_model_catalog for provider=prov_norm, layer=layer_norm, enabled=True.
+        2. If none in DB, calls live discovery API for the provider.
+        3. If live discovery fails, checks CURATED_PROVIDER_MODELS in memory.
+        4. Returns None if no model is available.
+        """
+        prov_norm = normalize_provider_name(provider)
+        layer_norm = layer.lower().strip()
+        api_key = (creds or {}).get("api_key") or ""
+
+        # 1. Query database catalog
+        try:
+            db_models = await kodewaves_db_client.list_models(
+                layer=layer_norm,
+                provider=prov_norm,
+                enabled_only=True,
+            )
+            if db_models:
+                recom = [m for m in db_models if getattr(m, "recommended", False)]
+                target = recom[0] if recom else db_models[0]
+                return target.model_identifier
+        except Exception as e:
+            logger.debug(f"[CatalogService] DB query for test model failed: {e}")
+
+        # 2. Live API discovery fallback if catalog has not yet been seeded
+        timeout = aiohttp.ClientTimeout(total=8)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                if prov_norm == "google" and api_key:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+                    async with session.get(url) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            for m in data.get("models", []):
+                                name = m.get("name", "").replace("models/", "")
+                                methods = m.get("supportedGenerationMethods", [])
+                                if layer_norm == "llm" and "generateContent" in methods and "tts" not in name and "live" not in name:
+                                    asyncio.create_task(self.discover_provider(prov_norm, creds=creds))
+                                    return name
+
+                elif prov_norm == "anthropic" and api_key:
+                    url = "https://api.anthropic.com/v1/models"
+                    headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+                    async with session.get(url, headers=headers) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            for m in data.get("data", []):
+                                mid = m.get("id", "")
+                                if mid.startswith("claude-"):
+                                    asyncio.create_task(self.discover_provider(prov_norm, creds=creds))
+                                    return mid
+
+                elif prov_norm == "openai" and api_key:
+                    base_url = (creds or {}).get("base_url") or "https://api.openai.com/v1"
+                    url = f"{base_url.rstrip('/')}/models"
+                    async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            models = [m.get("id", "") for m in data.get("data", [])]
+                            for pref in ("gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"):
+                                if pref in models:
+                                    return pref
+                            for mid in models:
+                                if mid.startswith("gpt-"):
+                                    return mid
+
+                elif prov_norm == "groq" and api_key:
+                    url = "https://api.groq.com/openai/v1/models"
+                    async with session.get(url, headers={"Authorization": f"Bearer {api_key}"}) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            models = [m.get("id", "") for m in data.get("data", [])]
+                            for pref in ("llama-3.3-70b-versatile", "llama-3.1-8b-instant"):
+                                if pref in models:
+                                    return pref
+                            if models:
+                                return models[0]
+
+                elif prov_norm == "ollama":
+                    ollama_url = os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
+                    async with session.get(f"{ollama_url.rstrip('/')}/api/tags") as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            models = data.get("models", [])
+                            if models:
+                                return models[0].get("name", "llama3.2")
+        except Exception as e:
+            logger.debug(f"[CatalogService] Live model discovery for test failed: {e}")
+
+        # 3. Curated built-in fallback
+        curated = [m for m in CURATED_PROVIDER_MODELS.get(prov_norm, []) if m.get("layer") == layer_norm]
+        if curated:
+            return curated[0]["model_identifier"]
+
+        return None
+
     async def verify_layer(
         self,
         provider: str,
@@ -349,29 +450,43 @@ class CatalogService:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 # 1. LLM Verification
                 if layer_norm == "llm":
+                    test_model = await self._get_test_model_for_layer(prov_norm, layer_norm, creds)
+                    if not test_model and prov_norm not in ("piper", "whisper", "ollama"):
+                        error_msg = f"No models available for {prov_norm}/{layer_norm} to verify against"
+                        await kodewaves_db_client.record_verify_run(
+                            provider=prov_norm,
+                            layer=layer_norm,
+                            status="FAIL",
+                            error_message=error_msg,
+                        )
+                        return False, None, error_msg
+
                     api_key = creds.get("api_key", "")
                     if prov_norm == "google":
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{test_model}:generateContent?key={api_key}"
                         payload = {"contents": [{"parts": [{"text": "Hello"}]}]}
                         async with session.post(url, json=payload) as resp:
                             if resp.status == 200:
                                 success = True
                             else:
-                                error_msg = f"Gemini LLM returned HTTP status {resp.status}"
+                                err_txt = await resp.text()
+                                error_msg = f"Gemini LLM returned HTTP status {resp.status}: {err_txt[:100]}"
 
                     elif prov_norm == "openai":
-                        url = "https://api.openai.com/v1/chat/completions"
-                        payload = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 5}
+                        base_url = (creds or {}).get("base_url") or "https://api.openai.com/v1"
+                        url = f"{base_url.rstrip('/')}/chat/completions"
+                        payload = {"model": test_model, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 5}
                         async with session.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload) as resp:
                             if resp.status == 200:
                                 success = True
                             else:
-                                error_msg = f"OpenAI chat completions returned HTTP {resp.status}"
+                                err_txt = await resp.text()
+                                error_msg = f"OpenAI chat completions returned HTTP {resp.status}: {err_txt[:100]}"
 
                     elif prov_norm == "anthropic":
                         url = "https://api.anthropic.com/v1/messages"
                         payload = {
-                            "model": "claude-3-5-haiku-20241022",
+                            "model": test_model,
                             "messages": [{"role": "user", "content": "ping"}],
                             "max_tokens": 5,
                         }
@@ -380,16 +495,18 @@ class CatalogService:
                             if resp.status == 200:
                                 success = True
                             else:
-                                error_msg = f"Anthropic returned HTTP status {resp.status}"
+                                err_txt = await resp.text()
+                                error_msg = f"Anthropic returned HTTP status {resp.status}: {err_txt[:100]}"
 
                     elif prov_norm == "groq":
                         url = "https://api.groq.com/openai/v1/chat/completions"
-                        payload = {"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": "ping"}], "max_tokens": 5}
+                        payload = {"model": test_model, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 5}
                         async with session.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload) as resp:
                             if resp.status == 200:
                                 success = True
                             else:
-                                error_msg = f"Groq returned HTTP status {resp.status}"
+                                err_txt = await resp.text()
+                                error_msg = f"Groq returned HTTP status {resp.status}: {err_txt[:100]}"
 
                     elif prov_norm == "ollama":
                         ollama_url = os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
@@ -406,9 +523,11 @@ class CatalogService:
 
                 # 2. STT Verification
                 elif layer_norm == "stt":
+                    test_model = await self._get_test_model_for_layer(prov_norm, layer_norm, creds)
                     if prov_norm == "deepgram":
                         api_key = creds.get("api_key", "")
-                        url = "https://api.deepgram.com/v1/listen?model=nova-2"
+                        stt_model = test_model or "nova-3"
+                        url = f"https://api.deepgram.com/v1/listen?model={stt_model}"
                         async with session.post(url, headers={"Authorization": f"Token {api_key}"}, data=b"RIFF....") as resp:
                             # 200 or 400 with audio error means valid authentication! 401 means invalid
                             if resp.status in (200, 400):
@@ -495,17 +614,30 @@ class CatalogService:
         self.invalidate_cache()
         return success, latency_ms, error_msg
 
-    async def verify_provider_all_layers(self, provider: str) -> Dict[str, Any]:
+    async def verify_provider_all_layers(
+        self,
+        provider: str,
+        creds: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """Verify all layers supported by a provider."""
         prov_norm = normalize_provider_name(provider)
         models = CURATED_PROVIDER_MODELS.get(prov_norm, [])
         layers = list({m["layer"] for m in models})
+
+        try:
+            db_models = await kodewaves_db_client.list_models(provider=prov_norm, enabled_only=False)
+            for m in db_models:
+                if m.layer and m.layer not in layers:
+                    layers.append(m.layer)
+        except Exception:
+            pass
+
         if not layers:
             layers = ["llm"]
 
         results = {}
         for layer in layers:
-            ok, lat, err = await self.verify_layer(prov_norm, layer)
+            ok, lat, err = await self.verify_layer(prov_norm, layer, creds=creds)
             results[layer] = {"success": ok, "latency_ms": lat, "error": err}
         return results
 

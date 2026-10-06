@@ -165,7 +165,7 @@ class ConnectionsVerifier:
 
     async def verify_link_6_per_call_record(self):
         """Link 6: Per-call record captures all required fields."""
-        from scripts.e2e.synthetic_call import SyntheticCallSimulator
+        from scripts.e2e.synthetic_call_dryrun import SyntheticCallSimulator
 
         sim = SyntheticCallSimulator()
         rec = await sim.run_cascade_call()
@@ -176,7 +176,7 @@ class ConnectionsVerifier:
 
     async def verify_link_7_wallet_ledger_and_local_free(self):
         """Link 7: Wallet ledger audit trail & 0 cost for local calls."""
-        from scripts.e2e.synthetic_call import SyntheticCallSimulator
+        from scripts.e2e.synthetic_call_dryrun import SyntheticCallSimulator
 
         sim = SyntheticCallSimulator()
         local_rec = await sim.run_local_call()

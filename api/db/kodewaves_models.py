@@ -47,7 +47,7 @@ class AIModelCatalogModel(Base):
     __tablename__ = "ai_model_catalog"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    model_identifier = Column(String(100), unique=True, nullable=False, index=True) # 'gpt-4o', 'sarvam-2b', 'claude-3-5-sonnet'
+    model_identifier = Column(String(100), unique=True, nullable=False, index=True) # 'gpt-4o', 'llama-3.3-70b', 'gemini-3.5-flash'
     display_name = Column(String(100), nullable=False)
     provider = Column(String(50), nullable=False, index=True)                       # 'openai', 'sarvam', 'anthropic', 'custom_openai_compatible'
     category = Column(String(20), nullable=False, index=True)                       # 'llm', 'stt', 'tts', 'sts'

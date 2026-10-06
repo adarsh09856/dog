@@ -82,68 +82,6 @@ export interface KodewavesFormState {
 }
 export type DograhFormState = KodewavesFormState;
 
-export const CLOUD_LLM_MODELS = [
-    { value: "auto", label: "Auto (Recommended - Best active engine)", provider: "auto" },
-    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash", provider: "google" },
-    { value: "gemini-2.5-pro", label: "Google Gemini 2.5 Pro (Deep Reasoning)", provider: "google" },
-    { value: "gemini-2.0-flash", label: "Google Gemini 2.0 Flash (Fast Production)", provider: "google" },
-    { value: "gpt-4o", label: "OpenAI GPT-4o (High Intelligence)", provider: "openai" },
-    { value: "gpt-4o-mini", label: "OpenAI GPT-4o Mini (Fast & Cost-effective)", provider: "openai" },
-    { value: "claude-3-5-sonnet-20241022", label: "Anthropic Claude 3.5 Sonnet (Advanced)", provider: "anthropic" },
-    { value: "claude-3-5-haiku-20241022", label: "Anthropic Claude 3.5 Haiku (Fast)", provider: "anthropic" },
-    { value: "llama-3.3-70b-versatile", label: "Groq Llama 3.3 70B (Ultra Low Latency)", provider: "groq" },
-    { value: "llama-3.1-8b-instant", label: "Groq Llama 3.1 8B (Sub-100ms)", provider: "groq" },
-    { value: "sarvam-2b", label: "Sarvam Indic 2B (Indian Languages)", provider: "sarvam" },
-];
-
-export const LOCAL_LLM_MODELS = [
-    { value: "qwen2.5:1.5b", label: "Qwen 2.5 1.5B (Recommended CPU, ~980MB RAM)" },
-    { value: "qwen2.5:0.5b", label: "Qwen 2.5 0.5B (Ultra-fast CPU, ~350MB RAM)" },
-];
-
-export const CLOUD_STT_MODELS = [
-    { value: "auto", label: "Auto (Recommended - Best active engine)", provider: "auto" },
-    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash Audio STT", provider: "google" },
-    { value: "gemini-2.0-flash", label: "Google Gemini 2.0 Flash Audio STT", provider: "google" },
-    { value: "nova-3", label: "Deepgram Nova-3 (Conversational)", provider: "deepgram" },
-    { value: "nova-2", label: "Deepgram Nova-2 (Conversational & Telephony)", provider: "deepgram" },
-    { value: "whisper-1", label: "OpenAI Whisper-1 (Accurate Multilingual)", provider: "openai" },
-    { value: "saaras:v2", label: "Sarvam Saaras v2 (High-accuracy Indic Speech)", provider: "sarvam" },
-    { value: "azure-speech", label: "Microsoft Azure Speech STT", provider: "azure" },
-];
-
-export const LOCAL_STT_MODELS = [
-    { value: "Systran/faster-whisper-tiny", label: "Faster-Whisper Tiny (Ultra-fast CPU, ~75MB RAM)" },
-    { value: "Systran/faster-whisper-base", label: "Faster-Whisper Base (Multilingual, ~140MB RAM)" },
-];
-
-export const CLOUD_TTS_MODELS = [
-    { value: "auto", label: "Auto (Recommended - Best active engine)", provider: "auto" },
-    { value: "gemini-2.5-flash-preview-tts", label: "Google Gemini 2.5 Voice Studio (High Fidelity)", provider: "google" },
-    { value: "sonic-3.5", label: "Cartesia Sonic 3.5 (Ultra-low latency, ~90ms)", provider: "cartesia" },
-    { value: "sonic-multilingual", label: "Cartesia Sonic Multilingual", provider: "cartesia" },
-    { value: "eleven_multilingual_v2", label: "ElevenLabs Multilingual v2 (Rich Neural)", provider: "elevenlabs" },
-    { value: "eleven_flash_v2_5", label: "ElevenLabs Flash v2.5 (High Speed & Expressive)", provider: "elevenlabs" },
-    { value: "eleven_turbo_v2_5", label: "ElevenLabs Turbo v2.5", provider: "elevenlabs" },
-    { value: "tts-1", label: "OpenAI TTS-1 (Standard Natural Speech)", provider: "openai" },
-    { value: "tts-1-hd", label: "OpenAI TTS-1 HD (High Definition Studio)", provider: "openai" },
-    { value: "bulbul:v1", label: "Sarvam Bulbul v1 (Native Indian Languages)", provider: "sarvam" },
-    { value: "aura-asteria-en", label: "Deepgram Aura Asteria (Female Conversational)", provider: "deepgram" },
-    { value: "aura-orion-en", label: "Deepgram Aura Orion (Male Authoritative)", provider: "deepgram" },
-    { value: "azure-neural", label: "Microsoft Azure Neural Voice", provider: "azure" },
-];
-
-export const LOCAL_TTS_MODELS = [
-    { value: "piper", label: "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)" },
-];
-
-export const DEFAULT_S2S_MODELS = [
-    { value: "gemini-2.5-flash", label: "Google Gemini 2.5 Flash Live (Sub-300ms)", provider: "google", description: "Ultra-low latency audio-in/audio-out Gemini Live" },
-    { value: "gemini-2.0-flash", label: "Google Gemini 2.0 Flash Live", provider: "google", description: "Standard Gemini 2.0 Live speech-to-speech" },
-    { value: "gpt-4o-realtime-preview", label: "OpenAI GPT-4o Realtime", provider: "openai", description: "Native OpenAI Realtime bidirectional voice" },
-    { value: "gpt-4o-mini-realtime-preview", label: "OpenAI GPT-4o Mini Realtime", provider: "openai", description: "Fast, cost-effective OpenAI Realtime voice" },
-];
-
 export const GEMINI_LIVE_VOICES = [
     { value: "Puck", label: "Puck (Natural & Conversational)" },
     { value: "Charon", label: "Charon (Warm & Confident)" },
@@ -323,7 +261,7 @@ function buildKodewavesState(
 
         const isRealtime = Boolean(configuredKodewaves.is_realtime);
         const realtimeProvider = configuredKodewaves.realtime_provider ? String(configuredKodewaves.realtime_provider) : "google";
-        const realtimeModel = configuredKodewaves.realtime_model ? String(configuredKodewaves.realtime_model) : "gemini-2.5-flash";
+        const realtimeModel = configuredKodewaves.realtime_model ? String(configuredKodewaves.realtime_model) : "";
 
         return {
             api_key: apiKey,
@@ -372,7 +310,7 @@ function buildKodewavesState(
             tts_model: ttsModel,
             is_realtime: false,
             realtime_provider: "google",
-            realtime_model: "gemini-2.5-flash",
+            realtime_model: "",
         };
     }
 
@@ -390,7 +328,7 @@ function buildKodewavesState(
         tts_model: undefined,
         is_realtime: false,
         realtime_provider: "google",
-        realtime_model: "gemini-2.5-flash",
+        realtime_model: "",
     };
 }
 const buildDograhState = buildKodewavesState;
@@ -577,17 +515,9 @@ export function AIModelConfigurationV2Editor({
     const effectiveLlmModels = useMemo(() => {
         const isLocal = kodewaves.llm_engine_type === "local_cpu";
         if (isLocal) {
-            if (catalogManifest?.local_llm_models && catalogManifest.local_llm_models.length > 0) {
-                return catalogManifest.local_llm_models;
-            }
-            return [
-                { value: "qwen2.5:1.5b", label: "Qwen 2.5 1.5B (Installed CPU, ~980MB RAM)" },
-                { value: "qwen2.5:0.5b", label: "Qwen 2.5 0.5B (Installed CPU, ~350MB RAM)" },
-            ];
+            return catalogManifest?.local_llm_models || [];
         }
-        let list = (catalogManifest?.cloud_llm_models && catalogManifest.cloud_llm_models.length > 0)
-            ? catalogManifest.cloud_llm_models
-            : CLOUD_LLM_MODELS;
+        let list = catalogManifest?.cloud_llm_models || [];
         
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
@@ -605,14 +535,9 @@ export function AIModelConfigurationV2Editor({
     const effectiveSttModels = useMemo(() => {
         const isLocal = kodewaves.stt_engine_type === "local_cpu";
         if (isLocal) {
-            if (catalogManifest?.local_stt_models && catalogManifest.local_stt_models.length > 0) {
-                return catalogManifest.local_stt_models;
-            }
-            return LOCAL_STT_MODELS;
+            return catalogManifest?.local_stt_models || [];
         }
-        let list = (catalogManifest?.cloud_stt_models && catalogManifest.cloud_stt_models.length > 0)
-            ? catalogManifest.cloud_stt_models
-            : CLOUD_STT_MODELS;
+        let list = catalogManifest?.cloud_stt_models || [];
         
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
@@ -630,14 +555,9 @@ export function AIModelConfigurationV2Editor({
     const effectiveTtsModels = useMemo(() => {
         const isLocal = kodewaves.tts_engine_type === "local_cpu";
         if (isLocal) {
-            if (catalogManifest?.local_tts_models && catalogManifest.local_tts_models.length > 0) {
-                return catalogManifest.local_tts_models;
-            }
-            return LOCAL_TTS_MODELS;
+            return catalogManifest?.local_tts_models || [];
         }
-        let list = (catalogManifest?.cloud_tts_models && catalogManifest.cloud_tts_models.length > 0)
-            ? catalogManifest.cloud_tts_models
-            : CLOUD_TTS_MODELS;
+        let list = catalogManifest?.cloud_tts_models || [];
         
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
@@ -675,9 +595,7 @@ export function AIModelConfigurationV2Editor({
     }, [kodewaves.tts_engine_type, kodewaves.tts_model, kodewaves.voice, catalogManifest]);
 
     const effectiveS2sModels = useMemo(() => {
-        let list = (catalogManifest?.cloud_s2s_models && catalogManifest.cloud_s2s_models.length > 0)
-            ? catalogManifest.cloud_s2s_models
-            : DEFAULT_S2S_MODELS;
+        let list = catalogManifest?.cloud_s2s_models || [];
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
             const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
@@ -738,8 +656,8 @@ export function AIModelConfigurationV2Editor({
                 stt_model: kodewaves.stt_model || undefined,
                 tts_model: kodewaves.tts_model || undefined,
                 is_realtime: isRt,
-                realtime_provider: kodewaves.realtime_provider || "google",
-                realtime_model: kodewaves.realtime_model || "gemini-2.5-flash",
+                realtime_provider: kodewaves.realtime_provider || (effectiveS2sModels[0]?.provider || "google"),
+                realtime_model: kodewaves.realtime_model || (effectiveS2sModels[0]?.value || undefined),
             };
             await onSave({
                 version: 2,
@@ -848,7 +766,7 @@ export function AIModelConfigurationV2Editor({
                                                 ? "none"
                                                 : (kodewaves.realtime_model && effectiveS2sModels.some((m) => m.value === kodewaves.realtime_model)
                                                     ? kodewaves.realtime_model
-                                                    : (effectiveS2sModels[0]?.value || "gemini-2.5-flash"))
+                                                    : (effectiveS2sModels[0]?.value || "none"))
                                         }
                                         onValueChange={(val) => {
                                             const chosen = effectiveS2sModels.find((m) => m.value === val);

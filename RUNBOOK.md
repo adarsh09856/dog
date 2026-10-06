@@ -68,6 +68,9 @@ bash deploy.sh
 
 ## 3. Environment Variables & Master Vault
 
+> [!WARNING]
+> **KEY ROTATION MANDATORY**: The Google Gemini API key ending in `FVoQ` that was previously present in chat history files MUST be deleted in Google AI Studio immediately before staging or production deployment, and replaced with a newly generated key. AI assistants and local scripts cannot rotate upstream provider keys for you. In Google AI Studio / provider consoles, delete the exposed key and create a new one.
+
 Master provider credentials (API keys for Gemini, OpenAI, Anthropic, Groq, Deepgram, Cartesia, ElevenLabs, Sarvam, Azure) are managed exclusively through the **Encrypted Database Vault** (`/api/v1/admin/master-keys`). They are encrypted at rest using AES-256 Fernet.
 
 ### Complete Environment Variable Reference (Appendix B)

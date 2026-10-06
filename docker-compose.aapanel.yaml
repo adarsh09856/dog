@@ -57,7 +57,7 @@ services:
     build:
       context: .
       dockerfile: deploy/minio/Dockerfile
-    image: kodewaves-minio:latest
+    image: kodewaves-minio:v1.0.0
     container_name: kodewaves_minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -88,7 +88,7 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
-    image: kodewaves-api:latest
+    image: kodewaves-api:v2.0.0
     container_name: kodewaves_api
     restart: unless-stopped
     depends_on:
@@ -181,7 +181,7 @@ services:
     build:
       context: .
       dockerfile: ui/Dockerfile
-    image: kodewaves-ui:latest
+    image: kodewaves-ui:v2.0.0
     container_name: kodewaves_ui
     restart: unless-stopped
     depends_on:
@@ -275,7 +275,7 @@ services:
     build:
       context: .
       dockerfile: deploy/piper/Dockerfile
-    image: kodewaves-piper:latest
+    image: kodewaves-piper:v1.0.0
     container_name: kodewaves_piper
     restart: unless-stopped
     profiles: ["local"]

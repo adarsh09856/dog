@@ -225,10 +225,10 @@ DEFAULT_CAMPAIGN_RETRY_CONFIG = {
 # transient network error can't permanently drop a final webhook. After
 # ``max_attempts`` transient failures the delivery is parked as ``dead_letter``.
 DEFAULT_WEBHOOK_DELIVERY_CONFIG = {
-    "max_attempts": int(os.getenv("WEBHOOK_DELIVERY_MAX_ATTEMPTS", 5)),
-    "base_delay_seconds": int(os.getenv("WEBHOOK_DELIVERY_BASE_DELAY_SECONDS", 30)),
-    "max_delay_seconds": int(os.getenv("WEBHOOK_DELIVERY_MAX_DELAY_SECONDS", 600)),
-    "timeout_seconds": int(os.getenv("WEBHOOK_DELIVERY_TIMEOUT_SECONDS", 30)),
+    "max_attempts": int(float(os.getenv("WEBHOOK_DELIVERY_MAX_ATTEMPTS", 5))),
+    "base_delay_seconds": int(float(os.getenv("WEBHOOK_DELIVERY_BASE_DELAY_SECONDS", 30))),
+    "max_delay_seconds": int(float(os.getenv("WEBHOOK_DELIVERY_MAX_DELAY_SECONDS", 600))),
+    "timeout_seconds": int(float(os.getenv("WEBHOOK_DELIVERY_TIMEOUT_SECONDS", 30))),
 }
 
 # Text chats have no transport disconnect event, so a periodic worker closes

@@ -231,10 +231,10 @@ def _compile_kodewaves_configuration(
                 voice=rt_voice or "terrence",
             )
         else:
-            # Default to Google Gemini 2.5 Live
+            # Default to Google Gemini Live
             realtime_service = GoogleRealtimeLLMConfiguration(
                 api_key=api_key,
-                model="gemini-2.5-flash" if rt_model in ("default", "auto") else rt_model,
+                model="gemini-3.1-flash-live-preview" if rt_model in ("default", "auto") else rt_model,
                 voice=rt_voice if rt_voice in ("Puck", "Charon", "Kore", "Fenrir", "Aoede") else "Puck",
                 language=configuration.language if configuration.language != "multi" else "en",
             )
@@ -244,7 +244,7 @@ def _compile_kodewaves_configuration(
             llm=KodewavesLLMService(
                 provider=ServiceProviders.KODEWAVES,
                 api_key=api_key,
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
             ),
             embeddings=KodewavesEmbeddingsConfiguration(
                 provider=ServiceProviders.KODEWAVES,

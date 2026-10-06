@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, repo_root)
 
-from scripts.e2e.synthetic_call import SyntheticCallSimulator, PerCallRecord
+from scripts.e2e.synthetic_call_dryrun import SyntheticCallSimulator, PerCallRecord
 
 
 @dataclass
@@ -186,7 +186,8 @@ class ConcurrencyBenchmarkRunner:
         """Execute full benchmark matrix."""
         all_results = []
         print("=" * 80)
-        print(" Kodewaves Load Test Suite (1, 3, 5, 10 Concurrent Calls)")
+        print(" [DRY RUN - NOT A MEASUREMENT] Simulated Synthetic Sleep Timings")
+        print(" Kodewaves Concurrency Flow Suite (1, 3, 5, 10 Concurrent Calls)")
         print("=" * 80)
 
         for setup in setups:

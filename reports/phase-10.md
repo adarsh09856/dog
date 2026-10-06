@@ -30,36 +30,25 @@ Work Package 10 (WP10) hardens platform concurrency controls, benchmarks multi-s
    - Tuned Silero VAD stop threshold (`vad_stop_secs=0.5`).
    - Tuned Deepgram STT endpointing to 300ms for conversational turn-taking.
    - Preserved server-side VAD with local turn-start fallback for Speech-to-Speech (Gemini Live / OpenAI Realtime).
-5. **Simulated Load Testing (1, 3, 5, 10 Calls)**:
-   - Built standalone benchmark suite: `scripts/e2e/loadtest.py`.
-   - Verified 100% success rate across all 16 concurrency tiers.
-   - Verified billing quota invariant: 0 minutes billed for local sovereign calls.
-   - Generated canonical report: `reports/latency.md`.
+5. **Dry Run Harness Verification (1, 3, 5, 10 Calls)**:
+   - Built standalone benchmark suite: `scripts/e2e/loadtest_dryrun.py` and `scripts/e2e/synthetic_call_dryrun.py`.
+   - Verified concurrency counter acquisition, slot release logic, and billing quota invariants (0 minutes billed for local sovereign calls).
+   - Real network latency against live cloud/local endpoints is **NOT TESTED** pending staging deployment with keys.
 
 ---
 
-## 2. Load Test Results Matrix
+## 2. Load Test & Concurrency Status Matrix
 
-The benchmark suite (`scripts/e2e/loadtest.py`) executed 1, 3, 5, and 10 simultaneous calls for all four pipeline topologies:
+> [!WARNING]
+> **DRY RUN ONLY — NOT A MEASUREMENT.**  
+> Millisecond timings produced by dry-run scripts were simulated for pipeline flow verification. Real latency against live providers will be measured in staging using `scripts/e2e/live_check.py`.
 
-| Setup | Concurrency | Success Rate | Mean STT (ms) | Mean TTFT (ms) | Mean TTFB (ms) | Mean Total (ms) | P95 Latency (ms) | Quota Check |
-|---|---|---|---|---|---|---|---|---|
-| **Cascade** (Deepgram + GPT-4o-mini + Cartesia) | 1 | 1/1 (100%) | 52.8 | 92.7 | 46.1 | 193.7 | 193.7 | PASS |
-| Cascade | 3 | 3/3 (100%) | 60.1 | 94.5 | 46.1 | 201.1 | 201.5 | PASS |
-| Cascade | 5 | 5/5 (100%) | 60.9 | 93.1 | 46.8 | 201.4 | 202.1 | PASS |
-| Cascade | 10 | 10/10 (100%) | 55.1 | 80.5 | 46.0 | 182.5 | 186.9 | PASS |
-| **Mixed** (Whisper + GPT-4o-mini + Piper) | 1 | 1/1 (100%) | 43.5 | 76.7 | 31.8 | 152.9 | 152.9 | PASS |
-| Mixed | 3 | 3/3 (100%) | 41.5 | 75.9 | 32.3 | 150.5 | 151.6 | PASS |
-| Mixed | 5 | 5/5 (100%) | 40.8 | 77.8 | 30.5 | 150.1 | 152.5 | PASS |
-| Mixed | 10 | 10/10 (100%) | 41.6 | 77.9 | 30.3 | 150.5 | 153.1 | PASS |
-| **Local** (Whisper + Ollama + Piper) | 1 | 1/1 (100%) | 44.6 | 61.0 | 32.1 | 138.3 | 138.3 | PASS (0 min) |
-| Local | 3 | 3/3 (100%) | 44.6 | 61.1 | 31.5 | 138.0 | 139.0 | PASS (0 min) |
-| Local | 5 | 5/5 (100%) | 42.1 | 63.4 | 31.4 | 137.7 | 139.6 | PASS (0 min) |
-| Local | 10 | 10/10 (100%) | 42.8 | 62.6 | 31.5 | 137.4 | 139.5 | PASS (0 min) |
-| **S2S** (Gemini Live / OpenAI Realtime) | 1 | 1/1 (100%) | 0.0 | 90.9 | 90.9 | 90.9 | 90.9 | PASS |
-| S2S | 3 | 3/3 (100%) | 0.0 | 95.4 | 95.4 | 95.4 | 105.1 | PASS |
-| S2S | 5 | 5/5 (100%) | 0.0 | 104.4 | 104.4 | 104.4 | 105.1 | PASS |
-| S2S | 10 | 10/10 (100%) | 0.0 | 103.0 | 103.0 | 103.0 | 104.9 | PASS |
+| Setup | Concurrency | Concurrency Gate | Billing Invariant | Live Latency Status |
+|---|---|---|---|---|
+| **Cascade** (Deepgram + GPT-4o-mini + Cartesia) | 1, 3, 5, 10 | PASS | PASS | NOT TESTED (no cloud keys) |
+| **Mixed** (Whisper + GPT-4o-mini + Piper) | 1, 3, 5, 10 | PASS | PASS | NOT TESTED (no local daemon / keys) |
+| **Local** (Whisper + Ollama + Piper) | 1, 3, 5, 10 | PASS | PASS (0 min) | NOT TESTED (no local daemons) |
+| **S2S** (Gemini Live / OpenAI Realtime) | 1, 3, 5, 10 | PASS | PASS | NOT TESTED (no cloud keys) |
 
 ---
 

@@ -352,7 +352,8 @@ async def main():
     simulator = SyntheticCallSimulator(args.wav)
 
     print("=" * 85)
-    print(" KODEWAVES SYNTHETIC CALL TEST HARNESS (WP7 / Part 8, 9.5, 9.6)")
+    print(" [DRY RUN - NOT A MEASUREMENT] Simulated Sleep Timings for Invariant Checks")
+    print(" KODEWAVES SYNTHETIC CALL DRY RUN HARNESS (WP7 / Part 8, 9.5, 9.6)")
     print(f" Caller Audio Source: {simulator.audio_wav_path or 'Synthetic PCM frames'}")
     print("=" * 85)
 
