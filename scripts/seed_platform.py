@@ -81,7 +81,7 @@ async def seed_global_settings():
             "category": "local_ai",
             "value": {
                 "enable_local_ai_engine": True,
-                "local_ai_access_policy": "all_workspaces",
+                "local_ai_access_policy": "public",
                 "ollama_endpoint": os.getenv("OLLAMA_ENDPOINT", "http://ollama:11434"),
                 "piper_endpoint": os.getenv("PIPER_ENDPOINT", "http://piper:5000"),
                 "whisper_endpoint": os.getenv("WHISPER_ENDPOINT", "http://whisper:8000/v1"),

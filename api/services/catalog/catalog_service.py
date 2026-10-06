@@ -288,7 +288,7 @@ class CatalogService:
                                     )
 
                 elif prov_norm == "piper":
-                    piper_url = os.environ.get("PIPER_ENDPOINT", "http://piper:8766")
+                    piper_url = os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
                     async with session.get(f"{piper_url.rstrip('/')}/voices") as resp:
                         if resp.status == 200:
                             vdata = await resp.json()
@@ -556,7 +556,7 @@ class CatalogService:
                             else:
                                 error_msg = f"ElevenLabs TTS returned HTTP {resp.status}"
                     elif prov_norm == "piper":
-                        piper_url = os.environ.get("PIPER_ENDPOINT", "http://piper:8766")
+                        piper_url = os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
                         async with session.get(f"{piper_url.rstrip('/')}/voices") as resp:
                             if resp.status == 200:
                                 success = True
@@ -736,16 +736,31 @@ class CatalogService:
             except Exception:
                 pass
 
-            # Local STT (Faster-Whisper on Speaches CPU)
-            local_stt = [
-                {"value": "Systran/faster-whisper-tiny", "label": "Faster-Whisper Tiny (Ultra-fast CPU, ~75MB RAM)"},
-                {"value": "Systran/faster-whisper-base", "label": "Faster-Whisper Base (Multilingual, ~140MB RAM)"},
-            ]
+            # Probe Local STT (Faster-Whisper on Speaches CPU)
+            whisper_url = local_ai_setting.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+            try:
+                probe_url = whisper_url.rstrip("/") if whisper_url.endswith("/models") else f"{whisper_url.rstrip('/')}/models"
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
+                    async with session.get(probe_url) as resp:
+                        if resp.status == 200:
+                            local_stt = [
+                                {"value": "Systran/faster-whisper-tiny", "label": "Faster-Whisper Tiny (Ultra-fast CPU, ~75MB RAM)"},
+                                {"value": "Systran/faster-whisper-base", "label": "Faster-Whisper Base (Multilingual, ~140MB RAM)"},
+                            ]
+            except Exception:
+                local_stt = []
 
-            # Local TTS (Piper ONNX)
-            local_tts = [
-                {"value": "piper", "label": "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)"},
-            ]
+            # Probe Local TTS (Piper ONNX)
+            piper_url = local_ai_setting.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
+                    async with session.get(f"{piper_url.rstrip('/')}/voices") as resp:
+                        if resp.status == 200:
+                            local_tts = [
+                                {"value": "piper", "label": "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)"},
+                            ]
+            except Exception:
+                local_tts = []
 
         # Prepend 'auto' item ONLY if cloud models exist
         if cloud_llm:

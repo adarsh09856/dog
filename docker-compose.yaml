@@ -262,6 +262,7 @@ services:
       MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
       PIPER_ENDPOINT: "${PIPER_ENDPOINT:-http://piper:5000}"
+      WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
 
       # Telephony media WebSocket capability token. The carrier dials the media

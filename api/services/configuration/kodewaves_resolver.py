@@ -314,7 +314,7 @@ async def apply_kodewaves_sovereign_resolution(
     local_engine = await kodewaves_db_client.get_setting("local_ai") or {}
     engine_enabled = local_engine.get("enable_local_ai_engine", False)
     access_policy = local_engine.get("local_ai_access_policy", "public")
-    is_public_local_ai = (access_policy == "public")
+    is_public_local_ai = access_policy in ("public", "all_workspaces")
     org_access = await kodewaves_db_client.get_setting(f"local_ai_org_{organization_id}")
     has_local_access = is_public_local_ai or (bool(org_access.get("enabled", False)) if org_access else False)
 
