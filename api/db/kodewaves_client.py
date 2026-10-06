@@ -316,6 +316,39 @@ class KodewavesDBClient(BaseDBClient):
             await session.refresh(run)
             return run
 
+    async def update_model_verification_status(
+        self,
+        provider: str,
+        layer: str,
+        status: str,
+        latency_ms: Optional[int] = None,
+        error_message: Optional[str] = None,
+    ) -> int:
+        """Persist model verification results to PostgreSQL ai_model_catalog."""
+        async with self.get_session() as session:
+            stmt = select(AIModelCatalogModel).where(
+                AIModelCatalogModel.provider == provider.lower().strip()
+            )
+            if layer:
+                stmt = stmt.where(
+                    (AIModelCatalogModel.layer == layer.lower().strip())
+                    | (AIModelCatalogModel.category == layer.lower().strip())
+                )
+            result = await session.execute(stmt)
+            models = result.scalars().all()
+            now = datetime.now(UTC)
+            count = 0
+            for m in models:
+                m.status = status.upper().strip()
+                if latency_ms is not None:
+                    m.latency_ms = latency_ms
+                m.last_verified_at = now
+                m.last_error = error_message if status.upper() != "PASS" else None
+                count += 1
+            if count > 0:
+                await session.commit()
+            return count
+
     async def get_org_ai_policy(self, organization_id: int) -> Optional[OrgAIPolicyModel]:
         async with self.get_session() as session:
             stmt = select(OrgAIPolicyModel).where(OrgAIPolicyModel.organization_id == organization_id)

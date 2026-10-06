@@ -136,23 +136,39 @@ async def test_master_key_post(req: TestConnectionRequest, _user=Depends(get_sup
     latency = round((datetime.now(UTC) - start_time).total_seconds() * 1000, 1)
 
     if results:
-        success = all(r.get("success", False) for r in results.values())
         passed = [l for l, r in results.items() if r.get("success")]
         failed = [f"{l}: {r.get('error')}" for l, r in results.items() if not r.get("success")]
-        if success:
+        success = len(passed) > 0
+        if len(failed) == 0:
             message = f"All {len(results)} layers verified successfully ({', '.join(passed)})"
+        elif len(passed) > 0:
+            message = f"Verified {len(passed)}/{len(results)} layers ({', '.join(passed)}); warnings: {'; '.join(failed)}"
         else:
-            message = f"Verification failed for {len(failed)}/{len(results)} layers: {'; '.join(failed)}"
+            message = f"Verification failed for all {len(results)} layers: {'; '.join(failed)}"
     else:
         success, message = await master_credential_service.test_connection(req.provider)
 
     status_str = "healthy" if success else "invalid"
-    # Update health status in DB
+    prov_clean = req.provider.lower().strip()
+    alias_map = {
+        "gemini": "google",
+        "google": "gemini",
+        "azure": "azure_speech",
+        "azure_speech": "azure",
+        "navana": "bodhi",
+        "bodhi": "navana",
+    }
+    alias = alias_map.get(prov_clean)
     try:
         await kodewaves_db_client.update_master_credential_health(
-            provider=req.provider.lower().strip(),
+            provider=prov_clean,
             health_status=status_str,
         )
+        if alias:
+            await kodewaves_db_client.update_master_credential_health(
+                provider=alias,
+                health_status=status_str,
+            )
     except Exception:
         pass
 
@@ -167,22 +183,39 @@ async def test_master_key_connection_path(provider: str, _user=Depends(get_super
     latency = round((datetime.now(UTC) - start_time).total_seconds() * 1000, 1)
 
     if results:
-        success = all(r.get("success", False) for r in results.values())
         passed = [l for l, r in results.items() if r.get("success")]
         failed = [f"{l}: {r.get('error')}" for l, r in results.items() if not r.get("success")]
-        if success:
+        success = len(passed) > 0
+        if len(failed) == 0:
             message = f"All {len(results)} layers verified successfully ({', '.join(passed)})"
+        elif len(passed) > 0:
+            message = f"Verified {len(passed)}/{len(results)} layers ({', '.join(passed)}); warnings: {'; '.join(failed)}"
         else:
-            message = f"Verification failed for {len(failed)}/{len(results)} layers: {'; '.join(failed)}"
+            message = f"Verification failed for all {len(results)} layers: {'; '.join(failed)}"
     else:
         success, message = await master_credential_service.test_connection(provider)
 
     status_str = "healthy" if success else "invalid"
+    prov_clean = provider.lower().strip()
+    alias_map = {
+        "gemini": "google",
+        "google": "gemini",
+        "azure": "azure_speech",
+        "azure_speech": "azure",
+        "navana": "bodhi",
+        "bodhi": "navana",
+    }
+    alias = alias_map.get(prov_clean)
     try:
         await kodewaves_db_client.update_master_credential_health(
-            provider=provider.lower().strip(),
+            provider=prov_clean,
             health_status=status_str,
         )
+        if alias:
+            await kodewaves_db_client.update_master_credential_health(
+                provider=alias,
+                health_status=status_str,
+            )
     except Exception:
         pass
 
@@ -191,18 +224,31 @@ async def test_master_key_connection_path(provider: str, _user=Depends(get_super
 
 @router.delete("/{provider}", response_model=Dict[str, Any])
 async def delete_master_key(provider: str, _user=Depends(get_superuser)):
-    """Disable or remove master credential for a provider."""
+    """Disable or remove master credential for a provider and its aliases."""
+    prov_clean = provider.lower().strip()
+    alias_map = {
+        "gemini": "google",
+        "google": "gemini",
+        "azure": "azure_speech",
+        "azure_speech": "azure",
+        "navana": "bodhi",
+        "bodhi": "navana",
+    }
+    alias = alias_map.get(prov_clean)
+    targets = [prov_clean] + ([alias] if alias else [])
+
     async with kodewaves_db_client.get_session() as session:
         from sqlalchemy import select
         stmt = select(PlatformMasterCredentialModel).where(
-            PlatformMasterCredentialModel.provider == provider.lower().strip()
+            PlatformMasterCredentialModel.provider.in_(targets)
         )
         res = await session.execute(stmt)
-        record = res.scalar_one_or_none()
-        if not record:
+        records = res.scalars().all()
+        if not records:
             raise HTTPException(status_code=404, detail=f"Master credential for '{provider}' not found")
 
-        await session.delete(record)
+        for r in records:
+            await session.delete(r)
         await session.commit()
         catalog_service.invalidate_cache()
         try:
@@ -212,7 +258,7 @@ async def delete_master_key(provider: str, _user=Depends(get_superuser)):
                 action="master_key.delete",
                 resource_type="credential",
                 resource_id=provider,
-                changes={"deleted": True},
+                changes={"deleted": True, "targets": targets},
             )
         except Exception:
             pass

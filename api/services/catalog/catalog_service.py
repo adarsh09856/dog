@@ -602,12 +602,13 @@ class CatalogService:
             )
 
             # Update models in database
-            models = await kodewaves_db_client.list_models(layer=layer_norm, provider=prov_norm, enabled_only=False)
-            for m in models:
-                m.status = status_str
-                m.latency_ms = latency_ms
-                m.last_verified_at = datetime.now(UTC)
-                m.last_error = error_msg if not success else None
+            await kodewaves_db_client.update_model_verification_status(
+                provider=prov_norm,
+                layer=layer_norm,
+                status=status_str,
+                latency_ms=latency_ms,
+                error_message=error_msg,
+            )
         except Exception as dberr:
             logger.debug(f"[CatalogService] DB logging skipped (offline): {dberr}")
 
