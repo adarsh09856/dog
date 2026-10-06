@@ -480,6 +480,18 @@ class KodewavesDBClient(BaseDBClient):
                 wallet = OrganizationWalletModel(organization_id=organization_id, credit_balance_minutes=0)
                 session.add(wallet)
 
+            # Idempotency check: avoid double crediting same payment reference
+            if reference_id:
+                check_stmt = select(WalletLedgerModel).where(
+                    WalletLedgerModel.organization_id == organization_id,
+                    WalletLedgerModel.reference_id == str(reference_id),
+                    WalletLedgerModel.amount_minutes > 0,
+                )
+                existing = await session.execute(check_stmt)
+                if existing.scalar_one_or_none() is not None:
+                    logger.info(f"[Wallet] Skipping duplicate credit: ref {reference_id} already applied to org {organization_id}")
+                    return wallet
+
             new_balance = wallet.credit_balance_minutes + minutes
             wallet.credit_balance_minutes = new_balance
             wallet.updated_at = datetime.now(UTC)

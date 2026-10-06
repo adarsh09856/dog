@@ -705,6 +705,13 @@ async def start_campaign(
     user: UserModel = Depends(get_user),
 ) -> CampaignResponse:
     """Start campaign execution"""
+    org = await db_client.get_organization_by_id(user.selected_organization_id)
+    if org and getattr(org, "status", "active") in ("suspended", "churned"):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Organization access is {org.status}. Starting campaigns is not permitted.",
+        )
+
     # Block start if the org has no telephony configuration at all.
     configs = await db_client.list_telephony_configurations(
         user.selected_organization_id
@@ -854,6 +861,19 @@ async def get_campaign_preflight(
     checks: List[CampaignPreflightItem] = []
     blockers: List[CampaignPreflightItem] = []
     warnings: List[CampaignPreflightItem] = []
+
+    # 0. Organization Status Gate
+    org = await db_client.get_organization_by_id(user.selected_organization_id)
+    if org and getattr(org, "status", "active") in ("suspended", "churned"):
+        item = CampaignPreflightItem(
+            category="organization",
+            status="block",
+            message=f"Organization account is {org.status}. Services are suspended.",
+            fix_action="Contact Support",
+            fix_link="mailto:support@kodewaves.in",
+        )
+        blockers.append(item)
+        checks.append(item)
 
     # 1. Telephony Config & Caller IDs
     if not campaign.telephony_configuration_id:

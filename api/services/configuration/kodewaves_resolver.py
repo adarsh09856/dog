@@ -12,6 +12,7 @@ from typing import Any, Dict, Literal, Optional
 from fastapi import HTTPException
 from loguru import logger
 
+from api.db import db_client
 from api.db.kodewaves_client import kodewaves_db_client
 from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
 from api.services.configuration.language_normalizer import (
@@ -310,6 +311,14 @@ async def apply_kodewaves_sovereign_resolution(
     if organization_id is None:
         effective.resolution_info = metadata.to_dict()
         return effective
+
+    # 0. Organization Status Gate
+    org = await db_client.get_organization_by_id(organization_id)
+    if org and getattr(org, "status", "active") in ("suspended", "churned"):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Organization access is {org.status}. Service is suspended.",
+        )
 
     # 1. Global Policies and Wallet Check
     byok_policy = await kodewaves_db_client.get_setting("byok_policy")

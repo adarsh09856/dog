@@ -109,6 +109,12 @@ class OrganizationModel(Base):
     id = Column(Integer, primary_key=True, index=True)
     provider_id = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    status = Column(
+        String,
+        nullable=False,
+        default="active",
+        server_default=text("'active'"),
+    )
 
     # Deprecated: MPS owns quota and credit ledger state.
     quota_type = Column(

@@ -97,11 +97,14 @@ async def report_workflow_run_platform_usage(workflow_run) -> None:
         return
 
     # Invariant (Part 8): 100% Local sovereign calls are free
+    usage_info = getattr(workflow_run, "usage_info", None) or {}
+    res_info = usage_info.get("resolution_info") or init_ctx.get("resolution_info") or gath_ctx.get("resolution_info") or {}
     if (
         getattr(workflow_run, "mode", None) == "local"
         or init_ctx.get("is_local")
         or gath_ctx.get("is_local")
         or init_ctx.get("source") == "local"
+        or res_info.get("overall_source") == "local"
     ):
         logger.info(
             f"[KodewavesBilling] Run {workflow_run.id} is a sovereign local call — 0 minutes charged"
