@@ -34,6 +34,8 @@ class PlatformSettingsResponse(BaseModel):
     stripe_publishable_key: Optional[str] = None
     stripe_secret_key: Optional[str] = None
     s2s_multiplier: Optional[float] = 1.0
+    default_org_concurrency_limit: Optional[int] = 10
+    max_concurrent_calls: Optional[int] = 50
 
 
 class TestEmailRequest(BaseModel):
@@ -69,6 +71,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
         smtp = settings_map.get("smtp") or {}
         payments = settings_map.get("payments") or {}
         pricing = settings_map.get("pricing") or {}
+        concurrency = settings_map.get("concurrency") or {}
 
         def _mask_secret(val: Optional[str]) -> Optional[str]:
             if not val:
@@ -100,6 +103,8 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
             stripe_publishable_key=payments.get("stripe_publishable_key"),
             stripe_secret_key=_mask_secret(payments.get("stripe_secret_key")),
             s2s_multiplier=float(pricing.get("s2s_multiplier", 1.0) or 1.0),
+            default_org_concurrency_limit=int(concurrency.get("default_org_concurrency_limit", 10)),
+            max_concurrent_calls=int(concurrency.get("max_concurrent_calls", 50)),
         )
 
 
@@ -180,6 +185,20 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
                 mult = 1.0
             pricing = {"s2s_multiplier": mult}
             await kodewaves_db_client.set_setting(key="pricing", value=pricing, category="pricing")
+
+        # 8. Concurrency Limits
+        if "default_org_concurrency_limit" in payload or "max_concurrent_calls" in payload or "local_ai_max_concurrency" in payload:
+            existing_conc = await kodewaves_db_client.get_setting("concurrency") or {}
+            conc = {
+                "default_org_concurrency_limit": int(payload.get("default_org_concurrency_limit", existing_conc.get("default_org_concurrency_limit", 10))),
+                "max_concurrent_calls": int(payload.get("max_concurrent_calls", existing_conc.get("max_concurrent_calls", 50))),
+            }
+            if "local_ai_max_concurrency" in payload:
+                conc["local_ai_max_concurrency"] = int(payload["local_ai_max_concurrency"])
+                existing_local = await kodewaves_db_client.get_setting("local_ai") or {}
+                existing_local["local_ai_max_concurrency"] = int(payload["local_ai_max_concurrency"])
+                await kodewaves_db_client.set_setting(key="local_ai", value=existing_local, category="local_ai")
+            await kodewaves_db_client.set_setting(key="concurrency", value=conc, category="concurrency")
 
         try:
             await kodewaves_db_client.record_audit_log(

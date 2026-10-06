@@ -70,6 +70,15 @@ class CallConcurrencyService:
             logger.warning(
                 f"Error getting concurrent limit for org {organization_id}: {e}"
             )
+
+        try:
+            from api.db.kodewaves_client import kodewaves_db_client
+            conc_setting = await kodewaves_db_client.get_setting("concurrency")
+            if conc_setting and conc_setting.get("default_org_concurrency_limit"):
+                return int(conc_setting["default_org_concurrency_limit"])
+        except Exception:
+            pass
+
         return self.default_concurrent_limit
 
     async def get_fleet_active_calls(self) -> int:
@@ -107,6 +116,41 @@ class CallConcurrencyService:
         concurrency without measuring — or being starved by — unrelated calls
         in the same org.
         """
+        # Enforce fleet-wide platform limit
+        try:
+            from api.db.kodewaves_client import kodewaves_db_client
+            conc_setting = await kodewaves_db_client.get_setting("concurrency")
+            fleet_max = int(conc_setting.get("max_concurrent_calls", 50)) if conc_setting else 50
+        except Exception:
+            fleet_max = 50
+
+        try:
+            fleet_count = await self.get_fleet_active_calls()
+            if fleet_count >= fleet_max:
+                logger.warning(
+                    f"Platform fleet-wide concurrent call limit reached: active={fleet_count}/{fleet_max}"
+                )
+                raise CallConcurrencyLimitError(
+                    organization_id=organization_id,
+                    source=source,
+                    wait_time=0.0,
+                    max_concurrent=fleet_max,
+                )
+        except CallConcurrencyLimitError:
+            raise
+        except Exception as e:
+            logger.debug(f"Fleet active count check skipped: {e}")
+
+        # Enforce local AI concurrency limit if local source
+        if source == "local" and scope_key is None:
+            scope_key = "local_engine"
+            try:
+                from api.db.kodewaves_client import kodewaves_db_client
+                local_setting = await kodewaves_db_client.get_setting("local_ai") or {}
+                scope_max_concurrent = int(local_setting.get("local_ai_max_concurrency", 2))
+            except Exception:
+                scope_max_concurrent = 2
+
         max_concurrent = await self.get_org_concurrent_limit(organization_id)
         if scope_max_concurrent is not None:
             scope_max_concurrent = int(scope_max_concurrent)

@@ -21,6 +21,16 @@ export GOMP_SPINCOUNT=0
 export KMP_AFFINITY=disabled
 
 ARQ_WORKERS=${ARQ_WORKERS:-1}
+if [[ -z "$FASTAPI_WORKERS" || "$FASTAPI_WORKERS" == "auto" || "$FASTAPI_WORKERS" == "1" ]] 2>/dev/null; then
+  CPU_CORES=$(nproc 2>/dev/null || echo 1)
+  if [ "$CPU_CORES" -gt 4 ]; then
+    FASTAPI_WORKERS=4
+  elif [ "$CPU_CORES" -gt 1 ]; then
+    FASTAPI_WORKERS=$CPU_CORES
+  else
+    FASTAPI_WORKERS=1
+  fi
+fi
 FASTAPI_WORKERS=${FASTAPI_WORKERS:-1}
 UVICORN_BASE_PORT=${UVICORN_BASE_PORT:-8000}
 

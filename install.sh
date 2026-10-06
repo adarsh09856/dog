@@ -217,6 +217,8 @@ prompt_configuration() {
         FERNET_KEY=$(generate_fernet_key)
         TURN_SECRET=$(generate_secret)
         DEV_SECRET=$(generate_secret)
+        CPU_CORES=$(nproc 2>/dev/null || echo 1)
+        FASTAPI_WORKERS=$(( CPU_CORES > 4 ? 4 : (CPU_CORES > 1 ? CPU_CORES : 1) ))
 
         cat > .env << ENVFILE
 # Kodewaves Production Environment Configuration
@@ -265,8 +267,8 @@ MINIO_ROOT_PASSWORD=$MINIO_PASS
 ENABLE_COTURN=true
 TURN_SECRET=$TURN_SECRET
 
-# Process Workers & Lean Resource Allocation
-FASTAPI_WORKERS=1
+# Process Workers & Lean Resource Allocation (Scaled from CPU)
+FASTAPI_WORKERS=$FASTAPI_WORKERS
 ENABLE_ARI_MANAGER=false
 ENABLE_CAMPAIGN_ORCHESTRATOR=false
 ENABLE_SIGNUP=true
