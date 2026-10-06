@@ -85,7 +85,7 @@ start() {
 # can be turned off (e.g. for an API/worker-only replica) by setting the flag to
 # "false" in the container env / docker-compose .env.
 ENABLE_ARI_MANAGER=${ENABLE_ARI_MANAGER:-false}
-ENABLE_CAMPAIGN_ORCHESTRATOR=${ENABLE_CAMPAIGN_ORCHESTRATOR:-false}
+ENABLE_CAMPAIGN_ORCHESTRATOR=${ENABLE_CAMPAIGN_ORCHESTRATOR:-true}
 
 if [[ "$ENABLE_ARI_MANAGER" == "true" ]]; then
   start ari_manager           python -m api.services.telephony.ari_manager

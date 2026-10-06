@@ -1,7 +1,9 @@
 import os
 import shutil
+import time
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
+import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
@@ -407,3 +409,148 @@ async def _terminate_call(run_id: int, reason: Optional[str] = None) -> Dict[str
             "run_id": run_id,
             "status": "terminated",
         }
+
+
+class ProcessHealthItem(BaseModel):
+    name: str
+    status: str  # "healthy", "degraded", "offline", "disabled"
+    latency_ms: Optional[float] = None
+    details: Optional[Dict[str, Any]] = None
+
+
+class ProcessHealthResponse(BaseModel):
+    status: str  # "healthy", "degraded", "offline"
+    timestamp: str
+    services: Dict[str, ProcessHealthItem]
+
+
+@router.get("/process-health", response_model=ProcessHealthResponse)
+async def get_process_health(_user=Depends(get_superuser)):
+    """Comprehensive live health check for all core sovereign processes and engine containers."""
+    services: Dict[str, ProcessHealthItem] = {}
+    overall_status = "healthy"
+
+    # 1. PostgreSQL Database
+    t0 = time.monotonic()
+    try:
+        async with kodewaves_db_client.get_session() as session:
+            await session.execute(select(1))
+        lat = round((time.monotonic() - t0) * 1000, 1)
+        services["database"] = ProcessHealthItem(name="PostgreSQL", status="healthy", latency_ms=lat)
+    except Exception as e:
+        services["database"] = ProcessHealthItem(name="PostgreSQL", status="offline", details={"error": str(e)})
+        overall_status = "degraded"
+
+    # 2. Redis Cache & Broker
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+    t0 = time.monotonic()
+    try:
+        import redis.asyncio as aioredis
+        r = await aioredis.from_url(redis_url, decode_responses=True)
+        pong = await r.ping()
+        lat = round((time.monotonic() - t0) * 1000, 1)
+        services["redis"] = ProcessHealthItem(name="Redis", status="healthy" if pong else "degraded", latency_ms=lat)
+
+        # 3. Campaign Orchestrator Heartbeat
+        orch_enabled = os.environ.get("ENABLE_CAMPAIGN_ORCHESTRATOR", "true").lower() in ("true", "1")
+        if not orch_enabled:
+            services["campaign_orchestrator"] = ProcessHealthItem(
+                name="Campaign Orchestrator", status="disabled", details={"enabled": False}
+            )
+        else:
+            hb = await r.get("campaign:orchestrator:heartbeat")
+            if hb:
+                services["campaign_orchestrator"] = ProcessHealthItem(
+                    name="Campaign Orchestrator", status="healthy", details={"last_heartbeat": hb}
+                )
+            else:
+                services["campaign_orchestrator"] = ProcessHealthItem(
+                    name="Campaign Orchestrator", status="offline", details={"heartbeat": "missing"}
+                )
+                if overall_status == "healthy":
+                    overall_status = "degraded"
+
+        await r.aclose()
+    except Exception as e:
+        services["redis"] = ProcessHealthItem(name="Redis", status="offline", details={"error": str(e)})
+        services["campaign_orchestrator"] = ProcessHealthItem(name="Campaign Orchestrator", status="offline", details={"error": "redis unreachable"})
+        overall_status = "degraded"
+
+    # 4. Storage (MinIO)
+    minio_host = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+    try:
+        t0 = time.monotonic()
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+            async with session.get(f"http://{minio_host}/minio/health/live") as resp:
+                lat = round((time.monotonic() - t0) * 1000, 1)
+                minio_ok = resp.status in (200, 403, 404)  # live probe responding
+                services["storage"] = ProcessHealthItem(
+                    name="MinIO Storage", status="healthy" if minio_ok else "degraded", latency_ms=lat
+                )
+    except Exception as e:
+        services["storage"] = ProcessHealthItem(name="MinIO Storage", status="degraded", details={"error": str(e)})
+
+    # 5. Local CPU AI Engines
+    local_settings = await kodewaves_db_client.get_setting("local_ai") or {}
+    local_ai_on = local_settings.get("enable_local_ai_engine", True)
+
+    if local_ai_on:
+        # Ollama
+        ollama_url = local_settings.get("ollama_endpoint") or os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
+        try:
+            t0 = time.monotonic()
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+                async with session.get(f"{ollama_url.rstrip('/')}/api/tags") as resp:
+                    lat = round((time.monotonic() - t0) * 1000, 1)
+                    if resp.status == 200:
+                        data = await resp.json()
+                        models = [m.get("name") for m in data.get("models", [])]
+                        services["ollama"] = ProcessHealthItem(
+                            name="Ollama LLM", status="healthy", latency_ms=lat, details={"models": models}
+                        )
+                    else:
+                        services["ollama"] = ProcessHealthItem(name="Ollama LLM", status="offline")
+        except Exception as e:
+            services["ollama"] = ProcessHealthItem(name="Ollama LLM", status="offline", details={"error": str(e)})
+
+        # Piper TTS
+        piper_url = local_settings.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
+        try:
+            t0 = time.monotonic()
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+                async with session.get(f"{piper_url.rstrip('/')}/voices") as resp:
+                    lat = round((time.monotonic() - t0) * 1000, 1)
+                    if resp.status == 200:
+                        services["piper"] = ProcessHealthItem(name="Piper TTS", status="healthy", latency_ms=lat)
+                    else:
+                        services["piper"] = ProcessHealthItem(name="Piper TTS", status="offline")
+        except Exception as e:
+            services["piper"] = ProcessHealthItem(name="Piper TTS", status="offline", details={"error": str(e)})
+
+        # Whisper STT
+        whisper_url = local_settings.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+        try:
+            t0 = time.monotonic()
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+                probe_url = whisper_url.rstrip("/") if whisper_url.endswith("/models") else f"{whisper_url.rstrip('/')}/models"
+                async with session.get(probe_url) as resp:
+                    lat = round((time.monotonic() - t0) * 1000, 1)
+                    if resp.status == 200:
+                        services["whisper"] = ProcessHealthItem(name="Faster-Whisper STT", status="healthy", latency_ms=lat)
+                    else:
+                        services["whisper"] = ProcessHealthItem(name="Faster-Whisper STT", status="offline")
+        except Exception as e:
+            services["whisper"] = ProcessHealthItem(name="Faster-Whisper STT", status="offline", details={"error": str(e)})
+    else:
+        services["local_ai"] = ProcessHealthItem(name="Local AI Engine", status="disabled")
+
+    # API uvicorn process itself
+    services["api_worker"] = ProcessHealthItem(
+        name="FastAPI Worker", status="healthy", details={"pid": os.getpid()}
+    )
+
+    return ProcessHealthResponse(
+        status=overall_status,
+        timestamp=datetime.now(UTC).isoformat(),
+        services=services,
+    )

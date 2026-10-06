@@ -66,8 +66,11 @@ class CampaignOrchestrator:
             # Task 2: Periodically check for stale campaigns
             completion_task = asyncio.create_task(self._monitor_completion())
 
-            # Wait for both tasks
-            await asyncio.gather(event_task, completion_task)
+            # Task 3: Heartbeat reporter for process health monitoring
+            heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+            # Wait for tasks
+            await asyncio.gather(event_task, completion_task, heartbeat_task)
 
         except asyncio.CancelledError:
             logger.info("Campaign Orchestrator cancelled")
@@ -77,6 +80,15 @@ class CampaignOrchestrator:
             raise
         finally:
             await self.shutdown()
+
+    async def _heartbeat_loop(self):
+        """Publish orchestrator heartbeat key to Redis every 5 seconds."""
+        while self._running:
+            try:
+                await self.redis.set("campaign:orchestrator:heartbeat", datetime.now(UTC).isoformat(), ex=15)
+            except Exception as e:
+                logger.debug(f"[CampaignOrchestrator] Heartbeat write error: {e}")
+            await asyncio.sleep(5)
 
     async def _listen_for_events(self):
         """Listen for campaign events and react immediately."""

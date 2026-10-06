@@ -315,7 +315,7 @@ TURN_SECRET=$TURN_SECRET
 # Process Workers & Lean Resource Allocation (Scaled from CPU)
 FASTAPI_WORKERS=$FASTAPI_WORKERS
 ENABLE_ARI_MANAGER=false
-ENABLE_CAMPAIGN_ORCHESTRATOR=false
+ENABLE_CAMPAIGN_ORCHESTRATOR=true
 ENABLE_SIGNUP=true
 
 # Local CPU AI Engine (Ollama LLM + Piper TTS + Whisper STT — Admin Opt-In)

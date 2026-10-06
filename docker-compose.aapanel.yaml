@@ -131,7 +131,7 @@ services:
       # Process Workers & Lean Resource Allocation
       FASTAPI_WORKERS: "${FASTAPI_WORKERS:-1}"
       ENABLE_ARI_MANAGER: "${ENABLE_ARI_MANAGER:-false}"
-      ENABLE_CAMPAIGN_ORCHESTRATOR: "${ENABLE_CAMPAIGN_ORCHESTRATOR:-false}"
+      ENABLE_CAMPAIGN_ORCHESTRATOR: "${ENABLE_CAMPAIGN_ORCHESTRATOR:-true}"
 
       # OpenMP, PyTorch, & BLAS CPU Thread Throttling (Prevents idle CPU pegging)
       OMP_NUM_THREADS: "1"
@@ -150,9 +150,10 @@ services:
       TURN_HOST: "${PUBLIC_HOST:-your-domain.com}"
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
 
-      # Local CPU AI Engine (Ollama + Piper TTS)
+      # Local CPU AI Engine (Ollama + Piper TTS + Faster-Whisper STT)
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
       PIPER_ENDPOINT: "${PIPER_ENDPOINT:-http://piper:5000}"
+      WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
 
       # DevOps / Monitoring Secret
