@@ -547,7 +547,10 @@ async def main():
         shutdown_event.set()
 
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
+        try:
+            loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
+        except (NotImplementedError, AttributeError):
+            pass
 
     # Run orchestrator with shutdown monitoring
     orchestrator_task = asyncio.create_task(orchestrator.run())
