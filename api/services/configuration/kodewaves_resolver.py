@@ -93,6 +93,8 @@ def _build_master_stt(prov: str, model: str, api_key: str, language: Optional[st
         return GoogleGeminiSTTConfiguration(api_key=api_key, model=model)
     elif prov_lower == "sarvam":
         return SarvamSTTConfiguration(api_key=api_key, model=model)
+    elif prov_lower == "groq":
+        return OpenAISTTConfiguration(api_key=api_key, model=model or "whisper-large-v3", base_url="https://api.groq.com/openai/v1")
     elif prov_lower == "openai":
         return OpenAISTTConfiguration(api_key=api_key, model=model)
     return DeepgramSTTConfiguration(api_key=api_key, model=model, language=norm_lang)
@@ -143,6 +145,10 @@ def _detect_provider_from_stt_model(model: Optional[str]) -> Optional[str]:
     if not model or model == "default":
         return None
     ml = model.lower()
+    if ml.startswith("groq/") or ml in ("whisper-large-v3", "whisper-large-v3-turbo") or "groq" in ml:
+        return "groq"
+    if ml in ("faster-whisper", "whisper-local", "systran/faster-whisper-tiny", "systran/faster-whisper-base") or "local" in ml:
+        return "whisper"
     if ml.startswith("nova") or "deepgram" in ml:
         return "deepgram"
     if "whisper" in ml:
@@ -220,6 +226,7 @@ async def _resolve_master_stt(effective: EffectiveAIModelConfiguration) -> Optio
 
     providers_priority = [
         ("deepgram", "nova-3"),
+        ("groq", "whisper-large-v3"),
         ("google", "gemini-3.5-flash"),
         ("navana", "hi-banking-v2-8khz"),
         ("sarvam", "saarika:v2.5"),

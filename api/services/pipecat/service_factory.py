@@ -786,6 +786,8 @@ def create_tts_service(
             silence_time_s=1.0,
         )
     elif user_config.tts.provider == ServiceProviders.OPENAI.value:
+        if not user_config.tts.api_key:
+            raise ValueError("OpenAI API key is missing. Please configure credentials in Admin Master Keys or BYOK.")
         kwargs = {}
         base_url = getattr(user_config.tts, "base_url", None)
         if base_url:
@@ -812,18 +814,19 @@ def create_tts_service(
         if not credentials:
             if not api_key:
                 api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-            if api_key:
-                from api.services.pipecat.gemini_tts import GeminiTTSService
-                tts_voice = voice if voice in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
-                return GeminiTTSService(
-                    api_key=api_key,
-                    model=getattr(user_config.tts, "model", None) or "gemini-3.1-flash-tts-preview",
-                    voice=tts_voice,
-                    sample_rate=audio_config.transport_out_sample_rate,
-                    text_filters=[xml_function_tag_filter],
-                    skip_aggregator_types=["recording_router", "recording"],
-                    silence_time_s=1.0,
-                )
+            if not api_key:
+                raise ValueError("Google Gemini API key is missing. Please configure credentials in Admin Master Keys or BYOK.")
+            from api.services.pipecat.gemini_tts import GeminiTTSService
+            tts_voice = voice if voice in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
+            return GeminiTTSService(
+                api_key=api_key,
+                model=getattr(user_config.tts, "model", None) or "gemini-3.1-flash-tts-preview",
+                voice=tts_voice,
+                sample_rate=audio_config.transport_out_sample_rate,
+                text_filters=[xml_function_tag_filter],
+                skip_aggregator_types=["recording_router", "recording"],
+                silence_time_s=1.0,
+            )
 
         settings_kwargs = {
             "model": model,
@@ -842,6 +845,8 @@ def create_tts_service(
             silence_time_s=1.0,
         )
     elif user_config.tts.provider == ServiceProviders.ELEVENLABS.value:
+        if not user_config.tts.api_key:
+            raise ValueError("ElevenLabs API key is missing. Please configure credentials in Admin Master Keys or BYOK.")
         # Backward compatible with older configuration "Name - voice_id"
         try:
             voice_id = user_config.tts.voice.split(" - ")[1]
@@ -868,6 +873,8 @@ def create_tts_service(
             silence_time_s=1.0,
         )
     elif user_config.tts.provider == ServiceProviders.CARTESIA.value:
+        if not user_config.tts.api_key:
+            raise ValueError("Cartesia API key is missing. Please configure credentials in Admin Master Keys or BYOK.")
         speed = getattr(user_config.tts, "speed", None)
         volume = getattr(user_config.tts, "volume", None)
         gen_config_kwargs = {}
@@ -993,20 +1000,25 @@ def create_tts_service(
                 silence_time_s=1.0,
             )
 
-        # Default fallback to Local CPU Piper ONNX
-        voice = getattr(user_config.tts, "voice", default_voice)
-        if not voice or voice in ("default", "alloy", "none", "af_heart") or voice.startswith(("dg_", "kw_")):
-            voice = default_voice
-        session = aiohttp.ClientSession()
-        return PiperHttpTTSService(
-            base_url=piper_url,
-            aiohttp_session=session,
-            settings=PiperHttpTTSSettings(
-                voice=voice,
-            ),
-            sample_rate=audio_config.transport_out_sample_rate,
-            text_filters=[xml_function_tag_filter],
-            skip_aggregator_types=["recording_router", "recording"],
+        # Only use Local CPU Piper ONNX if sovereign local CPU is specifically requested or enabled
+        if getattr(user_config.tts, "api_key", None) == "sovereign-local-cpu" or getattr(user_config.tts, "provider", None) in ("piper", "speaches"):
+            voice = getattr(user_config.tts, "voice", default_voice)
+            if not voice or voice in ("default", "alloy", "none", "af_heart") or voice.startswith(("dg_", "kw_")):
+                voice = default_voice
+            session = aiohttp.ClientSession()
+            return PiperHttpTTSService(
+                base_url=piper_url,
+                aiohttp_session=session,
+                settings=PiperHttpTTSSettings(
+                    voice=voice,
+                ),
+                sample_rate=audio_config.transport_out_sample_rate,
+                text_filters=[xml_function_tag_filter],
+                skip_aggregator_types=["recording_router", "recording"],
+            )
+
+        raise ValueError(
+            "No active TTS credentials configured for this agent. Please configure a TTS provider in Admin Master Keys or BYOK."
         )
     elif user_config.tts.provider == ServiceProviders.CAMB.value:
         from pipecat.services.camb.tts import CambTTSService
