@@ -374,7 +374,7 @@ services:
   # Ultra-Lightweight Self-Hosted CPU Local AI Engine (Optional / Admin Opt-In)
   # ==============================================================================
   ollama:
-    image: ollama/ollama:0.6.2
+    image: ollama/ollama:latest
     container_name: kodewaves_ollama
     restart: unless-stopped
     profiles: ["local"]
@@ -430,7 +430,7 @@ services:
 
   # Faster-Whisper Local STT Server (CTranslate2 CPU inference, OpenAI-compatible /v1/audio/transcriptions)
   whisper:
-    image: ghcr.io/speaches-ai/speaches:0.4.1-cpu
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
     container_name: kodewaves_whisper
     restart: unless-stopped
     profiles: ["local"]

@@ -37,8 +37,9 @@ echo -e "${BLUE}Using Docker Compose configuration: ${BOLD}${COMPOSE_FILE}${NC}"
 
 # 1. Pull latest code if git repo
 if [ -d ".git" ]; then
-    echo -e "${BLUE}[1/6] Pulling latest updates from Git...${NC}"
-    git pull origin main || echo -e "${YELLOW}⚠️ Git pull failed or working offline, proceeding with local changes.${NC}"
+    CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || echo "main")"
+    echo -e "${BLUE}[1/6] Pulling latest updates from Git (${CURRENT_BRANCH})...${NC}"
+    git pull origin "${CURRENT_BRANCH}" || echo -e "${YELLOW}⚠️ Git pull failed or working offline, proceeding with local changes.${NC}"
 else
     echo -e "${BLUE}[1/6] Deploying from local workspace directory...${NC}"
 fi
@@ -123,7 +124,7 @@ echo -e "${GREEN}${BOLD}✓ Kodewaves Sovereign Platform successfully deployed!$
 echo -e "${GREEN}  • Web UI:      http://127.0.0.1:${UI_PORT}${NC}"
 echo -e "${GREEN}  • Backend API: http://127.0.0.1:${API_PORT}${NC}"
 echo -e "${GREEN}  • Engine:      Dual-Mode Sovereign (General Cascade + S2S Realtime)${NC}"
-echo -e "${GREEN}  • S2S Realtime: Google Gemini 2.5 Live & OpenAI Realtime (Sub-300ms)${NC}"
+echo -e "${GREEN}  • S2S Realtime: Google Gemini Live & OpenAI Realtime (Sub-300ms)${NC}"
 echo -e "${GREEN}  • Local CPU:   Ollama LLM (Qwen 2.5) + Piper ONNX TTS (Hindi ~40ms)${NC}"
 echo -e "${GREEN}  • Cloud Stack: Deepgram, Gemini, OpenAI, Sarvam, Cartesia, ElevenLabs${NC}"
 echo ""
