@@ -301,5 +301,6 @@ export function WorkflowTable({
                 </Table>
             </CardContent>
         </Card>
-    );
+    </div>
+);
 }
