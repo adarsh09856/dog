@@ -12,6 +12,15 @@ from loguru import logger
 
 router = APIRouter(prefix="/master-keys", tags=["admin-master-keys"])
 
+ALIAS_MAP = {
+    "gemini": "google",
+    "google": "gemini",
+    "azure": "azure_speech",
+    "azure_speech": "azure",
+    "navana": "bodhi",
+    "bodhi": "navana",
+}
+
 
 class MasterCredentialRequest(BaseModel):
     provider: str
@@ -197,15 +206,7 @@ async def test_master_key_connection_path(provider: str, _user=Depends(get_super
 
     status_str = "healthy" if success else "invalid"
     prov_clean = provider.lower().strip()
-    alias_map = {
-        "gemini": "google",
-        "google": "gemini",
-        "azure": "azure_speech",
-        "azure_speech": "azure",
-        "navana": "bodhi",
-        "bodhi": "navana",
-    }
-    alias = alias_map.get(prov_clean)
+    alias = ALIAS_MAP.get(prov_clean)
     try:
         await kodewaves_db_client.update_master_credential_health(
             provider=prov_clean,
@@ -226,15 +227,7 @@ async def test_master_key_connection_path(provider: str, _user=Depends(get_super
 async def delete_master_key(provider: str, _user=Depends(get_superuser)):
     """Disable or remove master credential for a provider and its aliases."""
     prov_clean = provider.lower().strip()
-    alias_map = {
-        "gemini": "google",
-        "google": "gemini",
-        "azure": "azure_speech",
-        "azure_speech": "azure",
-        "navana": "bodhi",
-        "bodhi": "navana",
-    }
-    alias = alias_map.get(prov_clean)
+    alias = ALIAS_MAP.get(prov_clean)
     targets = [prov_clean] + ([alias] if alias else [])
 
     async with kodewaves_db_client.get_session() as session:
