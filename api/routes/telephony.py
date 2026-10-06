@@ -927,10 +927,18 @@ async def handle_inbound_run(request: Request):
         provider_instance = await get_telephony_provider_by_id(
             telephony_configuration_id, config.organization_id
         )
+        from urllib.parse import urlparse
         backend_endpoint, _ = await get_backend_endpoints(request=request)
-        public_url = f"{backend_endpoint}{request.url.path}"
-        if request.url.query:
-            public_url = f"{public_url}?{request.url.query}"
+        if hasattr(request.url, "path"):
+            req_path = request.url.path
+            req_query = getattr(request.url, "query", "")
+        else:
+            parsed_req = urlparse(str(request.url))
+            req_path = parsed_req.path
+            req_query = parsed_req.query
+        public_url = f"{backend_endpoint}{req_path}"
+        if req_query:
+            public_url = f"{public_url}?{req_query}"
 
         signature_valid = await provider_instance.verify_inbound_signature(
             public_url, webhook_data, headers, raw_body

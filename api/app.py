@@ -56,6 +56,14 @@ mcp_app = mcp.http_app(path="/", stateless_http=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with mcp_app.lifespan(app):
+        # Refuse to start if telephony signature verification is bypassed in production
+        import os
+        from api.constants import ENVIRONMENT
+        if os.getenv("SKIP_TELEPHONY_SIGNATURE_VERIFICATION", "false").lower() in ("true", "1") and ENVIRONMENT in ("production", "prod"):
+            raise RuntimeError(
+                "CRITICAL SECURITY VIOLATION: SKIP_TELEPHONY_SIGNATURE_VERIFICATION cannot be enabled in production environments."
+            )
+
         await get_arq_redis()
 
         # Purge any legacy Kodewaves/Dograh Cloudonix SIP auto-created configurations

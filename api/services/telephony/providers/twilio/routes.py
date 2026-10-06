@@ -36,11 +36,19 @@ async def handle_twiml_webhook(
     workflow_run = await db_client.get_workflow_run_by_id(workflow_run_id)
     provider = await get_telephony_provider_for_run(workflow_run, organization_id)
     callback_data = dict(await request.form())
+    from urllib.parse import urlparse
     from api.utils.common import get_backend_endpoints
     backend_endpoint, _ = await get_backend_endpoints(request=request)
-    public_url = f"{backend_endpoint}{request.url.path}"
-    if request.url.query:
-        public_url = f"{public_url}?{request.url.query}"
+    if hasattr(request.url, "path"):
+        req_path = request.url.path
+        req_query = getattr(request.url, "query", "")
+    else:
+        parsed_req = urlparse(str(request.url))
+        req_path = parsed_req.path
+        req_query = parsed_req.query
+    public_url = f"{backend_endpoint}{req_path}"
+    if req_query:
+        public_url = f"{public_url}?{req_query}"
 
     is_valid = await provider.verify_inbound_signature(
         public_url,
@@ -99,11 +107,19 @@ async def handle_twilio_status_callback(
         workflow_run, workflow.organization_id
     )
 
+    from urllib.parse import urlparse
     from api.utils.common import get_backend_endpoints
     backend_endpoint, _ = await get_backend_endpoints(request=request)
-    public_url = f"{backend_endpoint}{request.url.path}"
-    if request.url.query:
-        public_url = f"{public_url}?{request.url.query}"
+    if hasattr(request.url, "path"):
+        req_path = request.url.path
+        req_query = getattr(request.url, "query", "")
+    else:
+        parsed_req = urlparse(str(request.url))
+        req_path = parsed_req.path
+        req_query = parsed_req.query
+    public_url = f"{backend_endpoint}{req_path}"
+    if req_query:
+        public_url = f"{public_url}?{req_query}"
 
     is_valid = await provider.verify_inbound_signature(
         public_url,

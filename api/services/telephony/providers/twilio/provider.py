@@ -158,6 +158,10 @@ class TwilioProvider(TelephonyProvider):
         import os
         import re
         if os.getenv("SKIP_TELEPHONY_SIGNATURE_VERIFICATION", "false").lower() in ("true", "1"):
+            from api.constants import ENVIRONMENT
+            if ENVIRONMENT in ("production", "prod"):
+                logger.error("[Twilio] Refusing to bypass telephony signature verification in production environment")
+                return False
             logger.warning("[Twilio] Signature verification bypassed by SKIP_TELEPHONY_SIGNATURE_VERIFICATION")
             return True
 
