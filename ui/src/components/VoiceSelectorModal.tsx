@@ -4,7 +4,11 @@ import { Check, ChevronDown, Loader2, Pencil, Play, Square } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { getVoicesApiV1UserConfigurationsVoicesProviderGet } from "@/client/sdk.gen";
-import { VoiceInfo } from "@/client/types.gen";
+import { VoiceInfo as ApiVoiceInfo } from "@/client/types.gen";
+import { client } from "@/client/client.gen";
+import { detailFromError } from "@/lib/apiError";
+
+type VoiceInfo = ApiVoiceInfo & { provider?: string };
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -328,44 +332,22 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         const previewUrl = voice.preview_url || `/api/v1/user/configurations/voices/${targetProv}/${voice.voice_id}/preview`;
 
         try {
-            let token: string | null = null;
-            if (typeof window !== "undefined") {
-                token = localStorage.getItem("kodewaves_auth_token") || localStorage.getItem("token");
-                if (!token && typeof document !== "undefined") {
-                    const match = document.cookie.match(/(?:^|;\s*)kodewaves_auth_token=([^;]+)/) ||
-                                  document.cookie.match(/(?:^|;\s*)dograh_auth_token=([^;]+)/) ||
-                                  document.cookie.match(/(?:^|;\s*)oss_token=([^;]+)/);
-                    if (match) {
-                        token = decodeURIComponent(match[1]);
-                    }
+            let blob: Blob;
+            if (previewUrl.startsWith('/api/')) {
+                const result = await client.get<{ 200: Blob }>({
+                    url: previewUrl,
+                    parseAs: 'blob',
+                });
+                if (result.error || !result.data) {
+                    throw new Error(detailFromError(result.error, 'Voice preview unavailable'));
                 }
+                blob = result.data;
+            } else {
+                // Public provider samples must never receive the user's platform token.
+                const response = await fetch(previewUrl, { credentials: 'omit' });
+                if (!response.ok) throw new Error(`Voice preview unavailable (HTTP ${response.status})`);
+                blob = await response.blob();
             }
-            
-            const headers: Record<string, string> = {};
-            if (token) {
-                headers["Authorization"] = `Bearer ${token}`;
-            }
-
-            let finalUrl = previewUrl;
-            if (token && !finalUrl.includes("token=")) {
-                const sep = finalUrl.includes("?") ? "&" : "?";
-                finalUrl = `${finalUrl}${sep}token=${encodeURIComponent(token)}`;
-            }
-
-            const response = await fetch(finalUrl, { headers, credentials: "include" });
-            if (!response.ok) {
-                let detail = `Voice preview unavailable (HTTP ${response.status})`;
-                try {
-                    const errData = await response.json();
-                    if (errData?.detail) detail = errData.detail;
-                } catch {}
-                console.warn(`[VoiceSelector] Preview fetch failed: ${detail}`);
-                alert(detail);
-                clear();
-                return;
-            }
-
-            const blob = await response.blob();
             if (audioObjectUrlRef.current) {
                 URL.revokeObjectURL(audioObjectUrlRef.current);
             }
@@ -391,6 +373,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             await audio.play();
         } catch (err) {
             console.error("Audio preview playback failed:", err);
+            alert(err instanceof Error ? err.message : "Voice preview unavailable");
             clear();
         }
     };

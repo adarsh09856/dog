@@ -14,7 +14,6 @@ import {
   Flame,
   Globe,
   Layers,
-  LayoutFlow,
   Lock,
   Phone,
   Play,

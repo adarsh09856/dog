@@ -512,7 +512,7 @@ export default function MasterKeysAndModelsPage() {
                           {saved?.api_key_masked || (saved as any)?.has_credentials ? (
                             <span className="text-emerald-500 flex items-center gap-1 font-mono text-[11px]">
                               <CheckCircle2 className="h-3.5 w-3.5" />
-                              {saved.api_key_masked || "•••••••• (configured)"}
+                              {saved?.api_key_masked || "•••••••• (configured)"}
                             </span>
                           ) : (
                             <span className="text-amber-500 flex items-center gap-1 text-[11px]">

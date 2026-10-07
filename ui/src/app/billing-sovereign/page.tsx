@@ -19,6 +19,7 @@ import {
   Unlock,
   Zap,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -42,31 +43,29 @@ import {
 } from "@/lib/kodewavesApi";
 
 export default function SovereignBillingPage() {
+  const { user, loading: authLoading } = useAuth();
   const [wallet, setWallet] = useState<SovereignWallet | null>(null);
   const [ledger, setLedger] = useState<WalletLedgerItem[]>([]);
   const [plans, setPlans] = useState<SaaSPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [subscribingId, setSubscribingId] = useState<number | string | null>(null);
 
   const fetchData = async () => {
+    if (authLoading || !user) return;
+    setLoadError(null);
     setLoading(true);
     try {
       const [w, l, p] = await Promise.all([
-        sovereignBillingApi.getWallet().catch(() => ({
-          balance_minutes: 120.0,
-          total_credited_minutes: 200.0,
-          total_consumed_minutes: 80.0,
-          low_balance_threshold: 15.0,
-          plan_name: "Starter",
-          plan_minutes: 500,
-        })),
-        sovereignBillingApi.getLedger().catch(() => []),
-        sovereignBillingApi.getPlans().catch(() => []),
+        sovereignBillingApi.getWallet(),
+        sovereignBillingApi.getLedger(),
+        sovereignBillingApi.getPlans(),
       ]);
       setWallet(w);
       setLedger(l);
       setPlans(p);
     } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load billing details:", err);
     } finally {
       setLoading(false);
@@ -74,8 +73,9 @@ export default function SovereignBillingPage() {
   };
 
   useEffect(() => {
+    if (authLoading || !user) return;
     fetchData();
-  }, []);
+  }, [authLoading, user]);
 
   const handleSubscribe = async (plan: SaaSPlan) => {
     if (!confirm(`Subscribe to ${plan.name} for ₹${plan.monthly_price_inr.toLocaleString()} / month?`)) return;
@@ -93,6 +93,7 @@ export default function SovereignBillingPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+      {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

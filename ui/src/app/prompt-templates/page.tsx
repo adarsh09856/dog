@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -40,75 +41,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { PromptTemplate, promptTemplatesApi } from "@/lib/kodewavesApi";
 
-const DEFAULT_TEMPLATES: PromptTemplate[] = [
-  {
-    id: 1,
-    title: "Indian Real Estate Site Visit Scheduler",
-    category: "Real Estate",
-    description: "Qualifies high-intent property buyers in Mumbai/Bangalore/Delhi and books on-site weekend visits.",
-    system_prompt: `You are Priya, a polite and professional voice assistant for Lodha Realty. 
-Your goal is to qualify interested home buyers looking for 2 BHK or 3 BHK apartments. 
-1. Greet the customer warmly in Hindi or English (Hinglish).
-2. Ask about their preferred location and timeline to move in.
-3. Offer a private site visit this upcoming Saturday or Sunday at 11 AM or 3 PM.
-4. Keep all responses brief (under 2 sentences) for conversational voice pacing.`,
-    first_message: "Namaste! This is Priya from Lodha Realty. I noticed you were exploring our new towers in Bangalore. Are you looking for a 2 BHK or 3 BHK home?",
-    tags: ["Real Estate", "India", "Bilingual", "Lead Gen"],
-    is_featured: true,
-  },
-  {
-    id: 2,
-    title: "Banking EMI & Loan Pre-Approval Assistant",
-    category: "Banking & Finance",
-    description: "Informs customers about personal loan eligibility and collects KYC/income details over phone.",
-    system_prompt: `You are Rajesh from HDFC Customer Support.
-You are calling pre-approved customers regarding a special festive personal loan interest rate.
-1. Confirm if you are speaking with the intended customer.
-2. Share the pre-approved amount and interest rate.
-3. Answer any questions regarding monthly EMI payments and repayment tenure.
-4. Ask if they would like an executive to call back or send an application link via WhatsApp.`,
-    first_message: "Hello! Am I speaking with Rahul? This is Rajesh calling from HDFC Bank regarding your pre-approved festive loan.",
-    tags: ["Banking", "EMI", "Finance", "Outbound"],
-    is_featured: true,
-  },
-  {
-    id: 3,
-    title: "Healthcare Clinic Appointment Booking",
-    category: "Healthcare",
-    description: "Handles patient inquiries, identifies symptoms, and schedules doctor consultations.",
-    system_prompt: `You are Ananya, a medical receptionist at Apollo Clinics.
-Your role is to help patients book consultations with General Physicians or Specialists.
-1. Ask the patient how they are feeling today and what symptoms they have.
-2. Inquire if they prefer an in-clinic visit or a video consultation.
-3. Offer available appointment slots for today and tomorrow.
-4. Confirm their contact number for the booking confirmation SMS.`,
-    first_message: "Hello, thank you for calling Apollo Clinic. This is Ananya. How can I help you with your appointment today?",
-    tags: ["Healthcare", "Clinic", "Appointments"],
-    is_featured: true,
-  },
-  {
-    id: 4,
-    title: "E-Commerce Order Delivery Confirmation",
-    category: "Logistics",
-    description: "Verifies delivery address and cash-on-delivery (COD) order confirmation before dispatch.",
-    system_prompt: `You are an automated delivery verification agent for Delhivery.
-Your mission is to verify high-value Cash on Delivery orders.
-1. Confirm the customer's name and items ordered.
-2. State the total cash amount due upon delivery.
-3. Ask if they will be available at their address tomorrow between 10 AM and 6 PM.
-4. If unavailable, offer to reschedule delivery to a convenient date.`,
-    first_message: "Hi, this is Delhivery automated delivery verification calling for your recent order. Are you available for delivery tomorrow?",
-    tags: ["COD", "Logistics", "E-commerce"],
-    is_featured: false,
-  },
-];
-
 export default function PromptTemplatesPage() {
-  const [templates, setTemplates] = useState<PromptTemplate[]>(DEFAULT_TEMPLATES);
+  const { user, loading: authLoading } = useAuth();
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [category, setCategory] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<number | string | null>(null);
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -122,13 +62,14 @@ export default function PromptTemplatesPage() {
   const router = useRouter();
 
   const fetchTemplates = async () => {
+    if (authLoading || !user) return;
+    setLoadError(null);
     setLoading(true);
     try {
       const data = await promptTemplatesApi.getTemplates();
-      if (data && data.length > 0) {
-        setTemplates(data);
-      }
+      setTemplates(data);
     } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load prompt templates:", err);
     } finally {
       setLoading(false);
@@ -136,8 +77,9 @@ export default function PromptTemplatesPage() {
   };
 
   useEffect(() => {
+    if (authLoading || !user) return;
     fetchTemplates();
-  }, []);
+  }, [authLoading, user]);
 
   const handleCopyPrompt = (t: PromptTemplate) => {
     navigator.clipboard.writeText(t.system_prompt);
@@ -170,6 +112,7 @@ export default function PromptTemplatesPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+      {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

@@ -15,6 +15,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -50,8 +51,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { WebsiteWidget, widgetsApi } from "@/lib/kodewavesApi";
 
 export default function WidgetsPage() {
+  const { user, loading: authLoading } = useAuth();
   const [widgets, setWidgets] = useState<WebsiteWidget[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -64,11 +67,14 @@ export default function WidgetsPage() {
   const [copied, setCopied] = useState(false);
 
   const fetchWidgets = async () => {
+    if (authLoading || !user) return;
+    setLoadError(null);
     setLoading(true);
     try {
       const data = await widgetsApi.getWidgets();
       setWidgets(data);
     } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load widgets:", err);
     } finally {
       setLoading(false);
@@ -76,8 +82,9 @@ export default function WidgetsPage() {
   };
 
   useEffect(() => {
+    if (authLoading || !user) return;
     fetchWidgets();
-  }, []);
+  }, [authLoading, user]);
 
   const handleSaveWidget = async () => {
     if (!editingWidget || !editingWidget.name) {
@@ -134,6 +141,7 @@ export default function WidgetsPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+      {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

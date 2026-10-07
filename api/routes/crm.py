@@ -24,6 +24,7 @@ class ContactCreateRequest(BaseModel):
     stage_id: Optional[str] = None
     tags: List[str] = []
     custom_fields: Dict[str, Any] = {}
+    notes: Optional[str] = None
 
 
 class ContactItem(BaseModel):
@@ -36,6 +37,7 @@ class ContactItem(BaseModel):
     stage_id: Optional[str]
     tags: List[str]
     total_calls: int
+    notes: Optional[str] = None
     created_at: str
 
 
@@ -141,6 +143,7 @@ async def list_contacts(user: UserModel = Depends(get_user)):
                 stage_id=str(c.stage_id) if c.stage_id else None,
                 tags=c.tags or [],
                 total_calls=c.total_calls,
+                notes=(c.custom_fields or {}).get("notes"),
                 created_at=c.created_at.isoformat() if c.created_at else "",
             )
             for c in contacts
@@ -180,22 +183,13 @@ async def create_contact(req: ContactCreateRequest, user: UserModel = Depends(ge
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization required")
 
-    async with kodewaves_db_client.get_session() as session:
-        contact = ContactModel(
-            organization_id=org_id,
-            first_name=req.first_name,
-            last_name=req.last_name,
-            phone=req.phone,
-            email=req.email,
-            company=req.company,
-            stage_id=uuid.UUID(req.stage_id) if req.stage_id else None,
-            tags=req.tags,
-            custom_fields=req.custom_fields,
-        )
-        session.add(contact)
-        await session.commit()
-        await session.refresh(contact)
-        return {"id": str(contact.id), "phone": contact.phone, "message": "Contact created successfully"}
+    try:
+        contact = await kodewaves_db_client.save_contact(org_id, req.model_dump(exclude_unset=True))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid stage ID")
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {"id": str(contact.id), "phone": contact.phone, "message": "Contact created successfully"}
 
 
 @router.put("/contacts/{contact_id}", response_model=Dict[str, Any])
@@ -205,40 +199,13 @@ async def update_contact(contact_id: str, req: ContactCreateRequest, user: UserM
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization required")
 
-    async with kodewaves_db_client.get_session() as session:
-        try:
-            c_uuid = uuid.UUID(contact_id)
-            stmt = select(ContactModel).where(ContactModel.id == c_uuid, ContactModel.organization_id == org_id)
-        except ValueError:
-            stmt = select(ContactModel).where(ContactModel.phone == contact_id, ContactModel.organization_id == org_id)
-
-        result = await session.execute(stmt)
-        contact = result.scalar_one_or_none()
-        if not contact:
-            raise HTTPException(status_code=404, detail="Contact not found")
-
-        if req.first_name is not None:
-            contact.first_name = req.first_name
-        if req.last_name is not None:
-            contact.last_name = req.last_name
-        if req.phone:
-            contact.phone = req.phone
-        if req.email is not None:
-            contact.email = req.email
-        if req.company is not None:
-            contact.company = req.company
-        if req.stage_id:
-            try:
-                contact.stage_id = uuid.UUID(req.stage_id)
-            except ValueError:
-                pass
-        if req.tags:
-            contact.tags = req.tags
-        if req.custom_fields:
-            contact.custom_fields = req.custom_fields
-
-        await session.commit()
-        return {"id": str(contact.id), "message": "Contact updated successfully"}
+    try:
+        contact = await kodewaves_db_client.save_contact(org_id, req.model_dump(exclude_unset=True), contact_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid stage ID")
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {"id": str(contact.id), "message": "Contact updated successfully"}
 
 
 @router.delete("/contacts/{contact_id}", response_model=Dict[str, Any])
@@ -426,26 +393,18 @@ async def get_contact_timeline(contact_id: str, user: UserModel = Depends(get_us
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization required")
 
-    async with kodewaves_db_client.get_session() as session:
-        try:
-            c_uuid = uuid.UUID(contact_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid contact ID")
-
-        stmt = select(LeadActivityModel).where(LeadActivityModel.contact_id == c_uuid).order_by(desc(LeadActivityModel.created_at))
-        res = await session.execute(stmt)
-        activities = res.scalars().all()
-
-        return [
-            LeadTimelineItem(
-                id=str(a.id),
-                activity_type=a.activity_type,
-                summary=a.summary,
-                call_id=a.call_id,
-                created_at=a.created_at.isoformat() if a.created_at else "",
-            )
-            for a in activities
-        ]
+    try:
+        c_uuid = uuid.UUID(contact_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid contact ID")
+    try:
+        activities = await kodewaves_db_client.get_contact_timeline(org_id, c_uuid)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    return [LeadTimelineItem(
+        id=str(a.id), activity_type=a.activity_type, summary=a.summary,
+        call_id=a.call_id, created_at=a.created_at.isoformat() if a.created_at else "",
+    ) for a in activities]
 
 
 @router.post("/contacts/{contact_id}/notes", response_model=Dict[str, Any])

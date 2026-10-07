@@ -199,7 +199,7 @@ export default function CreateWorkflowPage() {
         if (catalogLoading || !catalog) return false;
         const total = (catalog.cloud_llm_models?.length ?? 0) +
             (catalog.local_llm_models?.length ?? 0) +
-            (catalog.s2s_models?.length ?? 0);
+            (catalog.cloud_s2s_models?.length ?? 0);
         return total === 0;
     }, [catalog, catalogLoading]);
 

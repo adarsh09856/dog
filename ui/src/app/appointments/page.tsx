@@ -14,6 +14,8 @@ import {
   Trash2,
   User,
 } from "lucide-react";
+import { appointmentInputTime, appointmentTimes } from "@/lib/appointmentTime";
+import { useAuth } from "@/lib/auth";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -47,18 +49,23 @@ import {
 import { Appointment, appointmentsApi } from "@/lib/kodewavesApi";
 
 export default function AppointmentsPage() {
+  const { user, loading: authLoading } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAppt, setEditingAppt] = useState<Partial<Appointment> | null>(null);
   const [saving, setSaving] = useState(false);
 
   const fetchAppointments = async () => {
+    if (authLoading || !user) return;
+    setLoadError(null);
     setLoading(true);
     try {
       const data = await appointmentsApi.getAppointments();
       setAppointments(data);
     } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load appointments:", err);
     } finally {
       setLoading(false);
@@ -66,8 +73,9 @@ export default function AppointmentsPage() {
   };
 
   useEffect(() => {
+    if (authLoading || !user) return;
     fetchAppointments();
-  }, []);
+  }, [authLoading, user]);
 
   const handleSaveAppointment = async () => {
     if (!editingAppt || !editingAppt.customer_name || !editingAppt.customer_phone || !editingAppt.start_time) {
@@ -76,10 +84,11 @@ export default function AppointmentsPage() {
     }
     setSaving(true);
     try {
+      const payload = { ...editingAppt, ...appointmentTimes(editingAppt.start_time, editingAppt.end_time) };
       if (editingAppt.id) {
-        await appointmentsApi.updateAppointment(editingAppt.id, editingAppt);
+        await appointmentsApi.updateAppointment(editingAppt.id, payload);
       } else {
-        await appointmentsApi.createAppointment(editingAppt);
+        await appointmentsApi.createAppointment(payload);
       }
       setModalOpen(false);
       setEditingAppt(null);
@@ -103,12 +112,13 @@ export default function AppointmentsPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+      {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Calendar Bookings & Appointments</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Voice agents automatically schedule customer callbacks, demos, and site visits into this calendar.
+            Manage customer callbacks, demos, and site visits in your workspace.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -123,8 +133,8 @@ export default function AppointmentsPage() {
                 customer_name: "",
                 customer_phone: "",
                 customer_email: "",
-                start_time: now.toISOString().slice(0, 16),
-                end_time: end.toISOString().slice(0, 16),
+                start_time: appointmentInputTime(now),
+                end_time: appointmentInputTime(end),
                 status: "confirmed",
                 notes: "",
               });
@@ -148,11 +158,11 @@ export default function AppointmentsPage() {
               Scheduled Bookings ({appointments.length})
             </CardTitle>
             <CardDescription>
-              Appointments automatically sync with Google Calendar when credentials are connected.
+              Review and manage bookings for your organization.
             </CardDescription>
           </div>
           <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20 gap-1.5">
-            <CheckCircle2 className="h-3 w-3" /> Voice AI Scheduling Active
+            <CheckCircle2 className="h-3 w-3" /> Workspace Bookings
           </Badge>
         </CardHeader>
         <CardContent className="p-0">
@@ -220,7 +230,7 @@ export default function AppointmentsPage() {
                             size="icon"
                             className="h-7 w-7"
                             onClick={() => {
-                              setEditingAppt(a);
+                              setEditingAppt({ ...a, start_time: appointmentInputTime(a.start_time), end_time: appointmentInputTime(a.end_time) });
                               setModalOpen(true);
                             }}
                           >

@@ -1,70 +1,35 @@
-import { resolveBrowserBackendUrl } from './apiClient';
+import { client } from '@/client/client.gen';
+import type { HttpMethod } from '@/client/core/types.gen';
+import { detailFromError } from './apiError';
 
-async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const isBrowser = typeof window !== 'undefined';
+/** Shared SDK transport keeps every panel on the current backend and auth session. */
+export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const apiPath = cleanEndpoint.startsWith('/api/v1') ? cleanEndpoint : `/api/v1${cleanEndpoint}`;
-
-  // In the browser, use relative path "" (same origin) so session cookies are forwarded seamlessly.
-  // On SSR/server, use the backend container/internal URL.
-  let baseUrl = '';
-  if (!isBrowser) {
-    baseUrl = process.env.BACKEND_URL || 'http://api:8000';
-  } else if (window.location.hostname === 'localhost' && window.location.port !== '8000') {
-    // Local development outside docker/nginx proxy
-    baseUrl = resolveBrowserBackendUrl();
+  const headers = new Headers(options.headers);
+  if (options.body != null && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
   }
-  const url = `${baseUrl}${apiPath}`;
-
-  // Read auth token from localStorage or cookies if in browser
-  let authHeader = '';
-  if (isBrowser) {
-    const lsToken = localStorage.getItem('kodewaves_auth_token') ||
-                    localStorage.getItem('token');
-    if (lsToken) {
-      authHeader = `Bearer ${lsToken}`;
-    } else if (typeof document !== 'undefined') {
-      const match = document.cookie.match(/(?:^|;\s*)kodewaves_auth_token=([^;]+)/) ||
-                    document.cookie.match(/(?:^|;\s*)dograh_auth_token=([^;]+)/) ||
-                    document.cookie.match(/(?:^|;\s*)oss_token=([^;]+)/);
-      if (match) {
-        authHeader = `Bearer ${decodeURIComponent(match[1])}`;
-      }
-    }
-  }
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(authHeader ? { Authorization: authHeader } : {}),
-    ...((options.headers as Record<string, string>) || {}),
-  };
-
-  const response = await fetch(url, {
+  const result = await client.request<{ 200: T }, unknown>({
     ...options,
+    next: undefined,
+    url: apiPath,
+    method: (options.method || 'GET').toUpperCase() as Uppercase<HttpMethod>,
     headers,
     credentials: 'include',
+    // Existing callers already serialize their JSON payloads.
+    bodySerializer: undefined,
+    parseAs: 'json',
+    responseStyle: 'fields',
+    throwOnError: false,
   });
-
-  if (!response.ok) {
-    let errorDetail = response.statusText;
-    try {
-      const errJson = await response.json();
-      if (Array.isArray(errJson.detail)) {
-        errorDetail = errJson.detail
-          .map((d: any) => (typeof d === "string" ? d : d.msg || `${d.loc?.join(".")}: ${d.msg}` || JSON.stringify(d)))
-          .join(", ");
-      } else if (typeof errJson.detail === "object" && errJson.detail !== null) {
-        errorDetail = JSON.stringify(errJson.detail);
-      } else {
-        errorDetail = errJson.detail || errJson.message || JSON.stringify(errJson);
-      }
-    } catch {
-      // ignore
-    }
-    throw new Error(errorDetail || `API request failed: ${response.status}`);
+  if (result.error !== undefined || !result.response?.ok) {
+    const fallback = result.error instanceof Error
+      ? result.error.message
+      : result.response?.statusText || 'Unable to reach the server';
+    throw new Error(detailFromError(result.error, fallback));
   }
-
-  return response.json();
+  return result.data as T;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +44,7 @@ export interface MasterCredential {
   api_key_masked?: string;
   api_key?: string;
   api_secret?: string;
+  credentials?: Record<string, string | undefined>;
   extra_config?: Record<string, any>;
   is_active: boolean;
   status: 'active' | 'degraded' | 'error' | 'untested';
@@ -91,7 +57,7 @@ export interface ModelCatalogEntry {
   provider: string;
   model_id: string;
   display_name: string;
-  category: 'llm' | 'stt' | 'tts' | 'sts';
+  category: 'llm' | 'stt' | 'tts' | 'sts' | 'realtime' | 's2s';
   cost_per_minute: number;
   markup_margin_percent: number;
   rate_per_minute: number;

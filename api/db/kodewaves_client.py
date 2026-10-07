@@ -513,6 +513,62 @@ class KodewavesDBClient(BaseDBClient):
     # ------------------------------------------------------------------------
     # CRM & Contacts
     # ------------------------------------------------------------------------
+    async def save_contact(self, organization_id: int, values: Dict[str, Any], contact_id: str | None = None) -> ContactModel:
+        """Save contact fields and validate stage ownership in the same transaction."""
+        async with self.get_session() as session:
+            if contact_id is not None:
+                try:
+                    identity = ContactModel.id == uuid.UUID(contact_id)
+                except ValueError:
+                    identity = ContactModel.phone == contact_id
+                contact = (await session.execute(select(ContactModel).where(
+                    identity, ContactModel.organization_id == organization_id
+                ).with_for_update())).scalar_one_or_none()
+                if contact is None:
+                    raise LookupError("Contact not found")
+            else:
+                contact = ContactModel(organization_id=organization_id)
+
+            values = dict(values)
+            if "stage_id" in values:
+                stage_id = uuid.UUID(values["stage_id"]) if values["stage_id"] else None
+                if stage_id is not None:
+                    stage = (await session.execute(select(LeadStageModel.id).where(
+                        LeadStageModel.id == stage_id,
+                        LeadStageModel.organization_id == organization_id,
+                    ))).scalar_one_or_none()
+                    if stage is None:
+                        raise LookupError("Stage not found")
+                values["stage_id"] = stage_id
+
+            fields = dict(values.pop("custom_fields") if "custom_fields" in values else (contact.custom_fields or {}))
+            if "notes" in values:
+                fields["notes"] = values.pop("notes") or ""
+            contact.custom_fields = fields
+            for key in ("first_name", "last_name", "phone", "email", "company", "stage_id", "tags"):
+                if key in values:
+                    setattr(contact, key, values[key])
+            if contact_id is None:
+                session.add(contact)
+            await session.commit()
+            await session.refresh(contact)
+            return contact
+
+    async def get_contact_timeline(self, organization_id: int, contact_id: uuid.UUID) -> List[LeadActivityModel]:
+        async with self.get_session() as session:
+            contact = (await session.execute(select(ContactModel.id).where(
+                ContactModel.id == contact_id, ContactModel.organization_id == organization_id,
+            ))).scalar_one_or_none()
+            if contact is None:
+                raise LookupError("Contact not found")
+            result = await session.execute(select(LeadActivityModel).join(
+                ContactModel, ContactModel.id == LeadActivityModel.contact_id
+            ).where(
+                ContactModel.organization_id == organization_id,
+                LeadActivityModel.contact_id == contact_id,
+            ).order_by(desc(LeadActivityModel.created_at)))
+            return list(result.scalars().all())
+
     async def list_contacts(self, organization_id: int, limit: int = 100, offset: int = 0) -> List[ContactModel]:
         async with self.get_session() as session:
             stmt = (

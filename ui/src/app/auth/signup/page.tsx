@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { detailFromError } from "@/lib/apiError";
 import { toast } from "sonner";
 
 import { signupApiV1AuthSignupPost } from "@/client/sdk.gen";
@@ -35,22 +36,25 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const res = await signupApiV1AuthSignupPost({
-        body: { email, password, name: name || undefined, organization_name: orgName || undefined },
-      });
+      const body = { email, password, name: name || undefined, organization_name: orgName || undefined };
+      const res = await signupApiV1AuthSignupPost({ body });
 
       if (res.error || !res.data) {
-        const detail = (res.error as { detail?: string })?.detail;
-        toast.error(detail || "Signup failed");
+        toast.error(detailFromError(res.error, "Signup failed"));
         return;
       }
 
       // Set httpOnly cookies via server route
-      await fetch("/api/auth/session", {
+      const session = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: res.data.token, user: res.data.user }),
       });
+
+      if (!session.ok) {
+        toast.error("Account created, but sign-in failed. Please sign in again.");
+        return;
+      }
 
       if (typeof window !== "undefined" && res.data.token) {
         localStorage.setItem("kodewaves_auth_token", res.data.token);

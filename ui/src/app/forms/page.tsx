@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -47,8 +48,10 @@ import {
 import { DynamicForm, formsApi } from "@/lib/kodewavesApi";
 
 export default function FormsPage() {
+  const { user, loading: authLoading } = useAuth();
   const [forms, setForms] = useState<DynamicForm[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Form Builder Dialog
   const [modalOpen, setModalOpen] = useState(false);
@@ -62,11 +65,14 @@ export default function FormsPage() {
   const [loadingSubs, setLoadingSubs] = useState(false);
 
   const fetchForms = async () => {
+    if (authLoading || !user) return;
+    setLoadError(null);
     setLoading(true);
     try {
       const data = await formsApi.getForms();
       setForms(data);
     } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load forms:", err);
     } finally {
       setLoading(false);
@@ -74,8 +80,9 @@ export default function FormsPage() {
   };
 
   useEffect(() => {
+    if (authLoading || !user) return;
     fetchForms();
-  }, []);
+  }, [authLoading, user]);
 
   const handleSaveForm = async () => {
     if (!editingForm || !editingForm.title || !editingForm.slug) {
@@ -143,6 +150,7 @@ export default function FormsPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+      {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

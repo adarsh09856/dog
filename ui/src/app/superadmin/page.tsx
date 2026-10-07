@@ -1,5 +1,7 @@
 "use client";
 
+import { getUserEmail } from "@/lib/auth/userDisplay";
+
 import { ArrowRight, List, Loader2, ShieldAlert } from 'lucide-react';
 import Link from "next/link";
 import { useState } from "react";
@@ -85,7 +87,7 @@ export default function SuperadminPage() {
                 <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
                 <h1 className="text-2xl font-bold tracking-tight">Superadmin Access Required</h1>
                 <p className="mt-2 text-sm text-muted-foreground max-w-md">
-                    Your account ({user?.email}) does not have administrative privileges to access this area.
+                    Your account ({getUserEmail(user)}) does not have administrative privileges to access this area.
                 </p>
                 <div className="mt-6 flex gap-4">
                     <Link href="/workflow">

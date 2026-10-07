@@ -15,6 +15,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -48,20 +49,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Contact, crmApi, LeadStage } from "@/lib/kodewavesApi";
 
-const DEFAULT_STAGES: LeadStage[] = [
-  { id: 1, name: "New Lead", order: 1, color: "bg-blue-500" },
-  { id: 2, name: "Contacted", order: 2, color: "bg-amber-500" },
-  { id: 3, name: "Qualified", order: 3, color: "bg-purple-500" },
-  { id: 4, name: "Negotiation", order: 4, color: "bg-indigo-500" },
-  { id: 5, name: "Closed Won", order: 5, color: "bg-emerald-500" },
-];
-
 export default function CRMPage() {
+  const { user, loading: authLoading } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [stages, setStages] = useState<LeadStage[]>(DEFAULT_STAGES);
+  const [stages, setStages] = useState<LeadStage[]>([]);
   const [search, setSearch] = useState("");
   const [selectedStage, setSelectedStage] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Contact Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -69,17 +64,20 @@ export default function CRMPage() {
   const [saving, setSaving] = useState(false);
 
   const fetchData = async () => {
+    if (authLoading || !user) return;
+    setLoadError(null);
     setLoading(true);
     try {
       const [fetchedContacts, fetchedStages] = await Promise.all([
-        crmApi.getContacts().catch(() => []),
-        crmApi.getStages().catch(() => DEFAULT_STAGES),
+        crmApi.getContacts(),
+        crmApi.getStages(),
       ]);
       setContacts(fetchedContacts);
       if (fetchedStages && fetchedStages.length > 0) {
         setStages(fetchedStages);
       }
     } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load CRM data:", err);
     } finally {
       setLoading(false);
@@ -87,8 +85,9 @@ export default function CRMPage() {
   };
 
   useEffect(() => {
+    if (authLoading || !user) return;
     fetchData();
-  }, []);
+  }, [authLoading, user]);
 
   const handleSaveContact = async () => {
     if (!editingContact || !editingContact.first_name || !editingContact.phone) {
@@ -124,9 +123,9 @@ export default function CRMPage() {
 
   const filteredContacts = contacts.filter((c) => {
     const matchesSearch =
-      c.first_name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.first_name || "").toLowerCase().includes(search.toLowerCase()) ||
       (c.last_name && c.last_name.toLowerCase().includes(search.toLowerCase())) ||
-      c.phone.includes(search) ||
+      (c.phone || "").includes(search) ||
       (c.email && c.email.toLowerCase().includes(search.toLowerCase())) ||
       (c.company && c.company.toLowerCase().includes(search.toLowerCase()));
 
@@ -136,6 +135,7 @@ export default function CRMPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+      {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -155,7 +155,7 @@ export default function CRMPage() {
                 phone: "",
                 email: "",
                 company: "",
-                stage_id: stages[0]?.id || 1,
+                stage_id: stages[0]?.id,
                 notes: "",
               });
               setModalOpen(true);

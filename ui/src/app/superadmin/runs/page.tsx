@@ -1,5 +1,7 @@
 "use client";
 
+import { getUserEmail } from "@/lib/auth/userDisplay";
+
 import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle, ChevronLeft, ChevronRight, ExternalLink, FileText, Info, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -295,7 +297,7 @@ export default function RunsPage() {
                 <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
                 <h1 className="text-2xl font-bold tracking-tight">Superadmin Access Required</h1>
                 <p className="mt-2 text-sm text-muted-foreground max-w-md">
-                    Your account ({auth.user?.email}) does not have administrative privileges to view global workflow runs.
+                    Your account ({getUserEmail(auth.user)}) does not have administrative privileges to view global workflow runs.
                 </p>
                 <div className="mt-6 flex gap-4">
                     <Link href="/workflow">

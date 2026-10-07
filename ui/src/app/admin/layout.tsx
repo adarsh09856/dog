@@ -1,5 +1,7 @@
 "use client";
 
+import { getUserEmail } from "@/lib/auth/userDisplay";
+
 import {
   Activity,
   ArrowLeft,
@@ -75,7 +77,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
         <h1 className="text-2xl font-bold tracking-tight">Superadmin Access Required</h1>
         <p className="mt-2 text-sm text-muted-foreground max-w-md">
-          Your account ({user?.email}) does not have administrative privileges to access the Kodewaves sovereign control plane.
+          Your account ({getUserEmail(user)}) does not have administrative privileges to access the Kodewaves sovereign control plane.
         </p>
         <div className="mt-6 flex gap-4">
           <Button variant="outline" onClick={() => router.push("/workflow")}>
@@ -141,7 +143,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
           <div className="flex items-center justify-between px-3 py-2 bg-muted/40 rounded-lg">
             <span className="text-xs truncate max-w-[140px] text-muted-foreground">
-              {user?.email || "Superadmin"}
+              {getUserEmail(user) || "Superadmin"}
             </span>
             <div className="flex items-center gap-1">
               <ThemeToggle showLabel={false} />

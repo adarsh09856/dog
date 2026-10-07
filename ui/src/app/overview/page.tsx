@@ -36,16 +36,20 @@ import { useAuth } from "@/lib/auth";
 import { overviewApi, OverviewStatsResponse } from "@/lib/kodewavesApi";
 
 export default function OverviewPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<OverviewStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadStats = async () => {
+    if (authLoading || !user) return;
+    setLoadError(null);
     try {
       setLoading(true);
       const data = await overviewApi.getStats();
       setStats(data);
     } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load overview metrics:", err);
     } finally {
       setLoading(false);
@@ -53,8 +57,9 @@ export default function OverviewPage() {
   };
 
   useEffect(() => {
+    if (authLoading || !user) return;
     loadStats();
-  }, []);
+  }, [authLoading, user]);
 
   const sections = [
     {
@@ -175,6 +180,7 @@ export default function OverviewPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Sovereign Platform Banner */}
         <Card className="border border-border/70 bg-gradient-to-br from-card via-card/90 to-card/50 shadow-sm">

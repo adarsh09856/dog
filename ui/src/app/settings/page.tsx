@@ -1,5 +1,7 @@
 "use client";
 
+import { getUserEmail } from "@/lib/auth/userDisplay";
+
 import { ArrowRight, Building, Cpu, ExternalLink, KeyRound, Phone, ShieldAlert, ShieldCheck, Sparkles, User, Wallet } from "lucide-react";
 import Link from "next/link";
 
@@ -76,7 +78,7 @@ export default function SettingsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
                 <span className="text-xs text-muted-foreground font-medium">Email Address</span>
-                <p className="text-sm font-semibold mt-0.5 truncate">{user?.email || "Signed In User"}</p>
+                <p className="text-sm font-semibold mt-0.5 truncate">{getUserEmail(user) || "Signed In User"}</p>
               </div>
               <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
                 <span className="text-xs text-muted-foreground font-medium">Account Role</span>
