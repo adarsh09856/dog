@@ -5,7 +5,8 @@
 # ==============================================================================
 
 set -euo pipefail
-umask 077
+# Application source is bind-mounted into containers running as non-root users.
+umask 022
 
 BOLD='\033[1m'
 GREEN='\033[0;32m'
@@ -65,12 +66,14 @@ docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS config -q
 
 # Back up before restarting the API: its entrypoint itself runs migrations.
 BACKUP_DIR="$APP_DIR/run/deploy-backups"
+umask 077
 mkdir -p "$BACKUP_DIR"
 BACKUP_FILE="$BACKUP_DIR/database_$(date +%Y%m%d_%H%M%S).sql"
 docker compose -f "$COMPOSE_FILE" exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$BACKUP_FILE"
 test -s "$BACKUP_FILE"
 printf '%s\n' "$PREVIOUS_REVISION" > "$BACKUP_FILE.previous-revision"
 git rev-parse HEAD > "$BACKUP_FILE.target-revision"
+umask 022
 
 # 2. Build only application images; leave existing infrastructure in place.
 echo -e "${BLUE}[2/6] Building and updating application containers...${NC}"
