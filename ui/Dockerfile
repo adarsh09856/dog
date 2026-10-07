@@ -52,6 +52,7 @@ WORKDIR /app
 
 # Environment variables will be provided by docker-compose
 ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
 
 # Create a non-root user
 RUN addgroup --system --gid 1001 nodejs && \

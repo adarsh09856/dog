@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Kodewaves Sovereign Voice AI — Fast Production Update & Redeploy Script
-# Pulls latest changes, cleans old server artifacts, applies migrations, seeds models
+# Updates an existing application deployment without host-wide cleanup.
 # ==============================================================================
 
-set -eo pipefail
+set -euo pipefail
+umask 077
 
 BOLD='\033[1m'
 GREEN='\033[0;32m'
@@ -16,6 +17,7 @@ NC='\033[0m'
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$APP_DIR"
+PREVIOUS_REVISION="$(git rev-parse HEAD)"
 
 echo -e "${CYAN}${BOLD}==============================================================================${NC}"
 echo -e "${BOLD} 🚀 Kodewaves Sovereign Voice AI — Production Deployment & Update${NC}"
@@ -39,15 +41,9 @@ echo -e "${BLUE}Using Docker Compose configuration: ${BOLD}${COMPOSE_FILE}${NC}"
 if [ -d ".git" ]; then
     CURRENT_BRANCH="$(git branch --show-current 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "stabilize")"
     echo -e "${BLUE}[1/6] Pulling latest updates from Git (${CURRENT_BRANCH})...${NC}"
-    git pull origin "${CURRENT_BRANCH}" || echo -e "${YELLOW}⚠️ Git pull failed or working offline, proceeding with local changes.${NC}"
+    git pull --ff-only origin "${CURRENT_BRANCH}"
 else
     echo -e "${BLUE}[1/6] Deploying from local workspace directory...${NC}"
-fi
-
-# Ensure collision-free PIPER_PORT and WHISPER_PORT exist in .env
-if [ -f ".env" ]; then
-    grep -q '^PIPER_PORT=' .env || echo "PIPER_PORT=8766" >> .env
-    grep -q '^WHISPER_PORT=' .env || echo "WHISPER_PORT=8765" >> .env
 fi
 
 # Check ENABLE_LOCAL_AI_ENGINE configuration
@@ -58,58 +54,44 @@ fi
 
 PROFILE_FLAGS=""
 if [ "$ENABLE_LOCAL" = "true" ]; then
-    echo -e "${BLUE}Local AI Engine profile active: starting Ollama, Whisper, and Piper...${NC}"
+    echo -e "${BLUE}Local AI Engine profile enabled; retaining existing engine services...${NC}"
     PROFILE_FLAGS="--profile local"
 else
-    echo -e "${YELLOW}Local AI Engine profile inactive: keeping Ollama, Whisper, and Piper OFF (saving host RAM)${NC}"
+    echo -e "${YELLOW}Local AI Engine profile disabled; retaining existing engine services...${NC}"
 fi
 
-# 2. Rebuild and restart application containers (removes orphaned/old containers)
+# Validate before any mutation. Compose scope must remain this application.
+docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS config -q
+
+# Back up before restarting the API: its entrypoint itself runs migrations.
+BACKUP_DIR="$APP_DIR/run/deploy-backups"
+mkdir -p "$BACKUP_DIR"
+BACKUP_FILE="$BACKUP_DIR/database_$(date +%Y%m%d_%H%M%S).sql"
+docker compose -f "$COMPOSE_FILE" exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$BACKUP_FILE"
+test -s "$BACKUP_FILE"
+printf '%s\n' "$PREVIOUS_REVISION" > "$BACKUP_FILE.previous-revision"
+git rev-parse HEAD > "$BACKUP_FILE.target-revision"
+
+# 2. Build only application images; leave existing infrastructure in place.
 echo -e "${BLUE}[2/6] Building and updating application containers...${NC}"
-docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --build --remove-orphans
+docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS build api ui
+docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps api ui
 
-if [ "$ENABLE_LOCAL" != "true" ]; then
-    # Ensure local engine containers are stopped if they were left running
-    docker compose -f "$COMPOSE_FILE" stop ollama whisper piper >/dev/null 2>&1 || true
-fi
-
-# 3. Apply Alembic database migrations (with safe pre-migration pg_dump)
-echo -e "${BLUE}[3/6] Backing up database and applying migrations (Alembic)...${NC}"
-sleep 5
-docker compose -f "$COMPOSE_FILE" exec -T postgres pg_dump -U postgres postgres > "db_backup_pre_migration_$(date +%Y%m%d_%H%M%S).sql" 2>/dev/null \
-    || docker exec kodewaves_postgres pg_dump -U postgres postgres > "db_backup_pre_migration_$(date +%Y%m%d_%H%M%S).sql" 2>/dev/null \
-    || echo -e "${YELLOW}⚠️ Pre-migration database dump skipped (offline or not running).${NC}"
-
-docker compose -f "$COMPOSE_FILE" exec -T api python -m alembic -c api/alembic.ini upgrade head \
-    || docker compose -f "$COMPOSE_FILE" run --rm api python -m alembic -c api/alembic.ini upgrade head \
-    || docker exec kodewaves_api python -m alembic -c api/alembic.ini upgrade head \
-    || echo -e "${YELLOW}⚠️ Alembic migration execution skipped or reported warning.${NC}"
-
-# 4. Bootstrap platform catalog seed
-echo -e "${BLUE}[4/6] Bootstrapping platform catalog (AI Model Catalog, Plans, Packages, Templates, Wallets)...${NC}"
-docker compose -f "$COMPOSE_FILE" exec -T api python -m scripts.seed_platform \
-    || docker compose -f "$COMPOSE_FILE" run --rm api python -m scripts.seed_platform \
-    || docker exec kodewaves_api python -m scripts.seed_platform \
-    || echo -e "${YELLOW}⚠️ Platform seed executed with warning.${NC}"
-
-# 5. Clean up old unused/dangling artifacts and Docker build cache on the server
-echo -e "${BLUE}[5/6] Cleaning up Docker build cache, dangling containers, and legacy server artifacts...${NC}"
-# Prune BuildKit build cache (preventing 50-100GB buildup on VPS)
-docker builder prune -af --filter "until=24h" >/dev/null 2>&1 || docker builder prune -af >/dev/null 2>&1 || true
-
-# Prune dangling/unused images left over from previous builds on the server
-docker image prune -af --filter "until=72h" >/dev/null 2>&1 || docker image prune -f >/dev/null 2>&1 || true
-docker container prune -f >/dev/null 2>&1 || true
-
-# Clean up any legacy environment keys in server .env (e.g. duplicate DOGRAH keys)
-if [ -f ".env" ]; then
-    sed -i '/^DOGRAH_DEVOPS_SECRET=/d' .env 2>/dev/null || true
-fi
-
-# Clean up any stale PID/band lock files from old host-level runs
-rm -f run/*.pid run/active_band run/*.port 2>/dev/null || true
-
-echo -e "${GREEN}✓ Server cleanup completed (freed disk space, pruned build cache & dangling images)${NC}"
+# The API entrypoint runs migrations before starting its services. Wait for
+# readiness rather than swallowing failures or running concurrent migrations.
+echo "Waiting for application readiness..."
+for attempt in $(seq 1 60); do
+    if docker compose -f "$COMPOSE_FILE" exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)" >/dev/null 2>&1 &&
+       docker compose -f "$COMPOSE_FILE" exec -T ui node -e "fetch('http://127.0.0.1:3010/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+        break
+    fi
+    if [ "$attempt" = 60 ]; then
+        echo "Deployment failed readiness checks. Backup: $BACKUP_FILE" >&2
+        exit 1
+    fi
+    sleep 5
+done
+# No host-wide pruning, environment rewriting or unrelated service cleanup.
 
 # 6. Service health verification
 echo -e "${BLUE}[6/6] Verifying running services and API health...${NC}"
@@ -125,8 +107,4 @@ echo ""
 echo -e "${GREEN}${BOLD}✓ Kodewaves Sovereign Platform successfully deployed!${NC}"
 echo -e "${GREEN}  • Web UI:      http://127.0.0.1:${UI_PORT}${NC}"
 echo -e "${GREEN}  • Backend API: http://127.0.0.1:${API_PORT}${NC}"
-echo -e "${GREEN}  • Engine:      Dual-Mode Sovereign (General Cascade + S2S Realtime)${NC}"
-echo -e "${GREEN}  • S2S Realtime: Google Gemini Live & OpenAI Realtime (Sub-300ms)${NC}"
-echo -e "${GREEN}  • Local CPU:   Ollama LLM (Qwen 2.5) + Piper ONNX TTS (Hindi ~40ms)${NC}"
-echo -e "${GREEN}  • Cloud Stack: Deepgram, Gemini, OpenAI, Sarvam, Cartesia, ElevenLabs${NC}"
-echo ""
+echo "Database backup: $BACKUP_FILE"
