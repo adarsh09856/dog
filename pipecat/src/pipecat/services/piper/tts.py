@@ -30,9 +30,13 @@ try:
     from piper import PiperVoice
     from piper.download_voices import download_voice
 except ModuleNotFoundError as e:
-    logger.error(f"Exception: {e}")
-    logger.error('In order to use Piper, you need to `uv add "pipecat-ai[piper]"`.')
-    raise ImportError(f"Missing module: {e}") from e
+    # The HTTP service talks to a separate Piper server and does not need the
+    # in-process package installed alongside the application.
+    PiperVoice = None
+    download_voice = None
+    _piper_import_error = e
+else:
+    _piper_import_error = None
 
 PIPER_CACHE_DIR = Path(os.path.expanduser("~/.cache/pipecat/piper"))
 
@@ -90,6 +94,12 @@ class PiperTTSService(TTSService):
                 parameters, ``settings`` values take precedence.
             **kwargs: Additional arguments passed to the parent `TTSService`.
         """
+        if _piper_import_error is not None:
+            raise ImportError(
+                'In-process Piper requires the "pipecat-ai[piper]" extra; '
+                "use PiperHttpTTSService for a separate Piper server."
+            ) from _piper_import_error
+
         # 1. Initialize default_settings with hardcoded defaults
         default_settings = self.Settings(model=None, voice=None, language=None)
 
