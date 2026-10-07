@@ -16,6 +16,10 @@ export default async function AfterSignInPage() {
     const user = await getServerUser();
     logger.debug('[AfterSignInPage] Got user:', { hasUser: !!user, userId: user?.id });
 
+    if (!user) {
+        redirect('/auth/login');
+    }
+
     if (authProvider === 'stack' && user && 'getAuthJson' in user) {
         logger.debug('[AfterSignInPage] Stack user detected, getting auth token...');
         const token = await user.getAuthJson();
@@ -34,6 +38,9 @@ export default async function AfterSignInPage() {
 
     try {
         const accessToken = await getServerAccessToken();
+        if (!accessToken) {
+            redirect('/auth/login');
+        }
         if (accessToken) {
             const countResponse = await getWorkflowCountApiV1WorkflowCountGet({
                 headers: {
