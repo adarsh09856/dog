@@ -8,7 +8,9 @@ import { getRedirectUrl } from "@/lib/utils";
 
 export const dynamic = 'force-dynamic';
 
-export default async function AfterSignInPage() {
+// This endpoint only chooses a destination. A route handler sends an HTTP
+// redirect before React renders the application shell.
+export async function GET() {
     logger.debug('[AfterSignInPage] Starting after-sign-in page');
     const authProvider = await getServerAuthProvider();
     logger.debug('[AfterSignInPage] Auth provider:', authProvider);
