@@ -8,6 +8,8 @@ from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import GlobalPlatformSettingModel
 from api.services.auth.depends import get_superuser
 from api.services.catalog.catalog_service import catalog_service
+from api.services.catalog.local_inventory import whisper_api_base
+from api.utils.common import normalize_local_ai_endpoint
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
@@ -281,7 +283,7 @@ async def send_test_email(payload: TestEmailRequest, _user=Depends(get_superuser
 async def get_ollama_models(_user=Depends(get_superuser)):
     """Query the local Ollama instance for installed models."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    ollama_url = local_ai.get("ollama_endpoint") or "http://ollama:11434"
+    ollama_url = normalize_local_ai_endpoint(local_ai.get("ollama_endpoint") or "http://ollama:11434")
     import aiohttp
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
@@ -299,7 +301,7 @@ async def get_ollama_models(_user=Depends(get_superuser)):
 async def pull_ollama_model(payload: OllamaPullRequest, _user=Depends(get_superuser)):
     """Instruct local Ollama instance to pull/download an AI model."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    ollama_url = local_ai.get("ollama_endpoint") or "http://ollama:11434"
+    ollama_url = normalize_local_ai_endpoint(local_ai.get("ollama_endpoint") or "http://ollama:11434")
     import aiohttp
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300)) as session:
@@ -320,7 +322,7 @@ async def pull_ollama_model(payload: OllamaPullRequest, _user=Depends(get_superu
 async def test_ollama(payload: Optional[Dict[str, Any]] = None, _user=Depends(get_superuser)):
     """Test function-calling and chat latency on local Ollama container."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    ollama_url = local_ai.get("ollama_endpoint") or "http://ollama:11434"
+    ollama_url = normalize_local_ai_endpoint(local_ai.get("ollama_endpoint") or "http://ollama:11434")
     model = (payload or {}).get("model") or "qwen2.5:0.5b"
     import time
     import aiohttp
@@ -377,7 +379,7 @@ async def test_ollama(payload: Optional[Dict[str, Any]] = None, _user=Depends(ge
 async def delete_ollama_model(model_name: str, _user=Depends(get_superuser)):
     """Delete an installed model from local Ollama instance."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    ollama_url = local_ai.get("ollama_endpoint") or "http://ollama:11434"
+    ollama_url = normalize_local_ai_endpoint(local_ai.get("ollama_endpoint") or "http://ollama:11434")
     import aiohttp
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
@@ -420,7 +422,7 @@ async def get_all_piper_voices(language: Optional[str] = None, _user=Depends(get
 async def get_piper_voices(_user=Depends(get_superuser)):
     """Query the local Piper TTS instance for installed neural voices."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    piper_url = local_ai.get("piper_endpoint") or "http://piper:5000"
+    piper_url = normalize_local_ai_endpoint(local_ai.get("piper_endpoint") or "http://piper:5000")
     import aiohttp
 
     KNOWN_VOICES = {
@@ -436,41 +438,49 @@ async def get_piper_voices(_user=Depends(get_superuser)):
             async with session.get(f"{piper_url.rstrip('/')}/voices") as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    voices_data = data.get("voices", data)
+                    voices_data = data.get("voices", data) if isinstance(data, dict) else data
                     installed_voices = []
                     if isinstance(voices_data, dict):
-                        for k in voices_data.keys():
+                        for k, voice_info in voices_data.items():
+                            if isinstance(voice_info, dict) and not voice_info.get("installed", True):
+                                continue
                             meta = KNOWN_VOICES.get(k, {"language": k.split("-")[0] if "-" in k else "Neural", "gender": "Neural", "quality": "Medium", "description": "Local neural voice"})
                             installed_voices.append({"id": k, "name": k, **meta, "installed": True})
                     elif isinstance(voices_data, list):
                         for item in voices_data:
-                            vid = item.get("key") or item.get("id") or (item if isinstance(item, str) else str(item))
+                            if isinstance(item, str):
+                                vid = item
+                            elif isinstance(item, dict) and item.get("installed", True):
+                                vid = item.get("key") or item.get("id")
+                            else:
+                                continue
+                            if not vid:
+                                continue
                             meta = KNOWN_VOICES.get(vid, {"language": "Neural", "gender": "Neural", "quality": "Medium", "description": "Local neural voice"})
                             installed_voices.append({"id": vid, "name": vid, **meta, "installed": True})
-                    if not installed_voices:
-                        installed_voices = [{"id": k, "name": k, **v, "installed": True} for k, v in KNOWN_VOICES.items()]
                     return {"voices": installed_voices, "endpoint": piper_url, "status": "online"}
                 else:
-                    return {"voices": [{"id": k, "name": k, **v, "installed": True} for k, v in KNOWN_VOICES.items()], "endpoint": piper_url, "status": "online"}
+                    return {"voices": [], "endpoint": piper_url, "status": f"HTTP {resp.status}"}
     except Exception:
-        return {"voices": [{"id": k, "name": k, **v, "installed": True} for k, v in KNOWN_VOICES.items()], "endpoint": piper_url, "status": "offline"}
+        return {"voices": [], "endpoint": piper_url, "status": "offline"}
 
 
 @router.post("/piper/download")
 async def download_piper_voice(payload: PiperDownloadRequest, _user=Depends(get_superuser)):
     """Instruct local Piper TTS instance to pull/download a voice."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    piper_url = local_ai.get("piper_endpoint") or "http://piper:5000"
+    piper_url = normalize_local_ai_endpoint(local_ai.get("piper_endpoint") or "http://piper:5000")
     import aiohttp
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
             async with session.post(f"{piper_url.rstrip('/')}/download", json={"voice": payload.voice}) as resp:
-                if resp.status == 200:
+                if resp.status in (200, 201):
                     return {"success": True, "voice": payload.voice, "message": f"Voice '{payload.voice}' is ready on host"}
-                else:
-                    return {"success": True, "voice": payload.voice, "message": f"Voice '{payload.voice}' registered on host"}
+                raise HTTPException(status_code=502, detail=f"Piper download failed (HTTP {resp.status})")
+    except HTTPException:
+        raise
     except Exception:
-        return {"success": True, "voice": payload.voice, "message": f"Voice '{payload.voice}' registered on host"}
+        raise HTTPException(status_code=502, detail="Piper service unavailable during download")
 
 
 @router.post("/piper/test")
@@ -480,7 +490,7 @@ async def test_piper_voice(payload: Dict[str, Any], _user=Depends(get_superuser)
     default_text = "नमस्ते, मैं आपका लोकल वॉइस असिस्टेंट हूँ।" if "hi" in voice.lower() else "Hello, this is a local Piper neural voice test."
     text = payload.get("text") or default_text
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    piper_url = local_ai.get("piper_endpoint") or "http://piper:5000"
+    piper_url = normalize_local_ai_endpoint(local_ai.get("piper_endpoint") or "http://piper:5000")
     synthesize_url = piper_url.rstrip("/") if piper_url.endswith("/synthesize") else f"{piper_url.rstrip('/')}/synthesize"
     import time
     import aiohttp
@@ -493,13 +503,18 @@ async def test_piper_voice(payload: Dict[str, Any], _user=Depends(get_superuser)
                 latency_ms = int((time.time() - start_t) * 1000)
                 if resp.status == 200:
                     audio_bytes = await resp.read()
-                    duration_s = round(len(audio_bytes) / (22050 * 2), 2)
+                    import io
+                    import wave
+                    with wave.open(io.BytesIO(audio_bytes), "rb") as audio:
+                        sample_rate = audio.getframerate()
+                        duration_s = round(audio.getnframes() / sample_rate, 2)
+                    latency_ms = int((time.time() - start_t) * 1000)
                     b64 = base64.b64encode(audio_bytes).decode("ascii")
                     return {
                         "success": True,
                         "voice": voice,
                         "latency_ms": latency_ms,
-                        "sample_rate": 22050,
+                        "sample_rate": sample_rate,
                         "audio_size_bytes": len(audio_bytes),
                         "duration_s": duration_s,
                         "audio_base64": b64,
@@ -516,34 +531,40 @@ async def test_piper_voice(payload: Dict[str, Any], _user=Depends(get_superuser)
 async def delete_piper_voice(voice_id: str, _user=Depends(get_superuser)):
     """Delete / remove a voice from the Piper host container."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    piper_url = local_ai.get("piper_endpoint") or "http://piper:5000"
+    piper_url = normalize_local_ai_endpoint(local_ai.get("piper_endpoint") or "http://piper:5000")
     import aiohttp
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
             async with session.delete(f"{piper_url.rstrip('/')}/voices/{voice_id}") as resp:
-                return {"success": True, "message": f"Voice {voice_id} deleted or unregistered."}
+                if resp.status not in (200, 204):
+                    raise HTTPException(status_code=502, detail=f"Piper delete failed (HTTP {resp.status})")
+                return {"success": True, "message": f"Voice {voice_id} deleted."}
+    except HTTPException:
+        raise
     except Exception:
-        return {"success": True, "message": f"Voice {voice_id} unregister requested."}
+        raise HTTPException(status_code=502, detail="Piper service unavailable during deletion")
 
 
 @router.get("/whisper/models")
 async def get_whisper_models(_user=Depends(get_superuser)):
     """Query the local Faster-Whisper STT instance for available models and online status."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    whisper_url = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    whisper_raw = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_raw))
     import aiohttp
     KNOWN_MODELS = [
-        {"id": "Systran/faster-whisper-tiny", "name": "Faster-Whisper Tiny (Ultra-fast CPU)", "size": "~75MB RAM", "installed": True},
-        {"id": "Systran/faster-whisper-base", "name": "Faster-Whisper Base (Multilingual)", "size": "~140MB RAM", "installed": True},
-        {"id": "Systran/faster-whisper-small", "name": "Faster-Whisper Small (Higher Accuracy)", "size": "~460MB RAM", "installed": False},
+        {"id": "Systran/faster-whisper-tiny", "name": "Faster-Whisper Tiny (Ultra-fast CPU)", "size": "~75MB download", "installed": False},
+        {"id": "Systran/faster-whisper-base", "name": "Faster-Whisper Base (Multilingual)", "size": "~140MB download", "installed": False},
+        {"id": "Systran/faster-whisper-small", "name": "Faster-Whisper Small (Higher Accuracy)", "size": "~460MB download", "installed": False},
     ]
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=4)) as session:
-            async with session.get(f"{whisper_url.rstrip('/')}/models") as resp:
+            probe_url = whisper_url.rstrip("/") if whisper_url.endswith("/models") else f"{whisper_url.rstrip('/')}/models"
+            async with session.get(probe_url) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     models_list = data.get("data", [])
-                    installed_ids = {m.get("id") for m in models_list}
+                    installed_ids = {m.get("id") for m in models_list if m.get("installed", True)}
                     for m in KNOWN_MODELS:
                         m["installed"] = m["id"] in installed_ids
                     return {"models": KNOWN_MODELS, "endpoint": whisper_url, "status": "online"}
@@ -557,30 +578,38 @@ async def download_whisper_model(payload: Dict[str, Any], _user=Depends(get_supe
     """Instruct local Speaches / Faster-Whisper to download/preload a model."""
     model = payload.get("model") or "Systran/faster-whisper-base"
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    whisper_url = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    whisper_raw = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_raw))
     import aiohttp
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180)) as session:
-            async with session.post(f"{whisper_url.rstrip('/')}/models", json={"model": model}) as resp:
+            async with session.post(f"{whisper_url}/models/{model}") as resp:
                 if resp.status in (200, 201):
                     return {"success": True, "model": model, "message": f"Model {model} is now ready on host"}
-                return {"success": True, "model": model, "message": f"Model {model} download initiated"}
+                raise HTTPException(status_code=502, detail=f"Whisper download failed (HTTP {resp.status})")
+    except HTTPException:
+        raise
     except Exception:
-        return {"success": True, "model": model, "message": f"Model {model} registered for host"}
+        raise HTTPException(status_code=502, detail="Whisper service unavailable during download")
 
 
 @router.delete("/whisper/models/{model_id:path}")
 async def delete_whisper_model(model_id: str, _user=Depends(get_superuser)):
     """Unload or delete a model from Speaches."""
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    whisper_url = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    whisper_raw = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_raw))
     import aiohttp
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
             async with session.delete(f"{whisper_url.rstrip('/')}/models/{model_id}") as resp:
+                if resp.status not in (200, 204):
+                    raise HTTPException(status_code=502, detail=f"Whisper unload failed (HTTP {resp.status})")
                 return {"success": True, "message": f"Model {model_id} unloaded."}
+    except HTTPException:
+        raise
     except Exception:
-        return {"success": True, "message": f"Model {model_id} unloaded."}
+        raise HTTPException(status_code=502, detail="Whisper service unavailable during unload")
 
 
 @router.post("/whisper/test")
@@ -601,7 +630,8 @@ async def test_whisper_stt(payload: Optional[Dict[str, Any]] = None, _user=Depen
         raise HTTPException(status_code=404, detail=f"Audio test fixture '{fixture_filename}' not found.")
 
     local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    whisper_url = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    whisper_raw = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+    whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_raw))
     transcribe_url = f"{whisper_url.rstrip('/')}/audio/transcriptions"
     start_t = time.time()
     try:

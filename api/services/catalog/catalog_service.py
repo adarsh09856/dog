@@ -18,7 +18,9 @@ from loguru import logger
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import AIModelCatalogModel, VoiceCatalogModel
 from api.services.catalog.normalize import normalize_provider_name
+from api.services.catalog.local_inventory import piper_voice_inventory, whisper_api_base
 from api.services.credentials.master_credential_service import master_credential_service
+from api.utils.common import normalize_local_ai_endpoint
 
 
 # Curated catalog definitions from repo and verified vendor docs (Part 4)
@@ -645,7 +647,7 @@ class CatalogService:
     async def get_available_catalog(
         self,
         organization_id: int,
-        user_has_local_ai: bool = True,
+        user_has_local_ai: bool = False,
     ) -> Dict[str, Any]:
         """
         Dynamically build catalog for an organization according to visibility rules.
@@ -719,11 +721,15 @@ class CatalogService:
         local_tts: List[Dict[str, Any]] = []
 
         local_ai_setting = await kodewaves_db_client.get_setting("local_ai") or {}
-        local_engine_enabled = local_ai_setting.get("enable_local_ai_engine", True) and local_allowed and user_has_local_ai
+        org_access = await kodewaves_db_client.get_setting(f"local_ai_org_{organization_id}") or {}
+        public_access = local_ai_setting.get("local_ai_access_policy", "public") in ("public", "all_workspaces")
+        local_access = public_access or bool(org_access.get("enabled", False))
+        local_engine_enabled = bool(local_ai_setting.get("enable_local_ai_engine", False) and local_allowed and local_access)
 
         if local_engine_enabled:
             # Check Ollama installed models
             ollama_url = local_ai_setting.get("ollama_endpoint") or os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
+            ollama_url = normalize_local_ai_endpoint(ollama_url).rstrip("/").removesuffix("/v1")
             try:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                     async with session.get(f"{ollama_url.rstrip('/')}/api/tags") as resp:
@@ -732,34 +738,40 @@ class CatalogService:
                             for m_obj in data.get("models", []):
                                 name = m_obj.get("name", "")
                                 size_gb = round(m_obj.get("size", 0) / (1024 ** 3), 1)
-                                label = f"{name} ({size_gb} GB RAM)" if size_gb > 0 else name
-                                installed_local_llm.append({"value": name, "label": label})
+                                label = f"{name} ({size_gb} GB download)" if size_gb > 0 else name
+                                if name:
+                                    installed_local_llm.append({"value": name, "label": label, "provider": "ollama"})
             except Exception:
                 pass
 
             # Probe Local STT (Faster-Whisper on Speaches CPU)
             whisper_url = local_ai_setting.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+            whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_url))
             try:
                 probe_url = whisper_url.rstrip("/") if whisper_url.endswith("/models") else f"{whisper_url.rstrip('/')}/models"
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
                     async with session.get(probe_url) as resp:
                         if resp.status == 200:
+                            data = await resp.json()
                             local_stt = [
-                                {"value": "Systran/faster-whisper-tiny", "label": "Faster-Whisper Tiny (Ultra-fast CPU, ~75MB RAM)"},
-                                {"value": "Systran/faster-whisper-base", "label": "Faster-Whisper Base (Multilingual, ~140MB RAM)"},
+                                {"value": model["id"], "label": model.get("name") or model["id"], "provider": "whisper"}
+                                for model in data.get("data", data.get("models", []))
+                                if isinstance(model, dict) and model.get("id") and model.get("installed", True)
                             ]
             except Exception:
                 local_stt = []
 
             # Probe Local TTS (Piper ONNX)
             piper_url = local_ai_setting.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
+            piper_url = normalize_local_ai_endpoint(piper_url).rstrip("/").removesuffix("/synthesize")
             try:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
                     async with session.get(f"{piper_url.rstrip('/')}/voices") as resp:
                         if resp.status == 200:
-                            local_tts = [
-                                {"value": "piper", "label": "Piper TTS (Native Hindi & Indic ONNX, ~40ms Ultra-Fast)"},
-                            ]
+                            data = await resp.json()
+                            voices = piper_voice_inventory(data)
+                            if voices:
+                                local_tts = [{"value": "piper", "label": "Piper TTS (Local)", "provider": "piper"}]
             except Exception:
                 local_tts = []
 
@@ -783,7 +795,7 @@ class CatalogService:
             "local_stt_models": local_stt,
             "local_tts_models": local_tts,
             "local_engine_enabled": local_engine_enabled,
-            "has_local_ai_access": user_has_local_ai,
+            "has_local_ai_access": bool(local_allowed and local_access),
             "supported_modes": ["general", "realtime"],
         }
 

@@ -279,6 +279,7 @@ class PiperHttpTTSService(TTSService):
 
         self._base_url = base_url
         self._session = aiohttp_session
+        self._validated_voice: str | None = None
 
     def can_generate_metrics(self) -> bool:
         """Check if this service can generate processing metrics.
@@ -303,12 +304,33 @@ class PiperHttpTTSService(TTSService):
             "Content-Type": "application/json",
         }
         try:
+            voice = self._settings.voice
+            if voice and voice != self._validated_voice:
+                inventory_url = self._base_url.removesuffix("/synthesize") + "/voices"
+                async with self._session.get(
+                    inventory_url, timeout=aiohttp.ClientTimeout(total=5)
+                ) as inventory_response:
+                    if inventory_response.status != 200:
+                        yield ErrorFrame(error="Unable to verify installed Piper voices")
+                        return
+                    inventory = await inventory_response.json()
+                voices = inventory.get("voices", inventory) if isinstance(inventory, dict) else inventory
+                if voice not in voices:
+                    yield ErrorFrame(error=f"Piper voice '{voice}' is not installed")
+                    return
+                self._validated_voice = voice
+
             data = {
                 "text": text,
                 "voice": self._settings.voice,
             }
 
-            async with self._session.post(self._base_url, json=data, headers=headers) as response:
+            async with self._session.post(
+                self._base_url,
+                json=data,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=30, connect=5),
+            ) as response:
                 if response.status != 200:
                     error = await response.text()
                     yield ErrorFrame(

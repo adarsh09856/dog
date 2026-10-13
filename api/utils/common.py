@@ -238,3 +238,20 @@ async def get_backend_endpoints(request: object | None = None) -> tuple[str, str
             "No tunnel URL available. Please set BACKEND_API_ENDPOINT environment "
             "variable or ensure cloudflared service is running."
         )
+
+
+def normalize_local_ai_endpoint(url: str | None) -> str:
+    """Normalize docker-internal container hostnames (ollama, piper, whisper) to 127.0.0.1 when running on host without docker DNS."""
+    if not url:
+        return ""
+    res = url.strip()
+    for h in ("ollama", "piper", "whisper"):
+        if f"://{h}:" in res or res.endswith(f"://{h}") or f"://{h}/" in res:
+            try:
+                import socket
+                socket.gethostbyname(h)
+            except Exception:
+                res = res.replace(f"://{h}", "://127.0.0.1")
+                if "://127.0.0.1:8000" in res:
+                    res = res.replace("://127.0.0.1:8000", "://127.0.0.1:8765")
+    return res

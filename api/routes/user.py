@@ -26,6 +26,7 @@ from api.schemas.workflow_configurations import (
 )
 from api.services.auth.depends import get_user
 from api.services.credentials.master_credential_service import master_credential_service
+from api.utils.common import normalize_local_ai_endpoint
 from api.services.configuration.ai_model_configuration import (
     convert_legacy_ai_model_configuration_to_v2,
     get_resolved_ai_model_configuration,
@@ -656,7 +657,16 @@ async def get_voices(
 
     # Determine active providers with master keys
     local_ai_setting = await kodewaves_db_client.get_setting("local_ai") or {}
-    local_engine_enabled = local_ai_setting.get("enable_local_ai_engine", True)
+    local_engine_enabled = bool(local_ai_setting.get("enable_local_ai_engine", False))
+    organization_id = user.selected_organization_id
+    if organization_id:
+        policy = await kodewaves_db_client.get_org_ai_policy(organization_id)
+        local_engine_enabled = local_engine_enabled and (policy.local_allowed if policy else True)
+        if local_ai_setting.get("local_ai_access_policy", "public") not in ("public", "all_workspaces"):
+            access = await kodewaves_db_client.get_setting(f"local_ai_org_{organization_id}") or {}
+            local_engine_enabled = local_engine_enabled and bool(access.get("enabled", False))
+    else:
+        local_engine_enabled = False
 
     enabled_provs = set()
     if local_engine_enabled:
@@ -711,6 +721,20 @@ async def get_voices(
         raw_catalog = [dict(v) for v in (UNIVERSAL_VOICE_CATALOG.get(norm_key) or UNIVERSAL_VOICE_CATALOG.get(provider_key) or [])]
         if not raw_catalog:
             raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES if v.get("provider") in (norm_key, provider_key)]
+
+    # Local voices must be installed: Piper otherwise silently uses its default voice.
+    if any(v.get("provider", "piper") in ("piper", "speaches") for v in raw_catalog):
+        from api.services.catalog.local_inventory import get_installed_piper_voices
+        endpoint = local_ai_setting.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
+        try:
+            installed = await get_installed_piper_voices(normalize_local_ai_endpoint(endpoint))
+        except Exception:
+            installed = {}
+        raw_catalog = [
+            v for v in raw_catalog
+            if v.get("provider", "piper") not in ("piper", "speaches")
+            or (local_engine_enabled and v["voice_id"] in installed)
+        ]
 
     # Annotate with working preview URL
     for v in raw_catalog:
@@ -949,7 +973,8 @@ async def preview_voice(
 
     # 0. Piper ONNX (OHF-Voice/piper1-gpl HTTP server, local CPU)
     if provider_lower in ("piper", "speaches"):
-        piper_url = os.environ.get("PIPER_ENDPOINT", "http://piper:5000").rstrip("/")
+        piper_raw = os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
+        piper_url = normalize_local_ai_endpoint(piper_raw).rstrip("/")
         lang_prefix = voice_id.split("_")[0]
         # Concise prompt (<4 words) for rapid local CPU synthesis (<200ms)
         samples = {
