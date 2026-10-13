@@ -160,6 +160,16 @@ class CatalogService:
         self._cache.clear()
         logger.info("[CatalogService] Catalog cache cleared.")
 
+    async def notify_changed(self) -> None:
+        """Invalidate available models on every API worker after a catalog mutation."""
+        self.invalidate_cache()
+        from api.services.worker_sync.manager import get_worker_sync_manager
+        from api.services.worker_sync.protocol import WorkerSyncEventType
+        try:
+            await get_worker_sync_manager().broadcast(WorkerSyncEventType.MODEL_CATALOG, "update")
+        except Exception as exc:
+            logger.warning(f"Model catalog broadcast failed; cache TTL remains active: {exc}")
+
     async def seed_curated_models_if_needed(self, provider: str) -> None:
         """Seed built-in curated models for a provider into the database if missing."""
         prov_norm = normalize_provider_name(provider)
@@ -804,3 +814,7 @@ class CatalogService:
 
 
 catalog_service = CatalogService()
+
+
+async def handle_catalog_sync(_event) -> None:
+    catalog_service.invalidate_cache()

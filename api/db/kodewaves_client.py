@@ -137,6 +137,55 @@ class KodewavesDBClient(BaseDBClient):
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
+    @staticmethod
+    def _admin_model_lookup(model_id: str):
+        try:
+            return AIModelCatalogModel.id == uuid.UUID(model_id)
+        except ValueError:
+            return AIModelCatalogModel.model_identifier == model_id
+
+    async def configure_admin_model(self, values: Dict[str, Any], model_id: Optional[str] = None):
+        """Save admin catalog fields without replacing discovered capabilities."""
+        async with self.get_session() as session:
+            lookup = self._admin_model_lookup(model_id) if model_id else (
+                AIModelCatalogModel.model_identifier == values["model_identifier"]
+            )
+            model = (await session.execute(select(AIModelCatalogModel).where(lookup))).scalar_one_or_none()
+            if model is None:
+                if model_id:
+                    return None
+                model = AIModelCatalogModel(model_identifier=values["model_identifier"])
+                session.add(model)
+            for name in ("display_name", "provider", "custom_base_url", "allowed_plan_ids",
+                         "base_cost_cents_per_unit", "retail_price_cents_per_unit", "sort_order"):
+                setattr(model, name, values[name])
+            category = values["category"]
+            model.category = category
+            model.layer = "s2s" if category in ("sts", "realtime", "s2s") else category
+            model.enabled = model.is_active = values["is_active"]
+            await session.commit()
+            return model
+
+    async def toggle_admin_model(self, model_id: str) -> Optional[bool]:
+        async with self.get_session() as session:
+            model = (await session.execute(select(AIModelCatalogModel).where(
+                self._admin_model_lookup(model_id)))).scalar_one_or_none()
+            if model is None:
+                return None
+            model.enabled = model.is_active = not model.is_active
+            await session.commit()
+            return model.is_active
+
+    async def delete_admin_model(self, model_id: str) -> bool:
+        async with self.get_session() as session:
+            model = (await session.execute(select(AIModelCatalogModel).where(
+                self._admin_model_lookup(model_id)))).scalar_one_or_none()
+            if model is None:
+                return False
+            await session.delete(model)
+            await session.commit()
+            return True
+
     async def list_active_models(self, category: Optional[str] = None) -> List[AIModelCatalogModel]:
         return await self.list_models(layer=category, enabled_only=True)
 

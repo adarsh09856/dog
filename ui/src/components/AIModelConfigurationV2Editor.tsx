@@ -24,6 +24,7 @@ import { VoiceSelectorModal } from "@/components/VoiceSelectorModal";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
 import { formatRoundingPolicy } from "@/lib/billingDisplay";
 import { catalogApi, type AvailableCatalogResponse } from "@/lib/kodewavesApi";
+import { useAuth } from "@/lib/auth";
 
 type ModelMode = "realtime" | "kodewaves" | "dograh" | "byok";
 
@@ -482,6 +483,7 @@ export function AIModelConfigurationV2Editor({
     onSave,
     submitLabel = "Save Configuration",
 }: AIModelConfigurationV2EditorProps) {
+    const { user, loading: authLoading } = useAuth();
     const defaultsForByok = useMemo(() => byokDefaults(defaults), [defaults]);
     const [mode, setMode] = useState<ModelMode>("kodewaves");
     const kodewavesDefaults = defaults.kodewaves || defaults.dograh;
@@ -505,12 +507,30 @@ export function AIModelConfigurationV2Editor({
     }, [kodewavesDefaults.multilingual_languages]);
 
     const [catalogManifest, setCatalogManifest] = useState<AvailableCatalogResponse | null>(null);
+    const [catalogError, setCatalogError] = useState<string | null>(null);
 
     useEffect(() => {
-        catalogApi.getAvailableCatalog()
-            .then((data) => setCatalogManifest(data))
-            .catch((err) => console.warn("[AIModelConfigurationV2Editor] Failed to fetch dynamic catalog:", err));
-    }, []);
+        if (authLoading || !user) return;
+        let active = true;
+        const refreshCatalog = () => {
+            catalogApi.getAvailableCatalog()
+                .then((data) => { if (active) { setCatalogManifest(data); setCatalogError(null); } })
+                .catch(() => { if (active) setCatalogError("Could not refresh available models. Check the connection before saving."); });
+        };
+        refreshCatalog();
+        window.addEventListener("focus", refreshCatalog);
+        window.addEventListener("kodewaves-model-catalog-changed", refreshCatalog);
+        const onStorage = (event: StorageEvent) => {
+            if (event.key === "kodewaves-model-catalog-revision") refreshCatalog();
+        };
+        window.addEventListener("storage", onStorage);
+        return () => {
+            active = false;
+            window.removeEventListener("focus", refreshCatalog);
+            window.removeEventListener("kodewaves-model-catalog-changed", refreshCatalog);
+            window.removeEventListener("storage", onStorage);
+        };
+    }, [authLoading, user]);
 
     const effectiveLlmModels = useMemo(() => {
         const isLocal = kodewaves.llm_engine_type === "local_cpu";
@@ -574,25 +594,9 @@ export function AIModelConfigurationV2Editor({
 
     const effectiveTtsProvider = useMemo(() => {
         if (kodewaves.tts_engine_type === "local_cpu") return "piper";
-        const tm = (kodewaves.tts_model || "").toLowerCase();
-        if (tm.includes("gemini") || tm.includes("google")) return "google";
-        if (tm.includes("sonic") || tm.includes("cartesia")) return "cartesia";
-        if (tm.includes("eleven")) return "elevenlabs";
-        if (tm.includes("tts-1") || tm.includes("openai")) return "openai";
-        if (tm.includes("aura") || tm.includes("deepgram")) return "deepgram";
-        if (tm.includes("azure")) return "azure";
-        if (tm.includes("bulbul") || tm.includes("sarvam")) return "sarvam";
-        if (tm.includes("piper")) return "piper";
-        const v = (kodewaves.voice || "").toLowerCase();
-        if (["journey", "puck", "charon", "aoede", "fenrir", "kore"].includes(v)) return "google";
-        if (["alloy", "echo", "fable", "onyx", "nova", "shimmer"].includes(v)) return "openai";
-        if (v.startsWith("aura-")) return "deepgram";
-        if (v.startsWith("hi_in-") || v.startsWith("en_us-")) return "piper";
-        const activeProvs = catalogManifest?.active_providers || [];
-        if (activeProvs.includes("google") || activeProvs.includes("gemini")) return "google";
-        if (activeProvs.length > 0) return activeProvs[0];
-        return "google";
-    }, [kodewaves.tts_engine_type, kodewaves.tts_model, kodewaves.voice, catalogManifest]);
+        const selectedProvider = effectiveTtsModels.find(model => model.value === kodewaves.tts_model)?.provider;
+        return selectedProvider && selectedProvider !== "auto" ? selectedProvider : "all";
+    }, [kodewaves.tts_engine_type, kodewaves.tts_model, effectiveTtsModels]);
 
     const effectiveS2sModels = useMemo(() => {
         let list = catalogManifest?.cloud_s2s_models || [];
@@ -643,6 +647,18 @@ export function AIModelConfigurationV2Editor({
             const isAllLocal = kodewaves.llm_engine_type === "local_cpu" && kodewaves.stt_engine_type === "local_cpu" && kodewaves.tts_engine_type === "local_cpu";
             const apiKey = isAllLocal ? "sovereign-local-cpu" : "sovereign-managed";
             const isRt = overrideRealtime !== undefined ? overrideRealtime : Boolean(kodewaves.is_realtime);
+            if (!catalogManifest || catalogError) throw new Error("Refresh the model catalog before saving.");
+            if (!isRt) {
+                for (const [label, selected, models] of [
+                    ["LLM", kodewaves.llm_model, effectiveLlmModels],
+                    ["STT", kodewaves.stt_model, effectiveSttModels],
+                    ["TTS", kodewaves.tts_model, effectiveTtsModels],
+                ] as const) {
+                    if (models.length === 0 || (selected && !models.some(model => model.value === selected))) {
+                        throw new Error(`Select an available ${label} model before saving.`);
+                    }
+                }
+            }
 
             const payload = {
                 api_key: apiKey,
@@ -732,7 +748,7 @@ export function AIModelConfigurationV2Editor({
 
                 <TabsContent value="realtime" className="mt-0 space-y-4">
                     <p className="text-sm text-muted-foreground">
-                        Native speech-to-speech architecture (Gemini Live &amp; OpenAI Realtime). Single bidirectional WebSocket connection with direct audio streaming, bypassing multi-step cascade delays for sub-300ms conversational latency.
+                        Speech-to-speech models stream audio directly. Response latency depends on the selected provider, model, region, and connection.
                     </p>
                     <PricingSummary pricing={pricing} includeManagedModel thirdPartyModels />
                     <Card>
@@ -745,7 +761,7 @@ export function AIModelConfigurationV2Editor({
                                             <span className="text-xs font-semibold text-foreground">Sovereign Speech-to-Speech (S2S / STS)</span>
                                         </div>
                                         <span className="rounded-md border border-primary/30 bg-background px-2 py-0.5 font-mono text-[11px] font-bold text-primary">
-                                            ⚡ Sub-300ms Bidirectional Audio
+                                            Bidirectional Audio Streaming
                                         </span>
                                     </div>
                                     <p className="mt-1 text-[11px] text-muted-foreground">
@@ -849,7 +865,7 @@ export function AIModelConfigurationV2Editor({
                                     </Select>
                                     {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && multilingualLanguageNames && (
                                         <p className="text-xs text-muted-foreground">
-                                            Auto-detects {multilingualLanguageNames}.
+                                            Speech recognition can auto-detect {multilingualLanguageNames}. Voice output uses the selected voice and its supported language.
                                         </p>
                                     )}
                                 </div>
@@ -910,8 +926,9 @@ export function AIModelConfigurationV2Editor({
 
                 <TabsContent value="kodewaves" className="mt-0">
                     <p className="mb-4 text-sm text-muted-foreground">
-                        Sovereign managed transcriber, LLM, and voice pipeline. Select a voice and language while Kodewaves manages the underlying model orchestration.
+                        Select cloud or local models independently for speech recognition, reasoning, and voice. Calls use the saved selections.
                     </p>
+                    {catalogError && <p role="alert" className="mb-4 text-sm text-destructive">{catalogError}</p>}
                     <PricingSummary pricing={pricing} includeManagedModel />
                     <Card>
                         <CardContent className="pt-6">
@@ -1207,6 +1224,8 @@ export function AIModelConfigurationV2Editor({
                                     <Label>Voice</Label>
                                     <VoiceSelectorModal
                                         provider={effectiveTtsProvider}
+                                        model={kodewaves.tts_model === "auto" ? undefined : kodewaves.tts_model}
+                                        source={kodewaves.tts_engine_type === "local_cpu" ? "local" : "cloud"}
                                         value={kodewaves.voice}
                                         onChange={(voice) => setKodewaves({ ...kodewaves, voice })}
                                         allowManualInput={allowCustomVoice}
@@ -1229,7 +1248,7 @@ export function AIModelConfigurationV2Editor({
                                     </Select>
                                     {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && multilingualLanguageNames && (
                                         <p className="text-xs text-muted-foreground">
-                                            Auto-detects {multilingualLanguageNames}.
+                                            Speech recognition can auto-detect {multilingualLanguageNames}. Voice output uses the selected voice and its supported language.
                                         </p>
                                     )}
                                 </div>
@@ -1253,7 +1272,7 @@ export function AIModelConfigurationV2Editor({
                                     />
                                 </div>
 
-                                {kodewaves.engine_type === "local_cpu" ? (
+                                {kodewaves.llm_engine_type === "local_cpu" && kodewaves.stt_engine_type === "local_cpu" && kodewaves.tts_engine_type === "local_cpu" ? (
                                     <div className="sm:col-span-2 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 flex items-start gap-3">
                                         <Cpu className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                                         <div className="space-y-1 text-xs">
@@ -1264,7 +1283,7 @@ export function AIModelConfigurationV2Editor({
                                                 </span>
                                             </div>
                                             <p className="text-muted-foreground leading-relaxed">
-                                                Voice pipeline calls run exclusively on your server CPU via Ollama (Qwen2.5) and Piper Native Indic ONNX TTS. Completely sovereign, reliable, and consumes zero wallet minutes.
+                                                All three selected layers run on local engines. Voice quality and response time depend on the installed models and available server resources. Match the spoken language to the selected voice.
                                             </p>
                                         </div>
                                     </div>
@@ -1273,10 +1292,10 @@ export function AIModelConfigurationV2Editor({
                                         <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                                         <div className="space-y-1 text-xs">
                                             <div className="font-semibold text-foreground text-sm">
-                                                Sovereign Platform Managed (Admin Master Keys)
+                                                Selected Cloud and Local Layers
                                             </div>
                                             <p className="text-muted-foreground leading-relaxed">
-                                                Voice pipelines run seamlessly using the master provider keys configured in your Admin Panel (Google Gemini, OpenAI, Deepgram, Sarvam, Cartesia, ElevenLabs). Voice usage is billed in minutes from your organization balance.
+                                                Cloud layers use the selected admin-provided models and keys; local layers use installed engines. Usage charges follow the call configuration and billing policy.
                                             </p>
                                         </div>
                                     </div>

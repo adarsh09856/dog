@@ -79,6 +79,7 @@ interface VoiceSelectorModalProps {
     onChange: (voiceId: string) => void;
     /** Optional model passed through to the voice catalog query. */
     model?: string;
+    source?: "cloud" | "local";
     /** Allow typing a raw voice ID for voices outside the catalog. */
     allowManualInput?: boolean;
     className?: string;
@@ -110,6 +111,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     value,
     onChange,
     model,
+    source,
     allowManualInput = false,
     className,
 }) => {
@@ -202,13 +204,11 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             try {
                 const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
                     path: { provider: targetProv as never },
-                    query: { q: value },
+                    query: { q: value, model: model === "auto" ? undefined : model },
                 });
                 if (!active) return;
                 const found = response.data?.voices?.find((voice) => voice.voice_id === value) ?? null;
-                if (found) {
-                    setSelectedVoiceInfo(found);
-                }
+                setSelectedVoiceInfo(found);
             } catch {
                 // Keep selected label as fallback
             }
@@ -216,7 +216,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         return () => {
             active = false;
         };
-    }, [value, provider]);
+    }, [value, provider, model]);
 
     // Fetch the filtered voice list (server-side) whenever the modal is open
     // and a filter changes. A request counter discards out-of-order responses.
@@ -249,13 +249,17 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                         setError("Failed to load voices");
                     }
                 } else {
-                    setVoices(response.data.voices);
+                    const available = response.data.voices.filter(voice => {
+                        const local = ["piper", "speaches"].includes((voice as VoiceInfo).provider || "");
+                        return source === "cloud" ? !local : source === "local" ? local : true;
+                    });
+                    setVoices(available);
                     if (response.data.facets) {
                         setFacets({
                             genders: response.data.facets.genders ?? [],
                             accents: response.data.facets.accents ?? [],
                             languages: response.data.facets.languages ?? [],
-                            providers: (response.data.facets as any).providers ?? [],
+                            providers: source ? Array.from(new Set(available.map(voice => (voice as VoiceInfo).provider).filter((provider): provider is string => Boolean(provider)))) : (response.data.facets as any).providers ?? [],
                         });
                     }
                 }
@@ -269,7 +273,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 }
             }
         })();
-    }, [isOpen, manualMode, provider, model, providerFilter, gender, accent, language, debouncedSearch]);
+    }, [isOpen, manualMode, provider, model, source, providerFilter, gender, accent, language, debouncedSearch]);
 
     // Stop any preview when the modal closes / unmounts.
     useEffect(() => {

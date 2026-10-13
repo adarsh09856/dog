@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from pipecat.services.openai.stt import OpenAISTTService, OpenAISTTSettings
+from pipecat.services.whisper.base_stt import Transcription
 
 
 @dataclass
@@ -44,3 +45,17 @@ class SpeachesSTTService(OpenAISTTService):
             settings=settings,
             **kwargs,
         )
+
+    async def _transcribe(self, audio: bytes) -> Transcription:
+        """Pass an explicit language, or omit it for Speaches auto detection."""
+        kwargs = {
+            "file": ("audio.wav", audio, "audio/wav"),
+            "model": self._settings.model,
+        }
+        if self._settings.language:
+            kwargs["language"] = str(self._settings.language).split("-")[0].lower()
+        if self._settings.prompt is not None:
+            kwargs["prompt"] = self._settings.prompt
+        if self._settings.temperature is not None:
+            kwargs["temperature"] = self._settings.temperature
+        return await self._client.audio.transcriptions.create(**kwargs)

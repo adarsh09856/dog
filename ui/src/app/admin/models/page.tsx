@@ -50,9 +50,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   adminApi,
+  catalogApi,
+  type AvailableCatalogResponse,
   MasterCredential,
   ModelCatalogEntry,
 } from "@/lib/kodewavesApi";
+import { useAuth } from "@/lib/auth";
 
 export interface ProviderMeta {
   provider: string;
@@ -172,6 +175,9 @@ const DEFAULT_PROVIDERS: ProviderMeta[] = [
 ];
 
 export default function MasterKeysAndModelsPage() {
+  const { user, loading: authLoading } = useAuth();
+  const [catalog, setCatalog] = useState<AvailableCatalogResponse | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [keys, setKeys] = useState<MasterCredential[]>([]);
   const [models, setModels] = useState<ModelCatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -197,13 +203,17 @@ export default function MasterKeysAndModelsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [fetchedKeys, fetchedModels] = await Promise.all([
-        adminApi.getMasterKeys().catch(() => []),
-        adminApi.getModels().catch(() => []),
+      const [fetchedKeys, fetchedModels, fetchedCatalog] = await Promise.all([
+        adminApi.getMasterKeys(),
+        adminApi.getModels(),
+        catalogApi.getAvailableCatalog(),
       ]);
       setKeys(fetchedKeys);
       setModels(fetchedModels);
+      setCatalog(fetchedCatalog);
+      setLoadError(null);
     } catch (err) {
+      setLoadError("Could not refresh credentials and models. Reload to try again.");
       console.error("Error loading master credentials & catalog:", err);
     } finally {
       setLoading(false);
@@ -211,8 +221,9 @@ export default function MasterKeysAndModelsPage() {
   };
 
   useEffect(() => {
+    if (authLoading || !user) return;
     fetchData();
-  }, []);
+  }, [authLoading, user]);
 
   const handleTestKey = async (provider: string) => {
     setTestingProvider(provider);
@@ -333,6 +344,7 @@ export default function MasterKeysAndModelsPage() {
         </Button>
       </div>
 
+      {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
       <Tabs defaultValue="credentials" className="space-y-6">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="credentials" className="gap-2">
@@ -354,13 +366,13 @@ export default function MasterKeysAndModelsPage() {
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Cpu className="h-5 w-5 text-primary" />
-                    <span>Sovereign Self-Hosted Engines (Local CPU - Zero Cloud Cost)</span>
+                    <span>Self-Hosted Engines</span>
                     <Badge variant="default" className="text-xs bg-emerald-600 hover:bg-emerald-600 text-white">
-                      Active
+                      {catalog?.local_engine_enabled ? "Enabled" : "Unavailable"}
                     </Badge>
                   </CardTitle>
                   <CardDescription className="mt-1">
-                    Lightweight CPU-native inference services running directly on your VPS. These run locally with zero API costs, zero cloud token billing, and maximum data sovereignty.
+                    Local model availability follows admin settings and installed engine inventories. Select voices that support the agent&apos;s spoken language.
                   </CardDescription>
                 </div>
               </div>
@@ -375,12 +387,13 @@ export default function MasterKeysAndModelsPage() {
                       Piper Neural TTS (OHF-Voice)
                     </span>
                     <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
-                      TTS (~40ms)
+                      Local TTS
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Ultra-fast neural text-to-speech with 21+ verified voices across Hindi, Telugu, Marathi, Malayalam, Bengali, and English. Runs locally on VPS CPU with zero cloud costs.
+                    Local speech synthesis uses installed voices. Check the voice language and measured response time in Settings before assigning it to an agent.
                   </p>
+                  <p className="text-xs text-muted-foreground">{catalog?.local_tts_models.length ?? 0} available local speech models</p>
                   <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
                     <span className="font-mono text-muted-foreground">Default: hi_IN-priyamvada-medium</span>
                     <Button variant="outline" size="sm" asChild className="h-7 text-xs">
@@ -401,8 +414,9 @@ export default function MasterKeysAndModelsPage() {
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Quantized GGUF models running directly on your VPS. Pre-pulled with Qwen 2.5 0.5B / 1.5B and Llama 3.2 1B for sovereign voice conversations without cloud API tokens.
+                    Quantized language models run on your server. Only downloaded models are available to users; accuracy and response time depend on the selected model and server capacity.
                   </p>
+                  <p className="text-xs text-muted-foreground">{catalog?.local_llm_models.map(model => model.value).join(", ") || "No local language models available"}</p>
                   <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
                     <span className="font-mono text-muted-foreground">Port: 11434</span>
                     <Button variant="outline" size="sm" asChild className="h-7 text-xs">

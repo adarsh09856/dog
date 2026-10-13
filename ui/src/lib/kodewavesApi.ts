@@ -29,6 +29,13 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
       : result.response?.statusText || 'Unable to reach the server';
     throw new Error(detailFromError(result.error, fallback));
   }
+  if (typeof window !== 'undefined' && options.method && options.method.toUpperCase() !== 'GET'
+      && /^\/admin\/(master-keys|models|settings)(\/|$)/.test(cleanEndpoint)) {
+    window.dispatchEvent(new Event('kodewaves-model-catalog-changed'));
+    try {
+      window.localStorage.setItem('kodewaves-model-catalog-revision', String(Date.now()));
+    } catch { /* Model refresh on focus remains available when storage is restricted. */ }
+  }
   return result.data as T;
 }
 

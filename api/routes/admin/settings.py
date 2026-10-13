@@ -215,7 +215,7 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
         except Exception:
             pass
 
-        catalog_service.invalidate_cache()
+        await catalog_service.notify_changed()
         return {"message": "Successfully saved sovereign platform settings"}
 
     # Fallback to key-value update if structured as { category, key, value }
@@ -224,10 +224,10 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
     category = payload.get("category", "general")
     if key and value is not None:
         await kodewaves_db_client.set_setting(key=key, value=value, category=category)
-        catalog_service.invalidate_cache()
+        await catalog_service.notify_changed()
         return {"message": f"Successfully updated setting '{key}'"}
 
-    catalog_service.invalidate_cache()
+    await catalog_service.notify_changed()
     return {"message": "Settings updated"}
 
 

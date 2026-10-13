@@ -206,6 +206,15 @@ def kodewaves_stt_uses_flux_language(language: str | None) -> bool:
     return _resolve_deepgram_flux_language_hint(language) is not None
 
 
+def _resolve_speaches_language(language: str | None) -> Language | None:
+    if not language or language in ("multi", "auto", "default"):
+        return None
+    try:
+        return Language(language)
+    except ValueError as exc:
+        raise ValueError(f"Unsupported selected speech language: {language}") from exc
+
+
 dograh_stt_uses_flux_language = kodewaves_stt_uses_flux_language
 
 
@@ -512,7 +521,7 @@ def create_stt_service(
             return SpeachesSTTService(
                 base_url=whisper_v1,
                 api_key="local-cpu-token",
-                settings=SpeachesSTTSettings(model=stt_model),
+                settings=SpeachesSTTSettings(model=stt_model, language=_resolve_speaches_language(language)),
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
@@ -584,13 +593,7 @@ def create_stt_service(
         )
     elif user_config.stt.provider in (ServiceProviders.SPEACHES.value, "speaches", "whisper"):
         lang_str = getattr(user_config.stt, "language", None)
-        lang_obj = None
-        if lang_str and lang_str not in ("multi", "auto", "default"):
-            try:
-                from pipecat.transcriptions.language import Language
-                lang_obj = Language(lang_str)
-            except ValueError:
-                lang_obj = None
+        lang_obj = _resolve_speaches_language(lang_str)
         base_url = getattr(user_config.stt, "base_url", None) or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
         _validate_runtime_service_url(base_url, "base_url")
         return SpeachesSTTService(
@@ -796,7 +799,7 @@ def create_tts_service(
         return OpenAITTSService(
             api_key=user_config.tts.api_key,
             sample_rate=OPENAI_SAMPLE_RATE,
-            settings=OpenAITTSSettings(model=user_config.tts.model),
+            settings=OpenAITTSSettings(model=user_config.tts.model, voice=user_config.tts.voice),
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,
@@ -926,8 +929,6 @@ def create_tts_service(
         ServiceProviders.DOGRAH.value,
         "kodewaves",
     ):
-        import os
-        import aiohttp
         from pipecat.services.piper.tts import PiperHttpTTSService, PiperHttpTTSSettings
         piper_host = os.environ.get("PIPER_ENDPOINT", "http://piper:5000").rstrip("/")
         piper_url = piper_host if piper_host.endswith("/synthesize") else f"{piper_host}/synthesize"
@@ -1036,10 +1037,8 @@ def create_tts_service(
         tts._settings.language = language
         return tts
     elif user_config.tts.provider in (ServiceProviders.SPEACHES.value, "speaches", "piper"):
-        import os
-        import aiohttp
         from pipecat.services.piper.tts import PiperHttpTTSService, PiperHttpTTSSettings
-        piper_host = os.environ.get("PIPER_ENDPOINT", getattr(user_config.tts, "base_url", None) or "http://piper:5000").rstrip("/")
+        piper_host = (getattr(user_config.tts, "base_url", None) or os.environ.get("PIPER_ENDPOINT") or "http://piper:5000").rstrip("/")
         piper_url = piper_host if piper_host.endswith("/synthesize") else f"{piper_host}/synthesize"
         lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None) or "hi"
         default_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
@@ -1426,7 +1425,6 @@ def create_llm_service_from_provider(
             settings=AzureLLMSettings(model=model, temperature=0.1),
         )
     elif provider in (ServiceProviders.OLLAMA.value, "ollama"):
-        import os
         ollama_host = base_url or os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
         if not ollama_host.endswith("/v1"):
             ollama_host = f"{ollama_host.rstrip('/')}/v1"
@@ -1443,7 +1441,6 @@ def create_llm_service_from_provider(
         ServiceProviders.DOGRAH.value,
         "kodewaves",
     ):
-        import os
         if api_key == "sovereign-local-cpu":
             ollama_host = os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
             if not ollama_host.endswith("/v1"):

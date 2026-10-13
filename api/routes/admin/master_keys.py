@@ -129,9 +129,10 @@ async def save_master_key(req: MasterCredentialRequest, _user=Depends(get_superu
 
     try:
         await catalog_service.discover_provider(provider_clean, creds=creds)
-        catalog_service.invalidate_cache()
     except Exception as disc_err:
         logger.warning(f"[MasterKeys] Auto-discovery for {provider_clean} encountered error: {disc_err}")
+
+    await catalog_service.notify_changed()
 
     return {"message": f"Successfully stored master credentials for {req.provider}"}
 
@@ -243,7 +244,7 @@ async def delete_master_key(provider: str, _user=Depends(get_superuser)):
         for r in records:
             await session.delete(r)
         await session.commit()
-        catalog_service.invalidate_cache()
+        await catalog_service.notify_changed()
         try:
             await kodewaves_db_client.record_audit_log(
                 actor_id=_user.id,
