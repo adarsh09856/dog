@@ -57,6 +57,7 @@ from api.services.pipecat.worker_runner import (
 )
 from api.services.workflow.dto import ReactFlowDTO
 from api.services.workflow.booking_response_guard import guard_booking_reply
+from api.services.workflow.confirmed_booking import confirmed_booking_arguments
 from api.services.workflow.initial_context import merge_external_initial_context
 from api.services.workflow.pipecat_engine import (
     ENGINE_OWNED_CONTEXT_KEYS,
@@ -778,16 +779,50 @@ async def execute_text_chat_pending_turn(
 
         if pending_user_message is not None:
             context.add_message({"role": "user", "content": pending_user_message})
-            generation_marker = capture_processor.activity_count
-            response_window.note_direct_context_request()
-            engine.expect_response()
-            await llm.queue_frame(LLMContextFrame(context))
-            await _wait_for_quiescence(
-                capture_processor=capture_processor,
-                response_window=response_window,
-                runner_task=runner_task,
-                activity_marker=generation_marker,
+            booking_arguments = confirmed_booking_arguments(pending_user_message)
+            active_tools = getattr(context.tools, "standard_tools", [])
+            has_booking_tool = any(
+                getattr(tool, "name", None) == "book_appointment"
+                for tool in active_tools
             )
+            if booking_arguments and has_booking_tool:
+                from api.services.workflow.tools.booking import execute_booking
+
+                capture_processor._append_event(
+                    "tool_call_started",
+                    {"function_name": "book_appointment", "arguments": booking_arguments},
+                )
+                booking_result = await execute_booking(
+                    booking_arguments, workflow.organization_id
+                )
+                capture_processor._append_event(
+                    "tool_call_result",
+                    {"function_name": "book_appointment", "result": booking_result},
+                )
+                if booking_result.get("booked") is True:
+                    reply = (
+                        "Your appointment is booked. "
+                        f"Appointment ID: {booking_result['appointment_id']}. "
+                        f"Time: {booking_result['start_time']}."
+                    )
+                else:
+                    reply = (
+                        "No appointment was saved. "
+                        + booking_result.get("error", "Please confirm the details and try again.")
+                    )
+                response_window.outputs.append(reply)
+                context.add_message({"role": "assistant", "content": reply})
+            else:
+                generation_marker = capture_processor.activity_count
+                response_window.note_direct_context_request()
+                engine.expect_response()
+                await llm.queue_frame(LLMContextFrame(context))
+                await _wait_for_quiescence(
+                    capture_processor=capture_processor,
+                    response_window=response_window,
+                    runner_task=runner_task,
+                    activity_marker=generation_marker,
+                )
     finally:
         try:
             if not task.has_finished():
