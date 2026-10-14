@@ -44,6 +44,82 @@ DEFAULT_PIPER_VOICES_BY_LANG = {
     "en-us": "en_US-lessac-medium",
 }
 
+SPEECH_LANGUAGE_NAMES = {
+    "ar": "Arabic", "bn": "Bengali", "de": "German", "en": "English",
+    "es": "Spanish", "fr": "French", "gu": "Gujarati", "hi": "Hindi",
+    "id": "Indonesian", "it": "Italian", "ja": "Japanese", "kn": "Kannada",
+    "ko": "Korean", "ml": "Malayalam", "mr": "Marathi", "nl": "Dutch",
+    "or": "Odia", "pa": "Punjabi", "pt": "Portuguese", "ru": "Russian",
+    "ta": "Tamil", "te": "Telugu", "th": "Thai", "tr": "Turkish",
+    "ur": "Urdu", "vi": "Vietnamese", "zh": "Chinese",
+}
+
+
+def _is_auto_language(value: Optional[str]) -> bool:
+    return not value or str(value).strip().lower().replace("_", "-") in {
+        "auto", "multi", "multilingual", "unknown", "default", "none", ""
+    }
+
+
+def infer_language_from_voice(provider: Optional[str], voice: Optional[str]) -> Optional[str]:
+    """Infer a speech language only when a voice ID declares a locale."""
+    if not voice:
+        return None
+    provider_key = str(provider or "").lower().strip()
+    voice_key = str(voice).strip().lower().replace("-", "_")
+    if provider_key in {"piper", "speaches", "local_cpu"}:
+        prefix = voice_key.split("_")[0]
+        if len(prefix) == 2 and prefix.isalpha():
+            return prefix
+    # Locale-based IDs such as hi-IN-SwaraNeural and en-IN-NeerjaNeural.
+    parts = voice_key.replace("_", "-").split("-")
+    if len(parts) > 1 and len(parts[0]) in (2, 3) and parts[0].isalpha():
+        return parts[0]
+    # Navana's IDs use a language prefix without a locale.
+    if provider_key == "navana" and voice_key.startswith(("hi-", "te-", "kn-", "mr-")):
+        return voice_key[:2]
+    return None
+
+
+def resolve_agent_speech_language(user_config) -> Optional[str]:
+    """Return an explicit TTS/STT language, or infer one from a locale voice."""
+    if user_config is None:
+        return None
+    tts = getattr(user_config, "tts", None)
+    stt = getattr(user_config, "stt", None)
+    for service in (tts, stt):
+        language = getattr(service, "language", None)
+        if not _is_auto_language(language):
+            return normalize_language_code(language)
+    voice_language = infer_language_from_voice(
+        getattr(getattr(tts, "provider", None), "value", getattr(tts, "provider", None)),
+        getattr(tts, "voice", None),
+    )
+    return voice_language or "caller"
+
+
+def speech_language_instruction(language: Optional[str]) -> Optional[str]:
+    """Build a concise text-generation rule so the LLM output matches TTS."""
+    if _is_auto_language(language):
+        return None
+    if language == "caller":
+        return (
+            "Final spoken-language rule (overrides earlier conflicting prompt text): "
+            "reply in the same language the caller used, and use that language's "
+            "normal writing system. Do not translate or transliterate into English. "
+            "Keep the caller's language consistent throughout the response."
+        )
+    code = normalize_language_code(language)
+    name = SPEECH_LANGUAGE_NAMES.get(code)
+    if not name:
+        return None
+    return (
+        f"Final spoken-language rule (overrides earlier conflicting prompt text): "
+        f"respond in {name}. Use its native script where applicable; do not "
+        "transliterate or translate into English. Keep names, numbers, and product "
+        "terms clear and natural."
+    )
+
 
 def normalize_language_code(lang: Optional[str], target_provider: Optional[str] = None) -> str:
     """

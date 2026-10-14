@@ -520,12 +520,36 @@ UNIVERSAL_VOICE_CATALOG: dict[str, list[dict]] = {
         {"voice_id": "shimmer", "name": "Shimmer (Clear & Expressive)", "description": "Bright, clear female tone optimal for educational and support content.", "gender": "female", "accent": "us", "language": "en"},
     ],
     "google": [
-        {"voice_id": "Journey", "name": "Journey (Adaptive Conversational)", "description": "High-fidelity conversational voice with expressive pitch and pace.", "gender": "female", "accent": "us", "language": "en"},
-        {"voice_id": "Puck", "name": "Puck (Playful & Quick)", "description": "Lively voice with fast turn-taking capability for interactive bots.", "gender": "male", "accent": "us", "language": "en"},
-        {"voice_id": "Charon", "name": "Charon (Calm & Informative)", "description": "Deep, grounded tone perfect for briefings and announcements.", "gender": "male", "accent": "us", "language": "en"},
-        {"voice_id": "Aoede", "name": "Aoede (Warm & Melodic)", "description": "Warm female voice tuned for storytelling and guided onboarding.", "gender": "female", "accent": "us", "language": "en"},
-        {"voice_id": "Fenrir", "name": "Fenrir (Crisp & Direct)", "description": "Crisp male articulation designed for high intelligibility on telephony.", "gender": "male", "accent": "us", "language": "en"},
-        {"voice_id": "Kore", "name": "Kore (Friendly Professional)", "description": "Friendly, modern corporate persona for front-desk reception.", "gender": "female", "accent": "us", "language": "en"},
+        {"voice_id": "Zephyr", "name": "Zephyr (Bright)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Puck", "name": "Puck (Upbeat)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Fenrir", "name": "Fenrir (Excitable)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Leda", "name": "Leda (Youthful)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Orus", "name": "Orus (Firm)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Aoede", "name": "Aoede (Breezy)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Callirrhoe", "name": "Callirrhoe (Easy-going)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Autonoe", "name": "Autonoe (Bright)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Enceladus", "name": "Enceladus (Breathy)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Iapetus", "name": "Iapetus (Clear)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Umbriel", "name": "Umbriel (Easy-going)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Algieba", "name": "Algieba (Smooth)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Despina", "name": "Despina (Smooth)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Erinome", "name": "Erinome (Clear)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Algenib", "name": "Algenib (Gravelly)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Rasalgethi", "name": "Rasalgethi (Informative)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Laomedeia", "name": "Laomedeia (Upbeat)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Achernar", "name": "Achernar (Soft)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Alnilam", "name": "Alnilam (Firm)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Schedar", "name": "Schedar (Even)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Gacrux", "name": "Gacrux (Mature)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Pulcherrima", "name": "Pulcherrima (Forward)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Achird", "name": "Achird (Friendly)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Zubenelgenubi", "name": "Zubenelgenubi (Casual)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Vindemiatrix", "name": "Vindemiatrix (Gentle)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Sadachbia", "name": "Sadachbia (Lively)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Sadaltager", "name": "Sadaltager (Knowledgeable)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Sulafat", "name": "Sulafat (Warm)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Charon", "name": "Charon (Informative)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "male", "accent": "multilingual", "language": "hi"},
+        {"voice_id": "Kore", "name": "Kore (Firm)", "description": "Multilingual preset; follows the language of the generated text.", "gender": "female", "accent": "multilingual", "language": "hi"},
     ],
     "azure": [
         {"voice_id": "en-US-JennyNeural", "name": "Jenny (Natural Conversational)", "description": "Fluid, natural-sounding American female neural voice.", "gender": "female", "accent": "us", "language": "en"},
@@ -610,6 +634,16 @@ for p_key in ["elevenlabs", "cartesia", "openai", "deepgram", "google", "azure",
             MANAGED_UNIVERSAL_VOICES.append(v)
 
 # Alias mirror providers to primary catalog entries
+GEMINI_TTS_LANGUAGE_TAGS = [
+    "de-DE", "en-US", "es-ES", "fr-FR", "hi-IN", "it-IT", "ja-JP",
+    "nl-NL", "pt-BR", "ru-RU",
+]
+for gemini_voice in UNIVERSAL_VOICE_CATALOG["google"]:
+    # Gemini's prebuilt IDs are vocal style presets. The spoken language comes
+    # from the generated transcript, so do not label them as US-English voices.
+    gemini_voice["language"] = "multi"
+    gemini_voice["languages"] = GEMINI_TTS_LANGUAGE_TAGS
+
 UNIVERSAL_VOICE_CATALOG["gemini"] = UNIVERSAL_VOICE_CATALOG["google"]
 UNIVERSAL_VOICE_CATALOG["azure_speech"] = UNIVERSAL_VOICE_CATALOG["azure"]
 UNIVERSAL_VOICE_CATALOG["kodewaves"] = MANAGED_UNIVERSAL_VOICES
@@ -624,6 +658,7 @@ class VoiceInfo(BaseModel):
     accent: Optional[str] = None
     gender: Optional[str] = None
     language: Optional[str] = None
+    languages: Optional[List[str]] = None
     preview_url: Optional[str] = None
     provider: Optional[str] = None
 
@@ -665,7 +700,11 @@ async def get_voices(
         matches = [entry for entry in models
                    if (entry.layer or entry.category) == "tts" and entry.model_identifier == model
                    and getattr(entry, "status", None) not in ("FAIL", "UNAVAILABLE")]
-        providers = {normalize_provider_name(entry.provider) for entry in matches}
+        providers = {
+            "gemini" if str(entry.provider).lower().strip() == "gemini"
+            else normalize_provider_name(entry.provider)
+            for entry in matches
+        }
         if len(providers) != 1:
             raise HTTPException(status_code=400, detail="Select an available TTS provider and model")
         provider_key = providers.pop()
@@ -703,7 +742,7 @@ async def get_voices(
             pass
 
     # Fetch voice catalog from Database Truth Layer (voice_catalog table)
-    norm_key = "google" if provider_key == "gemini" else ("azure" if provider_key == "azure_speech" else ("navana" if provider_key == "bodhi" else provider_key))
+    norm_key = "google" if provider_key == "google" else ("azure" if provider_key == "azure_speech" else ("navana" if provider_key == "bodhi" else provider_key))
     db_voices = await kodewaves_db_client.list_voices(
         provider=None if provider_key in ("kodewaves", "dograh", "all", "auto") else norm_key,
         tts_model=model,
@@ -716,7 +755,11 @@ async def get_voices(
                 "voice_id": v.voice_id,
                 "name": v.name,
                 "gender": v.gender,
-                "language": (v.languages[0] if v.languages else "en-US"),
+                "language": (
+                    "multi" if norm_key == "google"
+                    else (v.languages[0] if v.languages else "en-US")
+                ),
+                "languages": list(v.languages or []),
                 "provider": v.provider,
                 "preview_url": v.preview_url or f"/api/v1/user/configurations/voices/{v.provider}/{v.voice_id}/preview",
             }
@@ -783,7 +826,16 @@ async def get_voices(
     if accent and accent != "__all__":
         filtered = [v for v in filtered if v.get("accent") == accent]
     if language and language != "__all__":
-        filtered = [v for v in filtered if v.get("language") == language]
+        language_key = language.lower().replace("_", "-")
+        filtered = [
+            v for v in filtered
+            if any(
+                str(candidate).lower().replace("_", "-").split("-")[0]
+                == language_key.split("-")[0]
+                for candidate in (v.get("languages") or [v.get("language")])
+                if candidate
+            )
+        ]
     if q and q.strip():
         ql = q.strip().lower()
         filtered = [
@@ -797,7 +849,12 @@ async def get_voices(
     # Calculate facets dynamically from active provider catalog
     genders = sorted(list({v.get("gender") for v in raw_catalog if v.get("gender")}))
     accents = sorted(list({v.get("accent") for v in raw_catalog if v.get("accent")}))
-    languages = sorted(list({v.get("language") for v in raw_catalog if v.get("language")}))
+    languages = sorted({
+        candidate
+        for voice in raw_catalog
+        for candidate in (voice.get("languages") or [voice.get("language")])
+        if candidate
+    })
     providers_list = sorted(list({v.get("provider") for v in raw_catalog if v.get("provider")}))
 
     return VoicesResponse(
@@ -846,6 +903,7 @@ async def preview_voice(
     request: Request,
     token: Optional[str] = Query(None),
     model: Optional[str] = Query(None),
+    language: Optional[str] = Query(None),
     user: UserModel = Depends(get_user),
 ):
     """Generate a voice preview using the selected organization's authorized provider."""
@@ -879,7 +937,7 @@ async def preview_voice(
     elif not await _resolve_tts_preview_creds(provider_lower, user, db_client):
         raise HTTPException(status_code=400, detail="No active credentials for the selected voice provider")
 
-    cache_key = f"{user.selected_organization_id}:{provider_lower}:{model or 'default'}:{voice_id}"
+    cache_key = f"{user.selected_organization_id}:{provider_lower}:{model or 'default'}:{voice_id}:{language or 'default'}"
     if cache_key in _AUDIO_PREVIEW_CACHE:
         cached_bytes, cached_mime = _AUDIO_PREVIEW_CACHE[cache_key]
         return Response(content=cached_bytes, media_type=cached_mime,
@@ -992,7 +1050,9 @@ async def preview_voice(
 
     # 5. Google / Gemini
     if provider_lower in ("google", "gemini"):
-        creds = await _resolve_tts_preview_creds("google", user, db_client)
+        selected_model = model or "gemini-3.8-flash-lite-tts"
+        credential_provider = "gemini" if selected_model.startswith("gemini-") else "google"
+        creds = await _resolve_tts_preview_creds(credential_provider, user, db_client)
         api_key = creds.get("api_key")
         if not api_key:
             raise HTTPException(
@@ -1002,59 +1062,102 @@ async def preview_voice(
 
         gemini_voice = voice_id
 
-        candidate_endpoints = [
-            model or "gemini-3.1-flash-tts-preview",
-        ]
+        candidate_endpoints = [selected_model]
+        language_code = (language or "en").lower().replace("_", "-").split("-")[0]
+        preview_texts = {
+            "de": "Guten Tag. Dies ist eine natürliche Sprachprobe.",
+            "en": "Hello, this is a natural and conversational voice sample.",
+            "es": "Hola. Esta es una muestra de voz natural y conversacional.",
+            "fr": "Bonjour. Voici un échantillon de voix naturel et conversationnel.",
+            "hi": "नमस्ते। यह एक स्वाभाविक और बातचीत जैसी आवाज़ का नमूना है।",
+            "it": "Ciao. Questo è un esempio di voce naturale e colloquiale.",
+            "ja": "こんにちは。自然で会話らしい音声サンプルです。",
+            "nl": "Hallo. Dit is een natuurlijk en gesprekachtig stemvoorbeeld.",
+            "pt": "Olá. Esta é uma amostra de voz natural e conversacional.",
+            "ru": "Здравствуйте. Это естественный разговорный образец голоса.",
+        }
+        preview_text = preview_texts.get(language_code, preview_texts["en"])
         last_error = "Unknown error"
         for mdl in candidate_endpoints:
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{mdl}:generateContent?key={api_key}"
+                method = "streamGenerateContent" if mdl.startswith("gemini-3.8-") else "generateContent"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{mdl}:{method}"
+                if method == "streamGenerateContent":
+                    url += "?alt=sse"
                 headers = {
                     "Content-Type": "application/json",
                     "x-goog-api-key": api_key,
                 }
-                payload = {
-                    "contents": [{"parts": [{"text": "Hello! This is a live preview of this Gemini voice on Kodewaves."}]}],
-                    "generationConfig": {
-                        "responseModalities": ["AUDIO"],
-                        "speechConfig": {
-                            "voiceConfig": {
-                                "prebuiltVoiceConfig": {
-                                    "voiceName": gemini_voice
-                                }
-                            }
-                        }
+                if mdl.startswith("gemini-3.8-"):
+                    payload = {
+                        "contents": [{"role": "user", "parts": [{
+                            "text": preview_text,
+                            "speech_metadata": {
+                                "style": "natural, relaxed conversational delivery with clear articulation"
+                            },
+                        }]}],
+                        "generationConfig": {
+                            "responseModalities": ["AUDIO"],
+                            "responseFormat": {"audio": {"mimeType": "AUDIO_L16", "sampleRate": 24000}},
+                            "speechConfig": {"voiceConfig": {"voice": gemini_voice}},
+                        },
                     }
-                }
+                else:
+                    payload = {
+                        "contents": [{"parts": [{"text": preview_text}]}],
+                        "generationConfig": {
+                            "responseModalities": ["AUDIO"],
+                            "speechConfig": {
+                                "voiceConfig": {
+                                    "prebuiltVoiceConfig": {"voiceName": gemini_voice}
+                                }
+                            },
+                        },
+                    }
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
                     async with session.post(url, json=payload, headers=headers) as resp:
                         if resp.status == 200:
-                            data = await resp.json()
-                            candidates = data.get("candidates", [])
-                            if candidates:
-                                parts = candidates[0].get("content", {}).get("parts", [])
-                                for part in parts:
-                                    inline_data = part.get("inlineData", {})
-                                    if inline_data.get("data"):
-                                        import base64
-                                        import io
-                                        import wave
-                                        raw_audio = base64.b64decode(inline_data["data"])
-                                        mime = inline_data.get("mimeType", "")
-                                        if "wav" in mime:
-                                            return _cache_and_respond(raw_audio, "audio/wav")
-                                        elif "mp3" in mime or "mpeg" in mime:
-                                            return _cache_and_respond(raw_audio, "audio/mpeg")
-                                        elif "ogg" in mime or "opus" in mime:
-                                            return _cache_and_respond(raw_audio, "audio/ogg")
-                                        # Format PCM buffer into standard WAV 24kHz 16-bit
-                                        wav_buf = io.BytesIO()
-                                        with wave.open(wav_buf, "wb") as wf:
-                                            wf.setnchannels(1)
-                                            wf.setsampwidth(2)
-                                            wf.setframerate(24000)
-                                            wf.writeframes(raw_audio)
-                                        return _cache_and_respond(wav_buf.getvalue(), "audio/wav")
+                            import base64
+                            import io
+                            import json
+                            import wave
+
+                            if method == "streamGenerateContent":
+                                response_data = []
+                                async for line in resp.content:
+                                    line = line.strip()
+                                    if line.startswith(b"data:"):
+                                        event_data = line[5:].strip()
+                                        if event_data and event_data != b"[DONE]":
+                                            try:
+                                                response_data.append(json.loads(event_data))
+                                            except (json.JSONDecodeError, UnicodeDecodeError):
+                                                continue
+                            else:
+                                response_data = [await resp.json()]
+                            pcm_chunks = []
+                            for data in response_data:
+                                for candidate in data.get("candidates", []):
+                                    for part in candidate.get("content", {}).get("parts", []):
+                                        inline_data = part.get("inlineData") or part.get("inline_data") or {}
+                                        if inline_data.get("data"):
+                                            raw_audio = base64.b64decode(inline_data["data"])
+                                            mime = inline_data.get("mimeType", "")
+                                            if "wav" in mime:
+                                                return _cache_and_respond(raw_audio, "audio/wav")
+                                            if "mp3" in mime or "mpeg" in mime:
+                                                return _cache_and_respond(raw_audio, "audio/mpeg")
+                                            if "ogg" in mime or "opus" in mime:
+                                                return _cache_and_respond(raw_audio, "audio/ogg")
+                                            pcm_chunks.append(raw_audio)
+                            if pcm_chunks:
+                                wav_buf = io.BytesIO()
+                                with wave.open(wav_buf, "wb") as wf:
+                                    wf.setnchannels(1)
+                                    wf.setsampwidth(2)
+                                    wf.setframerate(24000)
+                                    wf.writeframes(b"".join(pcm_chunks))
+                                return _cache_and_respond(wav_buf.getvalue(), "audio/wav")
                         else:
                             err_body = await resp.text()
                             last_error = f"HTTP {resp.status}: {err_body[:120]}"

@@ -9,7 +9,7 @@ import { client } from "@/client/client.gen";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 
-type VoiceInfo = ApiVoiceInfo & { provider?: string };
+type VoiceInfo = ApiVoiceInfo & { provider?: string; languages?: string[] };
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -337,12 +337,19 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
 
         const targetProv = voice.provider || resolveTargetProvider(provider, providerFilter) || "google";
         const previewUrl = voice.preview_url || `/api/v1/user/configurations/voices/${targetProv}/${voice.voice_id}/preview`;
+        const resolvedPreviewUrl = previewUrl.startsWith("/api/") && language !== ALL_FILTER_VALUE
+            ? (() => {
+                const url = new URL(previewUrl, window.location.origin);
+                url.searchParams.set("language", language);
+                return `${url.pathname}${url.search}`;
+            })()
+            : previewUrl;
 
         try {
             let blob: Blob;
-            if (previewUrl.startsWith('/api/')) {
+            if (resolvedPreviewUrl.startsWith('/api/')) {
                 const result = await client.get<{ 200: Blob }>({
-                    url: previewUrl,
+                    url: resolvedPreviewUrl,
                     parseAs: 'blob',
                 });
                 if (result.error || !result.data) {
@@ -351,7 +358,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 blob = result.data;
             } else {
                 // Public provider samples must never receive the user's platform token.
-                const response = await fetch(previewUrl, { credentials: 'omit' });
+                const response = await fetch(resolvedPreviewUrl, { credentials: 'omit' });
                 if (!response.ok) throw new Error(`Voice preview unavailable (HTTP ${response.status})`);
                 blob = await response.blob();
             }

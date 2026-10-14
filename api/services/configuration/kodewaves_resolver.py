@@ -31,6 +31,7 @@ from api.services.configuration.registry import (
     GoogleGeminiSTTConfiguration,
     GoogleGeminiTTSConfiguration,
     GoogleLLMService,
+    GoogleTTSConfiguration,
     GroqLLMService,
     NavanaSTTConfiguration,
     NavanaTTSConfiguration,
@@ -122,9 +123,9 @@ def _build_master_tts(prov: str, model: str, api_key: str, voice: Optional[str] 
     elif prov_lower == "navana":
         v = voice if (voice and voice != "default") else "default_female"
         return NavanaTTSConfiguration(api_key=api_key, model=model or "bodhi-tts-v1", voice=v)
-    elif prov_lower in ("google", "gemini"):
+    elif prov_lower == "gemini":
         v = voice if (voice and voice != "default") else "Puck"
-        return GoogleGeminiTTSConfiguration(api_key=api_key, model=model or "gemini-3.1-flash-tts-preview", voice=v)
+        return GoogleGeminiTTSConfiguration(api_key=api_key, model=model or "gemini-3.8-flash-lite-tts", voice=v)
     elif prov_lower == "elevenlabs":
         v = voice if (voice and voice != "default") else "21m00Tcm4TlvDq8ikWAM"
         return ElevenlabsTTSConfiguration(api_key=api_key, model=model, voice=v)
@@ -134,6 +135,8 @@ def _build_master_tts(prov: str, model: str, api_key: str, voice: Optional[str] 
     elif prov_lower == "openai":
         v = voice if (voice and voice != "default") else "alloy"
         return OpenAITTSService(api_key=api_key, model=model, voice=v)
+    elif prov_lower == "google":
+        return GoogleTTSConfiguration(api_key=api_key, model=model or "chirp_3_hd", voice=voice or "en-US-Chirp3-HD-Charon")
     config_cls = REGISTRY.get(ServiceType.TTS, {}).get(prov_lower)
     if config_cls is None:
         raise HTTPException(status_code=400, detail=f"Unsupported platform TTS provider: {prov}")
@@ -217,13 +220,21 @@ async def _resolve_catalog_layer(effective: EffectiveAIModelConfiguration, layer
                   and (not explicit or m.model_identifier == requested)]
     candidates.sort(key=lambda m: (not bool(m.recommended), m.model_identifier))
     master_rows = await kodewaves_db_client.list_master_credentials()
-    active = {normalize_provider_name(row.provider) for row in master_rows
-              if row.is_enabled and row.credentials_encrypted}
+    active = {
+        (str(row.provider).lower().strip(), normalize_provider_name(row.provider))
+        for row in master_rows
+        if row.is_enabled and row.credentials_encrypted
+    }
     for model in candidates:
-        provider = normalize_provider_name(model.provider)
-        if provider not in active:
+        raw_provider = str(model.provider).lower().strip()
+        provider = "gemini" if raw_provider == "gemini" else normalize_provider_name(model.provider)
+        credential_provider = provider
+        if not any(
+            raw_provider == credential_provider or canonical_provider == credential_provider
+            for raw_provider, canonical_provider in active
+        ):
             continue
-        creds = await master_credential_service.get_master_credential(provider)
+        creds = await master_credential_service.get_master_credential(credential_provider)
         if not creds or not creds.get("api_key"):
             continue
         voice = getattr(current, "voice", None)

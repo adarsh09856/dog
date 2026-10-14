@@ -42,6 +42,10 @@ from api.services.pipecat.speech_playback import (
     SpeechPlayback,
     SpeechPlaybackTracker,
 )
+from api.services.configuration.language_normalizer import (
+    resolve_agent_speech_language,
+    speech_language_instruction,
+)
 from api.services.workflow.agent_runtime import AgentRuntime, new_visit_id
 from api.services.workflow.workflow_graph import Node, WorkflowGraph
 
@@ -822,16 +826,25 @@ class PipecatEngine:
             format_prompt=self._format_prompt,
             has_recordings=self._has_recordings,
         )
+        system_prompt = prompt.text
+        if not agent.is_realtime:
+            language_instruction = speech_language_instruction(
+                resolve_agent_speech_language(agent.user_config)
+            )
+            if language_instruction:
+                system_prompt = "\n\n".join(
+                    part for part in (system_prompt, language_instruction) if part
+                )
         functions = await compose_functions_for_node(
             node=node, custom_tool_manager=manager
         )
         agent.tools = ToolsSchema(standard_tools=functions)
-        agent.system_prompt = prompt.text
+        agent.system_prompt = system_prompt
         if agent.recording_router is not None:
             agent.recording_router.set_enabled(prompt.recording_enabled)
         if apply_settings:
             await agent.llm._update_settings(
-                LLMSettings(system_instruction=prompt.text)
+                LLMSettings(system_instruction=system_prompt)
             )
 
     async def _setup_llm_context(self, node: Node) -> None:

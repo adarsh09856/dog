@@ -20,6 +20,7 @@ from api.db.kodewaves_models import AIModelCatalogModel, VoiceCatalogModel
 from api.services.catalog.normalize import normalize_provider_name
 from api.services.catalog.local_inventory import piper_voice_inventory, whisper_api_base
 from api.services.credentials.master_credential_service import master_credential_service
+from api.services.configuration.registry import GEMINI_TTS_VOICES
 from api.utils.common import normalize_local_ai_endpoint
 
 
@@ -29,7 +30,6 @@ CURATED_PROVIDER_MODELS: Dict[str, List[Dict[str, Any]]] = {
         {"model_identifier": "gemini-3.5-flash", "display_name": "Google Gemini 3.5 Flash", "layer": "llm", "recommended": True, "supports_tools": True},
         {"model_identifier": "gemini-3.5-flash-lite", "display_name": "Google Gemini 3.5 Flash Lite", "layer": "llm", "recommended": False, "supports_tools": True},
         {"model_identifier": "gemini-3.1-flash-lite", "display_name": "Google Gemini 3.1 Flash Lite", "layer": "llm", "recommended": False, "supports_tools": True},
-        {"model_identifier": "gemini-3.1-flash-tts-preview", "display_name": "Google Gemini 3.1 Voice Studio (Streaming TTS)", "layer": "tts", "recommended": True, "languages": ["hi-IN", "en-US"]},
         {"model_identifier": "gemini-3.1-flash-live-preview", "display_name": "Google Gemini 3.1 Flash Live (Bidirectional S2S)", "layer": "s2s", "recommended": True},
         {"model_identifier": "text-embedding-004", "display_name": "Google Text Embedding 004", "layer": "embeddings", "recommended": True},
     ],
@@ -93,13 +93,23 @@ CURATED_PROVIDER_MODELS: Dict[str, List[Dict[str, Any]]] = {
     ]
 }
 
+def _tts_model_credential_provider(provider: str, model_identifier: str) -> str:
+    """Map a catalog TTS model to the credential namespace that serves it."""
+    if normalize_provider_name(provider) == "google" and model_identifier.startswith("gemini-"):
+        return "gemini"
+    return normalize_provider_name(provider)
+
 CURATED_PROVIDER_VOICES: Dict[str, List[Dict[str, Any]]] = {
     "google": [
-        {"voice_id": "Puck", "name": "Puck", "gender": "male", "languages": ["en-US", "hi-IN"]},
-        {"voice_id": "Charon", "name": "Charon", "gender": "male", "languages": ["en-US", "hi-IN"]},
-        {"voice_id": "Kore", "name": "Kore", "gender": "female", "languages": ["en-US", "hi-IN"]},
-        {"voice_id": "Fenrir", "name": "Fenrir", "gender": "male", "languages": ["en-US", "hi-IN"]},
-        {"voice_id": "Aoede", "name": "Aoede", "gender": "female", "languages": ["en-US", "hi-IN"]},
+        {
+            "voice_id": voice,
+            "name": voice,
+            "languages": [
+                "en-US", "hi-IN", "fr-FR", "es-ES", "de-DE", "it-IT",
+                "ja-JP", "nl-NL", "pt-BR", "ru-RU",
+            ],
+        }
+        for voice in GEMINI_TTS_VOICES
     ],
     "openai": [
         {"voice_id": "alloy", "name": "Alloy", "gender": "neutral", "languages": ["en-US"]},
@@ -147,6 +157,14 @@ CURATED_PROVIDER_VOICES: Dict[str, List[Dict[str, Any]]] = {
     ],
 }
 
+CURATED_PROVIDER_MODELS["gemini"] = [
+    {"model_identifier": "gemini-3.8-flash-lite-tts", "display_name": "Google Gemini 3.8 Flash-Lite (Low-Latency TTS)", "layer": "tts", "recommended": True, "languages": ["hi-IN", "en-US", "fr-FR", "es-ES", "de-DE", "it-IT", "ja-JP", "nl-NL", "pt-BR", "ru-RU"]},
+    {"model_identifier": "gemini-3.8-flash-tts", "display_name": "Google Gemini 3.8 Flash (High-Fidelity TTS)", "layer": "tts", "recommended": False, "languages": ["hi-IN", "en-US", "fr-FR", "es-ES", "de-DE", "it-IT", "ja-JP", "nl-NL", "pt-BR", "ru-RU"]},
+    {"model_identifier": "gemini-3.1-flash-tts-preview", "display_name": "Google Gemini 3.1 Flash TTS (Legacy Preview)", "layer": "tts", "recommended": False, "languages": ["hi-IN", "en-US"]},
+    {"model_identifier": "gemini-2.5-pro-preview-tts", "display_name": "Google Gemini 2.5 Pro Preview TTS", "layer": "tts", "recommended": False, "languages": ["hi-IN", "en-US"]},
+]
+CURATED_PROVIDER_VOICES["gemini"] = CURATED_PROVIDER_VOICES["google"]
+
 
 class CatalogService:
     """Truth layer catalog service providing live capability manifests and dynamic caches."""
@@ -172,7 +190,8 @@ class CatalogService:
 
     async def seed_curated_models_if_needed(self, provider: str) -> None:
         """Seed built-in curated models for a provider into the database if missing."""
-        prov_norm = normalize_provider_name(provider)
+        raw_provider = (provider or "").lower().strip()
+        prov_norm = "gemini" if raw_provider == "gemini" else normalize_provider_name(provider)
         models = CURATED_PROVIDER_MODELS.get(prov_norm, [])
         for m in models:
             existing = await kodewaves_db_client.get_model(m["model_identifier"])
@@ -208,7 +227,8 @@ class CatalogService:
         Discover models and voices for a provider using active credentials.
         Writes discovered capabilities into ai_model_catalog and voice_catalog.
         """
-        prov_norm = normalize_provider_name(provider)
+        raw_provider = (provider or "").lower().strip()
+        prov_norm = "gemini" if raw_provider == "gemini" else normalize_provider_name(provider)
         if creds is None:
             creds = await master_credential_service.get_master_credential(prov_norm)
 
@@ -223,29 +243,30 @@ class CatalogService:
         timeout = aiohttp.ClientTimeout(total=8)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                if prov_norm == "google" and api_key:
+                if prov_norm in ("google", "gemini") and api_key:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
                     async with session.get(url) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             for m in data.get("models", []):
                                 name = m.get("name", "").replace("models/", "")
-                                if "gemini" in name:
-                                    discovered_models.append(name)
-                                    layer = "llm"
-                                    if "tts" in name:
-                                        layer = "tts"
-                                    elif "live" in name:
-                                        layer = "s2s"
-                                    await kodewaves_db_client.upsert_model(
-                                        model_identifier=name,
-                                        display_name=m.get("displayName") or name,
-                                        provider="google",
-                                        layer=layer,
-                                        enabled=True,
-                                        source="discovered",
-                                        status="UNTESTED",
-                                    )
+                                if "gemini" not in name.lower():
+                                    continue
+                                discovered_models.append(name)
+                                layer = "llm"
+                                if "tts" in name.lower():
+                                    layer = "tts"
+                                elif "live" in name.lower():
+                                    layer = "s2s"
+                                await kodewaves_db_client.upsert_model(
+                                    model_identifier=name,
+                                    display_name=m.get("displayName") or name,
+                                    provider="gemini" if layer == "tts" else "google",
+                                    layer=layer,
+                                    enabled=True,
+                                    source="discovered",
+                                    status="UNTESTED",
+                                )
 
                 elif prov_norm == "openai" and api_key:
                     base_url = (creds or {}).get("base_url") or "https://api.openai.com/v1"
@@ -337,7 +358,8 @@ class CatalogService:
         3. If live discovery fails, checks CURATED_PROVIDER_MODELS in memory.
         4. Returns None if no model is available.
         """
-        prov_norm = normalize_provider_name(provider)
+        raw_provider = (provider or "").lower().strip()
+        prov_norm = "gemini" if raw_provider == "gemini" else normalize_provider_name(provider)
         layer_norm = layer.lower().strip()
         api_key = (creds or {}).get("api_key") or ""
 
@@ -359,7 +381,7 @@ class CatalogService:
         timeout = aiohttp.ClientTimeout(total=8)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                if prov_norm == "google" and api_key:
+                if prov_norm in ("google", "gemini") and api_key:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
                     async with session.get(url) as resp:
                         if resp.status == 200:
@@ -437,11 +459,14 @@ class CatalogService:
         Perform real execution test for a provider's capability layer.
         Writes result to catalog_verify_runs and updates model status in catalog.
         """
-        prov_norm = normalize_provider_name(provider)
+        raw_provider = (provider or "").lower().strip()
+        prov_norm = "gemini" if raw_provider == "gemini" else normalize_provider_name(provider)
         layer_norm = layer.lower().strip()
 
         if creds is None:
-            creds = await master_credential_service.get_master_credential(prov_norm)
+            creds = await master_credential_service.get_master_credential(
+                "gemini" if prov_norm == "gemini" else prov_norm
+            )
 
         if not creds and prov_norm not in ("piper", "whisper", "ollama"):
             error_msg = f"No active credentials configured for provider '{provider}'"
@@ -474,7 +499,7 @@ class CatalogService:
                         return False, None, error_msg
 
                     api_key = creds.get("api_key", "")
-                    if prov_norm == "google":
+                    if prov_norm in ("google", "gemini"):
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/{test_model}:generateContent?key={api_key}"
                         payload = {"contents": [{"parts": [{"text": "Hello"}]}]}
                         async with session.post(url, json=payload) as resp:
@@ -553,7 +578,49 @@ class CatalogService:
 
                 # 3. TTS Verification
                 elif layer_norm == "tts":
-                    if prov_norm == "cartesia":
+                    if prov_norm == "gemini":
+                        test_model = await self._get_test_model_for_layer(
+                            prov_norm, layer_norm, creds
+                        )
+                        if not test_model:
+                            error_msg = "No Gemini TTS model is enabled in the catalog"
+                        else:
+                            url = (
+                                "https://generativelanguage.googleapis.com/v1beta/models/"
+                                f"{test_model}:generateContent"
+                            )
+                            payload = {
+                                "contents": [{
+                                    "role": "user",
+                                    "parts": [{
+                                        "text": "नमस्ते, यह आवाज़ की जाँच है।",
+                                        "speech_metadata": {
+                                            "style": "natural, relaxed conversational delivery"
+                                        },
+                                    }],
+                                }],
+                                "generationConfig": {
+                                    "responseModalities": ["AUDIO"],
+                                    "speechConfig": {"voiceConfig": {"voice": "Kore"}},
+                                },
+                            }
+                            async with session.post(
+                                url,
+                                headers={"x-goog-api-key": creds.get("api_key", "")},
+                                json=payload,
+                            ) as resp:
+                                if resp.status == 200:
+                                    body = await resp.json()
+                                    success = any(
+                                        part.get("inlineData", {}).get("data")
+                                        for candidate in body.get("candidates", [])
+                                        for part in candidate.get("content", {}).get("parts", [])
+                                    )
+                                    if not success:
+                                        error_msg = "Gemini TTS verification returned no audio"
+                                else:
+                                    error_msg = f"Gemini TTS returned HTTP {resp.status}: {(await resp.text())[:100]}"
+                    elif prov_norm == "cartesia":
                         api_key = creds.get("api_key", "")
                         async with session.get("https://api.cartesia.ai/voices", headers={"X-API-Key": api_key, "Cartesia-Version": "2024-06-10"}) as resp:
                             if resp.status == 200:
@@ -604,9 +671,10 @@ class CatalogService:
         status_str = "PASS" if success else "FAIL"
 
         # Record test run in DB if reachable
+        db_provider = prov_norm
         try:
             await kodewaves_db_client.record_verify_run(
-                provider=prov_norm,
+                provider=db_provider,
                 layer=layer_norm,
                 status=status_str,
                 latency_ms=latency_ms,
@@ -615,7 +683,7 @@ class CatalogService:
 
             # Update models in database
             await kodewaves_db_client.update_model_verification_status(
-                provider=prov_norm,
+                provider=db_provider,
                 layer=layer_norm,
                 status=status_str,
                 latency_ms=latency_ms,
@@ -633,7 +701,8 @@ class CatalogService:
         creds: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Verify all layers supported by a provider."""
-        prov_norm = normalize_provider_name(provider)
+        raw_provider = (provider or "").lower().strip()
+        prov_norm = "gemini" if raw_provider == "gemini" else normalize_provider_name(provider)
         models = CURATED_PROVIDER_MODELS.get(prov_norm, [])
         layers = list({m["layer"] for m in models})
 
@@ -675,7 +744,8 @@ class CatalogService:
         active_providers: Set[str] = set()
         for r in master_creds:
             if r.is_enabled and r.credentials_encrypted:
-                p_norm = normalize_provider_name(r.provider)
+                raw_provider = str(r.provider).lower().strip()
+                p_norm = "gemini" if raw_provider == "gemini" else normalize_provider_name(r.provider)
                 active_providers.add(p_norm)
                 # Keep original alias accessible
                 active_providers.add(r.provider.lower().strip())
@@ -698,9 +768,16 @@ class CatalogService:
         cloud_s2s: List[Dict[str, Any]] = []
 
         for m in all_models:
-            prov = normalize_provider_name(m.provider)
+            raw_provider = str(m.provider).lower().strip()
+            prov = "gemini" if raw_provider == "gemini" else normalize_provider_name(m.provider)
             # Visibility rule: Provider key active AND status != 'FAIL' AND status != 'UNAVAILABLE'
-            if prov not in active_providers and m.provider.lower().strip() not in active_providers:
+            credential_provider = (
+                _tts_model_credential_provider(prov, m.model_identifier)
+                if (m.layer or m.category) == "tts"
+                else prov
+            )
+            if (credential_provider not in active_providers
+                    and m.provider.lower().strip() not in active_providers):
                 continue
             if m.status in ("FAIL", "UNAVAILABLE"):
                 continue

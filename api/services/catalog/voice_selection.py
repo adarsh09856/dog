@@ -8,7 +8,8 @@ def model_voice_ids(provider: str, model: str | None) -> set[str] | None:
     """Return a model-specific voice pool when the provider declares one."""
     if not model or model in ("auto", "default"):
         return None
-    key = normalize_provider_name(provider)
+    raw_provider = (provider or "").lower().strip()
+    key = "gemini" if raw_provider == "gemini" else normalize_provider_name(provider)
     if key == "google" and model.startswith("gemini"):
         key = "gemini"
     config = REGISTRY[ServiceType.TTS].get(key)
@@ -18,6 +19,6 @@ def model_voice_ids(provider: str, model: str | None) -> set[str] | None:
         return None
     pools = metadata.get("model_options") or {}
     pool = pools.get(model)
-    if pool is None and normalize_provider_name(provider) == "google":
+    if pool is None and key == "google":
         pool = metadata.get("examples")
     return set(pool) if pool is not None else None

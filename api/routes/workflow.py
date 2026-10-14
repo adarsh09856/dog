@@ -329,6 +329,53 @@ class CreateWorkflowRequest(BaseModel):
     workflow_definition: dict
 
 
+class GenerateWorkflowRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=3, max_length=4000)
+    instructions: str | None = Field(default=None, max_length=8000)
+
+
+class GenerateWorkflowResponse(BaseModel):
+    workflow_definition: dict
+    model_provider: str
+    model_name: str
+
+
+@router.post("/generate/definition", response_model=GenerateWorkflowResponse)
+async def generate_workflow_definition(
+    request: GenerateWorkflowRequest,
+    user: UserModel = Depends(get_user),
+) -> GenerateWorkflowResponse:
+    """Generate and validate a workflow using the organization's selected LLM."""
+    organization_id = user.selected_organization_id
+    if not organization_id:
+        raise HTTPException(status_code=400, detail="Select an organization first")
+
+    try:
+        from api.services.workflow.generation import generate_voice_workflow
+
+        definition, provider, model = await generate_voice_workflow(
+            organization_id, request.name, request.description, request.instructions,
+        )
+        definition = ensure_trigger_paths(definition)
+        validation_errors = await _validate_workflow_definition(
+            definition, organization_id=organization_id,
+        )
+        if validation_errors:
+            raise ValueError("Generated workflow failed platform validation")
+        return GenerateWorkflowResponse(
+            workflow_definition=definition, model_provider=provider, model_name=model,
+        )
+    except HTTPException:
+        raise
+    except Exception as error:
+        logger.warning("Workflow generation failed for org {}: {}", organization_id, type(error).__name__)
+        raise HTTPException(
+            status_code=502,
+            detail="The selected model could not produce a valid workflow. Please retry or simplify the agent purpose.",
+        ) from error
+
+
 class DuplicateTemplateRequest(BaseModel):
     template_id: int
     workflow_name: str

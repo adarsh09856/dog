@@ -26,6 +26,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { createWorkflowApiV1WorkflowCreateDefinitionPost } from '@/client/sdk.gen';
+import { apiFetch } from '@/lib/kodewavesApi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -300,41 +301,24 @@ export default function CreateWorkflowPage() {
         setIsCreating(true);
         try {
             const accessToken = await getAccessToken();
-            const promptText =
-                customBuilderPrompt.trim() ||
-                `# Goal\nYou are a voice AI agent handling: ${customBuilderDescription || customBuilderName}.\n\n## Rules\n- Speak naturally\n- Keep turns short (1-3 sentences max).`;
-
-            const definition = {
-                nodes: [
-                    {
-                        id: '1',
-                        type: 'startCall',
-                        position: { x: 175, y: 60 },
-                        data: {
-                            name: 'start call',
-                            prompt: promptText,
-                            allow_interrupt: false,
-                            invalid: false,
-                            validationMessage: null,
-                            add_global_prompt: false,
-                            delayed_start: false,
-                            is_start: true,
-                            selected_through_edge: false,
-                            hovered_through_edge: false,
-                            extraction_enabled: false,
-                            selected: false,
-                            dragging: false,
-                        },
-                    },
-                ],
-                edges: [],
-                viewport: { x: 808, y: 269, zoom: 0.75 },
-            };
+            const description = customBuilderDescription.trim() || customBuilderName.trim();
+            const definition = await apiFetch<{ workflow_definition: Record<string, unknown>; model_provider: string; model_name: string }>(
+                '/workflow/generate/definition',
+                {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    body: JSON.stringify({
+                        name: customBuilderName.trim(),
+                        description,
+                        instructions: customBuilderPrompt.trim() || undefined,
+                    }),
+                },
+            );
 
             const response = await createWorkflowApiV1WorkflowCreateDefinitionPost({
                 body: {
                     name: customBuilderName.trim(),
-                    workflow_definition: definition as unknown as { [key: string]: unknown },
+                    workflow_definition: definition.workflow_definition,
                 },
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
@@ -342,12 +326,14 @@ export default function CreateWorkflowPage() {
             });
 
             if (response.data?.id) {
-                toast.success(`Agent "${customBuilderName}" created!`);
+                toast.success(`Agent created with ${definition.model_provider}/${definition.model_name}.`);
                 router.push(`/workflow/${response.data.id}?onboarding=web_call`);
+            } else {
+                throw new Error('The workflow was generated but the server did not return a created agent.');
             }
         } catch (err) {
-            logger.error(`Error creating custom workflow: ${err}`);
-            toast.error('Failed to create custom agent.');
+            logger.error(`Error generating custom workflow: ${err}`);
+            toast.error(err instanceof Error ? err.message : 'Could not generate a valid agent with the selected model.');
         } finally {
             setIsCreating(false);
         }
@@ -558,7 +544,7 @@ export default function CreateWorkflowPage() {
                             <CardHeader>
                                 <CardTitle className="text-xl">Custom Voice Agent Builder</CardTitle>
                                 <CardDescription>
-                                    Define your own agent goals, personality, and prompt from scratch.
+                                    Describe the job and generate a connected, validated call flow with the organization’s selected local or cloud LLM.
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-5">
@@ -604,7 +590,7 @@ export default function CreateWorkflowPage() {
                                         disabled={isCreating || !customBuilderName.trim()}
                                         className="w-full"
                                     >
-                                        {isCreating ? 'Creating Agent...' : 'Create Voice Agent'}
+                                        {isCreating ? 'Generating and validating…' : 'Generate and Create Agent'}
                                     </Button>
                                 </div>
                             </CardContent>

@@ -1614,16 +1614,43 @@ class MiniMaxTTSConfiguration(BaseTTSConfiguration):
     )
 
 
-GEMINI_TTS_MODELS = ["gemini-3.1-flash-tts-preview"]
+GEMINI_TTS_MODELS = [
+    "gemini-3.8-flash-lite-tts",
+    "gemini-3.8-flash-tts",
+    "gemini-3.1-flash-tts-preview",
+    "gemini-2.5-pro-preview-tts",
+]
 GEMINI_TTS_VOICES = [
+    "Zephyr",
     "Puck",
+    "Leda",
+    "Orus",
+    "Aoede",
+    "Callirrhoe",
+    "Autonoe",
+    "Enceladus",
+    "Iapetus",
+    "Umbriel",
+    "Algieba",
+    "Despina",
+    "Erinome",
+    "Algenib",
+    "Rasalgethi",
+    "Laomedeia",
+    "Achernar",
+    "Alnilam",
+    "Schedar",
+    "Gacrux",
+    "Pulcherrima",
+    "Achird",
+    "Zubenelgenubi",
+    "Vindemiatrix",
+    "Sadachbia",
+    "Sadaltager",
+    "Sulafat",
     "Charon",
     "Kore",
     "Fenrir",
-    "Aoede",
-    "Zephyr",
-    "Leda",
-    "Orpheus",
 ]
 
 
@@ -1632,14 +1659,18 @@ class GoogleGeminiTTSConfiguration(BaseTTSConfiguration):
     model_config = GEMINI_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.GEMINI] = ServiceProviders.GEMINI
     model: str = Field(
-        default="gemini-3.1-flash-tts-preview",
+        default="gemini-3.8-flash-lite-tts",
         description="Google Gemini Direct Audio TTS model.",
         json_schema_extra={"examples": GEMINI_TTS_MODELS, "allow_custom_input": True},
     )
     voice: str = Field(
         default="Puck",
         description="Gemini voice name.",
-        json_schema_extra={"examples": GEMINI_TTS_VOICES, "allow_custom_input": True},
+        json_schema_extra={
+            "examples": GEMINI_TTS_VOICES,
+            "model_options": {model: GEMINI_TTS_VOICES for model in GEMINI_TTS_MODELS},
+            "allow_custom_input": True,
+        },
     )
     api_key: str | list[str] | None = Field(
         default=None,

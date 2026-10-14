@@ -236,7 +236,9 @@ GOOGLE_STT_LANGUAGES = (
     "zu-ZA",
 )
 
-GOOGLE_TTS_MODELS = ("gemini-3.1-flash-tts-preview", "chirp_3_hd")
+GOOGLE_TTS_MODELS = (
+    "chirp_3_hd",
+)
 GOOGLE_TTS_VOICES = ("en-US-Chirp3-HD-Charon",)
 GOOGLE_TTS_LANGUAGES = (
     "ar-XA",

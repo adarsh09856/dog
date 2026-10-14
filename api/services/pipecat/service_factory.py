@@ -18,7 +18,7 @@ from api.services.configuration.options import (
     DEEPGRAM_FLUX_MODELS,
     GOOGLE_VERTEX_DEFAULT_LOCATION,
 )
-from api.services.configuration.registry import ServiceProviders
+from api.services.configuration.registry import GEMINI_TTS_VOICES, ServiceProviders
 from api.services.pipecat.gemini_json_schema_adapter import (
     KodewavesGeminiJSONSchemaAdapter,
 )
@@ -814,21 +814,13 @@ def create_tts_service(
         credentials = getattr(user_config.tts, "credentials", None)
         api_key = getattr(user_config.tts, "api_key", None)
 
+        # Google Cloud TTS and Gemini AI Studio TTS have different auth,
+        # model names, voice identifiers, and request formats. Never infer a
+        # Gemini route from an unrelated Google API key.
         if not credentials:
-            if not api_key:
-                api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-            if not api_key:
-                raise ValueError("Google Gemini API key is missing. Please configure credentials in Admin Master Keys or BYOK.")
-            from api.services.pipecat.gemini_tts import GeminiTTSService
-            tts_voice = voice if voice in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
-            return GeminiTTSService(
-                api_key=api_key,
-                model=getattr(user_config.tts, "model", None) or "gemini-3.1-flash-tts-preview",
-                voice=tts_voice,
-                sample_rate=audio_config.transport_out_sample_rate,
-                text_filters=[xml_function_tag_filter],
-                skip_aggregator_types=["recording_router", "recording"],
-                silence_time_s=1.0,
+            raise ValueError(
+                "Google Cloud TTS credentials are missing. Configure a Google Cloud service account; "
+                "for an AI Studio key, select the Gemini TTS provider."
             )
 
         settings_kwargs = {
@@ -969,10 +961,12 @@ def create_tts_service(
         if gemini_key:
             from api.services.pipecat.gemini_tts import GeminiTTSService
             raw_v = getattr(user_config.tts, "voice", "Puck")
-            tts_v = raw_v if raw_v in ("Puck", "Charon", "Kore", "Fenrir", "Aoede", "Journey") else "Puck"
+            tts_v = raw_v or "Puck"
+            if tts_v not in GEMINI_TTS_VOICES:
+                raise ValueError(f"Unsupported Gemini TTS voice: {tts_v}")
             return GeminiTTSService(
                 api_key=gemini_key,
-                model=getattr(user_config.tts, "model", None) or "gemini-3.1-flash-tts-preview",
+                model=getattr(user_config.tts, "model", None) or "gemini-3.8-flash-lite-tts",
                 voice=tts_v,
                 sample_rate=audio_config.transport_out_sample_rate,
                 text_filters=[xml_function_tag_filter],
@@ -1282,7 +1276,7 @@ def create_tts_service(
 
         return GeminiTTSService(
             api_key=user_config.tts.api_key,
-            model=getattr(user_config.tts, "model", None) or "gemini-3.1-flash-tts-preview",
+            model=getattr(user_config.tts, "model", None) or "gemini-3.8-flash-lite-tts",
             voice=getattr(user_config.tts, "voice", "Puck"),
             sample_rate=audio_config.transport_out_sample_rate,
             text_filters=[xml_function_tag_filter],
