@@ -71,7 +71,9 @@ from pipecat.services.kodewaves.flux.stt import KodewavesFluxSTTService
 DograhFluxSTTService = KodewavesFluxSTTService
 from pipecat.services.kodewaves.stt import KodewavesSTTService, KodewavesSTTSettings
 from pipecat.services.kodewaves.tts import KodewavesTTSService, KodewavesTTSSettings
-from pipecat.services.kodewaves.llm import KodewavesLLMService
+from api.services.pipecat.booking_tool_choice import (
+    BookingKodewavesLLMService as KodewavesLLMService,
+)
 
 DograhLLMService = KodewavesLLMService
 CommitStrategy, ElevenLabsRealtimeSTTService, ElevenLabsRealtimeSTTSettings = _optional_import(
@@ -99,7 +101,7 @@ MiniMaxLLMService = _optional_import("pipecat.services.minimax.llm", "MiniMaxLLM
 MiniMaxTTSSettings = _optional_import("pipecat.services.minimax.tts", "MiniMaxTTSSettings")
 from pipecat.services.openai._constants import OPENAI_SAMPLE_RATE
 from pipecat.services.openai.base_llm import OpenAILLMSettings
-from pipecat.services.openai.llm import OpenAILLMService
+from api.services.pipecat.booking_tool_choice import BookingOpenAILLMService as OpenAILLMService
 from pipecat.services.openai.stt import (
     OpenAISTTService,
     OpenAISTTSettings,
