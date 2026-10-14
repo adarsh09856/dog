@@ -301,6 +301,7 @@ class TwilioProvider(TelephonyProvider):
         3. Then audio messages
         """
         from api.services.pipecat.run_pipeline import run_pipeline_telephony
+        from .media_socket import TwilioMediaSocket
 
         try:
             # Wait for "connected" event
@@ -336,7 +337,9 @@ class TwilioProvider(TelephonyProvider):
                 return
 
             await run_pipeline_telephony(
-                websocket,
+                TwilioMediaSocket(
+                    websocket, stream_sid=stream_sid, workflow_run_id=workflow_run_id
+                ),
                 provider_name=self.PROVIDER_NAME,
                 workflow_id=workflow_id,
                 workflow_run_id=workflow_run_id,

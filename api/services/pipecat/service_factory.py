@@ -921,7 +921,8 @@ def create_tts_service(
         ServiceProviders.DOGRAH.value,
         "kodewaves",
     ):
-        from pipecat.services.piper.tts import PiperHttpTTSService, PiperHttpTTSSettings
+        from pipecat.services.piper.tts import PiperHttpTTSSettings
+        from api.services.pipecat.piper_tts import PiperOwnedSessionTTSService
         piper_host = os.environ.get("PIPER_ENDPOINT", "http://piper:5000").rstrip("/")
         piper_url = piper_host if piper_host.endswith("/synthesize") else f"{piper_host}/synthesize"
         lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None) or "hi"
@@ -932,7 +933,7 @@ def create_tts_service(
             if not voice or voice == "default":
                 voice = default_voice
             session = aiohttp.ClientSession()
-            return PiperHttpTTSService(
+            return PiperOwnedSessionTTSService(
                 base_url=piper_url,
                 aiohttp_session=session,
                 settings=PiperHttpTTSSettings(
@@ -1002,7 +1003,7 @@ def create_tts_service(
             if not voice or voice == "default":
                 voice = default_voice
             session = aiohttp.ClientSession()
-            return PiperHttpTTSService(
+            return PiperOwnedSessionTTSService(
                 base_url=piper_url,
                 aiohttp_session=session,
                 settings=PiperHttpTTSSettings(
@@ -1033,7 +1034,8 @@ def create_tts_service(
         tts._settings.language = language
         return tts
     elif user_config.tts.provider in (ServiceProviders.SPEACHES.value, "speaches", "piper"):
-        from pipecat.services.piper.tts import PiperHttpTTSService, PiperHttpTTSSettings
+        from pipecat.services.piper.tts import PiperHttpTTSSettings
+        from api.services.pipecat.piper_tts import PiperOwnedSessionTTSService
         piper_host = (getattr(user_config.tts, "base_url", None) or os.environ.get("PIPER_ENDPOINT") or "http://piper:5000").rstrip("/")
         piper_url = piper_host if piper_host.endswith("/synthesize") else f"{piper_host}/synthesize"
         lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None) or "hi"
@@ -1042,7 +1044,7 @@ def create_tts_service(
         if not voice or voice == "default":
             voice = default_voice
         session = aiohttp.ClientSession()
-        return PiperHttpTTSService(
+        return PiperOwnedSessionTTSService(
             base_url=piper_url,
             aiohttp_session=session,
             settings=PiperHttpTTSSettings(

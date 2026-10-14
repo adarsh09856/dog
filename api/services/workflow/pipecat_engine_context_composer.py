@@ -21,6 +21,15 @@ from api.services.workflow.tools.knowledge_base import get_knowledge_base_tool
 RECORDING_MARKER = "●"  # Play pre-recorded audio
 TTS_MARKER = "▸"  # Generate dynamic TTS text
 
+ACTION_GROUNDING_INSTRUCTIONS = (
+    "Only confirm an action after its action tool returns a successful result. "
+    "Changing workflow steps is not an action confirmation. Never invent booking "
+    "IDs or other tool results. Before a successful booking tool result, collect "
+    "the required details and ask for confirmation; do not say an appointment "
+    "is booked. If no suitable tool is available, explain that the action cannot "
+    "be completed here."
+)
+
 # ---------------------------------------------------------------------------
 # Recording response mode system prompt instructions
 # ---------------------------------------------------------------------------
@@ -81,7 +90,10 @@ def compose_system_prompt_for_node(
 
     formatted_node_prompt = format_prompt(node.prompt)
 
-    parts = [p for p in (global_prompt, formatted_node_prompt) if p]
+    parts = [
+        p for p in (global_prompt, formatted_node_prompt, ACTION_GROUNDING_INSTRUCTIONS)
+        if p
+    ]
 
     recording_enabled = has_recordings and "RECORDING_ID:" in formatted_node_prompt
     if recording_enabled:

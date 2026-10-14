@@ -481,7 +481,17 @@ class PipecatEngine:
                                 EndTaskReason.END_CALL.value
                             )
 
-                result = {"status": "done"}
+                result = {
+                    "status": "done",
+                    "action": "workflow_node_transition",
+                    "node_id": transition_to_node,
+                    "message": (
+                        "The conversation moved to the next step. This result does "
+                        "not create a booking or complete any external action. "
+                        "Follow the current step instructions and call its tools "
+                        "before claiming their actions succeeded."
+                    ),
+                }
 
                 properties = FunctionCallResultProperties(
                     on_context_updated=on_context_updated,
