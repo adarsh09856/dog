@@ -2,6 +2,7 @@
 """Utility script to convert audio file sample rates using Pipecat's resampler."""
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
