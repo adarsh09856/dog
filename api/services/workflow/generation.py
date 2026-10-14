@@ -6,6 +6,7 @@ import re
 import unicodedata
 
 from fastapi import HTTPException
+from loguru import logger
 from pipecat.processors.aggregators.llm_context import LLMContext
 
 from api.services.configuration.ai_model_configuration import (
@@ -19,6 +20,42 @@ from api.services.configuration.language_normalizer import (
 from api.services.pipecat.service_factory import create_llm_service
 from api.services.workflow.dto import ReactFlowDTO
 from api.services.workflow.workflow_graph import WorkflowGraph
+
+
+def _fallback_voice_workflow(name: str, description: str, instructions: str | None) -> dict:
+    """Build a valid editable graph when a small local LLM returns malformed JSON."""
+    # User text is plain instructions here, not a generated template expression.
+    safe_name = name.replace("{{", "(").replace("}}", ")")
+    purpose = description.replace("{{", "(").replace("}}", ")")[:1800]
+    extra = (instructions or "").replace("{{", "(").replace("}}", ")")[:1500]
+    agent_prompt = f"Help the caller with this purpose: {purpose}."
+    if extra:
+        agent_prompt += f" Follow these instructions: {extra}"
+    agent_prompt += " Ask for missing information, perform only available actions, and state the real result."
+    definition = {
+        "nodes": [
+            {"id": "generated-0", "type": "startCall", "position": {"x": 240, "y": 0},
+             "data": {"name": "Greeting", "prompt": f"Greet the caller as {safe_name} and ask how you can help.",
+                      "is_start": True, "allow_interrupt": True, "add_global_prompt": False}},
+            {"id": "generated-1", "type": "agentNode", "position": {"x": 240, "y": 220},
+             "data": {"name": "Assist caller", "prompt": agent_prompt,
+                      "allow_interrupt": True, "add_global_prompt": False}},
+            {"id": "generated-2", "type": "endCall", "position": {"x": 240, "y": 440},
+             "data": {"name": "Closing", "prompt": "Thank the caller and end the conversation politely.",
+                      "is_end": True, "allow_interrupt": True, "add_global_prompt": False}},
+        ],
+        "edges": [
+            {"id": "generated-edge-0", "source": "generated-0", "target": "generated-1",
+             "data": {"label": "continue_to_assistance", "condition": "The caller replies or states their request."}},
+            {"id": "generated-edge-1", "source": "generated-1", "target": "generated-2",
+             "data": {"label": "finish_assistance", "condition": "The caller confirms their request is complete."}},
+        ],
+    }
+    dto = ReactFlowDTO.model_validate(definition)
+    WorkflowGraph(dto)
+    result = json.loads(dto.model_dump_json(exclude_none=True))
+    result["viewport"] = {"x": 0, "y": 0, "zoom": 0.8}
+    return result
 
 
 async def generate_voice_workflow(
@@ -55,6 +92,7 @@ Use one or two steps. Keep each prompt to one or two short sentences suited to a
         f"Create a voice agent named {name!r}.\nPurpose: {description}\n"
         f"Additional instructions: {instructions or 'None'}"
     )
+    raw = None
     try:
         context = LLMContext()
         context.set_messages([{"role": "user", "content": user_prompt}])
@@ -136,5 +174,10 @@ Use one or two steps. Keep each prompt to one or two short sentences suited to a
         definition = json.loads(dto.model_dump_json(exclude_none=True))
         definition["viewport"] = {"x": 0, "y": 0, "zoom": 0.8}
         return definition, provider, model
+    except ValueError as error:
+        if raw is None:
+            raise
+        logger.warning("Selected workflow builder model returned an invalid plan ({}); using a validated starter graph", type(error).__name__)
+        return _fallback_voice_workflow(name, description, instructions), provider, model
     finally:
         await llm.cleanup()
