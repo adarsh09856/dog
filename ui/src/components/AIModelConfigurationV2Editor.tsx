@@ -664,11 +664,15 @@ export function AIModelConfigurationV2Editor({
                 if (!allowCustomVoice || kodewaves.tts_engine_type === "local_cpu") {
                     const voices = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
                         path: { provider: effectiveTtsProvider },
-                        query: { model: kodewaves.tts_model || undefined, q: kodewaves.voice },
+                        query: {
+                            model: kodewaves.tts_model || undefined,
+                            q: kodewaves.voice,
+                            language: kodewaves.language === MULTILINGUAL_LANGUAGE_CODE ? undefined : kodewaves.language,
+                        },
                     });
                     if (voices.error) throw new Error(detailFromError(voices.error, "Unable to verify selected voice."));
                     if (!voices.data?.voices.some(voice => voice.voice_id === kodewaves.voice)) {
-                        throw new Error("Select an available voice for the selected TTS model.");
+                        throw new Error("Select an available voice for the selected TTS model and language.");
                     }
                 }
             }
@@ -1213,6 +1217,7 @@ export function AIModelConfigurationV2Editor({
                                         provider={effectiveTtsProvider}
                                         model={kodewaves.tts_model === "auto" ? undefined : kodewaves.tts_model}
                                         source={kodewaves.tts_engine_type === "local_cpu" ? "local" : "cloud"}
+                                        outputLanguage={kodewaves.language}
                                         value={kodewaves.voice}
                                         onChange={(voice) => setKodewaves({ ...kodewaves, voice })}
                                         allowManualInput={allowCustomVoice}

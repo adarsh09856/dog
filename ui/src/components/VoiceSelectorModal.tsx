@@ -81,6 +81,8 @@ interface VoiceSelectorModalProps {
     /** Optional model passed through to the voice catalog query. */
     model?: string;
     source?: "cloud" | "local";
+    /** Restrict voices and previews to the configured spoken language. */
+    outputLanguage?: string;
     /** Allow typing a raw voice ID for voices outside the catalog. */
     allowManualInput?: boolean;
     className?: string;
@@ -113,6 +115,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     onChange,
     model,
     source,
+    outputLanguage,
     allowManualInput = false,
     className,
 }) => {
@@ -159,7 +162,10 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
 
     const [gender, setGender] = useState(DEFAULT_GENDER);
     const [accent, setAccent] = useState(DEFAULT_ACCENT);
-    const [language, setLanguage] = useState(DEFAULT_LANGUAGE);
+    const configuredLanguage = outputLanguage && !["multi", "auto", "unknown"].includes(outputLanguage)
+        ? outputLanguage : undefined;
+    const [language, setLanguage] = useState(configuredLanguage || DEFAULT_LANGUAGE);
+    const effectiveLanguage = configuredLanguage || language;
     const [searchInput, setSearchInput] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -235,7 +241,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             if (target === "all" && providerFilter !== "__all__") (query as any).provider_filter = providerFilter;
             if (gender !== ALL_FILTER_VALUE) query.gender = gender;
             if (accent !== ALL_FILTER_VALUE) query.accent = accent;
-            if (language !== ALL_FILTER_VALUE) query.language = language;
+            if (effectiveLanguage !== ALL_FILTER_VALUE) query.language = effectiveLanguage;
             const search = debouncedSearch.trim();
             if (search) query.q = search;
 
@@ -276,7 +282,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 }
             }
         })();
-    }, [isOpen, manualMode, provider, model, source, providerFilter, gender, accent, language, debouncedSearch, authLoading, user]);
+    }, [isOpen, manualMode, provider, model, source, providerFilter, gender, accent, effectiveLanguage, debouncedSearch, authLoading, user]);
 
     // Stop any preview when the modal closes / unmounts.
     useEffect(() => {
@@ -300,8 +306,8 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         [facets.accents, accent],
     );
     const languageOptions = useMemo(
-        () => toSortedOptions(facets.languages, language, languageLabel),
-        [facets.languages, language],
+        () => toSortedOptions(facets.languages, effectiveLanguage, languageLabel),
+        [facets.languages, effectiveLanguage],
     );
 
     const openModal = () => {
@@ -310,7 +316,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         setProviderFilter(initialFilter);
         setGender(DEFAULT_GENDER);
         setAccent(DEFAULT_ACCENT);
-        setLanguage(DEFAULT_LANGUAGE);
+        setLanguage(configuredLanguage || DEFAULT_LANGUAGE);
         setSearchInput("");
         setDebouncedSearch("");
         setManualMode(false);
@@ -337,10 +343,11 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
 
         const targetProv = voice.provider || resolveTargetProvider(provider, providerFilter) || "google";
         const previewUrl = voice.preview_url || `/api/v1/user/configurations/voices/${targetProv}/${voice.voice_id}/preview`;
-        const resolvedPreviewUrl = previewUrl.startsWith("/api/") && language !== ALL_FILTER_VALUE
+        const resolvedPreviewUrl = previewUrl.startsWith("/api/")
             ? (() => {
                 const url = new URL(previewUrl, window.location.origin);
-                url.searchParams.set("language", language);
+                if (effectiveLanguage !== ALL_FILTER_VALUE) url.searchParams.set("language", effectiveLanguage);
+                if (model && model !== "auto") url.searchParams.set("model", model);
                 return `${url.pathname}${url.search}`;
             })()
             : previewUrl;
@@ -397,9 +404,13 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             const next = manualVoiceId.trim();
             if (next) onChange(next);
         } else if (pendingVoiceId) {
-            onChange(pendingVoiceId);
             const chosen = voices.find((voice) => voice.voice_id === pendingVoiceId);
-            if (chosen) setSelectedVoiceInfo(chosen);
+            if (isLoading || !chosen) {
+                setError("Choose an available voice for the selected model and language.");
+                return;
+            }
+            onChange(pendingVoiceId);
+            setSelectedVoiceInfo(chosen);
         }
         setIsOpen(false);
     };
@@ -484,7 +495,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                             </SelectContent>
                         </Select>
 
-                        <Select value={language} onValueChange={setLanguage} disabled={manualMode}>
+                        <Select value={effectiveLanguage} onValueChange={setLanguage} disabled={manualMode || Boolean(configuredLanguage)}>
                             <SelectTrigger className="h-9 w-[150px]">
                                 <SelectValue placeholder="Language" />
                             </SelectTrigger>
