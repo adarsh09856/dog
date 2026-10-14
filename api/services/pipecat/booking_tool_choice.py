@@ -1,6 +1,7 @@
 """Require the calendar action when a caller explicitly confirms a booking."""
 
 import re
+from loguru import logger
 
 from pipecat.services.kodewaves.llm import KodewavesLLMService
 from pipecat.services.openai.llm import OpenAILLMService
@@ -52,6 +53,17 @@ class _BookingToolChoiceMixin:
     def build_chat_completion_params(self, params_from_context):
         params = super().build_chat_completion_params(params_from_context)
         choice = booking_tool_choice(params)
+        messages = params.get("messages")
+        if isinstance(messages, list) and messages:
+            latest_user = next((message for message in reversed(messages) if isinstance(message, dict) and message.get("role") == "user"), None)
+            if latest_user and _CONFIRMATION.search(_message_text(latest_user)):
+                tools = params.get("tools")
+                logger.info(
+                    "Confirmed booking selection: last_role={}, tool_names={}, forced={}",
+                    messages[-1].get("role") if isinstance(messages[-1], dict) else type(messages[-1]).__name__,
+                    [tool.get("function", {}).get("name") for tool in tools if isinstance(tool, dict)] if isinstance(tools, list) else type(tools).__name__,
+                    bool(choice),
+                )
         if choice:
             params["tool_choice"] = choice
         return params

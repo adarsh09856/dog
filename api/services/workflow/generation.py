@@ -22,7 +22,7 @@ from api.services.workflow.dto import ReactFlowDTO
 from api.services.workflow.workflow_graph import WorkflowGraph
 
 
-def _fallback_voice_workflow(name: str, description: str, instructions: str | None) -> dict:
+def _fallback_voice_workflow(name: str, description: str, instructions: str | None, language: str | None = None) -> dict:
     """Build a valid editable graph when a small local LLM returns malformed JSON."""
     # User text is plain instructions here, not a generated template expression.
     safe_name = name.replace("{{", "(").replace("}}", ")")
@@ -32,10 +32,16 @@ def _fallback_voice_workflow(name: str, description: str, instructions: str | No
     if extra:
         agent_prompt += f" Follow these instructions: {extra}"
     agent_prompt += " Ask for missing information, perform only available actions, and state the real result."
+    greeting = (
+        "नमस्ते, बताइए, मैं आपकी कैसे मदद करूँ?"
+        if (language or "").split("-")[0].lower() == "hi"
+        else "Hello, how may I help you today?"
+    )
     definition = {
         "nodes": [
             {"id": "generated-0", "type": "startCall", "position": {"x": 240, "y": 0},
              "data": {"name": "Greeting", "prompt": f"Greet the caller as {safe_name} and ask how you can help.",
+                      "greeting_type": "text", "greeting": greeting,
                       "is_start": True, "allow_interrupt": True, "add_global_prompt": False}},
             {"id": "generated-1", "type": "agentNode", "position": {"x": 240, "y": 220},
              "data": {"name": "Assist caller", "prompt": agent_prompt,
@@ -178,6 +184,6 @@ Use one or two steps. Keep each prompt to one or two short sentences suited to a
         if raw is None:
             raise
         logger.warning("Selected workflow builder model returned an invalid plan ({}); using a validated starter graph", type(error).__name__)
-        return _fallback_voice_workflow(name, description, instructions), provider, model
+        return _fallback_voice_workflow(name, description, instructions, selected_language), provider, model
     finally:
         await llm.cleanup()
