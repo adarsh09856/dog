@@ -6,6 +6,7 @@ from typing import List, Literal, Optional, TypedDict, Union
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.responses import Response
 from pydantic import BaseModel, Field, ValidationError
 
 from api.db import db_client
@@ -784,130 +785,30 @@ async def get_voices(
 
 
 async def _resolve_tts_preview_creds(provider_alias: str, user, db_client) -> dict:
-    from api.services.credentials.master_credential_service import master_credential_service
-    prov = provider_alias.lower().strip()
-    if prov == "gemini":
-        prov = "google"
-    elif prov == "azure_speech":
-        prov = "azure"
+    from api.services.catalog.normalize import normalize_provider_name
+    from api.services.configuration.ai_model_configuration import get_organization_ai_model_configuration_v2
 
-    for test_key in ([prov, "google", "gemini"] if prov in ("google", "gemini") else [prov]):
-        creds = await master_credential_service.get_master_credential(test_key)
-        if creds and (creds.get("api_key") or creds.get("apiKey")):
-            return {"api_key": creds.get("api_key") or creds.get("apiKey")}
+    provider = normalize_provider_name(provider_alias)
+    byok_policy = await kodewaves_db_client.get_setting("byok_policy") or {}
+    if byok_policy.get("allow_user_byok", True):
+        configuration = await get_organization_ai_model_configuration_v2(user.selected_organization_id)
+        if configuration and configuration.mode == "byok" and configuration.byok:
+            pipeline = configuration.byok.pipeline
+            tts = pipeline.tts if pipeline else None
+            if tts and normalize_provider_name(getattr(tts.provider, "value", tts.provider)) == provider and tts.api_key:
+                result = {"api_key": tts.api_key}
+                for field in ("region", "base_url"):
+                    value = getattr(tts, field, None)
+                    if value:
+                        result[field] = value
+                return result
 
-    env_map = {
-        "google": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-        "gemini": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-        "openai": ["OPENAI_API_KEY"],
-        "deepgram": ["DEEPGRAM_API_KEY"],
-        "cartesia": ["CARTESIA_API_KEY"],
-        "elevenlabs": ["ELEVENLABS_API_KEY", "XI_API_KEY"],
-        "sarvam": ["SARVAM_API_KEY"],
-        "azure": ["AZURE_SPEECH_API_KEY", "AZURE_SPEECH_KEY", "AZURE_API_KEY"],
-        "azure_speech": ["AZURE_SPEECH_API_KEY", "AZURE_SPEECH_KEY", "AZURE_API_KEY"],
-    }
-    for env_var in env_map.get(prov, [f"{prov.upper()}_API_KEY"]):
-        val = os.environ.get(env_var)
-        if val:
-            res = {"api_key": val}
-            if prov in ("azure", "azure_speech"):
-                res["region"] = os.environ.get("AZURE_SPEECH_REGION", "eastus")
-            return res
-
-    if user and getattr(user, "selected_organization_id", None):
-        try:
-            from api.services.configuration.ai_model_configuration import (
-                _get_organization_ai_model_configuration_v2_row,
-                _parse_organization_ai_model_configuration_v2,
-            )
-            row = await _get_organization_ai_model_configuration_v2_row(user.selected_organization_id)
-            org_cfg = _parse_organization_ai_model_configuration_v2(row, user.selected_organization_id)
-            if org_cfg:
-                if org_cfg.byok:
-                    if org_cfg.byok.pipeline and org_cfg.byok.pipeline.tts:
-                        tts_prov = getattr(org_cfg.byok.pipeline.tts, "provider", "").lower()
-                        if tts_prov == prov or (prov in ("google", "gemini") and tts_prov in ("google", "gemini")):
-                            key = getattr(org_cfg.byok.pipeline.tts, "api_key", None)
-                            if key:
-                                return {"api_key": key}
-                    if org_cfg.byok.pipeline and org_cfg.byok.pipeline.llm:
-                        llm_prov = getattr(org_cfg.byok.pipeline.llm, "provider", "").lower()
-                        if llm_prov == prov or (prov in ("google", "gemini") and llm_prov in ("google", "gemini")):
-                            key = getattr(org_cfg.byok.pipeline.llm, "api_key", None)
-                            if key:
-                                return {"api_key": key}
-                    if org_cfg.byok.realtime and org_cfg.byok.realtime.realtime:
-                        rt_prov = getattr(org_cfg.byok.realtime.realtime, "provider", "").lower()
-                        if rt_prov == prov or (prov in ("google", "gemini") and rt_prov in ("google", "gemini")):
-                            key = getattr(org_cfg.byok.realtime.realtime, "api_key", None)
-                            if key:
-                                return {"api_key": key}
-                k_cfg = org_cfg.kodewaves or org_cfg.dograh
-                if k_cfg and k_cfg.api_key and k_cfg.api_key not in ("sovereign-managed", "sovereign-local-cpu"):
-                    return {"api_key": k_cfg.api_key}
-        except Exception as org_cfg_err:
-            logger.debug(f"[VoicePreview] Org config key check failed: {org_cfg_err}")
-
-        try:
-            org_keys = await db_client.get_api_keys_by_organization(user.selected_organization_id)
-            for ok in org_keys:
-                ok_prov = getattr(ok, "provider", "").lower()
-                if (
-                    ok_prov == prov
-                    or (prov in ("google", "gemini") and ok_prov in ("google", "gemini"))
-                    or (prov in ("azure", "azure_speech") and ok_prov in ("azure", "azure_speech"))
-                ):
-                    extra = getattr(ok, "extra", {}) or {}
-                    res = {"api_key": getattr(ok, "api_key", None)}
-                    if "region" in extra:
-                        res["region"] = extra["region"]
-                    return res
-        except Exception:
-            pass
-
-    # Global DB fallback across all orgs (for single-tenant / local deployments)
-    try:
-        from api.db.models import OrganizationConfigurationModel
-        from api.enums import OrganizationConfigurationKey
-        from sqlalchemy.future import select
-        async with db_client.async_session() as session:
-            result = await session.execute(
-                select(OrganizationConfigurationModel).where(
-                    OrganizationConfigurationModel.key == OrganizationConfigurationKey.MODEL_CONFIGURATION_V2.value
-                )
-            )
-            rows = result.scalars().all()
-            for r in rows:
-                if not r.value:
-                    continue
-                from api.services.configuration.ai_model_configuration import _parse_organization_ai_model_configuration_v2
-                org_cfg = _parse_organization_ai_model_configuration_v2(r, r.organization_id)
-                if not org_cfg:
-                    continue
-                if org_cfg.byok:
-                    for branch in [
-                        org_cfg.byok.pipeline.tts if org_cfg.byok.pipeline else None,
-                        org_cfg.byok.pipeline.llm if org_cfg.byok.pipeline else None,
-                        org_cfg.byok.realtime.realtime if org_cfg.byok.realtime else None,
-                    ]:
-                        if branch:
-                            b_prov = getattr(branch, "provider", "").lower()
-                            if b_prov == prov or (prov in ("google", "gemini") and b_prov in ("google", "gemini")):
-                                key = getattr(branch, "api_key", None)
-                                if key:
-                                    return {"api_key": key}
-                k_cfg = org_cfg.kodewaves or org_cfg.dograh
-                if k_cfg and k_cfg.api_key and k_cfg.api_key not in ("sovereign-managed", "sovereign-local-cpu"):
-                    return {"api_key": k_cfg.api_key}
-    except Exception as db_fallback_err:
-        logger.debug(f"[VoicePreview] Global org config fallback search failed: {db_fallback_err}")
-
-    return {}
+    # MasterCredentialService enforces administrator disablement and environment policy.
+    credentials = await master_credential_service.get_master_credential(provider)
+    return credentials or {}
 
 
 _AUDIO_PREVIEW_CACHE: dict[str, tuple[bytes, str]] = {}
-_INSTALLED_PIPER_VOICES_CACHE: set[str] = set()
 
 
 @router.get("/configurations/voices/{provider}/{voice_id}/preview")
@@ -916,50 +817,42 @@ async def preview_voice(
     voice_id: str,
     request: Request,
     token: Optional[str] = Query(None),
+    user: UserModel = Depends(get_user),
 ):
-    """Generate or stream audio preview for a given voice with in-memory caching for zero latency."""
+    """Generate a voice preview using the selected organization's authorized provider."""
     provider_lower = provider.lower()
 
-    # Provider auto-correction based on voice signature to prevent cross-engine mismatch
-    if voice_id in ("Journey", "Puck", "Charon", "Aoede", "Fenrir", "Kore"):
-        provider_lower = "google"
-    elif voice_id in ("alloy", "echo", "fable", "onyx", "nova", "shimmer"):
-        provider_lower = "openai"
-    elif voice_id.startswith("aura-"):
-        provider_lower = "deepgram"
-    elif voice_id.startswith(("sonic-", "barbershop", "helpful", "friendly", "brooke")):
-        provider_lower = "cartesia"
-    elif voice_id in ("arvind", "amol", "amrita", "ananya", "aditi", "abhinav", "meera"):
-        provider_lower = "sarvam"
-    elif voice_id.startswith(("hi-", "te-", "kn-", "mr-")) and "medium" not in voice_id:
-        provider_lower = "navana"
+    if not user.selected_organization_id:
+        raise HTTPException(status_code=400, detail="Select an organization first")
 
-    cache_key = f"{provider_lower}:{voice_id}"
+    if provider_lower in ("piper", "speaches"):
+        from api.services.catalog.catalog_service import catalog_service
+        catalog = await catalog_service.get_available_catalog(
+            organization_id=user.selected_organization_id,
+            user_has_local_ai=bool(getattr(user, "has_local_ai_access", False)),
+        )
+        if not catalog.get("local_engine_enabled"):
+            raise HTTPException(status_code=403, detail="Local AI is disabled or unavailable for this organization")
+        from api.services.catalog.local_inventory import get_installed_piper_voices
+        settings = await kodewaves_db_client.get_setting("local_ai") or {}
+        endpoint = settings.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
+        piper_url = normalize_local_ai_endpoint(endpoint).rstrip("/").removesuffix("/synthesize")
+        try:
+            installed = await get_installed_piper_voices(piper_url)
+        except Exception:
+            raise HTTPException(status_code=503, detail="Unable to verify installed local voices")
+        if voice_id not in installed:
+            raise HTTPException(status_code=400, detail="Selected local voice is not installed; ask the administrator to install it")
+    elif not await _resolve_tts_preview_creds(provider_lower, user, db_client):
+        raise HTTPException(status_code=400, detail="No active credentials for the selected voice provider")
+
+    cache_key = f"{user.selected_organization_id}:{provider_lower}:{voice_id}"
     if cache_key in _AUDIO_PREVIEW_CACHE:
         cached_bytes, cached_mime = _AUDIO_PREVIEW_CACHE[cache_key]
-        return Response(
-            content=cached_bytes,
-            media_type=cached_mime,
-            headers={"Cache-Control": "public, max-age=86400"},
-        )
+        return Response(content=cached_bytes, media_type=cached_mime,
+                        headers={"Cache-Control": "private, no-store"})
 
-    user = None
-    try:
-        if not request.headers.get("authorization") and token:
-            user = await get_user(authorization=f"Bearer {token}")
-        else:
-            user = await get_user(
-                authorization=request.headers.get("authorization"),
-                x_api_key=request.headers.get("x-api-key"),
-                kodewaves_auth_token=request.cookies.get("kodewaves_auth_token"),
-                dograh_auth_token=request.cookies.get("dograh_auth_token"),
-                oss_token=request.cookies.get("oss_token"),
-            )
-    except Exception as auth_err:
-        logger.debug(f"[VoicePreview] Auth check deferred to DB lookup: {auth_err}")
-    import os
     import aiohttp
-    from starlette.responses import Response
 
     def _cache_and_respond(audio_bytes: bytes, mime_type: str) -> Response:
         if len(_AUDIO_PREVIEW_CACHE) < 500:
@@ -967,63 +860,24 @@ async def preview_voice(
         return Response(
             content=audio_bytes,
             media_type=mime_type,
-            headers={"Cache-Control": "public, max-age=86400"},
+            headers={"Cache-Control": "private, no-store"},
         )
 
     # 0. Piper ONNX (OHF-Voice/piper1-gpl HTTP server, local CPU)
     if provider_lower in ("piper", "speaches"):
-        piper_raw = os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
-        piper_url = normalize_local_ai_endpoint(piper_raw).rstrip("/")
-        lang_prefix = voice_id.split("_")[0]
-        # Concise prompt (<4 words) for rapid local CPU synthesis (<200ms)
         samples = {
             "hi": "नमस्ते, कोडवेव्स में आपका स्वागत है।",
-            "te": "నమస్కారం, కోడ్‌వేవ్స్‌కు స్వాగతం.",
-            "ml": "നമസ്കാരം, കോഡ്‌വേവ്സിലേക്ക് സ്വാഗതം.",
             "mr": "नमस्कार, कोडवेव्स मध्ये आपले स्वागत आहे.",
-            "bn": "নমস্কার, কোডওয়েভসে স্বাগতম।",
         }
-        text = samples.get(lang_prefix, "Hello from Kodewaves.")
+        text = samples.get(voice_id.split("_")[0], "Hello from Kodewaves.")
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
-                # Fast path: direct synthesize first
-                try:
-                    async with session.post(
-                        f"{piper_url}/synthesize",
-                        json={"text": text, "voice": voice_id},
-                        timeout=aiohttp.ClientTimeout(total=5),
-                    ) as resp:
-                        if resp.status == 200:
-                            return _cache_and_respond(await resp.read(), "audio/wav")
-                except Exception:
-                    pass
-
-                # Fallback: check installed list or trigger download if missing
-                if voice_id not in _INSTALLED_PIPER_VOICES_CACHE:
-                    try:
-                        async with session.get(f"{piper_url}/voices", timeout=aiohttp.ClientTimeout(total=3)) as vresp:
-                            if vresp.status == 200:
-                                installed = await vresp.json()
-                                _INSTALLED_PIPER_VOICES_CACHE.update(installed.keys() if isinstance(installed, dict) else installed)
-                    except Exception:
-                        pass
-
-                if voice_id not in _INSTALLED_PIPER_VOICES_CACHE:
-                    try:
-                        async with session.post(f"{piper_url}/download", json={"voice": voice_id}, timeout=aiohttp.ClientTimeout(total=60)) as dresp:
-                            if dresp.status == 200:
-                                _INSTALLED_PIPER_VOICES_CACHE.add(voice_id)
-                    except Exception as dl_err:
-                        logger.warning(f"[VoicePreview] Piper voice check/download failed: {dl_err}")
-
-                async with session.post(f"{piper_url}/synthesize", json={"text": text, "voice": voice_id}, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    if resp.status == 200:
-                        return _cache_and_respond(await resp.read(), "audio/wav")
-                    detail = (await resp.text())[:200]
-                    logger.warning(f"[VoicePreview] Piper HTTP {resp.status} for {voice_id}: {detail}")
-        except Exception as e:
-            logger.warning(f"[VoicePreview] Piper server unreachable at {piper_url}: {e}")
-        raise HTTPException(status_code=503, detail="Local Piper TTS server is not reachable or voice is not installed")
+                async with session.post(f"{piper_url}/synthesize", json={"text": text, "voice": voice_id}) as response:
+                    if response.status == 200:
+                        return _cache_and_respond(await response.read(), "audio/wav")
+        except Exception as error:
+            logger.warning("Local voice preview failed: %s", type(error).__name__)
+        raise HTTPException(status_code=503, detail="Local voice synthesis failed")
 
     # 1. Sarvam Indic (Hindi)
     if provider_lower == "sarvam":
