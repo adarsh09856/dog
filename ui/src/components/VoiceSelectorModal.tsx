@@ -45,6 +45,7 @@ const EMPTY_FACETS: Facets = { genders: [], accents: [], languages: [], provider
 const PROVIDER_TABS = [
     { id: "__all__", label: "All Active Voices" },
     { id: "piper", label: "Piper Hindi & Indic (Local)" },
+    { id: "speaches", label: "Kokoro (Local CPU)" },
     { id: "sarvam", label: "Sarvam Indic" },
     { id: "cartesia", label: "Cartesia Sonic" },
     { id: "openai", label: "OpenAI" },
@@ -63,7 +64,7 @@ const PROVIDER_TABS = [
 function resolveTargetProvider(prov: string, filter?: string): string {
     const norm = (prov || "").toLowerCase().trim();
     if (norm === "gemini" || norm === "google") return "google";
-    if (norm === "speaches" || norm === "piper") return "piper";
+    if (norm === "piper") return "piper";
     if (norm === "azure_speech" || norm === "azure") return "azure";
     if (["openai", "elevenlabs", "cartesia", "deepgram", "sarvam", "navana", "smallest", "lmnt", "rime"].includes(norm)) {
         return norm;
@@ -140,7 +141,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         if (activeProvList.length === 0) {
             const detected = Array.from(new Set(voices.map((v) => (v as any).provider).filter(Boolean)));
             if (detected.length > 0) {
-                const uniqueDetected = Array.from(new Set(detected.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p === "speaches" ? "piper" : p)));
+                const uniqueDetected = Array.from(new Set(detected.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p)));
                 return [
                     { id: "__all__", label: `All Active Voices (${voices.length})` },
                     ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && uniqueDetected.includes(t.id)),
@@ -148,7 +149,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             }
             return [{ id: "__all__", label: `All Voices (${voices.length || 0})` }];
         }
-        const normalizedProvList = Array.from(new Set(activeProvList.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p === "speaches" ? "piper" : p)));
+        const normalizedProvList = Array.from(new Set(activeProvList.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p)));
         return [
             { id: "__all__", label: `All Active Voices (${voices.length})` },
             ...PROVIDER_TABS.filter((t) => t.id !== "__all__" && normalizedProvList.includes(t.id)),
