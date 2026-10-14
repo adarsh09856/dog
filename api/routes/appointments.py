@@ -47,6 +47,7 @@ class AppointmentCreateRequest(BaseModel):
     def valid_status(cls, value):
         if value is not None and value not in {
             "scheduled",
+            "pending",
             "confirmed",
             "completed",
             "cancelled",

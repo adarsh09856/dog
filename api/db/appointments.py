@@ -103,11 +103,13 @@ async def save_appointment(organization_id, values, appointment_id=None):
         status = values.get("status") or (
             appointment.status if appointment else "confirmed"
         )
-        if status != "cancelled" and not (settings and settings.allow_overlapping):
+        if status in {"scheduled", "pending", "confirmed"} and not (
+            settings and settings.allow_overlapping
+        ):
             buffer = timedelta(minutes=settings.buffer_minutes if settings else 15)
             query = select(AppointmentModel.id).where(
                 AppointmentModel.organization_id == organization_id,
-                AppointmentModel.status.in_(["scheduled", "confirmed"]),
+                AppointmentModel.status.in_(["scheduled", "pending", "confirmed"]),
                 AppointmentModel.start_time < end + buffer,
                 AppointmentModel.end_time > start - buffer,
             )
