@@ -7,6 +7,7 @@ import { getVoicesApiV1UserConfigurationsVoicesProviderGet } from "@/client/sdk.
 import { VoiceInfo as ApiVoiceInfo } from "@/client/types.gen";
 import { client } from "@/client/client.gen";
 import { detailFromError } from "@/lib/apiError";
+import { useAuth } from "@/lib/auth";
 
 type VoiceInfo = ApiVoiceInfo & { provider?: string };
 import { Button } from "@/components/ui/button";
@@ -115,6 +116,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     allowManualInput = false,
     className,
 }) => {
+    const { user, loading: authLoading } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [voices, setVoices] = useState<VoiceInfo[]>([]);
     const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
@@ -194,6 +196,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
     // Resolve the currently-selected voice (for the trigger label) without
     // pulling the catalog: a targeted lookup by voice ID.
     useEffect(() => {
+        if (authLoading || !user) return;
         if (!value) {
             setSelectedVoiceInfo(null);
             return;
@@ -216,12 +219,12 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         return () => {
             active = false;
         };
-    }, [value, provider, model]);
+    }, [value, provider, model, authLoading, user]);
 
     // Fetch the filtered voice list (server-side) whenever the modal is open
     // and a filter changes. A request counter discards out-of-order responses.
     useEffect(() => {
-        if (!isOpen || manualMode) return;
+        if (authLoading || !user || !isOpen || manualMode) return;
         const id = ++requestId.current;
         setIsLoading(true);
         setError(null);
@@ -273,7 +276,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 }
             }
         })();
-    }, [isOpen, manualMode, provider, model, source, providerFilter, gender, accent, language, debouncedSearch]);
+    }, [isOpen, manualMode, provider, model, source, providerFilter, gender, accent, language, debouncedSearch, authLoading, user]);
 
     // Stop any preview when the modal closes / unmounts.
     useEffect(() => {

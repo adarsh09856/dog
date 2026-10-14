@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import delete, desc, select, update
+from sqlalchemy import delete, desc, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.db.base_client import BaseDBClient
@@ -283,7 +283,10 @@ class KodewavesDBClient(BaseDBClient):
             if provider:
                 stmt = stmt.where(VoiceCatalogModel.provider == provider.lower().strip())
             if tts_model:
-                stmt = stmt.where(VoiceCatalogModel.tts_model == tts_model)
+                stmt = stmt.where(or_(
+                    VoiceCatalogModel.tts_model == tts_model,
+                    VoiceCatalogModel.tts_model.is_(None),
+                ))
             result = await session.execute(stmt)
             voices = list(result.scalars().all())
             if language:

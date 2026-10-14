@@ -98,7 +98,12 @@ def get_default_piper_voice_for_language(lang: Optional[str]) -> str:
 
 def normalize_stt_language(provider: Optional[str], lang: Optional[str]) -> str:
     """Convenience wrapper for STT language normalization."""
-    if str(lang).lower().strip() == "multi":
+    if str(lang).lower().strip() in ("multi", "auto", "unknown"):
+        provider_key = str(provider or "").lower()
+        if provider_key == "sarvam":
+            return "unknown"
+        if provider_key in ("google", "gemini"):
+            return "auto"
         return "multi"
     return normalize_language_code(lang, target_provider=provider)
 

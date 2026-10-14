@@ -61,8 +61,13 @@ class GeminiSTTService(STTService):
         encoded_audio = base64.b64encode(wav_bytes).decode("utf-8")
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{self._model}:generateContent?key={self._api_key}"
 
+        language_instruction = (
+            "Detect the spoken language and preserve its original language and script. "
+            if self._language in ("auto", "multi", "unknown")
+            else f"Preserve the spoken words in language '{self._language}' and its native script. "
+        )
         prompt = (
-            f"Transcribe the spoken words in this audio clip verbatim into text in language '{self._language}'. "
+            "Transcribe the spoken words in this audio clip verbatim. " + language_instruction +
             "Output ONLY the exact transcribed text, nothing else. If there is only silence, background noise, or no clear speech, output nothing."
         )
 

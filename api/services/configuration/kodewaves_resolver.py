@@ -19,6 +19,7 @@ from api.utils.common import normalize_local_ai_endpoint
 from api.services.configuration.language_normalizer import (
     get_default_piper_voice_for_language,
     normalize_language_code,
+    normalize_stt_language,
 )
 from api.services.configuration.registry import (
     REGISTRY,
@@ -94,7 +95,7 @@ def _build_master_llm(prov: str, model: str, api_key: str, base_url: Optional[st
 
 def _build_master_stt(prov: str, model: str, api_key: str, language: Optional[str] = None):
     prov_lower = prov.lower()
-    norm_lang = normalize_language_code(language, target_provider=prov_lower)
+    norm_lang = normalize_stt_language(prov_lower, language)
     if prov_lower == "deepgram":
         return DeepgramSTTConfiguration(api_key=api_key, model=model, language=norm_lang)
     elif prov_lower == "navana":
@@ -235,6 +236,9 @@ async def _resolve_catalog_layer(effective: EffectiveAIModelConfiguration, layer
             config = _build_master_tts(provider, model.model_identifier, creds["api_key"], voice)
             if current is not None and hasattr(current, "speed") and "speed" in type(config).model_fields:
                 config.speed = current.speed
+            spoken_language = getattr(current, "language", None) or getattr(effective.stt, "language", None)
+            if spoken_language and spoken_language not in ("multi", "auto", "unknown") and "language" in type(config).model_fields:
+                config.language = normalize_language_code(spoken_language, target_provider=provider)
         setattr(effective, layer, config)
         return ResolvedLayerInfo(provider=provider, model=model.model_identifier, source="master_key",
                                  voice=getattr(config, "voice", None), language=getattr(config, "language", None))
@@ -452,7 +456,7 @@ async def apply_kodewaves_sovereign_resolution(
             norm_lang = (
                 "multi"
                 if is_local_stt and str(raw_lang or "auto").lower() in ("auto", "multi", "default")
-                else normalize_language_code(raw_lang, target_provider=provider_name)
+                else normalize_stt_language(provider_name, raw_lang)
             )
 
             if hasattr(effective.stt, "language"):

@@ -2,6 +2,8 @@
 
 import { AlertTriangle, Bot, CheckCircle2, Cloud, Cpu, Info, Key, Layers, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { getVoicesApiV1UserConfigurationsVoicesProviderGet } from "@/client/sdk.gen";
+import { detailFromError } from "@/lib/apiError";
 
 import type {
     ModelConfigurationMetricPrice,
@@ -649,6 +651,7 @@ export function AIModelConfigurationV2Editor({
             const isRt = overrideRealtime !== undefined ? overrideRealtime : Boolean(kodewaves.is_realtime);
             if (!catalogManifest || catalogError) throw new Error("Refresh the model catalog before saving.");
             if (!isRt) {
+                if (!kodewaves.voice.trim()) throw new Error("Select a voice for the selected TTS model before saving.");
                 for (const [label, selected, models] of [
                     ["LLM", kodewaves.llm_model, effectiveLlmModels],
                     ["STT", kodewaves.stt_model, effectiveSttModels],
@@ -656,6 +659,16 @@ export function AIModelConfigurationV2Editor({
                 ] as const) {
                     if (models.length === 0 || (selected && !models.some(model => model.value === selected))) {
                         throw new Error(`Select an available ${label} model before saving.`);
+                    }
+                }
+                if (!allowCustomVoice || kodewaves.tts_engine_type === "local_cpu") {
+                    const voices = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
+                        path: { provider: effectiveTtsProvider },
+                        query: { model: kodewaves.tts_model || undefined, q: kodewaves.voice },
+                    });
+                    if (voices.error) throw new Error(detailFromError(voices.error, "Unable to verify selected voice."));
+                    if (!voices.data?.voices.some(voice => voice.voice_id === kodewaves.voice)) {
+                        throw new Error("Select an available voice for the selected TTS model.");
                     }
                 }
             }
@@ -1114,12 +1127,11 @@ export function AIModelConfigurationV2Editor({
                                             <button
                                                 type="button"
                                                 onClick={() => {
-                                                    const isPiper = (kodewaves.voice || "").startsWith("hi_IN-") || (kodewaves.voice || "").startsWith("en_US-");
                                                     setKodewaves({
                                                         ...kodewaves,
                                                         tts_engine_type: "cloud",
-                                                        voice: isPiper ? "Puck" : kodewaves.voice,
-                                                        tts_model: kodewaves.tts_model === "piper" ? "auto" : kodewaves.tts_model,
+                                                        voice: kodewaves.tts_engine_type === "cloud" ? kodewaves.voice : "",
+                                                        tts_model: kodewaves.tts_engine_type === "cloud" ? kodewaves.tts_model : undefined,
                                                     });
                                                 }}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
@@ -1134,11 +1146,10 @@ export function AIModelConfigurationV2Editor({
                                                 type="button"
                                                 onClick={() => {
                                                     if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
-                                                    const isPiper = (kodewaves.voice || "").startsWith("hi_IN-") || (kodewaves.voice || "").startsWith("en_US-");
                                                     setKodewaves({
                                                         ...kodewaves,
                                                         tts_engine_type: "local_cpu",
-                                                        voice: isPiper ? kodewaves.voice : "hi_IN-priyamvada-medium",
+                                                        voice: kodewaves.tts_engine_type === "local_cpu" ? kodewaves.voice : "",
                                                         tts_model: "piper",
                                                     });
                                                 }}
@@ -1163,33 +1174,7 @@ export function AIModelConfigurationV2Editor({
                                         }
                                         onValueChange={(tts_model) => {
                                             const nextModel = tts_model === "auto" || tts_model === "none" ? undefined : tts_model;
-                                            let nextVoice = kodewaves.voice;
-                                            const tm = (nextModel || "").toLowerCase();
-                                            if (tm.includes("gemini") || tm.includes("google")) {
-                                                if (!["kore", "puck", "charon", "aoede", "fenrir", "journey"].includes((nextVoice || "").toLowerCase())) {
-                                                    nextVoice = "Kore";
-                                                }
-                                            } else if (tm.includes("piper") || kodewaves.tts_engine_type === "local_cpu") {
-                                                if (!nextVoice || (!nextVoice.includes("hi_IN") && !nextVoice.includes("en_US"))) {
-                                                    nextVoice = "hi_IN-priyamvada-medium";
-                                                }
-                                            } else if (tm.includes("openai") || tm.includes("tts-1")) {
-                                                if (!["alloy", "echo", "fable", "onyx", "nova", "shimmer"].includes((nextVoice || "").toLowerCase())) {
-                                                    nextVoice = "alloy";
-                                                }
-                                            } else if (tm.includes("cartesia") || tm.includes("sonic")) {
-                                                if (!nextVoice?.startsWith("sonic")) {
-                                                    nextVoice = "sonic-english";
-                                                }
-                                            } else if (tm.includes("eleven")) {
-                                                if (nextVoice !== "21m00Tcm4TlvDq8ikWAM" && nextVoice !== "pNInz6obpgDQGcFmaJgB") {
-                                                    nextVoice = "21m00Tcm4TlvDq8ikWAM";
-                                                }
-                                            } else if (tm.includes("sarvam") || tm.includes("bulbul")) {
-                                                if (!["arvind", "amrita"].includes((nextVoice || "").toLowerCase())) {
-                                                    nextVoice = "arvind";
-                                                }
-                                            }
+                                            const nextVoice = nextModel === kodewaves.tts_model ? kodewaves.voice : "";
                                             setKodewaves({ ...kodewaves, tts_model: nextModel, voice: nextVoice });
                                         }}
                                     >
@@ -1222,14 +1207,16 @@ export function AIModelConfigurationV2Editor({
 
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Voice</Label>
-                                    <VoiceSelectorModal
+                                    {effectiveTtsProvider === "all" ? (
+                                        <p className="text-sm text-muted-foreground">Select a TTS model to choose its voices.</p>
+                                    ) : <VoiceSelectorModal
                                         provider={effectiveTtsProvider}
                                         model={kodewaves.tts_model === "auto" ? undefined : kodewaves.tts_model}
                                         source={kodewaves.tts_engine_type === "local_cpu" ? "local" : "cloud"}
                                         value={kodewaves.voice}
                                         onChange={(voice) => setKodewaves({ ...kodewaves, voice })}
                                         allowManualInput={allowCustomVoice}
-                                    />
+                                    />}
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">

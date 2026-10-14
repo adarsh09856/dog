@@ -2,6 +2,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 from typing import List, Literal, Optional, TypedDict, Union
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -655,6 +656,19 @@ async def get_voices(
 ) -> VoicesResponse:
     """Get available voices for a TTS provider with strict master key filtering and preview URLs."""
     provider_key = provider.lower().strip()
+    managed_selection = provider_key in ("kodewaves", "dograh", "all", "auto")
+    from api.services.catalog.normalize import normalize_provider_name
+    from api.services.catalog.voice_selection import model_voice_ids
+    model = model if model not in ("auto", "default", "") else None
+    if model and provider_key in ("kodewaves", "dograh", "all", "auto"):
+        models = await kodewaves_db_client.list_models(enabled_only=True)
+        matches = [entry for entry in models
+                   if (entry.layer or entry.category) == "tts" and entry.model_identifier == model
+                   and getattr(entry, "status", None) not in ("FAIL", "UNAVAILABLE")]
+        providers = {normalize_provider_name(entry.provider) for entry in matches}
+        if len(providers) != 1:
+            raise HTTPException(status_code=400, detail="Select an available TTS provider and model")
+        provider_key = providers.pop()
 
     # Determine active providers with master keys
     local_ai_setting = await kodewaves_db_client.get_setting("local_ai") or {}
@@ -722,6 +736,18 @@ async def get_voices(
         if not raw_catalog:
             raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES if v.get("provider") in (norm_key, provider_key)]
 
+    if managed_selection:
+        raw_catalog = [voice for voice in raw_catalog if voice.get("provider") in enabled_provs]
+        if norm_key not in ("kodewaves", "dograh", "all", "auto") and norm_key not in enabled_provs:
+            return VoicesResponse(provider=provider, voices=[], facets=VoiceFacets())
+
+    allowed_voice_ids = model_voice_ids(norm_key, model)
+    if allowed_voice_ids is not None:
+        raw_catalog = [voice for voice in raw_catalog if voice["voice_id"] in allowed_voice_ids]
+        if not raw_catalog:
+            raw_catalog = [{"voice_id": voice_id, "name": voice_id, "provider": norm_key}
+                           for voice_id in sorted(allowed_voice_ids)]
+
     # Local voices must be installed: Piper otherwise silently uses its default voice.
     if any(v.get("provider", "piper") in ("piper", "speaches") for v in raw_catalog):
         from api.services.catalog.local_inventory import get_installed_piper_voices
@@ -740,6 +766,8 @@ async def get_voices(
     for v in raw_catalog:
         v_prov = v.get("provider", "speaches")
         v["preview_url"] = f"/api/v1/user/configurations/voices/{v_prov}/{v['voice_id']}/preview"
+        if model:
+            v["preview_url"] += "?" + urlencode({"model": model})
 
     filtered = raw_catalog
     if provider_filter and provider_filter != "__all__":
@@ -817,10 +845,15 @@ async def preview_voice(
     voice_id: str,
     request: Request,
     token: Optional[str] = Query(None),
+    model: Optional[str] = Query(None),
     user: UserModel = Depends(get_user),
 ):
     """Generate a voice preview using the selected organization's authorized provider."""
     provider_lower = provider.lower()
+    from api.services.catalog.voice_selection import model_voice_ids
+    allowed_voice_ids = model_voice_ids(provider_lower, model)
+    if allowed_voice_ids is not None and voice_id not in allowed_voice_ids:
+        raise HTTPException(status_code=400, detail="Selected voice is not supported by the selected TTS model")
 
     if not user.selected_organization_id:
         raise HTTPException(status_code=400, detail="Select an organization first")
@@ -846,7 +879,7 @@ async def preview_voice(
     elif not await _resolve_tts_preview_creds(provider_lower, user, db_client):
         raise HTTPException(status_code=400, detail="No active credentials for the selected voice provider")
 
-    cache_key = f"{user.selected_organization_id}:{provider_lower}:{voice_id}"
+    cache_key = f"{user.selected_organization_id}:{provider_lower}:{model or 'default'}:{voice_id}"
     if cache_key in _AUDIO_PREVIEW_CACHE:
         cached_bytes, cached_mime = _AUDIO_PREVIEW_CACHE[cache_key]
         return Response(content=cached_bytes, media_type=cached_mime,
@@ -889,7 +922,7 @@ async def preview_voice(
                     "inputs": ["नमस्ते, यह कोडवेव्स पर आवाज का पूर्वावलोकन है।"],
                     "target_language_code": "hi-IN",
                     "speaker": voice_id,
-                    "model": "bulbul:v3",
+                    "model": model or "bulbul:v3",
                 }
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
                     async with session.post("https://api.sarvam.ai/text-to-speech", json=payload, headers=headers) as resp:
@@ -914,7 +947,7 @@ async def preview_voice(
                     "Content-Type": "application/json",
                 }
                 payload = {
-                    "model_id": "sonic-3.5",
+                    "model_id": model or "sonic-3.5",
                     "transcript": "Hello, this is a live preview of this voice on Kodewaves.",
                     "voice": {"mode": "id", "id": voice_id},
                     "output_format": {"container": "wav", "encoding": "pcm_s16le", "sample_rate": 24000},
@@ -933,7 +966,7 @@ async def preview_voice(
         if creds.get("api_key"):
             try:
                 headers = {"Authorization": f"Bearer {creds['api_key']}", "Content-Type": "application/json"}
-                payload = {"model": "tts-1", "voice": voice_id, "input": "Hello, this is a sample preview on Kodewaves."}
+                payload = {"model": model or "tts-1", "voice": voice_id, "input": "Hello, this is a sample preview on Kodewaves."}
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
                     async with session.post("https://api.openai.com/v1/audio/speech", json=payload, headers=headers) as resp:
                         if resp.status == 200:
@@ -948,7 +981,7 @@ async def preview_voice(
         if creds.get("api_key"):
             try:
                 headers = {"xi-api-key": creds["api_key"], "Content-Type": "application/json"}
-                payload = {"text": "Hello, this is a sample preview on Kodewaves.", "model_id": "eleven_multilingual_v2"}
+                payload = {"text": "Hello, this is a sample preview on Kodewaves.", "model_id": model or "eleven_multilingual_v2"}
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
                     async with session.post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}", json=payload, headers=headers) as resp:
                         if resp.status == 200:
@@ -967,20 +1000,10 @@ async def preview_voice(
                 detail="Google Gemini API key not found. Please add your GEMINI_API_KEY in Admin > Models or Workspace Settings to preview Gemini voices.",
             )
 
-        gemini_voice = {
-            "puck": "Puck",
-            "charon": "Charon",
-            "kore": "Kore",
-            "fenrir": "Fenrir",
-            "aoede": "Aoede",
-            "journey": "Aoede",
-            "zephyr": "Zephyr",
-            "leda": "Leda",
-            "enceladus": "Enceladus",
-        }.get(voice_id.lower(), voice_id if voice_id in ("Puck", "Charon", "Aoede", "Fenrir", "Kore", "Zephyr") else "Puck")
+        gemini_voice = voice_id
 
         candidate_endpoints = [
-            "gemini-3.1-flash-tts-preview",
+            model or "gemini-3.1-flash-tts-preview",
         ]
         last_error = "Unknown error"
         for mdl in candidate_endpoints:
