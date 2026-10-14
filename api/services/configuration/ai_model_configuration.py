@@ -107,11 +107,13 @@ async def get_effective_ai_model_configuration_for_workflow(
             OrganizationAIModelConfigurationV2.model_validate(v2_override)
         )
     else:
-        resolved_config = await get_resolved_ai_model_configuration(
-            organization_id=organization_id,
-        )
+        configuration = await get_organization_ai_model_configuration_v2(organization_id)
         effective = resolve_effective_config(
-            resolved_config.effective,
+            # Resolve credentials once, after overrides. Reusing a configuration
+            # containing decrypted master keys would classify them as BYOK.
+            compile_ai_model_configuration_v2(configuration)
+            if configuration is not None
+            else EffectiveAIModelConfiguration(),
             workflow_configurations.get("model_overrides"),
         )
 

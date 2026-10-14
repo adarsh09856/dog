@@ -15,11 +15,14 @@ from loguru import logger
 from api.db import db_client
 from api.db.kodewaves_client import kodewaves_db_client
 from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
+from api.utils.common import normalize_local_ai_endpoint
 from api.services.configuration.language_normalizer import (
     get_default_piper_voice_for_language,
     normalize_language_code,
 )
 from api.services.configuration.registry import (
+    REGISTRY,
+    ServiceType,
     AnthropicLLMService,
     CartesiaTTSConfiguration,
     DeepgramSTTConfiguration,
@@ -80,7 +83,13 @@ def _build_master_llm(prov: str, model: str, api_key: str, base_url: Optional[st
         return GoogleLLMService(api_key=api_key, model=model)
     elif prov_lower == "anthropic":
         return AnthropicLLMService(api_key=api_key, model=model)
-    return OpenAILLMService(api_key=api_key, model=model)
+    config_cls = REGISTRY.get(ServiceType.LLM, {}).get(prov_lower)
+    if config_cls is None:
+        raise HTTPException(status_code=400, detail=f"Unsupported platform LLM provider: {prov}")
+    kwargs = {"api_key": api_key, "model": model}
+    if base_url and "base_url" in config_cls.model_fields:
+        kwargs["base_url"] = base_url
+    return config_cls(**kwargs)
 
 
 def _build_master_stt(prov: str, model: str, api_key: str, language: Optional[str] = None):
@@ -89,16 +98,19 @@ def _build_master_stt(prov: str, model: str, api_key: str, language: Optional[st
     if prov_lower == "deepgram":
         return DeepgramSTTConfiguration(api_key=api_key, model=model, language=norm_lang)
     elif prov_lower == "navana":
-        return NavanaSTTConfiguration(api_key=api_key, model=model)
+        return NavanaSTTConfiguration(api_key=api_key, model=model, language=norm_lang)
     elif prov_lower in ("google", "gemini"):
-        return GoogleGeminiSTTConfiguration(api_key=api_key, model=model)
+        return GoogleGeminiSTTConfiguration(api_key=api_key, model=model, language=norm_lang)
     elif prov_lower == "sarvam":
-        return SarvamSTTConfiguration(api_key=api_key, model=model)
+        return SarvamSTTConfiguration(api_key=api_key, model=model, language=norm_lang)
     elif prov_lower == "groq":
         return OpenAISTTConfiguration(api_key=api_key, model=model or "whisper-large-v3", base_url="https://api.groq.com/openai/v1")
     elif prov_lower == "openai":
         return OpenAISTTConfiguration(api_key=api_key, model=model)
-    return DeepgramSTTConfiguration(api_key=api_key, model=model, language=norm_lang)
+    config_cls = REGISTRY.get(ServiceType.STT, {}).get(prov_lower)
+    if config_cls is None:
+        raise HTTPException(status_code=400, detail=f"Unsupported platform STT provider: {prov}")
+    return config_cls(api_key=api_key, model=model, language=norm_lang)
 
 
 def _build_master_tts(prov: str, model: str, api_key: str, voice: Optional[str] = None):
@@ -114,15 +126,20 @@ def _build_master_tts(prov: str, model: str, api_key: str, voice: Optional[str] 
         return GoogleGeminiTTSConfiguration(api_key=api_key, model=model or "gemini-3.1-flash-tts-preview", voice=v)
     elif prov_lower == "elevenlabs":
         v = voice if (voice and voice != "default") else "21m00Tcm4TlvDq8ikWAM"
-        return ElevenlabsTTSConfiguration(api_key=api_key, voice=v)
+        return ElevenlabsTTSConfiguration(api_key=api_key, model=model, voice=v)
     elif prov_lower == "sarvam":
         v = voice if (voice and voice != "default") else "meera"
-        return SarvamTTSConfiguration(api_key=api_key, voice=v)
+        return SarvamTTSConfiguration(api_key=api_key, model=model, voice=v)
     elif prov_lower == "openai":
         v = voice if (voice and voice != "default") else "alloy"
-        return OpenAITTSService(api_key=api_key, voice=v)
-    v = voice if (voice and voice != "default") else "3faa81ae-d3d8-4ab1-9e44-e50e46d33c30"
-    return CartesiaTTSConfiguration(api_key=api_key, voice=v)
+        return OpenAITTSService(api_key=api_key, model=model, voice=v)
+    config_cls = REGISTRY.get(ServiceType.TTS, {}).get(prov_lower)
+    if config_cls is None:
+        raise HTTPException(status_code=400, detail=f"Unsupported platform TTS provider: {prov}")
+    kwargs = {"api_key": api_key, "model": model}
+    if voice and voice != "default":
+        kwargs["voice"] = voice
+    return config_cls(**kwargs)
 
 
 def _detect_provider_from_llm_model(model: Optional[str]) -> Optional[str]:
@@ -186,111 +203,72 @@ def _detect_provider_from_tts_model(model: Optional[str]) -> Optional[str]:
     return None
 
 
-async def _resolve_master_llm(effective: EffectiveAIModelConfiguration) -> Optional[ResolvedLayerInfo]:
-    """Resolve sovereign LLM master credentials in priority order when not specified."""
-    current_model = getattr(effective.llm, "model", None)
-    detected_prov = _detect_provider_from_llm_model(current_model)
+async def _resolve_catalog_layer(effective: EffectiveAIModelConfiguration, layer: str) -> Optional[ResolvedLayerInfo]:
+    """Resolve only enabled administrator catalog entries; never guess a vendor from an ID."""
+    from api.services.catalog.normalize import normalize_provider_name
 
-    if detected_prov:
-        creds = await master_credential_service.get_master_credential(detected_prov)
-        if creds and creds.get("api_key"):
-            effective.llm = _build_master_llm(detected_prov, current_model, creds["api_key"], creds.get("base_url"))
-            return ResolvedLayerInfo(provider=detected_prov, model=current_model, source="master_key")
-
-    providers_priority = [
-        ("google", "gemini-3.5-flash"),
-        ("openai", "gpt-4o-mini"),
-        ("anthropic", "claude-haiku-4-5-20251001"),
-        ("sarvam", "sarvam-105b"),
-        ("groq", "llama-3.3-70b-versatile"),
-    ]
-    for prov, default_model in providers_priority:
-        creds = await master_credential_service.get_master_credential(prov)
-        if creds and creds.get("api_key"):
-            model = current_model if (current_model and current_model != "default" and _detect_provider_from_llm_model(current_model) in (None, prov)) else default_model
-            effective.llm = _build_master_llm(prov, model, creds["api_key"], creds.get("base_url"))
-            return ResolvedLayerInfo(provider=prov, model=model, source="master_key")
+    current = getattr(effective, layer)
+    requested = getattr(current, "model", None)
+    explicit = requested not in (None, "", "auto", "default")
+    models = await kodewaves_db_client.list_models(enabled_only=True)
+    candidates = [m for m in models if (m.layer or m.category) == layer
+                  and m.status not in ("FAIL", "UNAVAILABLE")
+                  and (not explicit or m.model_identifier == requested)]
+    candidates.sort(key=lambda m: (not bool(m.recommended), m.model_identifier))
+    master_rows = await kodewaves_db_client.list_master_credentials()
+    active = {normalize_provider_name(row.provider) for row in master_rows
+              if row.is_enabled and row.credentials_encrypted}
+    for model in candidates:
+        provider = normalize_provider_name(model.provider)
+        if provider not in active:
+            continue
+        creds = await master_credential_service.get_master_credential(provider)
+        if not creds or not creds.get("api_key"):
+            continue
+        voice = getattr(current, "voice", None)
+        language = getattr(current, "language", None)
+        if layer == "llm":
+            config = _build_master_llm(provider, model.model_identifier, creds["api_key"], creds.get("base_url"))
+        elif layer == "stt":
+            config = _build_master_stt(provider, model.model_identifier, creds["api_key"], language)
+        else:
+            config = _build_master_tts(provider, model.model_identifier, creds["api_key"], voice)
+            if current is not None and hasattr(current, "speed") and "speed" in type(config).model_fields:
+                config.speed = current.speed
+        setattr(effective, layer, config)
+        return ResolvedLayerInfo(provider=provider, model=model.model_identifier, source="master_key",
+                                 voice=getattr(config, "voice", None), language=getattr(config, "language", None))
+    if explicit:
+        raise HTTPException(status_code=400, detail=f"Selected {layer.upper()} model '{requested}' is disabled or unavailable. Choose an available model.")
     return None
+
+
+async def _resolve_master_llm(effective: EffectiveAIModelConfiguration) -> Optional[ResolvedLayerInfo]:
+    return await _resolve_catalog_layer(effective, "llm")
 
 
 async def _resolve_master_stt(effective: EffectiveAIModelConfiguration) -> Optional[ResolvedLayerInfo]:
-    """Resolve sovereign STT master credentials in priority order when not specified."""
-    current_model = getattr(effective.stt, "model", None)
-    current_lang = getattr(effective.stt, "language", None)
-    detected_prov = _detect_provider_from_stt_model(current_model)
-
-    if detected_prov:
-        creds = await master_credential_service.get_master_credential(detected_prov)
-        if creds and creds.get("api_key"):
-            effective.stt = _build_master_stt(detected_prov, current_model, creds["api_key"], current_lang)
-            return ResolvedLayerInfo(provider=detected_prov, model=current_model, source="master_key", language=current_lang)
-
-    providers_priority = [
-        ("deepgram", "nova-3"),
-        ("groq", "whisper-large-v3"),
-        ("google", "gemini-3.5-flash"),
-        ("navana", "hi-banking-v2-8khz"),
-        ("sarvam", "saarika:v2.5"),
-        ("openai", "whisper-1"),
-    ]
-    for prov, default_model in providers_priority:
-        creds = await master_credential_service.get_master_credential(prov)
-        if creds and creds.get("api_key"):
-            model = current_model if (current_model and current_model != "default" and _detect_provider_from_stt_model(current_model) in (None, prov)) else default_model
-            effective.stt = _build_master_stt(prov, model, creds["api_key"], current_lang)
-            return ResolvedLayerInfo(provider=prov, model=model, source="master_key", language=current_lang)
-    return None
+    return await _resolve_catalog_layer(effective, "stt")
 
 
 async def _resolve_master_tts(effective: EffectiveAIModelConfiguration) -> Optional[ResolvedLayerInfo]:
-    """Resolve sovereign TTS master credentials in priority order when not specified."""
-    current_voice = getattr(effective.tts, "voice", None)
-    configured_model = getattr(effective.tts, "model", None)
-    detected_prov = _detect_provider_from_tts_model(configured_model)
+    return await _resolve_catalog_layer(effective, "tts")
 
-    default_models = {
-        "cartesia": "sonic-3.5",
-        "elevenlabs": "eleven_flash_v2_5",
-        "openai": "tts-1",
-        "google": "gemini-3.1-flash-tts-preview",
-        "sarvam": "bulbul:v2",
-        "navana": "bodhi-tts-v1",
-    }
-    default_voices = {
-        "google": "Puck",
-        "openai": "alloy",
-        "cartesia": "3faa81ae-d3d8-4ab1-9e44-e50e46d33c30",
-        "elevenlabs": "21m00Tcm4TlvDq8ikWAM",
-        "sarvam": "meera",
-        "navana": "default_female",
-    }
 
-    if detected_prov and detected_prov != "piper":
-        creds = await master_credential_service.get_master_credential(detected_prov)
-        if creds and creds.get("api_key"):
-            model = configured_model if (configured_model and configured_model != "default") else default_models.get(detected_prov, "default")
-            is_local_piper_voice = current_voice and ("_IN-" in current_voice or "_US-" in current_voice)
-            target_voice = default_voices.get(detected_prov, "Puck") if is_local_piper_voice or not current_voice else current_voice
-            effective.tts = _build_master_tts(detected_prov, model, creds["api_key"], target_voice)
-            return ResolvedLayerInfo(provider=detected_prov, model=model, voice=target_voice, source="master_key")
+async def _require_enabled_platform_model(layer: str, provider: str, model: str) -> None:
+    """Recheck saved selections at execution time, including administrator revocations."""
+    from api.services.catalog.normalize import normalize_provider_name
 
-    providers_priority = [
-        ("google", "gemini-3.1-flash-tts-preview", "Puck"),
-        ("cartesia", "sonic-3.5", "3faa81ae-d3d8-4ab1-9e44-e50e46d33c30"),
-        ("navana", "bodhi-tts-v1", "default_female"),
-        ("elevenlabs", "eleven_flash_v2_5", "21m00Tcm4TlvDq8ikWAM"),
-        ("sarvam", "bulbul:v2", "meera"),
-        ("openai", "tts-1", "alloy"),
-    ]
-    for prov, default_model, fallback_voice in providers_priority:
-        creds = await master_credential_service.get_master_credential(prov)
-        if creds and creds.get("api_key"):
-            is_local_piper_voice = current_voice and ("_IN-" in current_voice or "_US-" in current_voice)
-            voice = fallback_voice if is_local_piper_voice or not current_voice or current_voice == "default" else current_voice
-            chosen_model = configured_model if (configured_model and configured_model != "default") else default_model
-            effective.tts = _build_master_tts(prov, chosen_model, creds["api_key"], voice)
-            return ResolvedLayerInfo(provider=prov, model=chosen_model, voice=voice, source="master_key")
-    return None
+    models = await kodewaves_db_client.list_models(enabled_only=True)
+    allowed_layers = {"s2s", "realtime"} if layer == "realtime" else {layer}
+    if not any(
+        (entry.layer or entry.category) in allowed_layers
+        and entry.model_identifier == model
+        and normalize_provider_name(entry.provider) == normalize_provider_name(provider)
+        and entry.status not in ("FAIL", "UNAVAILABLE")
+        for entry in models
+    ):
+        raise HTTPException(status_code=400, detail=f"Selected {layer.upper()} model '{model}' is disabled or unavailable.")
 
 
 async def apply_kodewaves_sovereign_resolution(
@@ -324,6 +302,12 @@ async def apply_kodewaves_sovereign_resolution(
     byok_policy = await kodewaves_db_client.get_setting("byok_policy")
     allow_byok = byok_policy.get("allow_user_byok", True) if byok_policy else True
 
+    if not allow_byok:
+        for layer in (effective.llm, effective.stt, effective.tts, effective.realtime):
+            key = getattr(layer, "api_key", None)
+            if key and key not in ("sovereign-managed", "default", "sovereign-local-cpu", "local-cpu-token"):
+                raise HTTPException(status_code=403, detail="User-provided model keys are disabled by your administrator.")
+
     wallet = await kodewaves_db_client.get_or_create_wallet(organization_id)
     has_positive_balance = (wallet.credit_balance_minutes + wallet.bonus_minutes) > 0 if wallet else True
 
@@ -333,20 +317,49 @@ async def apply_kodewaves_sovereign_resolution(
     is_public_local_ai = access_policy in ("public", "all_workspaces")
     org_access = await kodewaves_db_client.get_setting(f"local_ai_org_{organization_id}")
     has_local_access = is_public_local_ai or (bool(org_access.get("enabled", False)) if org_access else False)
+    org_policy = await kodewaves_db_client.get_org_ai_policy(organization_id)
+    if org_policy:
+        has_local_access = has_local_access and org_policy.local_allowed
+        if effective.is_realtime and not org_policy.s2s_allowed:
+            raise HTTPException(status_code=403, detail="Realtime models are disabled for this organization.")
 
-    ollama_base = local_engine.get("ollama_endpoint", "http://ollama:11434").rstrip("/")
+    ollama_raw = local_engine.get("ollama_endpoint", "http://ollama:11434")
+    ollama_base = normalize_local_ai_endpoint(ollama_raw).rstrip("/")
     ollama_v1_url = f"{ollama_base}/v1" if not ollama_base.endswith("/v1") else ollama_base
-    piper_base = local_engine.get("piper_endpoint", "http://piper:5000").rstrip("/")
+
+    piper_raw = local_engine.get("piper_endpoint", "http://piper:5000")
+    piper_base = normalize_local_ai_endpoint(piper_raw).rstrip("/")
     piper_endpoint = f"{piper_base}/synthesize" if not piper_base.endswith("/synthesize") else piper_base
-    whisper_base = local_engine.get("whisper_endpoint", "http://whisper:8000/v1").rstrip("/")
+
+    whisper_raw = local_engine.get("whisper_endpoint", "http://whisper:8000/v1")
+    whisper_base = normalize_local_ai_endpoint(whisper_raw).rstrip("/")
     whisper_v1_url = f"{whisper_base}/v1" if not whisper_base.endswith("/v1") else whisper_base
 
     is_using_master_keys = False
 
+
     # =========================================================================
     # 2. LLM Layer Resolution
     # =========================================================================
-    if effective.llm:
+    if effective.llm is None:
+        resolved = await _resolve_master_llm(effective)
+        if resolved:
+            metadata.llm = resolved
+            is_using_master_keys = True
+        elif engine_enabled and has_local_access:
+            model_to_use = "qwen2.5:0.5b"
+            effective.llm = OpenAILLMService(
+                api_key="sovereign-local-cpu",
+                model=model_to_use,
+                base_url=ollama_v1_url,
+            )
+            metadata.llm = ResolvedLayerInfo(provider="ollama", model=model_to_use, source="local")
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="No active LLM credentials configured. Please configure an API key in Admin Master Keys.",
+            )
+    else:
         provider = getattr(effective.llm, "provider", "openai")
         provider_name = str(getattr(provider, "value", provider)).lower()
         user_key = getattr(effective.llm, "api_key", None)
@@ -392,152 +405,201 @@ async def apply_kodewaves_sovereign_resolution(
                         detail="No active LLM credentials configured. Please configure an API key in Admin Master Keys.",
                     )
             else:
-                # Explicit provider requested -> Zero silent fallback!
                 creds = await master_credential_service.get_master_credential(provider_name)
-                if not creds or not creds.get("api_key"):
+                if creds and creds.get("api_key"):
+                    await _require_enabled_platform_model("llm", provider_name, model)
+                    effective.llm.api_key = creds["api_key"]
+                    if creds.get("base_url") and hasattr(effective.llm, "base_url"):
+                        effective.llm.base_url = creds["base_url"]
+                    metadata.llm = ResolvedLayerInfo(provider=provider_name, model=model, source="master_key")
+                    is_using_master_keys = True
+                else:
                     raise HTTPException(
                         status_code=400,
                         detail=f"Requested LLM provider '{provider_name}' has no active master credentials or is disabled.",
                     )
-                effective.llm.api_key = creds["api_key"]
-                if creds.get("base_url") and hasattr(effective.llm, "base_url"):
-                    effective.llm.base_url = creds["base_url"]
-                metadata.llm = ResolvedLayerInfo(provider=provider_name, model=model, source="master_key")
-                is_using_master_keys = True
 
     # =========================================================================
     # 3. STT Layer Resolution
     # =========================================================================
-    if effective.stt:
-        provider = getattr(effective.stt, "provider", "deepgram")
-        provider_name = str(getattr(provider, "value", provider)).lower()
-        user_key = getattr(effective.stt, "api_key", None)
-        model = getattr(effective.stt, "model", "default")
-        raw_lang = getattr(effective.stt, "language", "en")
-        norm_lang = normalize_language_code(raw_lang, target_provider=provider_name)
-
-        if hasattr(effective.stt, "language"):
-            effective.stt.language = norm_lang
-
-        # Local Whisper STT
-        if provider_name in ("whisper", "speaches", "local_cpu") or user_key == "sovereign-local-cpu":
-            if not engine_enabled or not has_local_access:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
-                )
-            model_to_use = model if model and model != "default" else "Systran/faster-whisper-tiny"
-            effective.stt = SpeachesSTTConfiguration(
-                api_key="local-cpu-token",
-                model=model_to_use,
-                language=norm_lang,
-                base_url=whisper_v1_url,
-            )
-            metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language=norm_lang)
-
-        # BYOK User Key
-        elif user_key and user_key not in ("sovereign-managed", "default") and allow_byok:
-            metadata.stt = ResolvedLayerInfo(provider=provider_name, model=model, source="user_key", language=norm_lang)
-
-        # Platform Master Key or Default
-        else:
-            if provider_name in ("kodewaves", "dograh", "default"):
-                resolved = await _resolve_master_stt(effective)
-                if resolved:
-                    metadata.stt = resolved
-                    is_using_master_keys = True
-                elif engine_enabled and has_local_access:
-                    model_to_use = model if model and model != "default" else "Systran/faster-whisper-tiny"
-                    effective.stt = SpeachesSTTConfiguration(
-                        api_key="local-cpu-token",
-                        model=model_to_use,
-                        language=norm_lang,
-                        base_url=whisper_v1_url,
-                    )
-                    metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language=norm_lang)
-                else:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="No active STT credentials configured. Please configure Deepgram or Google API key in Admin Master Keys.",
-                    )
-            else:
-                # Explicit provider requested -> Zero silent fallback!
-                creds = await master_credential_service.get_master_credential(provider_name)
-                if not creds or not creds.get("api_key"):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Requested STT provider '{provider_name}' has no active master credentials or is disabled.",
-                    )
-                effective.stt.api_key = creds["api_key"]
-                metadata.stt = ResolvedLayerInfo(provider=provider_name, model=model, source="master_key", language=norm_lang)
+    if not effective.is_realtime:
+        if effective.stt is None:
+            resolved = await _resolve_master_stt(effective)
+            if resolved:
+                metadata.stt = resolved
                 is_using_master_keys = True
-
-    # =========================================================================
-    # 4. TTS Layer Resolution
-    # =========================================================================
-    if effective.tts:
-        provider = getattr(effective.tts, "provider", "cartesia")
-        provider_name = str(getattr(provider, "value", provider)).lower()
-        user_key = getattr(effective.tts, "api_key", None)
-        model = getattr(effective.tts, "model", "default")
-        current_voice = getattr(effective.tts, "voice", None)
-        stt_lang = getattr(effective.stt, "language", None) if effective.stt else None
-        tts_lang = getattr(effective.tts, "language", None) or stt_lang or "en"
-
-        # Local Piper TTS
-        if provider_name in ("piper", "speaches", "local_cpu") or user_key == "sovereign-local-cpu":
-            if not engine_enabled or not has_local_access:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
+            elif engine_enabled and has_local_access:
+                model_to_use = "Systran/faster-whisper-tiny"
+                effective.stt = SpeachesSTTConfiguration(
+                    api_key="local-cpu-token",
+                    model=model_to_use,
+                    language="en",
+                    base_url=whisper_v1_url,
                 )
-            default_voice = get_default_piper_voice_for_language(tts_lang)
-            voice_to_use = current_voice if current_voice and current_voice not in ("default", "none", "Puck", "alloy") else default_voice
-            effective.tts = SpeachesTTSConfiguration(
-                api_key="local-cpu-token",
-                model="piper",
-                voice=voice_to_use,
-                base_url=piper_endpoint,
-            )
-            metadata.tts = ResolvedLayerInfo(provider="piper", model="piper", voice=voice_to_use, source="local")
-
-        # BYOK User Key
-        elif user_key and user_key not in ("sovereign-managed", "default") and allow_byok:
-            metadata.tts = ResolvedLayerInfo(provider=provider_name, model=model, voice=current_voice, source="user_key")
-
-        # Platform Master Key or Default
-        else:
-            if provider_name in ("kodewaves", "dograh", "default"):
-                resolved = await _resolve_master_tts(effective)
-                if resolved:
-                    metadata.tts = resolved
-                    is_using_master_keys = True
-                elif engine_enabled and has_local_access:
-                    default_voice = get_default_piper_voice_for_language(tts_lang)
-                    voice_to_use = current_voice if current_voice and current_voice not in ("default", "none", "Puck", "alloy") else default_voice
-                    effective.tts = SpeachesTTSConfiguration(
-                        api_key="local-cpu-token",
-                        model="piper",
-                        voice=voice_to_use,
-                        base_url=piper_endpoint,
-                    )
-                    metadata.tts = ResolvedLayerInfo(provider="piper", model="piper", voice=voice_to_use, source="local")
-                else:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="No active TTS credentials configured. Please configure Cartesia, Google, or ElevenLabs in Admin Master Keys.",
-                    )
+                metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language="en")
             else:
-                # Explicit provider requested -> Zero silent fallback!
-                creds = await master_credential_service.get_master_credential(provider_name)
-                if not creds or not creds.get("api_key"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="No active STT credentials configured. Please configure Deepgram, Groq, or Google in Admin Master Keys.",
+                )
+        else:
+            provider = getattr(effective.stt, "provider", "deepgram")
+            provider_name = str(getattr(provider, "value", provider)).lower()
+            user_key = getattr(effective.stt, "api_key", None)
+            model = getattr(effective.stt, "model", "default")
+            raw_lang = getattr(effective.stt, "language", "en")
+            is_local_stt = provider_name in ("whisper", "speaches", "local_cpu") or user_key in ("sovereign-local-cpu", "local-cpu-token")
+            norm_lang = (
+                "multi"
+                if is_local_stt and str(raw_lang or "auto").lower() in ("auto", "multi", "default")
+                else normalize_language_code(raw_lang, target_provider=provider_name)
+            )
+
+            if hasattr(effective.stt, "language"):
+                effective.stt.language = norm_lang
+
+            # Local Whisper STT
+            if provider_name in ("whisper", "speaches", "local_cpu") or user_key in ("sovereign-local-cpu", "local-cpu-token"):
+                if not engine_enabled or not has_local_access:
                     raise HTTPException(
-                        status_code=400,
-                        detail=f"Requested TTS provider '{provider_name}' has no active master credentials or is disabled.",
+                        status_code=403,
+                        detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
-                effective.tts.api_key = creds["api_key"]
-                metadata.tts = ResolvedLayerInfo(provider=provider_name, model=model, voice=current_voice, source="master_key")
+                model_to_use = model if model and model != "default" else "Systran/faster-whisper-tiny"
+                effective.stt = SpeachesSTTConfiguration(
+                    api_key="local-cpu-token",
+                    model=model_to_use,
+                    language=norm_lang,
+                    base_url=whisper_v1_url,
+                )
+                metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language=norm_lang)
+
+            # BYOK User Key
+            elif user_key and user_key not in ("sovereign-managed", "default") and allow_byok:
+                metadata.stt = ResolvedLayerInfo(provider=provider_name, model=model, source="user_key", language=norm_lang)
+
+            # Platform Master Key or Default
+            else:
+                if provider_name in ("kodewaves", "dograh", "default"):
+                    resolved = await _resolve_master_stt(effective)
+                    if resolved:
+                        metadata.stt = resolved
+                        is_using_master_keys = True
+                    elif engine_enabled and has_local_access:
+                        model_to_use = model if model and model != "default" else "Systran/faster-whisper-tiny"
+                        effective.stt = SpeachesSTTConfiguration(
+                            api_key="local-cpu-token",
+                            model=model_to_use,
+                            language=norm_lang,
+                            base_url=whisper_v1_url,
+                        )
+                        metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language=norm_lang)
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="No active STT credentials configured. Please configure Deepgram, Groq, or Google in Admin Master Keys.",
+                        )
+                else:
+                    creds = await master_credential_service.get_master_credential(provider_name)
+                    if creds and creds.get("api_key"):
+                        await _require_enabled_platform_model("stt", provider_name, model)
+                        effective.stt.api_key = creds["api_key"]
+                        metadata.stt = ResolvedLayerInfo(provider=provider_name, model=model, source="master_key", language=norm_lang)
+                        is_using_master_keys = True
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Requested STT provider '{provider_name}' has no active master credentials or is disabled.",
+                        )
+
+        # =========================================================================
+        # 4. TTS Layer Resolution
+        # =========================================================================
+        if effective.tts is None:
+            resolved = await _resolve_master_tts(effective)
+            if resolved:
+                metadata.tts = resolved
                 is_using_master_keys = True
+            elif engine_enabled and has_local_access:
+                default_voice = get_default_piper_voice_for_language("en")
+                effective.tts = SpeachesTTSConfiguration(
+                    api_key="local-cpu-token",
+                    model="piper",
+                    voice=default_voice,
+                    base_url=piper_endpoint,
+                )
+                metadata.tts = ResolvedLayerInfo(provider="piper", model="piper", voice=default_voice, source="local")
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No active TTS credentials configured. Please configure Cartesia, Google, or ElevenLabs in Admin Master Keys.",
+                )
+        else:
+            provider = getattr(effective.tts, "provider", "cartesia")
+            provider_name = str(getattr(provider, "value", provider)).lower()
+            user_key = getattr(effective.tts, "api_key", None)
+            model = getattr(effective.tts, "model", "default")
+            current_voice = getattr(effective.tts, "voice", None)
+            stt_lang = getattr(effective.stt, "language", None) if effective.stt else None
+            tts_lang = getattr(effective.tts, "language", None) or stt_lang or "en"
+
+            # Local Piper TTS
+            if provider_name in ("piper", "speaches", "local_cpu") or user_key in ("sovereign-local-cpu", "local-cpu-token"):
+                if not engine_enabled or not has_local_access:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
+                    )
+                default_voice = get_default_piper_voice_for_language(tts_lang)
+                voice_to_use = current_voice if current_voice and current_voice != "default" else default_voice
+                effective.tts = SpeachesTTSConfiguration(
+                    api_key="local-cpu-token",
+                    model="piper",
+                    voice=voice_to_use,
+                    speed=getattr(effective.tts, "speed", 1.0),
+                    base_url=piper_endpoint,
+                )
+                metadata.tts = ResolvedLayerInfo(provider="piper", model="piper", voice=voice_to_use, source="local")
+
+            # BYOK User Key
+            elif user_key and user_key not in ("sovereign-managed", "default") and allow_byok:
+                metadata.tts = ResolvedLayerInfo(provider=provider_name, model=model, voice=current_voice, source="user_key")
+
+            # Platform Master Key or Default
+            else:
+                if provider_name in ("kodewaves", "dograh", "default"):
+                    resolved = await _resolve_master_tts(effective)
+                    if resolved:
+                        metadata.tts = resolved
+                        is_using_master_keys = True
+                    elif engine_enabled and has_local_access:
+                        default_voice = get_default_piper_voice_for_language(tts_lang)
+                        voice_to_use = current_voice if current_voice and current_voice != "default" else default_voice
+                        effective.tts = SpeachesTTSConfiguration(
+                            api_key="local-cpu-token",
+                            model="piper",
+                            voice=voice_to_use,
+                            speed=getattr(effective.tts, "speed", 1.0),
+                            base_url=piper_endpoint,
+                        )
+                        metadata.tts = ResolvedLayerInfo(provider="piper", model="piper", voice=voice_to_use, source="local")
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="No active TTS credentials configured. Please configure Cartesia, Google, or ElevenLabs in Admin Master Keys.",
+                        )
+                else:
+                    creds = await master_credential_service.get_master_credential(provider_name)
+                    if creds and creds.get("api_key"):
+                        await _require_enabled_platform_model("tts", provider_name, model)
+                        effective.tts.api_key = creds["api_key"]
+                        metadata.tts = ResolvedLayerInfo(provider=provider_name, model=model, voice=current_voice, source="master_key")
+                        is_using_master_keys = True
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Requested TTS provider '{provider_name}' has no active master credentials or is disabled.",
+                        )
 
     # =========================================================================
     # 5. S2S / Realtime Resolution
@@ -557,6 +619,7 @@ async def apply_kodewaves_sovereign_resolution(
                     status_code=400,
                     detail=f"Requested S2S Realtime provider '{provider_name}' has no active master credentials or is disabled.",
                 )
+            await _require_enabled_platform_model("realtime", provider_name, model)
             effective.realtime.api_key = creds["api_key"]
             metadata.realtime = ResolvedLayerInfo(provider=provider_name, model=model, source="master_key")
             is_using_master_keys = True
