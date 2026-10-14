@@ -228,13 +228,6 @@ def register_event_handlers(
         # transfer still wants the ordinary hangup strategy to tear down our
         # own legs.
         gathered_context = await engine.get_gathered_context()
-        try:
-            runtime_billing_context = build_runtime_billing_context([
-                visit["runtime_configuration"] for visit in engine.agent_visits
-            ])
-        except Exception:
-            logger.exception("Could not capture runtime billing sources for run {}", workflow_run_id)
-            runtime_billing_context = build_runtime_billing_context([])
         reason = (
             EndTaskReason.CALL_TRANSFERRED.value
             if gathered_context.get("external_pbx_transferred")
@@ -351,6 +344,14 @@ def register_event_handlers(
         # them under a row lock at write time, so re-merging a staler unlocked
         # copy would only be a second, worse answer.
         gathered_context = await engine.get_gathered_context()
+
+        try:
+            runtime_billing_context = build_runtime_billing_context([
+                visit["runtime_configuration"] for visit in engine.agent_visits
+            ])
+        except Exception:
+            logger.exception("Could not capture runtime billing sources for run {}", workflow_run_id)
+            runtime_billing_context = build_runtime_billing_context([])
 
         # Store disposition code in workflow for dynamic filtering
         disposition_code = gathered_context.get("mapped_call_disposition")
