@@ -695,12 +695,9 @@ async def authorize_workflow_run_start(
             or getattr(user_config, "is_managed", False)
         )
 
-        is_local_cpu = (
-            getattr(user_config, "llm_engine_type", None) == "local_cpu"
-            or getattr(getattr(user_config, "llm", None), "api_key", None) == "sovereign-local-cpu"
-            or getattr(getattr(user_config, "stt", None), "api_key", None) == "sovereign-local-cpu"
-            or getattr(getattr(user_config, "tts", None), "api_key", None) == "sovereign-local-cpu"
-        )
+        resolution = getattr(user_config, "resolution_info", None) or {}
+        is_managed = is_managed or resolution.get("overall_source") == "master_key"
+        is_local_cpu = resolution.get("overall_source") == "local"
 
         # If using Local CPU engine or BYOK personal keys or admin/superuser, no platform minutes are required
         # If using Sovereign Platform Managed cloud keys, require > 0 minutes

@@ -811,6 +811,8 @@ async def _run_pipeline_impl(
             "llm_provider": user_config.llm.provider,
             "llm_model": user_config.llm.model,
         }
+    runtime_configuration["resolution_info"] = getattr(user_config, "resolution_info", None) or {}
+    runtime_configuration["is_realtime"] = is_realtime
     merged_call_context_vars = {
         **merged_call_context_vars,
         "runtime_configuration": runtime_configuration,

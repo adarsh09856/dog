@@ -1,11 +1,6 @@
-"""Workflow-run billing hooks.
+"""Account for completed calls using provider sources recorded by the runtime."""
 
-Kodewaves does not rate or deduct credits locally. MPS owns credit accounting.
-For hosted deployments, Kodewaves reports completed platform usage to MPS.
-When a server-minted MPS correlation id exists, MPS uses model-service usage
-as the canonical duration. Otherwise Kodewaves reports the completed run duration.
-"""
-
+import math
 from typing import Any
 
 from loguru import logger
@@ -15,6 +10,23 @@ from api.db import db_client
 from api.enums import WorkflowRunMode
 from api.services.managed_model_services import get_mps_correlation_id
 from api.services.mps_service_key_client import mps_service_key_client
+
+
+def build_runtime_billing_context(runtime_configurations: list[dict]) -> dict:
+    """Capture used provider sources, including agents reached by a handoff."""
+    sources: set[str] = set()
+    is_realtime = False
+    for index, configuration in enumerate(runtime_configurations):
+        realtime = bool(configuration.get("is_realtime"))
+        is_realtime = is_realtime or realtime
+        resolution = configuration.get("resolution_info") or {}
+        # Recognition belongs to the root call pipeline. Child agents replace
+        # reasoning and synthesis, while retaining that recognition service.
+        layers = ("llm", "realtime") if realtime else (("llm", "stt", "tts") if index == 0 else ("llm", "tts"))
+        for layer in layers:
+            source = (resolution.get(layer) or {}).get("source")
+            sources.add(source if source in ("local", "user_key", "master_key") else "unknown")
+    return {"version": 1, "sources": sorted(sources or {"unknown"}), "is_realtime": is_realtime}
 
 
 def _workflow_run_organization_id(workflow_run) -> int | None:
@@ -86,28 +98,15 @@ async def report_workflow_run_platform_usage(workflow_run) -> None:
         )
         return
 
-    init_ctx = getattr(workflow_run, "initial_context", {}) or {}
-    gath_ctx = getattr(workflow_run, "gathered_context", {}) or {}
-
-    # Invariant (Part 8): Admin test calls are free
-    if init_ctx.get("is_admin_test") or gath_ctx.get("is_admin_test"):
-        logger.info(
-            f"[KodewavesBilling] Run {workflow_run.id} is an admin test call — 0 minutes charged"
-        )
-        return
-
-    # Invariant (Part 8): 100% Local sovereign calls are free
+    # Usage metadata is written by the server pipeline. Caller-provided prompt
+    # variables and extracted conversation fields cannot authorize free calls.
     usage_info = getattr(workflow_run, "usage_info", None) or {}
-    res_info = usage_info.get("resolution_info") or init_ctx.get("resolution_info") or gath_ctx.get("resolution_info") or {}
-    if (
-        getattr(workflow_run, "mode", None) == "local"
-        or init_ctx.get("is_local")
-        or gath_ctx.get("is_local")
-        or init_ctx.get("source") == "local"
-        or res_info.get("overall_source") == "local"
-    ):
+    billing_context = usage_info.get("runtime_billing_context") or {}
+    sources = set(billing_context.get("sources") or [])
+    if billing_context.get("version") == 1 and sources and sources <= {"local", "user_key"}:
         logger.info(
-            f"[KodewavesBilling] Run {workflow_run.id} is a sovereign local call — 0 minutes charged"
+            "Run {} used local or user-owned model credentials; no platform minutes charged",
+            workflow_run.id,
         )
         return
 
@@ -117,14 +116,10 @@ async def report_workflow_run_platform_usage(workflow_run) -> None:
 
         billable_secs = duration_seconds or 0.0
         if billable_secs > 0:
-            base_minutes = max(1, int((billable_secs + 59) // 60))
+            base_minutes = max(1, math.ceil(billable_secs / 60))
 
             # Invariant (Part 8): S2S rate as an admin setting
-            is_s2s = (
-                getattr(workflow_run, "mode", None) == "s2s"
-                or init_ctx.get("is_realtime")
-                or init_ctx.get("mode") == "s2s"
-            )
+            is_s2s = bool(billing_context.get("is_realtime"))
             multiplier = 1.0
             if is_s2s:
                 pricing_settings = await kodewaves_db_client.get_setting("pricing") or {}
@@ -152,7 +147,7 @@ async def report_workflow_run_platform_usage(workflow_run) -> None:
 
 
 async def report_completed_workflow_run_platform_usage(workflow_run_id: int) -> None:
-    """Load a completed workflow run and report platform usage to MPS."""
+    """Load a completed workflow run and account for its platform usage."""
     workflow_run = await db_client.get_workflow_run_by_id(workflow_run_id)
     if not workflow_run:
         logger.warning(

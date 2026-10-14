@@ -27,6 +27,7 @@ from api.services.posthog_client import capture_event
 from api.services.workflow.initial_context import merge_external_initial_context
 from api.services.workflow.pipecat_engine import PipecatEngine
 from api.services.workflow_run_artifacts import upload_workflow_run_artifacts
+from api.services.workflow_run_billing import build_runtime_billing_context
 from api.tasks.arq import enqueue_job
 from api.tasks.function_names import FunctionNames
 from pipecat.frames.frames import (
@@ -227,6 +228,13 @@ def register_event_handlers(
         # transfer still wants the ordinary hangup strategy to tear down our
         # own legs.
         gathered_context = await engine.get_gathered_context()
+        try:
+            runtime_billing_context = build_runtime_billing_context([
+                visit["runtime_configuration"] for visit in engine.agent_visits
+            ])
+        except Exception:
+            logger.exception("Could not capture runtime billing sources for run {}", workflow_run_id)
+            runtime_billing_context = build_runtime_billing_context([])
         reason = (
             EndTaskReason.CALL_TRANSFERRED.value
             if gathered_context.get("external_pbx_transferred")
@@ -414,6 +422,7 @@ def register_event_handlers(
             logger.warning(f"Failed to close Smart-Turn analyzer gracefully: {exc}")
 
         usage_info = pipeline_metrics_aggregator.get_all_usage_metrics_serialized()
+        usage_info["runtime_billing_context"] = runtime_billing_context
 
         logger.debug(
             "Usage metrics: {}, gathered context keys: {}",

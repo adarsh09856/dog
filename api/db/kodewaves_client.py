@@ -474,14 +474,29 @@ class KodewavesDBClient(BaseDBClient):
         reason: str = "call_usage",
         reference_id: Optional[str] = None,
     ) -> OrganizationWalletModel:
+        if minutes <= 0:
+            raise ValueError("Minute deductions must be positive")
         async with self.get_session() as session:
-            stmt = select(OrganizationWalletModel).where(OrganizationWalletModel.organization_id == organization_id)
+            stmt = select(OrganizationWalletModel).where(
+                OrganizationWalletModel.organization_id == organization_id
+            ).with_for_update()
             result = await session.execute(stmt)
             wallet = result.scalar_one_or_none()
 
             if not wallet:
                 wallet = OrganizationWalletModel(organization_id=organization_id, credit_balance_minutes=0, bonus_minutes=0)
                 session.add(wallet)
+                await session.flush()
+
+            if reference_id:
+                existing = await session.execute(select(WalletLedgerModel.id).where(
+                    WalletLedgerModel.organization_id == organization_id,
+                    WalletLedgerModel.reference_id == str(reference_id),
+                    WalletLedgerModel.reason == reason,
+                    WalletLedgerModel.amount_minutes < 0,
+                ).limit(1))
+                if existing.scalar_one_or_none() is not None:
+                    return wallet
 
             credit_bal = wallet.credit_balance_minutes or 0
             bonus_bal = wallet.bonus_minutes or 0

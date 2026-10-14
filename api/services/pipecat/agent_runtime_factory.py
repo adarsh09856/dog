@@ -221,6 +221,8 @@ class AgentRuntimeFactory:
             recording_router=recording_router,
             user_config=user_config,
             runtime_configuration={
+                "resolution_info": getattr(user_config, "resolution_info", None) or {},
+                "is_realtime": False,
                 "stt_provider": user_config.stt.provider,
                 "stt_model": user_config.stt.model,
                 "tts_provider": user_config.tts.provider,
