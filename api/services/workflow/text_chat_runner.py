@@ -56,6 +56,7 @@ from api.services.pipecat.worker_runner import (
     wait_for_pipeline_worker_started,
 )
 from api.services.workflow.dto import ReactFlowDTO
+from api.services.workflow.booking_response_guard import guard_booking_reply
 from api.services.workflow.initial_context import merge_external_initial_context
 from api.services.workflow.pipecat_engine import (
     ENGINE_OWNED_CONTEXT_KEYS,
@@ -802,6 +803,19 @@ async def execute_text_chat_pending_turn(
         if response_window.outputs
         else None
     )
+    verified_reply = guard_booking_reply(assistant_text, capture_processor.events)
+    if verified_reply != assistant_text:
+        logger.warning(
+            "Suppressed unsupported booking success claim for workflow_run_id={}",
+            workflow_run_id,
+        )
+        assistant_text = verified_reply
+        messages = context.get_messages()
+        for message in reversed(messages):
+            if isinstance(message, dict) and message.get("role") == "assistant":
+                message["content"] = verified_reply
+                break
+        context.set_messages(messages)
     assistant_created_at = datetime.now(UTC).isoformat()
     usage = pipeline_metrics_aggregator.get_all_usage_metrics_serialized()
     current_node = engine.active_agent.current_node
