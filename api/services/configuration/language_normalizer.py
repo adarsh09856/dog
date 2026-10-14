@@ -69,6 +69,10 @@ def infer_language_from_voice(provider: Optional[str], voice: Optional[str]) -> 
     voice_key = str(voice).strip().lower().replace("-", "_")
     if provider_key in {"piper", "speaches", "local_cpu"}:
         prefix = voice_key.split("_")[0]
+        if prefix in {"hf", "hm"}:
+            return "hi"
+        if prefix in {"af", "am"}:
+            return "en"
         if len(prefix) == 2 and prefix.isalpha():
             return prefix
     # Locale-based IDs such as hi-IN-SwaraNeural and en-IN-NeerjaNeural.

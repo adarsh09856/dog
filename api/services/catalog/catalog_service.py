@@ -862,6 +862,25 @@ class CatalogService:
             except Exception:
                 local_tts = []
 
+            # Show only TTS models actually installed on the local Speaches server.
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
+                    async with session.get(f"{whisper_url.rstrip('/')}/models") as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            for installed_model in data.get("data", []):
+                                if (isinstance(installed_model, dict)
+                                        and installed_model.get("task") == "text-to-speech"
+                                        and installed_model.get("id")):
+                                    model_id = installed_model["id"]
+                                    local_tts.append({
+                                        "value": model_id,
+                                        "label": model_id.split("/")[-1] + " (Local CPU)",
+                                        "provider": "speaches",
+                                    })
+            except Exception:
+                pass
+
         # Prepend 'auto' item ONLY if cloud models exist
         if cloud_llm:
             cloud_llm.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": True})

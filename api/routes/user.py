@@ -488,6 +488,10 @@ TTSProvider = Literal[
 
 
 UNIVERSAL_VOICE_CATALOG: dict[str, list[dict]] = {
+    "speaches": [
+        {"voice_id": "hf_alpha", "name": "Alpha (Hindi Female, Kokoro)", "description": "Local Kokoro ONNX Hindi voice.", "gender": "female", "accent": "in", "language": "hi", "provider": "speaches"},
+        {"voice_id": "af_heart", "name": "Heart (US English Female, Kokoro)", "description": "Local Kokoro ONNX English voice; American accent.", "gender": "female", "accent": "us", "language": "en", "provider": "speaches"},
+    ],
     "piper": [
         {"voice_id": "hi_IN-priyamvada-medium", "name": "Priyamvada (Hindi Female)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "female", "accent": "in", "language": "hi"},
         {"voice_id": "hi_IN-pratham-medium", "name": "Pratham (Hindi Male)", "description": "Piper ONNX (OHF-Voice/piper1-gpl), runs locally on CPU.", "gender": "male", "accent": "in", "language": "hi"},
@@ -749,7 +753,22 @@ async def get_voices(
         language=language,
     )
 
-    if db_voices:
+    if provider_key == "speaches" and model == "speaches-ai/Kokoro-82M-v1.0-ONNX":
+        raw_catalog = [dict(v) for v in UNIVERSAL_VOICE_CATALOG["speaches"]]
+        whisper_endpoint = local_ai_setting.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+        from api.services.catalog.local_inventory import whisper_api_base
+        whisper_base = whisper_api_base(normalize_local_ai_endpoint(whisper_endpoint))
+        try:
+            import aiohttp
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+                async with session.get(f"{whisper_base.rstrip('/')}/models") as response:
+                    payload = await response.json() if response.status == 200 else {}
+            installed_ids = {entry.get("id") for entry in payload.get("data", [])}
+        except Exception:
+            installed_ids = set()
+        if not local_engine_enabled or model not in installed_ids:
+            raw_catalog = []
+    elif db_voices:
         raw_catalog = [
             {
                 "voice_id": v.voice_id,
@@ -792,7 +811,7 @@ async def get_voices(
                            for voice_id in sorted(allowed_voice_ids)]
 
     # Local voices must be installed: Piper otherwise silently uses its default voice.
-    if any(v.get("provider", "piper") in ("piper", "speaches") for v in raw_catalog):
+    if any(v.get("provider", "piper") == "piper" for v in raw_catalog):
         from api.services.catalog.local_inventory import get_installed_piper_voices
         endpoint = local_ai_setting.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
         try:
@@ -916,6 +935,7 @@ async def preview_voice(
     if not user.selected_organization_id:
         raise HTTPException(status_code=400, detail="Select an organization first")
 
+    is_kokoro = provider_lower == "speaches" and model == "speaches-ai/Kokoro-82M-v1.0-ONNX"
     if provider_lower in ("piper", "speaches"):
         from api.services.catalog.catalog_service import catalog_service
         catalog = await catalog_service.get_available_catalog(
@@ -924,16 +944,30 @@ async def preview_voice(
         )
         if not catalog.get("local_engine_enabled"):
             raise HTTPException(status_code=403, detail="Local AI is disabled or unavailable for this organization")
-        from api.services.catalog.local_inventory import get_installed_piper_voices
         settings = await kodewaves_db_client.get_setting("local_ai") or {}
-        endpoint = settings.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
-        piper_url = normalize_local_ai_endpoint(endpoint).rstrip("/").removesuffix("/synthesize")
-        try:
-            installed = await get_installed_piper_voices(piper_url)
-        except Exception:
-            raise HTTPException(status_code=503, detail="Unable to verify installed local voices")
-        if voice_id not in installed:
-            raise HTTPException(status_code=400, detail="Selected local voice is not installed; ask the administrator to install it")
+        if is_kokoro:
+            from api.services.catalog.local_inventory import whisper_api_base
+            endpoint = settings.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+            speaches_url = whisper_api_base(normalize_local_ai_endpoint(endpoint)).rstrip("/")
+            import aiohttp
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+                    async with session.get(f"{speaches_url}/models") as response:
+                        data = await response.json() if response.status == 200 else {}
+                if model not in {entry.get("id") for entry in data.get("data", [])}:
+                    raise HTTPException(status_code=400, detail="Selected local TTS model is not installed")
+            except (aiohttp.ClientError, TimeoutError):
+                raise HTTPException(status_code=503, detail="Unable to verify installed local TTS model")
+        else:
+            from api.services.catalog.local_inventory import get_installed_piper_voices
+            endpoint = settings.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
+            piper_url = normalize_local_ai_endpoint(endpoint).rstrip("/").removesuffix("/synthesize")
+            try:
+                installed = await get_installed_piper_voices(piper_url)
+            except Exception:
+                raise HTTPException(status_code=503, detail="Unable to verify installed local voices")
+            if voice_id not in installed:
+                raise HTTPException(status_code=400, detail="Selected local voice is not installed; ask the administrator to install it")
     elif not await _resolve_tts_preview_creds(provider_lower, user, db_client):
         raise HTTPException(status_code=400, detail="No active credentials for the selected voice provider")
 
@@ -955,6 +989,18 @@ async def preview_voice(
         )
 
     # 0. Piper ONNX (OHF-Voice/piper1-gpl HTTP server, local CPU)
+    if is_kokoro:
+        text = "नमस्ते, मैं आपकी अपॉइंटमेंट बुक करने में मदद कर सकती हूँ।" if voice_id.startswith("h") else "Hello from Kodewaves."
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
+                async with session.post(f"{speaches_url}/audio/speech", json={
+                    "model": model, "voice": voice_id, "input": text, "response_format": "wav",
+                }) as response:
+                    if response.status == 200:
+                        return _cache_and_respond(await response.read(), "audio/wav")
+        except Exception as error:
+            logger.warning("Kokoro voice preview failed: %s", type(error).__name__)
+        raise HTTPException(status_code=503, detail="Local voice synthesis failed")
     if provider_lower in ("piper", "speaches"):
         samples = {
             "hi": "नमस्ते, कोडवेव्स में आपका स्वागत है।",

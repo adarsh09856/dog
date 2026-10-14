@@ -1535,6 +1535,7 @@ class RimeTTSConfiguration(BaseTTSConfiguration):
 
 SPEACHES_TTS_MODELS = [
     "piper",
+    "speaches-ai/Kokoro-82M-v1.0-ONNX",
     "piper/hi_IN-priyamvada-medium",
     "piper/hi_IN-pratham-medium",
     "piper/en_US-lessac-medium",
@@ -1555,8 +1556,10 @@ class SpeachesTTSConfiguration(BaseTTSConfiguration):
     )
     voice: str = Field(
         default="hi_IN-priyamvada-medium",
-        json_schema_extra={"allow_custom_input": True},
-        description="Voice ID for the Piper ONNX engine (e.g. hi_IN-priyamvada-medium, hi_IN-pratham-medium, en_US-lessac-medium).",
+        json_schema_extra={"allow_custom_input": True, "model_options": {
+            "speaches-ai/Kokoro-82M-v1.0-ONNX": ["hf_alpha", "af_heart"],
+        }},
+        description="Voice ID supported by the selected installed local TTS model.",
     )
     base_url: str = Field(
         default="http://piper:5000/synthesize",

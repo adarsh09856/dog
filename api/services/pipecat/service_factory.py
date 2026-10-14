@@ -1034,6 +1034,28 @@ def create_tts_service(
         tts._settings.language = language
         return tts
     elif user_config.tts.provider in (ServiceProviders.SPEACHES.value, "speaches", "piper"):
+        selected_model = getattr(user_config.tts, "model", None) or "piper"
+        if selected_model != "piper" and not selected_model.startswith("piper/"):
+            if selected_model != "speaches-ai/Kokoro-82M-v1.0-ONNX":
+                raise ValueError(f"Unsupported local TTS model: {selected_model}")
+            if SpeachesTTSService is None or SpeachesTTSSettings is None:
+                raise ValueError("The selected Speaches TTS service is unavailable")
+            speaches_url = getattr(user_config.tts, "base_url", None) or ""
+            if "piper" in speaches_url or not speaches_url:
+                speaches_url = os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+            _validate_runtime_service_url(speaches_url, "base_url")
+            return SpeachesTTSService(
+                api_key="local",
+                base_url=speaches_url.rstrip("/"),
+                sample_rate=24000,
+                settings=SpeachesTTSSettings(
+                    model=selected_model,
+                    voice=user_config.tts.voice,
+                    speed=getattr(user_config.tts, "speed", 1.0),
+                ),
+                text_filters=[xml_function_tag_filter],
+                skip_aggregator_types=["recording_router", "recording"],
+            )
         from pipecat.services.piper.tts import PiperHttpTTSSettings
         from api.services.pipecat.piper_tts import PiperOwnedSessionTTSService
         piper_host = (getattr(user_config.tts, "base_url", None) or os.environ.get("PIPER_ENDPOINT") or "http://piper:5000").rstrip("/")

@@ -595,7 +595,9 @@ export function AIModelConfigurationV2Editor({
     }, [kodewaves.tts_engine_type, catalogManifest]);
 
     const effectiveTtsProvider = useMemo(() => {
-        if (kodewaves.tts_engine_type === "local_cpu") return "piper";
+        if (kodewaves.tts_engine_type === "local_cpu") {
+            return effectiveTtsModels.find(model => model.value === kodewaves.tts_model)?.provider || "piper";
+        }
         const selectedProvider = effectiveTtsModels.find(model => model.value === kodewaves.tts_model)?.provider;
         return selectedProvider && selectedProvider !== "auto" ? selectedProvider : "all";
     }, [kodewaves.tts_engine_type, kodewaves.tts_model, effectiveTtsModels]);
