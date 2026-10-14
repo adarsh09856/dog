@@ -970,7 +970,7 @@ export function AIModelConfigurationV2Editor({
                                         </div>
                                     </div>
                                     <p className="mt-1 text-[11px] text-muted-foreground">
-                                        Mix and match cloud master keys and local CPU engines independently for each layer based on your latency and cost preferences.
+                                        Mix and match cloud master keys and self-hosted engines independently for each layer based on your latency and cost preferences.
                                     </p>
                                 </div>
 
@@ -1005,7 +1005,7 @@ export function AIModelConfigurationV2Editor({
                                                         : "text-muted-foreground hover:text-foreground"
                                                 }`}
                                             >
-                                                <Cpu className="h-3 w-3" /> Local CPU
+                                                <Cpu className="h-3 w-3" /> Self-hosted
                                             </button>
                                         </div>
                                     </div>
@@ -1078,7 +1078,7 @@ export function AIModelConfigurationV2Editor({
                                                         : "text-muted-foreground hover:text-foreground"
                                                 }`}
                                             >
-                                                <Cpu className="h-3 w-3" /> Local CPU
+                                                <Cpu className="h-3 w-3" /> Self-hosted
                                             </button>
                                         </div>
                                     </div>
@@ -1163,7 +1163,7 @@ export function AIModelConfigurationV2Editor({
                                                         : "text-muted-foreground hover:text-foreground"
                                                 }`}
                                             >
-                                                <Cpu className="h-3 w-3" /> Local CPU
+                                                <Cpu className="h-3 w-3" /> Self-hosted
                                             </button>
                                         </div>
                                     </div>
@@ -1269,7 +1269,7 @@ export function AIModelConfigurationV2Editor({
                                         <Cpu className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
                                         <div className="space-y-1 text-xs">
                                             <div className="font-semibold text-foreground text-sm flex items-center gap-2">
-                                                Local Sovereign CPU Engine Active
+                                                Self-hosted Engine Active
                                                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider">
                                                     Zero Cloud Keys Required
                                                 </span>

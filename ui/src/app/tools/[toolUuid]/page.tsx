@@ -465,7 +465,7 @@ export default function ToolDetailPage() {
         const normalizedTransferDestination = transferDestination.trim();
 
         // Validation based on tool type
-        if (tool.category === "calculator") {
+        if (tool.category === "calculator" || tool.category === "book_appointment") {
             // No validation needed for built-in tools
         } else if (tool.category === "transfer_agent") {
             if (!transferAgentWorkflowId) {
@@ -599,14 +599,14 @@ export default function ToolDetailPage() {
 
             let requestBody: UpdateToolRequest;
 
-            if (tool.category === "calculator") {
+            if (tool.category === "calculator" || tool.category === "book_appointment") {
                 // Built-in tool - only name/description, no config
                 requestBody = {
                     name,
                     description: description || undefined,
                     definition: {
                         schema_version: 1,
-                        type: "calculator",
+                        type: tool.category,
                     },
                 };
             } else if (tool.category === "end_call") {
@@ -903,7 +903,7 @@ const data = await response.json();`;
     const isEndCallTool = tool.category === "end_call";
     const isTransferCallTool = tool.category === "transfer_call";
     const isTransferAgentTool = tool.category === "transfer_agent";
-    const isBuiltinTool = tool.category === "calculator";
+    const isBuiltinTool = tool.category === "calculator" || tool.category === "book_appointment";
     const isMcpTool = tool.category === "mcp";
     const isHttpApiTool = tool.category === "http_api";
     const hasUnsavedHttpChanges =
@@ -990,8 +990,8 @@ const data = await response.json();`;
                             onNameChange={setName}
                             description={description}
                             onDescriptionChange={setDescription}
-                            title="Calculator Configuration"
-                            subtitle="Built-in calculator for arithmetic operations. No additional configuration needed."
+                            title={tool.category === "book_appointment" ? "Appointment Booking Configuration" : "Calculator Configuration"}
+                            subtitle={tool.category === "book_appointment" ? "Saves caller-confirmed appointments in this workspace. Attach this tool to the agent's conversation node. Duration, buffer and overlap rules come from the workspace calendar settings." : "Built-in calculator for arithmetic operations. No additional configuration needed."}
                         />
                     ) : isEndCallTool ? (
                         <EndCallToolConfig

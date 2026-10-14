@@ -183,7 +183,7 @@ export default function AppointmentsPage() {
                 {appointments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground">
-                      No appointments booked yet. Voice agents will book slots during live conversations.
+                      No appointments booked yet. Create a booking here, or attach the Book Appointment tool to your voice agent.
                     </TableCell>
                   </TableRow>
                 ) : (

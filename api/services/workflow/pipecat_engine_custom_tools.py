@@ -304,7 +304,10 @@ class CustomToolManager:
         """
         timeout_secs: Optional[float] = None
 
-        if tool.category == ToolCategory.END_CALL.value:
+        if tool.category == ToolCategory.BOOK_APPOINTMENT.value:
+            timeout_secs = 10.0
+            handler = self._create_booking_handler()
+        elif tool.category == ToolCategory.END_CALL.value:
             handler = self._create_end_call_handler(tool, function_name)
         elif tool.category == ToolCategory.TRANSFER_AGENT.value:
             # The handler returns as soon as the handoff is accepted; the
@@ -323,6 +326,20 @@ class CustomToolManager:
             handler = self._create_http_tool_handler(tool, function_name)
 
         return handler, timeout_secs
+
+    def _create_booking_handler(self):
+        async def booking_handler(params: FunctionCallParams) -> None:
+            from api.services.workflow.tools.booking import execute_booking
+
+            try:
+                result = await execute_booking(params.arguments, await self.get_organization_id())
+            except Exception as exc:
+                logger.error("Appointment tool persistence failed ({})", type(exc).__name__)
+                result = {"status": "error", "booked": False,
+                          "error": "Unable to save appointment. Do not claim a successful booking."}
+            await params.result_callback(result)
+
+        return booking_handler
 
     def _transfer_handler_timeout_secs(self, tool: Any) -> float:
         config = (tool.definition or {}).get("config", {}) or {}

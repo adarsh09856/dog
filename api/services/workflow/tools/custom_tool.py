@@ -157,6 +157,13 @@ def tool_to_function_schema(tool: Any) -> dict[str, Any]:
 
     function_name = custom_tool_function_name(tool.name)
 
+    if definition.get("type") == "book_appointment":
+        from api.services.workflow.tools.booking import BookingArguments
+
+        schema = BookingArguments.model_json_schema()
+        properties = schema["properties"]
+        required = schema["required"]
+
     return {
         "type": "function",
         "function": {

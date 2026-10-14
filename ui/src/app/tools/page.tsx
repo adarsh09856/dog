@@ -308,6 +308,8 @@ export default function ToolsPage() {
                 return <Badge variant="destructive">End Call</Badge>;
             case "calculator":
                 return <Badge variant="secondary">Calculator</Badge>;
+            case "book_appointment":
+                return <Badge variant="secondary">Book Appointment</Badge>;
             case "native":
                 return <Badge variant="secondary">Native</Badge>;
             case "integration":

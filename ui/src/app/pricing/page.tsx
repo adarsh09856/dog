@@ -83,7 +83,7 @@ export default function PricingPage() {
         "500 Included Voice Minutes",
         "8 Concurrent Channels",
         "Navana Bodhi 10 Indic Languages",
-        "Sub-500ms Gemini Live Integration",
+        "Streaming Gemini Live Integration",
         "Twilio & Exotel Native SIP",
         "Outbound CSV Call Campaigns",
         "System 1 Jev Decision Guardrail",
@@ -130,7 +130,7 @@ export default function PricingPage() {
       features: [
         "10,000 Included Voice Minutes",
         "100+ Concurrent Channels",
-        "Local CPU AI Engine (Ollama + Whisper)",
+        "Self-hosted AI Engine (Ollama + Whisper)",
         "Zero External Data Transmission (HIPAA/GDPR)",
         "Full White-Label Branding & Domain",
         "Custom Telecom Interconnects",
@@ -173,7 +173,7 @@ export default function PricingPage() {
       a: "Yes! Kodewaves fully supports Bring-Your-Own-Key for all providers (OpenAI, Gemini, Anthropic, ElevenLabs, Deepgram, Cartesia, Twilio, Exotel). If you use your own keys, you only pay for the platform base subscription without any voice minute markups.",
     },
     {
-      q: "How does the Local CPU AI Engine work on a low-RAM VPS?",
+      q: "How does the self-hosted AI engine use server hardware?",
       a: "Our self-hosted stack uses lightweight quantized models specifically optimized for CPUs: Qwen 2.5 1.5B (or Phi-4 Mini), Faster-Whisper (STT), and Piper Native Indic ONNX (TTS). It operates within 2–3 GB RAM inside Docker containers, allowing you to run zero-cloud voice agents on budget cloud servers without GPUs.",
     },
     {

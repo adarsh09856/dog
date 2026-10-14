@@ -47,7 +47,7 @@ export default function HomePage() {
 
   const sttOptions = [
     "Deepgram Nova-3",
-    "Speaches Whisper (Local CPU)",
+    "Speaches Whisper (Self-hosted)",
     "Navana Bodhi Indic (Hindi/Tamil)",
     "Google Gemini STT",
     "AssemblyAI",
@@ -55,7 +55,7 @@ export default function HomePage() {
 
   const llmOptions = [
     "OpenAI GPT-4o-mini",
-    "Ollama Qwen2.5 (Local CPU 0ms)",
+    "Ollama Qwen2.5 (Self-hosted)",
     "Gemini 2.5 Flash",
     "Groq Llama-3.3-70B",
     "Claude 3.5 Sonnet",
@@ -63,7 +63,7 @@ export default function HomePage() {
   ];
 
   const ttsOptions = [
-    "Piper Native Indic (Local CPU)",
+    "Piper Native Indic (Self-hosted)",
     "Google Gemini Voice Studio",
     "Cartesia Sonic 3.5",
     "ElevenLabs Flash v2.5",
@@ -326,11 +326,11 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="size-1.5 rounded-full bg-[#e5a84b]"></span>
-                  Local CPU Stack option runs 100% free with zero cloud keys
+                  Self-hosted engines run without cloud model keys; hosting and telephony costs still apply
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="size-1.5 rounded-full bg-blue-500"></span>
-                  Sub-300ms pipeline execution with native streaming WebSockets
+                  Streaming voice pipelines with measured response latency
                 </div>
               </div>
             </div>
@@ -604,7 +604,7 @@ export default function HomePage() {
                 <Cpu className="h-5 w-5" />
               </div>
               <h3 className="text-base font-semibold text-[#f3f1ed]">
-                Sovereign Local CPU Stack
+                Sovereign Self-hosted Stack
               </h3>
               <p className="text-xs text-[#8f8c87] leading-relaxed">
                 Run 100% self-hosted Ollama (Qwen2.5) + Faster-Whisper STT + Piper Native Indic ONNX TTS directly on your server CPU. Zero cloud API keys and ₹0 minute costs.

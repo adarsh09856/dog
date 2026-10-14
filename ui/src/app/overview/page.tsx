@@ -84,7 +84,7 @@ export default function OverviewPage() {
           href: "/model-configurations",
           icon: Brain,
           badge: stats?.model_health.total_models ? `${stats.model_health.total_models} Models` : "BYOK + Cloud",
-          desc: "Configure LLM, STT, and TTS engines across Cloud (Gemini, OpenAI) & Local CPU.",
+          desc: "Configure LLM, STT, and TTS engines across Cloud (Gemini, OpenAI) & Self-hosted.",
         },
         {
           title: "Telephony",
@@ -237,7 +237,7 @@ export default function OverviewPage() {
               <span>•</span>
               <span>Cloud Models (Gemini 3.5, OpenAI, Deepgram, Sarvam, Cartesia)</span>
               <span>•</span>
-              <span>Local CPU Fallback (Piper ONNX &amp; Faster-Whisper)</span>
+              <span>Self-hosted Speech Engines (Piper ONNX &amp; Faster-Whisper)</span>
             </div>
           </CardContent>
         </Card>
@@ -494,7 +494,7 @@ export default function OverviewPage() {
               </Badge>
             </div>
             <CardDescription className="text-xs">
-              Manage platform master API keys, toggle local CPU AI permissions, inspect system audit logs, and configure email SMTP settings.
+              Manage platform master API keys, toggle self-hosted AI permissions, inspect system audit logs, and configure email SMTP settings.
             </CardDescription>
           </CardHeader>
           <CardContent>

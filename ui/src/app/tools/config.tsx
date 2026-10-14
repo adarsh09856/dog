@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowLeftRight, Calculator, Cog, Globe, type LucideIcon, PhoneForwarded, PhoneOff, Puzzle } from "lucide-react";
+import { ArrowLeftRight, Calendar, Calculator, Cog, Globe, type LucideIcon, PhoneForwarded, PhoneOff, Puzzle } from "lucide-react";
 import { type ReactNode } from "react";
 
 import type {
     CalculatorToolDefinition,
+    BookAppointmentToolDefinition,
     ContextDestinationMappingConfig,
     ContextDestinationRoute,
     ContextDestinationRule,
@@ -19,7 +20,7 @@ import type {
 } from "@/client/types.gen";
 import { createUuid } from "@/lib/uuid";
 
-export type ToolCategory = "http_api" | "end_call" | "transfer_call" | "transfer_agent" | "calculator" | "native" | "integration" | "mcp";
+export type ToolCategory = "http_api" | "end_call" | "transfer_call" | "transfer_agent" | "calculator" | "book_appointment" | "native" | "integration" | "mcp";
 
 export type EndCallMessageType = "none" | "custom" | "audio";
 export type TransferDestinationSource = "static" | "dynamic" | "context_mapping";
@@ -94,6 +95,18 @@ export interface ToolCategoryConfig {
 }
 
 export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
+    {
+        value: "book_appointment",
+        label: "Book Appointment",
+        description: "Save caller-confirmed bookings to your workspace calendar",
+        icon: Calendar,
+        iconName: "calendar",
+        iconColor: "#10B981",
+        autoFill: {
+            name: "Book Appointment",
+            description: "After the caller confirms the exact date, time and timezone, save the appointment. Confirm success only when the tool returns booked=true and an appointment ID. If it fails, explain that no booking was saved.",
+        },
+    },
     {
         value: "http_api",
         label: "External HTTP API",
@@ -209,6 +222,8 @@ export function getToolTypeLabel(category: string): string {
             return "HTTP API Tool";
         case "calculator":
             return "Calculator Tool";
+        case "book_appointment":
+            return "Appointment Tool";
         case "native":
             return "Native Tool";
         case "integration":
@@ -245,6 +260,7 @@ export type ToolDefinition =
     | TransferCallToolDefinition
     | TransferAgentToolDefinition
     | CalculatorToolDefinition
+    | BookAppointmentToolDefinition
     | McpToolDefinition;
 
 export function createEndCallDefinition(config: EndCallConfig): EndCallToolDefinition {
@@ -326,6 +342,8 @@ export function createToolDefinition(category: ToolCategory): ToolDefinition {
             return createTransferCallDefinition(DEFAULT_TRANSFER_CALL_CONFIG);
         case "calculator":
             return createCalculatorDefinition();
+        case "book_appointment":
+            return { schema_version: 1, type: "book_appointment" };
         case "http_api":
         default:
             return createHttpApiDefinition();

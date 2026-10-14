@@ -401,7 +401,7 @@ export default function AdminUsersPage() {
                   <TableHead className="text-xs">SaaS Plan</TableHead>
                   <TableHead className="text-xs text-center">Calls Made</TableHead>
                   <TableHead className="text-xs text-right">Wallet Balance</TableHead>
-                  <TableHead className="text-xs text-center">Local CPU AI</TableHead>
+                  <TableHead className="text-xs text-center">Self-hosted AI</TableHead>
                   <TableHead className="text-xs text-center">Status</TableHead>
                   <TableHead className="text-xs text-right">Actions</TableHead>
                 </TableRow>
@@ -682,7 +682,7 @@ export default function AdminUsersPage() {
                   className="rounded border-border text-primary focus:ring-primary"
                 />
                 <Label htmlFor="create-local-ai" className="text-xs font-medium cursor-pointer">
-                  Allow Local AI Access (Self-Hosted CPU Engine)
+                  Allow Local AI Access (Self-hosted Engine)
                 </Label>
               </div>
             </div>
@@ -972,7 +972,7 @@ export default function AdminUsersPage() {
                       className="rounded border-border text-primary focus:ring-primary"
                     />
                     <div>
-                      <span className="text-xs font-semibold text-amber-500">Allow Local CPU AI Access (Ollama + Speaches)</span>
+                      <span className="text-xs font-semibold text-amber-500">Allow Self-hosted AI Access (Ollama + Speaches)</span>
                       <p className="text-[10px] text-muted-foreground">Enables 100% free self-hosted sovereign CPU models for this user.</p>
                     </div>
                   </label>

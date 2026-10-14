@@ -27,6 +27,7 @@ ToolCategoryValue = Literal[
     "transfer_call",
     "transfer_agent",
     "calculator",
+    "book_appointment",
     "native",
     "integration",
     "mcp",
@@ -606,6 +607,13 @@ class CalculatorToolDefinition(BaseModel):
     type: Literal["calculator"] = Field(description="Tool type.")
 
 
+class BookAppointmentToolDefinition(BaseModel):
+    """Book a confirmed time in this workspace's appointment calendar."""
+
+    schema_version: int = Field(default=1)
+    type: Literal["book_appointment"]
+
+
 class McpToolDefinition(BaseModel):
     """Persisted MCP tool definition."""
 
@@ -620,6 +628,7 @@ ToolDefinition = Annotated[
     | TransferCallToolDefinition
     | TransferAgentToolDefinition
     | CalculatorToolDefinition
+    | BookAppointmentToolDefinition
     | McpToolDefinition,
     Field(discriminator="type"),
 ]

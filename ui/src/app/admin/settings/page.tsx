@@ -512,7 +512,7 @@ export default function AdminSettingsPage() {
               <div>
                 <div className="text-xs font-semibold flex items-center gap-1.5">
                   <Cpu className="h-3.5 w-3.5 text-indigo-500" />
-                  Enable Sovereign Local CPU AI Engine
+                  Enable Sovereign Self-hosted AI Engine
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
                   Allows opted-in tenants to run local inference. Access must be granted per-user in User Management to prevent VPS overload.

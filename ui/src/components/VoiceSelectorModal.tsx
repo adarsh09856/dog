@@ -9,7 +9,7 @@ import { client } from "@/client/client.gen";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 
-type VoiceInfo = ApiVoiceInfo & { provider?: string; languages?: string[] };
+type VoiceInfo = ApiVoiceInfo;
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
