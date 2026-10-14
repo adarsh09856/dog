@@ -66,7 +66,7 @@ function resolveTargetProvider(prov: string, filter?: string): string {
     if (norm === "gemini" || norm === "google") return "google";
     if (norm === "piper") return "piper";
     if (norm === "azure_speech" || norm === "azure") return "azure";
-    if (["openai", "elevenlabs", "cartesia", "deepgram", "sarvam", "navana", "smallest", "lmnt", "rime"].includes(norm)) {
+    if (["openai", "elevenlabs", "cartesia", "deepgram", "sarvam", "navana", "smallest", "lmnt", "rime", "speaches"].includes(norm)) {
         return norm;
     }
     if (filter && filter !== "__all__") {
