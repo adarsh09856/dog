@@ -432,7 +432,7 @@ class KodewavesUltravoxRealtimeLLMService(
         *,
         greeting_text: str | None,
         agent_speaks_first: bool,
-    ) -> DograhUltravoxOneShotInputParams:
+    ) -> KodewavesUltravoxOneShotInputParams:
         current_params = self._params
         extra = {
             key: value
