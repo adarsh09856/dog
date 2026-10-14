@@ -706,13 +706,12 @@ async def get_voices(
                 "preview_url": v.preview_url or f"/api/v1/user/configurations/voices/{v.provider}/{v.voice_id}/preview",
             }
             for v in db_voices
-            if (provider_key in ("kodewaves", "dograh", "all", "auto") and (not enabled_provs or v.provider in enabled_provs))
+            if (provider_key in ("kodewaves", "dograh", "all", "auto") and v.provider in enabled_provs)
             or (v.provider in (norm_key, provider_key))
         ]
     elif provider_key in ("kodewaves", "dograh", "all", "auto"):
         raw_catalog = [dict(v) for v in MANAGED_UNIVERSAL_VOICES]
-        if enabled_provs:
-            raw_catalog = [v for v in raw_catalog if v.get("provider") in enabled_provs]
+        raw_catalog = [v for v in raw_catalog if v.get("provider") in enabled_provs]
     elif provider_key in ("speaches", "piper"):
         # Piper Native Hindi & Indic ONNX Local CPU engine
         local_catalog = UNIVERSAL_VOICE_CATALOG.get("piper") or []

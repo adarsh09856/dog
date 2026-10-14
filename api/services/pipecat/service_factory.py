@@ -937,7 +937,7 @@ def create_tts_service(
 
         if getattr(user_config.tts, "api_key", None) == "sovereign-local-cpu":
             voice = getattr(user_config.tts, "voice", default_voice)
-            if not voice or voice in ("default", "alloy", "none", "af_heart") or voice.startswith(("dg_", "kw_")):
+            if not voice or voice == "default":
                 voice = default_voice
             session = aiohttp.ClientSession()
             return PiperHttpTTSService(
@@ -945,6 +945,7 @@ def create_tts_service(
                 aiohttp_session=session,
                 settings=PiperHttpTTSSettings(
                     voice=voice,
+                    speed=getattr(user_config.tts, "speed", 1.0),
                 ),
                 sample_rate=audio_config.transport_out_sample_rate,
                 text_filters=[xml_function_tag_filter],
@@ -1004,7 +1005,7 @@ def create_tts_service(
         # Only use Local CPU Piper ONNX if sovereign local CPU is specifically requested or enabled
         if getattr(user_config.tts, "api_key", None) == "sovereign-local-cpu" or getattr(user_config.tts, "provider", None) in ("piper", "speaches"):
             voice = getattr(user_config.tts, "voice", default_voice)
-            if not voice or voice in ("default", "alloy", "none", "af_heart") or voice.startswith(("dg_", "kw_")):
+            if not voice or voice == "default":
                 voice = default_voice
             session = aiohttp.ClientSession()
             return PiperHttpTTSService(
@@ -1012,6 +1013,7 @@ def create_tts_service(
                 aiohttp_session=session,
                 settings=PiperHttpTTSSettings(
                     voice=voice,
+                    speed=getattr(user_config.tts, "speed", 1.0),
                 ),
                 sample_rate=audio_config.transport_out_sample_rate,
                 text_filters=[xml_function_tag_filter],
@@ -1043,7 +1045,7 @@ def create_tts_service(
         lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None) or "hi"
         default_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
         voice = getattr(user_config.tts, "voice", default_voice) or default_voice
-        if not voice or voice in ("default", "alloy", "none", "af_heart") or voice.startswith(("dg_", "kw_")):
+        if not voice or voice == "default":
             voice = default_voice
         session = aiohttp.ClientSession()
         return PiperHttpTTSService(
@@ -1051,6 +1053,7 @@ def create_tts_service(
             aiohttp_session=session,
             settings=PiperHttpTTSSettings(
                 voice=voice,
+                speed=getattr(user_config.tts, "speed", 1.0),
             ),
             sample_rate=audio_config.transport_out_sample_rate,
             text_filters=[xml_function_tag_filter],

@@ -5,7 +5,7 @@ No hardcoded models or voices.
 """
 
 from typing import Any, Dict
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.db.models import UserModel
 from api.services.auth.depends import get_user
@@ -24,10 +24,10 @@ async def get_available_catalog(
     2. Returns local LLM/STT/TTS models if and only if local AI is enabled and accessible.
     3. Respects organization AI policy.
     """
-    org_id = getattr(user, "organization_id", 0) or 0
-    has_local = getattr(user, "has_local_ai_access", True)
-    if has_local is None:
-        has_local = True
+    org_id = user.selected_organization_id
+    if not org_id:
+        raise HTTPException(status_code=400, detail="Select an organization first")
+    has_local = bool(getattr(user, "has_local_ai_access", False))
 
     return await catalog_service.get_available_catalog(
         organization_id=org_id,

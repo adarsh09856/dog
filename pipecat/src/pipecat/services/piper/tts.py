@@ -7,9 +7,10 @@
 """Piper TTS service implementation."""
 
 import asyncio
+import math
 import os
 from collections.abc import AsyncGenerator, AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,7 @@ from pipecat.frames.frames import (
 from pipecat.services.settings import TTSSettings
 from pipecat.services.tts_service import TTSService
 from pipecat.utils.tracing.service_decorators import traced_tts
-from pipecat.utils.types import require_given
+from pipecat.utils.types import NOT_GIVEN, NotGiven, require_given
 
 try:
     from piper import PiperVoice
@@ -214,7 +215,7 @@ class PiperTTSService(TTSService):
 class PiperHttpTTSSettings(TTSSettings):
     """Settings for PiperHttpTTSService."""
 
-    pass
+    speed: float | NotGiven = field(default_factory=lambda: NOT_GIVEN)
 
 
 class PiperHttpTTSService(TTSService):
@@ -253,7 +254,7 @@ class PiperHttpTTSService(TTSService):
             **kwargs: Additional arguments passed to the parent TTSService.
         """
         # 1. Initialize default_settings with hardcoded defaults
-        default_settings = self.Settings(model=None, voice=None, language=None)
+        default_settings = self.Settings(model=None, voice=None, language=None, speed=1.0)
 
         # 2. Apply direct init arg overrides (deprecated)
         if voice_id is not None:
@@ -324,6 +325,11 @@ class PiperHttpTTSService(TTSService):
                 "text": text,
                 "voice": self._settings.voice,
             }
+            speed = float(self._settings.speed)
+            if not math.isfinite(speed) or speed <= 0:
+                yield ErrorFrame(error="Piper speech speed must be positive and finite")
+                return
+            data["length_scale"] = 1.0 / speed
 
             async with self._session.post(
                 self._base_url,
