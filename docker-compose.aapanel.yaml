@@ -332,9 +332,9 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: 1536M
+          memory: 3072M
         reservations:
-          memory: 768M
+          memory: 1024M
     networks:
       - kodewaves-network
 
