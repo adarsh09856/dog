@@ -94,6 +94,16 @@ def compose_system_prompt_for_node(
         p for p in (global_prompt, formatted_node_prompt, ACTION_GROUNDING_INSTRUCTIONS)
         if p
     ]
+    if node.out_edges:
+        transitions = "\n".join(
+            f"- {edge.get_function_name()}: {format_prompt(edge.condition)}"
+            for edge in node.out_edges
+        )
+        parts.append(
+            "Workflow step routing: when a condition below matches the caller's "
+            "request, invoke that transition tool before handling the next step. "
+            "A transition only changes the conversation step.\n" + transitions
+        )
 
     recording_enabled = has_recordings and "RECORDING_ID:" in formatted_node_prompt
     if recording_enabled:
