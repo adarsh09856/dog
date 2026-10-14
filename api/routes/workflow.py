@@ -357,6 +357,9 @@ async def generate_workflow_definition(
         definition, provider, model = await generate_voice_workflow(
             organization_id, request.name, request.description, request.instructions,
         )
+        definition = await _attach_generated_booking_tool(
+            definition, user, " ".join((request.name, request.description, request.instructions or "")),
+        )
         definition = ensure_trigger_paths(definition)
         validation_errors = await _validate_workflow_definition(
             definition, organization_id=organization_id,
@@ -374,6 +377,67 @@ async def generate_workflow_definition(
             status_code=502,
             detail="The selected model could not produce a valid workflow. Please retry or simplify the agent purpose.",
         ) from error
+
+
+async def _attach_generated_booking_tool(definition: dict, user: UserModel, purpose: str) -> dict:
+    """Give an appointment agent a real calendar action before returning its graph."""
+    import re
+
+    if not re.search(
+        r"\b(appointment|booking|reservation|book a time|schedule a call)\b",
+        purpose,
+        re.IGNORECASE,
+    ):
+        return definition
+
+    from api.enums import ToolCategory, ToolStatus
+    from api.schemas.tool import CreateToolRequest
+    from api.services.tool_management import create_tool_for_user
+    from api.services.workflow.tools.custom_tool import custom_tool_function_name
+
+    tools = await db_client.get_tools_for_organization(
+        user.selected_organization_id,
+        status=ToolStatus.ACTIVE.value,
+        category=ToolCategory.BOOK_APPOINTMENT.value,
+    )
+    if tools:
+        tool = tools[0]
+        tool_uuid, tool_name = tool.tool_uuid, tool.name
+    else:
+        created = await create_tool_for_user(
+            CreateToolRequest(
+                name="Book Appointment",
+                description="Save a caller-confirmed appointment in the workspace calendar. Return success only after the calendar saves it.",
+                category=ToolCategory.BOOK_APPOINTMENT.value,
+                definition={"schema_version": 1, "type": "book_appointment"},
+            ),
+            user,
+            source="workflow_generator",
+        )
+        tool_uuid, tool_name = created.tool_uuid, created.name
+
+    action_name = custom_tool_function_name(tool_name)
+    for node in definition.get("nodes", []):
+        if node.get("type") != "agentNode":
+            continue
+        data = node.setdefault("data", {})
+        data["tool_uuids"] = list(dict.fromkeys([*(data.get("tool_uuids") or []), tool_uuid]))
+        data["prompt"] = (
+            f"{data.get('prompt', '').rstrip()}\n\n"
+            f"For a booking, collect the caller's name, phone, exact future date, time and timezone. "
+            f"Repeat the details and ask for explicit confirmation. Then call {action_name}. "
+            "Only say the appointment is booked when that tool returns booked=true and an appointment_id; "
+            "otherwise explain the failure and ask for a new time."
+        )
+    for edge in definition.get("edges", []):
+        source = next((node for node in definition.get("nodes", []) if node.get("id") == edge.get("source")), None)
+        if source and source.get("type") == "agentNode":
+            edge.setdefault("data", {})["condition"] = (
+                "For a booking request, proceed only after the booking tool returns booked=true "
+                "and an appointment_id; otherwise remain here and resolve the booking. "
+                + edge.get("data", {}).get("condition", "")
+            )
+    return definition
 
 
 class DuplicateTemplateRequest(BaseModel):
