@@ -301,11 +301,17 @@ async def initiate_call(
     }
     if result.caller_number:
         updated_initial_context["caller_number"] = result.caller_number
-    await db_client.update_workflow_run(
-        run_id=workflow_run_id,
-        gathered_context=gathered_context,
-        initial_context=updated_initial_context,
-    )
+    try:
+        await db_client.update_workflow_run(
+            run_id=workflow_run_id,
+            gathered_context=gathered_context,
+            initial_context=updated_initial_context,
+        )
+    except Exception as exc:
+        logger.warning(
+            f"Call initiated for workflow run {workflow_run_id}, but could not "
+            f"persist provider metadata: {exc}"
+        )
 
     return {"message": f"Call initiated successfully with run name {workflow_run_name}"}
 
