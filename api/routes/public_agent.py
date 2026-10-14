@@ -373,20 +373,14 @@ async def _execute_resolved_target(
     if target.identifier_type == "trigger_path":
         gathered_context["trigger_uuid"] = target.identifier_value
 
-    merged_initial_context = {
-        **(workflow_run.initial_context or {}),
-        **telephony_context,
-    }
-    merged_gathered_context = {
-        **(workflow_run.gathered_context or {}),
-        **gathered_context,
-    }
-
+    telephony_context = {"called_number": request.phone_number}
+    if result.caller_number:
+        telephony_context["caller_number"] = result.caller_number
     try:
         await db_client.update_workflow_run(
             run_id=workflow_run.id,
-            gathered_context=merged_gathered_context,
-            initial_context=merged_initial_context,
+            gathered_context=gathered_context,
+            initial_context=telephony_context,
         )
     except Exception as e:
         logger.warning(

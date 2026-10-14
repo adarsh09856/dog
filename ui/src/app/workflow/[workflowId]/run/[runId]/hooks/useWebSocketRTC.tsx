@@ -812,18 +812,18 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                     await negotiate();
                 } catch (err) {
                     logger.error(`Could not acquire media: ${err}`);
-                    setPermissionError('Could not acquire media');
-                    setConnectionStatus('failed');
+                    cleanupConnection({ graceful: false, status: 'failed' });
+                    setPermissionError('Could not access the microphone. Check browser permission and retry.');
                 }
             } else {
                 await negotiate();
             }
         } catch (error) {
             logger.error('Failed to start connection:', error);
+            cleanupConnection({ graceful: false, status: 'failed' });
             if (error instanceof Error) {
                 setPermissionError(error.message);
             }
-            setConnectionStatus('failed');
         } finally {
             setIsStarting(false);
         }
