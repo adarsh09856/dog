@@ -582,6 +582,19 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             break;
                         }
 
+                        case 'rtf-latency-measured': {
+                            const latencySeconds = Number(message.payload?.latency_seconds);
+                            if (!Number.isFinite(latencySeconds) || latencySeconds < 0) break;
+                            setFeedbackMessages(prev => [...prev, {
+                                id: `latency-${Date.now()}`,
+                                type: 'latency-metric',
+                                text: `${(latencySeconds * 1000).toFixed(0)}ms`,
+                                latencySeconds,
+                                timestamp: new Date().toISOString(),
+                            }]);
+                            break;
+                        }
+
                         case 'rtf-pipeline-error': {
                             const { error, fatal, processor: errorProcessor } = message.payload;
                             setFeedbackMessages(prev => [...prev, {

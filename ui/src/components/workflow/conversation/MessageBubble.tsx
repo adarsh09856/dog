@@ -10,6 +10,7 @@ interface MessageBubbleProps {
     final?: boolean;
     tone?: "default" | "muted";
     reasoningDurationMs?: number;
+    responseLatencyMs?: number;
     containerClassName?: string;
 }
 
@@ -19,6 +20,7 @@ export function MessageBubble({
     final = true,
     tone = "default",
     reasoningDurationMs,
+    responseLatencyMs,
     containerClassName,
 }: MessageBubbleProps) {
     const isUser = role === "user";
@@ -27,11 +29,11 @@ export function MessageBubble({
     return (
         <div className={cn("flex", isUser ? "justify-end" : "justify-start", containerClassName)}>
             <div className="flex max-w-[85%] flex-col gap-1">
-                {!isUser && reasoningDurationMs !== undefined ? (
+                {!isUser && (reasoningDurationMs !== undefined || responseLatencyMs !== undefined) ? (
                     <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
                         <Brain className="h-3 w-3" />
-                        <span className="font-medium">Reasoning Delay:</span>
-                        <span>{Math.round(reasoningDurationMs)}ms</span>
+                        {responseLatencyMs !== undefined ? <><span className="font-medium">Response delay:</span><span>{Math.round(responseLatencyMs)}ms</span></> : null}
+                        {reasoningDurationMs !== undefined ? <><span className="font-medium">LLM first token:</span><span>{Math.round(reasoningDurationMs)}ms</span></> : null}
                     </div>
                 ) : null}
                 <div

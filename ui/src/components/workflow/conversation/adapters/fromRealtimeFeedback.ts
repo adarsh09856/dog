@@ -23,7 +23,7 @@ export function isLlmTtfb(kind: TtfbKind | undefined) {
 }
 
 function liveFeedbackItem(message: RealtimeFeedbackMessage, reasoningDurationMs?: number): ConversationItem | null {
-    if (message.type === "ttfb-metric") {
+    if (message.type === "ttfb-metric" || message.type === "latency-metric") {
         return null;
     }
 
@@ -108,11 +108,18 @@ function liveFeedbackItem(message: RealtimeFeedbackMessage, reasoningDurationMs?
 export function conversationItemsFromLiveFeedback(messages: RealtimeFeedbackMessage[]) {
     const items: ConversationItem[] = [];
     let pendingReasoningDurationMs: number | undefined;
+    let pendingResponseLatencyMs: number | undefined;
 
     messages.forEach((message) => {
         if (message.type === "ttfb-metric") {
             if (message.ttfbSeconds !== undefined) {
                 pendingReasoningDurationMs = message.ttfbSeconds * 1000;
+            }
+            return;
+        }
+        if (message.type === "latency-metric") {
+            if (message.latencySeconds !== undefined) {
+                pendingResponseLatencyMs = message.latencySeconds * 1000;
             }
             return;
         }
@@ -122,10 +129,14 @@ export function conversationItemsFromLiveFeedback(messages: RealtimeFeedbackMess
             return;
         }
 
+        if (item.kind === "message" && item.role === "assistant") {
+            item.responseLatencyMs = pendingResponseLatencyMs;
+        }
         items.push(item);
 
         if (item.kind === "message" || item.kind === "tool-call") {
             pendingReasoningDurationMs = undefined;
+            pendingResponseLatencyMs = undefined;
         }
     });
 
@@ -136,6 +147,7 @@ export function conversationItemsFromRealtimeFeedbackEvents(events: RealtimeFeed
     const items: ConversationItem[] = [];
     const toolCallIndexById = new Map<string, number>();
     let pendingReasoningDurationMs: number | undefined;
+    let pendingResponseLatencyMs: number | undefined;
     let currentBotItemIndex: number | null = null;
     let currentBotTurn: number | null = null;
 
@@ -143,6 +155,12 @@ export function conversationItemsFromRealtimeFeedbackEvents(events: RealtimeFeed
         if (event.type === "rtf-ttfb-metric") {
             if (event.payload.ttfb_seconds !== undefined && isLlmTtfb(event.payload.kind)) {
                 pendingReasoningDurationMs = event.payload.ttfb_seconds * 1000;
+            }
+            return;
+        }
+        if (event.type === "rtf-latency-measured") {
+            if (event.payload.latency_seconds !== undefined) {
+                pendingResponseLatencyMs = event.payload.latency_seconds * 1000;
             }
             return;
         }
@@ -186,10 +204,12 @@ export function conversationItemsFromRealtimeFeedbackEvents(events: RealtimeFeed
                 text,
                 final: event.payload.final,
                 reasoningDurationMs: pendingReasoningDurationMs,
+                responseLatencyMs: pendingResponseLatencyMs,
             });
             currentBotItemIndex = items.length - 1;
             currentBotTurn = event.turn;
             pendingReasoningDurationMs = undefined;
+            pendingResponseLatencyMs = undefined;
             return;
         }
 

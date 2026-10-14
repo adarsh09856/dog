@@ -6,6 +6,7 @@ export type RealtimeFeedbackMessageType =
     | "function-call"
     | "node-transition"
     | "ttfb-metric"
+    | "latency-metric"
     | "pipeline-error"
     | "interrupt-warning";
 
@@ -26,6 +27,7 @@ export interface RealtimeFeedbackMessage {
     previousNode?: string;
     allowInterrupt?: boolean;
     ttfbSeconds?: number;
+    latencySeconds?: number;
     processor?: string;
     model?: string;
     fatal?: boolean;
@@ -52,6 +54,7 @@ export interface RealtimeFeedbackEvent {
         previous_node_name?: string;
         allow_interrupt?: boolean;
         ttfb_seconds?: number;
+        latency_seconds?: number;
         kind?: TtfbKind;
         processor?: string;
         model?: string;
@@ -71,6 +74,7 @@ interface ConversationItemBase {
     timestamp?: string;
     turnId?: string;
     reasoningDurationMs?: number;
+    responseLatencyMs?: number;
 }
 
 export interface ConversationMessageItem extends ConversationItemBase {

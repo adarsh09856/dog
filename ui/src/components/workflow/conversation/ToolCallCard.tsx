@@ -35,7 +35,7 @@ export function ToolCallCard({
                 {reasoningDurationMs !== undefined ? (
                     <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
                         <Brain className="h-3 w-3" />
-                        <span className="font-medium">Reasoning Delay:</span>
+                        <span className="font-medium">LLM first token:</span>
                         <span>{Math.round(reasoningDurationMs)}ms</span>
                     </div>
                 ) : null}
