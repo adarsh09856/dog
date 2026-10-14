@@ -418,7 +418,10 @@ async def _attach_generated_booking_tool(definition: dict, user: UserModel, purp
 
     action_name = custom_tool_function_name(tool_name)
     for node in definition.get("nodes", []):
-        if node.get("type") != "agentNode":
+        # The opening node handles the caller's first request. Small local
+        # models do not always invoke the graph transition before continuing,
+        # so the calendar action must also be reachable there.
+        if node.get("type") not in ("startCall", "agentNode"):
             continue
         data = node.setdefault("data", {})
         data["tool_uuids"] = list(dict.fromkeys([*(data.get("tool_uuids") or []), tool_uuid]))
