@@ -342,6 +342,35 @@ class CustomToolManager:
                 logger.error("Appointment tool persistence failed ({})", type(exc).__name__)
                 result = {"status": "error", "booked": False,
                           "error": "Unable to save appointment. Do not claim a successful booking."}
+            from api.services.configuration.language_normalizer import resolve_agent_speech_language
+            from api.services.workflow.booking_response_guard import guard_booking_reply
+
+            language = resolve_agent_speech_language(
+                getattr(self._agent, "user_config", None)
+            )
+            if (
+                result.get("booked") is True
+                and result.get("appointment_id")
+                and language in {"hi", "en"}
+                and not getattr(self._engine, "_is_realtime", False)
+            ):
+                # The persisted result already supplies a complete confirmation.
+                # Another generation adds latency and can contradict the calendar.
+                reply = guard_booking_reply(None, [{
+                    "type": "tool_call_result",
+                    "payload": {"function_name": "book_appointment", "result": result},
+                }], language=language)
+
+                async def confirm_saved_booking() -> None:
+                    await self._engine.queue_speech(reply, append_to_context=True)
+
+                await params.result_callback(
+                    result,
+                    properties=FunctionCallResultProperties(
+                        run_llm=False, on_context_updated=confirm_saved_booking,
+                    ),
+                )
+                return
             await params.result_callback(result)
 
         return booking_handler
