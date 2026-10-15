@@ -502,12 +502,6 @@ export function AIModelConfigurationV2Editor({
 
     const allowCustomVoice = kodewavesDefaults.allow_custom_input ?? false;
     const kodewavesSpeedRange = kodewavesDefaults.speed_range ?? { min: 0.5, max: 2.0, step: 0.1 };
-    const multilingualLanguageNames = useMemo(() => {
-        const codes = kodewavesDefaults.multilingual_languages ?? [];
-        if (codes.length === 0) return null;
-        return codes.map((code) => LANGUAGE_DISPLAY_NAMES[code] || code).join(", ");
-    }, [kodewavesDefaults.multilingual_languages]);
-
     const [catalogManifest, setCatalogManifest] = useState<AvailableCatalogResponse | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -882,9 +876,9 @@ export function AIModelConfigurationV2Editor({
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && multilingualLanguageNames && (
+                                    {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
                                         <p className="text-xs text-muted-foreground">
-                                            Speech recognition can auto-detect {multilingualLanguageNames}. Voice output uses the selected voice and its supported language.
+                                            Speech recognition auto-detects only languages supported by the selected STT model. Voice output uses the selected voice and its supported language.
                                         </p>
                                     )}
                                 </div>
@@ -1240,9 +1234,9 @@ export function AIModelConfigurationV2Editor({
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && multilingualLanguageNames && (
+                                    {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
                                         <p className="text-xs text-muted-foreground">
-                                            Speech recognition can auto-detect {multilingualLanguageNames}. Voice output uses the selected voice and its supported language.
+                                            Speech recognition auto-detects only languages supported by the selected STT model. Voice output uses the selected voice and its supported language.
                                         </p>
                                     )}
                                 </div>
