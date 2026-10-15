@@ -22,6 +22,9 @@ RECORDING_MARKER = "●"  # Play pre-recorded audio
 TTS_MARKER = "▸"  # Generate dynamic TTS text
 
 ACTION_GROUNDING_INSTRUCTIONS = (
+    "Continue from the conversation history. After the opening greeting, answer "
+    "the caller's latest request without greeting again or asking for details "
+    "they have already provided. "
     "Only confirm an action after its action tool returns a successful result. "
     "Changing workflow steps is not an action confirmation. Never invent booking "
     "IDs or other tool results. Before a successful booking tool result, collect "

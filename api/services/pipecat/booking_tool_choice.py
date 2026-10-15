@@ -66,6 +66,23 @@ class _BookingToolChoiceMixin:
                 )
         if choice:
             params["tool_choice"] = choice
+            # Some local OpenAI-compatible engines treat a named tool choice
+            # as a hint. Keep routing tools from competing with this confirmed
+            # calendar action, and make the instruction explicit in context.
+            params["tools"] = [
+                tool for tool in params["tools"]
+                if tool.get("function", {}).get("name") == "book_appointment"
+            ]
+            params["messages"] = [*params["messages"], {
+                "role": "system",
+                "content": (
+                    "The caller has explicitly confirmed an appointment. Continue "
+                    "this conversation; do not greet again. Call book_appointment "
+                    "using only the caller's stated name, phone, date, time and "
+                    "timezone. Do not invent missing details. If any required "
+                    "detail is missing, ask for that detail instead."
+                ),
+            }]
         return params
 
 
