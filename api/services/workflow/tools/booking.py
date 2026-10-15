@@ -1,6 +1,7 @@
 """Native booking tool: confirmation is returned only after persistence."""
 
 from datetime import datetime
+import re
 
 from pydantic import (
     BaseModel,
@@ -12,6 +13,26 @@ from pydantic import (
 )
 
 from api.db import appointments
+
+
+def caller_confirmed_booking(messages: list) -> bool:
+    """Read consent from the caller, rather than trusting an LLM boolean."""
+    dialogue = [m for m in messages if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
+    caller_index = next((i for i in range(len(dialogue) - 1, -1, -1) if dialogue[i].get("role") == "user"), None)
+    if caller_index is None:
+        return False
+    text = dialogue[caller_index].get("content")
+    if not isinstance(text, str) or re.search(r"\b(don't|do not|cancel|not|no|never)\b|नहीं|मत\s", text, re.I):
+        return False
+    recent = " ".join(str(m.get("content", "")) for m in dialogue[max(0, caller_index - 4):caller_index + 1])
+    if not re.search(r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", recent, re.I):
+        return False
+    if re.search(r"\b(?:I|we)\s+(?:explicitly\s+)?confirm\b|पुष्टि\s+कर(?:ता|ती|ते)|पक्का\s+कर", text, re.I):
+        return True
+    if not re.fullmatch(r"\s*(?:yes|yes please|correct|that's right|go ahead|हाँ|हां|जी हाँ|जी हां)[.!।\s]*", text, re.I):
+        return False
+    previous = next((m.get("content", "") for m in reversed(dialogue[:caller_index]) if m.get("role") == "assistant"), "")
+    return isinstance(previous, str) and bool(re.search(r"\bconfirm\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का", previous, re.I))
 
 
 class BookingArguments(BaseModel):

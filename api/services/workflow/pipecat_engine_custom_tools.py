@@ -329,10 +329,15 @@ class CustomToolManager:
 
     def _create_booking_handler(self):
         async def booking_handler(params: FunctionCallParams) -> None:
-            from api.services.workflow.tools.booking import execute_booking
+            from api.services.workflow.tools.booking import execute_booking, caller_confirmed_booking
 
             try:
-                result = await execute_booking(params.arguments, await self.get_organization_id())
+                arguments = dict(params.arguments or {})
+                context = getattr(self._engine, "context", None)
+                arguments["confirmed_by_caller"] = caller_confirmed_booking(
+                    context.get_messages() if context is not None else []
+                )
+                result = await execute_booking(arguments, await self.get_organization_id())
             except Exception as exc:
                 logger.error("Appointment tool persistence failed ({})", type(exc).__name__)
                 result = {"status": "error", "booked": False,
