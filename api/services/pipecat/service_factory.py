@@ -1488,11 +1488,15 @@ def create_llm_service_from_provider(
         )
     elif provider == ServiceProviders.GOOGLE.value:
         model = _google_model_or_default(model)
+        # Pipecat defaults unknown Gemini 3 Flash variants to MINIMAL. The
+        # Gemini 3.8 API rejects that level; use its lowest accepted level.
+        thinking = {"thinking_level": "low"} if model.startswith("gemini-3.8-flash") else None
         return KodewavesGoogleLLMService(
             api_key=api_key,
             settings=GoogleLLMSettings(
                 model=model,
                 temperature=0.1,
+                **({"thinking": thinking} if thinking is not None else {}),
                 # Pipecat executes tools; the SDK should return their calls.
                 extra={"automatic_function_calling": {"disable": True}},
             ),
