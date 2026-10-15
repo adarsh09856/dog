@@ -85,6 +85,7 @@ ElevenLabsTTSService, ElevenLabsTTSSettings = _optional_import(
 )
 GladiaSTTService, GladiaSTTSettings = _optional_import("pipecat.services.gladia.stt", "GladiaSTTService", "GladiaSTTSettings")
 GoogleLLMService, GoogleLLMSettings = _optional_import("pipecat.services.google.llm", "GoogleLLMService", "GoogleLLMSettings")
+GoogleThinkingConfig = _optional_import("pipecat.services.google.llm", "GoogleThinkingConfig")
 GoogleSTTService, GoogleSTTSettings = _optional_import("pipecat.services.google.stt", "GoogleSTTService", "GoogleSTTSettings")
 GoogleTTSService, GoogleTTSSettings = _optional_import("pipecat.services.google.tts", "GoogleTTSService", "GoogleTTSSettings")
 GoogleVertexLLMService, GoogleVertexLLMSettings = _optional_import(
@@ -1490,7 +1491,11 @@ def create_llm_service_from_provider(
         model = _google_model_or_default(model)
         # Pipecat defaults unknown Gemini 3 Flash variants to MINIMAL. The
         # Gemini 3.8 API rejects that level; use its lowest accepted level.
-        thinking = {"thinking_level": "low"} if model.startswith("gemini-3.8-flash") else None
+        thinking = (
+            GoogleThinkingConfig(thinking_level="low")
+            if model.startswith("gemini-3.8-flash")
+            else None
+        )
         return KodewavesGoogleLLMService(
             api_key=api_key,
             settings=GoogleLLMSettings(
