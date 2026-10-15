@@ -18,6 +18,7 @@ from pipecat.frames.frames import (
     TranscriptionFrame,
 )
 from pipecat.services.stt_service import STTService
+from pipecat.services.settings import STTSettings
 
 
 class GeminiSTTService(STTService):
@@ -32,9 +33,14 @@ class GeminiSTTService(STTService):
         sample_rate: int = 16000,
         **kwargs,
     ):
-        super().__init__(sample_rate=sample_rate, **kwargs)
+        resolved_model = "gemini-3.8-flash" if (not model or "stt" in model.lower() or model in ("default", "none")) else model
+        super().__init__(
+            sample_rate=sample_rate,
+            settings=STTSettings(model=resolved_model, language=language),
+            **kwargs,
+        )
         self._api_key = api_key or ""
-        self._model = "gemini-3.8-flash" if (not model or "stt" in model.lower() or model in ("default", "none")) else model
+        self._model = resolved_model
         self._language = language
         self._sample_rate = sample_rate
 

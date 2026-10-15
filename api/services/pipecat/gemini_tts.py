@@ -1,5 +1,6 @@
 """Google Gemini TTS for Pipecat, including streamed Gemini 3.8 output."""
 
+import asyncio
 from collections.abc import AsyncGenerator
 import base64
 import io
@@ -19,6 +20,7 @@ from pipecat.frames.frames import (
     TTSStoppedFrame,
 )
 from pipecat.services.tts_service import TTSService
+from pipecat.services.settings import TTSSettings
 from pipecat.utils.tracing.service_decorators import traced_tts
 
 
@@ -34,12 +36,17 @@ class GeminiTTSService(TTSService):
         sample_rate: int = 24000,
         **kwargs,
     ):
-        super().__init__(sample_rate=sample_rate, **kwargs)
-        self._api_key = api_key or ""
-        self._model = model if (model and "tts" in model.lower()) else "gemini-3.8-flash-lite-tts"
+        resolved_model = model if (model and "tts" in model.lower()) else "gemini-3.8-flash-lite-tts"
         selected_voice = voice or "Puck"
-        if not supports_gemini_voice(self._model, selected_voice):
+        if not supports_gemini_voice(resolved_model, selected_voice):
             raise ValueError(f"Unsupported Gemini TTS voice: {selected_voice}")
+        super().__init__(
+            sample_rate=sample_rate,
+            settings=TTSSettings(model=resolved_model, voice=selected_voice, language=None),
+            **kwargs,
+        )
+        self._api_key = api_key or ""
+        self._model = resolved_model
         self._voice = selected_voice
         self._sample_rate = sample_rate
         # Gemini's raw output is 24kHz even when a transport requests 8/16kHz.
@@ -138,43 +145,45 @@ class GeminiTTSService(TTSService):
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    url,
-                    json=payload,
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=30),
-                ) as response:
-                    if response.status != 200:
-                        logger.error(
-                            "[Gemini TTS] HTTP {}: {}",
-                            response.status,
-                            (await response.text())[:500],
-                        )
-                        yield ErrorFrame(error=f"Gemini TTS error: {response.status}")
-                        return
-
-                    if is_streaming_model:
-                        async for line in response.content:
-                            line = line.strip()
-                            if not line or not line.startswith(b"data:"):
-                                continue
-                            event_data = line[5:].strip()
-                            if event_data == b"[DONE]":
-                                break
-                            try:
-                                event = json.loads(event_data)
-                            except (json.JSONDecodeError, UnicodeDecodeError):
-                                logger.debug("[Gemini TTS] Ignoring malformed stream event")
-                                continue
-                            async for frame in audio_frames(event):
-                                yield frame
-                    else:
-                        result = await response.json()
-                        async for frame in audio_frames(result):
-                            yield frame
-
-                    if not audio_emitted:
-                        yield ErrorFrame(error="Gemini TTS returned no audio data")
+                for attempt in range(2):
+                    async with session.post(
+                        url,
+                        json=payload,
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=12),
+                    ) as response:
+                        if response.status != 200:
+                            detail = (await response.text())[:500]
+                            if response.status == 503 and attempt == 0:
+                                logger.warning("[Gemini TTS] Provider busy; retrying once")
+                            else:
+                                logger.error("[Gemini TTS] HTTP {}: {}", response.status, detail)
+                                yield ErrorFrame(error=f"Gemini TTS error: {response.status}")
+                                return
+                        else:
+                            if is_streaming_model:
+                                async for line in response.content:
+                                    line = line.strip()
+                                    if not line or not line.startswith(b"data:"):
+                                        continue
+                                    event_data = line[5:].strip()
+                                    if event_data == b"[DONE]":
+                                        break
+                                    try:
+                                        event = json.loads(event_data)
+                                    except (json.JSONDecodeError, UnicodeDecodeError):
+                                        logger.debug("[Gemini TTS] Ignoring malformed stream event")
+                                        continue
+                                    async for frame in audio_frames(event):
+                                        yield frame
+                            else:
+                                result = await response.json()
+                                async for frame in audio_frames(result):
+                                    yield frame
+                            if not audio_emitted:
+                                yield ErrorFrame(error="Gemini TTS returned no audio data")
+                            return
+                    await asyncio.sleep(0.25)
         except Exception as error:
             logger.error("[Gemini TTS] Synthesis failed: {}", type(error).__name__)
             yield ErrorFrame(error=str(error))

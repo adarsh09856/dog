@@ -601,14 +601,19 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                         case 'rtf-pipeline-error': {
                             const { error, fatal, processor: errorProcessor } = message.payload;
-                            setFeedbackMessages(prev => [...prev, {
-                                id: `error-${Date.now()}`,
-                                type: 'pipeline-error',
-                                text: error,
-                                fatal,
-                                processor: errorProcessor,
-                                timestamp: new Date().toISOString(),
-                            }]);
+                            setFeedbackMessages(prev => [
+                                ...prev.map(msg => msg.type === 'bot-text' && !msg.final
+                                    ? { ...msg, final: true }
+                                    : msg),
+                                {
+                                    id: `error-${Date.now()}`,
+                                    type: 'pipeline-error',
+                                    text: error,
+                                    fatal,
+                                    processor: errorProcessor,
+                                    timestamp: new Date().toISOString(),
+                                },
+                            ]);
                             break;
                         }
 
