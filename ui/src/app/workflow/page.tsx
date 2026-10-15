@@ -11,6 +11,7 @@ import { FolderSection } from '@/components/workflow/folders/FolderSection';
 import { UploadWorkflowButton } from '@/components/workflow/UploadWorkflowButton';
 import { getServerAccessToken, getServerAuthProvider } from '@/lib/auth/server';
 import logger from '@/lib/logger';
+import { detailFromError } from '@/lib/apiError';
 
 import WorkflowLayout from "./WorkflowLayout";
 
@@ -46,6 +47,10 @@ async function WorkflowList() {
                 status: 'active,archived'
             }
         });
+
+        if (response.error || !response.data) {
+            throw new Error(detailFromError(response.error, 'Unable to load agents. Please retry.'));
+        }
 
         const allWorkflowData = response.data ? (Array.isArray(response.data) ? response.data : [response.data]) : [];
 
@@ -95,8 +100,9 @@ async function WorkflowList() {
     } catch (err) {
         logger.error(`Error fetching workflows: ${err}`);
         return (
-            <div className="text-red-500">
-                Failed to load Workflows. Please Try Again Later.
+            <div role="alert" className="text-red-500">
+                <p>{err instanceof Error ? err.message : 'Unable to load agents. Please retry.'}</p>
+                <a className="underline" href="/workflow">Retry loading agents</a>
             </div>
         );
     }

@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 import base64
 import io
 import json
+import re
 import wave
 
 import aiohttp
@@ -41,6 +42,10 @@ class GeminiTTSService(TTSService):
         self._voice = selected_voice
         self._model = model if (model and "tts" in model.lower()) else "gemini-3.8-flash-lite-tts"
         self._sample_rate = sample_rate
+        # Gemini's raw output is 24kHz even when a transport requests 8/16kHz.
+        # Frames must carry the source rate so the transport can resample;
+        # relabelling 24kHz as 16kHz slows speech and changes its pitch.
+        self._provider_sample_rate = 24000
 
     def can_generate_metrics(self) -> bool:
         return True
@@ -76,7 +81,7 @@ class GeminiTTSService(TTSService):
                     "responseFormat": {
                         "audio": {
                             "mimeType": "AUDIO_L16",
-                            "sampleRate": self._sample_rate,
+                            "sampleRate": self._provider_sample_rate,
                         }
                     },
                     "speechConfig": {"voiceConfig": {"voice": self._voice}},
@@ -110,7 +115,11 @@ class GeminiTTSService(TTSService):
                     if not encoded:
                         continue
                     audio_bytes = base64.b64decode(encoded)
-                    sample_rate = self._sample_rate
+                    mime_type = inline_data.get("mimeType") or inline_data.get("mime_type") or ""
+                    rate = re.search(r"(?:^|;)\s*rate\s*=\s*(\d+)", mime_type, re.IGNORECASE)
+                    sample_rate = int(rate.group(1)) if rate else self._provider_sample_rate
+                    if not 8000 <= sample_rate <= 192000:
+                        raise ValueError("Gemini TTS returned an invalid audio sample rate")
                     if audio_bytes.startswith(b"RIFF") and b"WAVE" in audio_bytes[:16]:
                         try:
                             with wave.open(io.BytesIO(audio_bytes), "rb") as wav_file:
