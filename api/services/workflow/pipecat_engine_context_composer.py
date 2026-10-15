@@ -5,6 +5,7 @@ reusable functions. Defines recording response mode markers and instructions.
 """
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
@@ -97,6 +98,13 @@ def compose_system_prompt_for_node(
         p for p in (global_prompt, formatted_node_prompt, ACTION_GROUNDING_INSTRUCTIONS)
         if p
     ]
+    parts.append(
+        f"Current server time: {datetime.now(UTC).isoformat(timespec='seconds')} (UTC). "
+        "Resolve today/tomorrow against this actual date in the caller's confirmed "
+        "timezone; ask for the timezone when it is unknown. Never invent the current "
+        "date. For bookings, verify a complete phone number and read back the exact "
+        "calendar date, time and timezone before asking permission to save."
+    )
     if node.out_edges:
         transitions = "\n".join(
             f"- {edge.get_function_name()}: {format_prompt(edge.condition)}"

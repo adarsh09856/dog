@@ -31,3 +31,14 @@ def normalize_provider_name(provider: str) -> str:
         "ultravox_realtime": "ultravox",
     }
     return alias_map.get(p, p)
+
+
+def tts_runtime_provider(provider: str, model: str | None) -> str:
+    """Distinguish AI Studio Gemini speech from Google Cloud speech."""
+    raw = str(provider).lower().strip()
+    if raw == "gemini" or (
+        normalize_provider_name(raw) == "google"
+        and str(model or "").lower().startswith("gemini-")
+    ):
+        return "gemini"
+    return normalize_provider_name(raw)

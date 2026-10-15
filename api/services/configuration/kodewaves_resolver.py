@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from loguru import logger
 
 from api.services.configuration.local_defaults import DEFAULT_LOCAL_LLM_MODEL
+from api.services.catalog.normalize import tts_runtime_provider
 from api.db import db_client
 from api.db.kodewaves_client import kodewaves_db_client
 from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
@@ -117,7 +118,7 @@ def _build_master_stt(prov: str, model: str, api_key: str, language: Optional[st
 
 
 def _build_master_tts(prov: str, model: str, api_key: str, voice: Optional[str] = None):
-    prov_lower = prov.lower()
+    prov_lower = tts_runtime_provider(prov, model)
     if prov_lower == "cartesia":
         v = voice if (voice and voice != "default") else "3faa81ae-d3d8-4ab1-9e44-e50e46d33c30"
         return CartesiaTTSConfiguration(api_key=api_key, model=model or "sonic-3.5", voice=v)
@@ -228,8 +229,10 @@ async def _resolve_catalog_layer(effective: EffectiveAIModelConfiguration, layer
     }
     for model in candidates:
         raw_provider = str(model.provider).lower().strip()
-        provider = "gemini" if raw_provider == "gemini" else normalize_provider_name(model.provider)
-        credential_provider = provider
+        provider = (tts_runtime_provider(raw_provider, model.model_identifier)
+                    if layer == "tts" else
+                    "gemini" if raw_provider == "gemini" else normalize_provider_name(model.provider))
+        credential_provider = normalize_provider_name(provider)
         if not any(
             raw_provider == credential_provider or canonical_provider == credential_provider
             for raw_provider, canonical_provider in active
@@ -561,6 +564,13 @@ async def apply_kodewaves_sovereign_resolution(
             current_voice = getattr(effective.tts, "voice", None)
             stt_lang = getattr(effective.stt, "language", None) if effective.stt else None
             tts_lang = getattr(effective.tts, "language", None) or stt_lang or "en"
+
+            runtime_provider = tts_runtime_provider(provider_name, model)
+            if provider_name == "google" and runtime_provider == "gemini":
+                # Catalog rows historically used Google's credential namespace
+                # for both products. Model identity determines the speech API.
+                effective.tts = _build_master_tts(runtime_provider, model, user_key, current_voice)
+                provider_name = runtime_provider
 
             # Preserve the explicitly selected local engine and voice.
             if provider_name in ("piper", "speaches", "local_cpu") or user_key in ("sovereign-local-cpu", "local-cpu-token"):

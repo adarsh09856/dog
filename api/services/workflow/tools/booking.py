@@ -52,13 +52,22 @@ def caller_confirmed_booking(messages: list) -> bool:
     if re.search(r"\b(?:I|we)\s+(?:explicitly\s+)?confirm\b|\bmain\s+confirm\s+kart[ai]\s+(?:hu|hun|hoon)\b|पुष्टि\s+कर(?:ता|ती|ते)|पक्का\s+कर", text, re.I):
         return True
     if not re.fullmatch(
-        r"\s*(?:(?:yes|haan|han|ha|ji|हाँ|हां|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|haan|han|बुक\s+कर\s+दो))?"
+        r"\s*(?:(?:yes|ok|okay|haan|han|ha|ji|हाँ|हां|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|haan|han|बुक\s+कर\s+दो))?"
         r"|correct|that's right|go ahead|(?:confirm|book)\s+kar\s+(?:do|dijiye))[.!।\s]*",
         text, re.I,
     ):
         return False
     previous = next((m.get("content", "") for m in reversed(dialogue[:caller_index]) if m.get("role") == "assistant"), "")
-    return isinstance(previous, str) and bool(re.search(r"\b(confirm|sahi|theek)\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का", previous, re.I))
+    if not isinstance(previous, str):
+        return False
+    booking_readback = re.search(
+        r"\b(appointment|booking|consultation|reservation|book)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति|बुक", previous, re.I,
+    )
+    confirmation_question = re.search(
+        r"\b(confirm|sahi|theek)\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का"
+        r"|\b(?:shall|should|may|can) I\b[^?]*\bbook\b|\bgo ahead and book\b", previous, re.I,
+    )
+    return bool(booking_readback and confirmation_question)
 
 
 class BookingArguments(BaseModel):
@@ -85,6 +94,14 @@ class BookingArguments(BaseModel):
     def timezone_required(cls, value):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("Confirm the timezone before booking")
+        return value
+
+    @field_validator("customer_phone")
+    @classmethod
+    def complete_phone_required(cls, value):
+        normalized = value.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
+        if not re.fullmatch(r"\+?[\d\s().-]+", normalized.strip()) or not 7 <= len(re.sub(r"\D", "", normalized)) <= 15:
+            raise ValueError("Ask for a complete phone number, including its country code")
         return value
 
     @field_validator("customer_name", "customer_phone", "title")

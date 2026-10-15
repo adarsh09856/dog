@@ -17,7 +17,7 @@ from loguru import logger
 
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import AIModelCatalogModel, VoiceCatalogModel
-from api.services.catalog.normalize import normalize_provider_name
+from api.services.catalog.normalize import normalize_provider_name, tts_runtime_provider
 from api.services.catalog.local_inventory import piper_voice_inventory, whisper_api_base
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.registry import GEMINI_TTS_VOICES
@@ -95,9 +95,7 @@ CURATED_PROVIDER_MODELS: Dict[str, List[Dict[str, Any]]] = {
 
 def _tts_model_credential_provider(provider: str, model_identifier: str) -> str:
     """Map a catalog TTS model to the credential namespace that serves it."""
-    if normalize_provider_name(provider) == "google" and model_identifier.startswith("gemini-"):
-        return "gemini"
-    return normalize_provider_name(provider)
+    return tts_runtime_provider(provider, model_identifier)
 
 CURATED_PROVIDER_VOICES: Dict[str, List[Dict[str, Any]]] = {
     "google": [
