@@ -20,6 +20,9 @@ LANGUAGE_NAME_TO_ISO = {
     "punjabi": "pa",
     "odia": "or",
     "nepali": "ne",
+    "assamese": "as", "bodo": "brx", "dogri": "doi", "kashmiri": "ks",
+    "konkani": "kok", "maithili": "mai", "manipuri": "mni", "meitei": "mni",
+    "sanskrit": "sa", "santali": "sat", "sindhi": "sd", "urdu": "ur",
     "spanish": "es",
     "french": "fr",
     "german": "de",
@@ -52,6 +55,9 @@ SPEECH_LANGUAGE_NAMES = {
     "or": "Odia", "pa": "Punjabi", "pt": "Portuguese", "ru": "Russian",
     "ta": "Tamil", "te": "Telugu", "th": "Thai", "tr": "Turkish",
     "ur": "Urdu", "vi": "Vietnamese", "zh": "Chinese",
+    "as": "Assamese", "brx": "Bodo", "doi": "Dogri", "ks": "Kashmiri",
+    "kok": "Konkani", "mai": "Maithili", "mni": "Manipuri", "ne": "Nepali",
+    "sa": "Sanskrit", "sat": "Santali", "sd": "Sindhi",
 }
 
 
@@ -128,9 +134,12 @@ def speech_language_instruction(language: Optional[str]) -> Optional[str]:
         )
     return (
         f"Final spoken-language rule (overrides earlier conflicting prompt text): "
-        f"respond in {name}. Use its native script where applicable; do not "
-        "transliterate or translate into English. Keep names, numbers, and product "
-        "terms clear and natural."
+        f"understand {name}, English, and switches between them, including "
+        f"{name} written in Latin letters. Respond naturally in {name} with "
+        "English terms where the caller uses them. Never require the caller to "
+        "use only one language or repeat supplied details in another language. "
+        "Write native-language words in their normal script for speech; preserve "
+        "English names, numbers, and product terms clearly."
     )
 
 

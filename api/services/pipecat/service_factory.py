@@ -224,14 +224,18 @@ def _resolve_speaches_language(language: str | None) -> Language | None:
 def _speaches_transcription_prompt(language: str | None, keyterms: list[str] | None) -> str:
     """Give Whisper concise code-switch and vocabulary hints without forcing a language."""
     language_code = (language or "multi").casefold().split("-", 1)[0]
-    if language_code in {"multi", "auto", "default", "hi", "en"}:
+    if language_code == "hi":
         prompt = (
             "Hindi and English conversation, including Hinglish and mid-sentence code-switching. "
             "Transcribe the words as spoken; do not translate or summarize. Preserve names, "
             "English terms, and number words."
         )
     else:
-        prompt = "Transcribe the words as spoken; do not translate or summarize. Preserve names and numbers."
+        prompt = (
+            "Transcribe the spoken language verbatim, preserving mid-sentence "
+            "language switches and English terms. Do not translate or summarize. "
+            "Preserve names and number words."
+        )
     terms = [str(term).replace("\n", " ").strip() for term in (keyterms or [])]
     terms = [term[:60] for term in terms if term][:20]
     if terms:
