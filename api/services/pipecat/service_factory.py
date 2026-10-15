@@ -1378,14 +1378,15 @@ def _voice_completion_settings(model: str, temperature: float | None = None) -> 
     return values
 
 
-def _migrate_deprecated_google_model(model: str) -> str:
-    """Ensure Google model ID is canonical and valid for official Gemini API (Gemini 3.5)."""
-    if not model or model in ("default", "none"):
+def _google_model_or_default(model: str) -> str:
+    """Keep an explicit selection; only resolve the platform's default aliases.
+
+    Model availability is checked by discovery/verification. Substituting a
+    different model here changes the user's cost, quota and call behaviour.
+    """
+    if not model or model.strip().casefold() in ("default", "none", ""):
         return "gemini-3.5-flash"
-    m = model.strip().lower()
-    if m.startswith("gemini-2.") or m.startswith("gemini-1.") or "3.8" in m:
-        return "gemini-3.5-flash"
-    return model
+    return model.strip()
 
 
 @_report_service_factory_failures(ErrorSource.LLM, provider_argument=0)
@@ -1467,7 +1468,7 @@ def create_llm_service_from_provider(
             **kwargs,
         )
     elif provider == ServiceProviders.GOOGLE.value:
-        model = _migrate_deprecated_google_model(model)
+        model = _google_model_or_default(model)
         return KodewavesGoogleLLMService(
             api_key=api_key,
             settings=GoogleLLMSettings(
