@@ -28,5 +28,9 @@ def guard_booking_reply(reply: str | None, events: list[dict]) -> str | None:
             continue
         result = payload.get("result") or {}
         if isinstance(result, dict) and result.get("booked") is True and result.get("appointment_id"):
-            return reply
+            return (
+                "Your appointment is booked. "
+                f"Appointment ID: {result['appointment_id']}. "
+                f"Time: {result.get('start_time', 'see the appointments calendar')}."
+            )
     return UNVERIFIED_BOOKING_REPLY
