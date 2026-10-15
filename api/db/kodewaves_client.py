@@ -369,6 +369,32 @@ class KodewavesDBClient(BaseDBClient):
             await session.refresh(run)
             return run
 
+    async def upsert_discovered_model(
+        self, model_identifier: str, display_name: str, provider: str, layer: str,
+        languages: Optional[List[str]] = None,
+    ):
+        """Refresh vendor capabilities without overwriting administrator policy/prices."""
+        async with self.get_session() as session:
+            model = (await session.execute(select(AIModelCatalogModel).where(
+                AIModelCatalogModel.model_identifier == model_identifier
+            ))).scalar_one_or_none()
+            if model is None:
+                model = AIModelCatalogModel(
+                    model_identifier=model_identifier, enabled=True, is_active=True,
+                    status="UNTESTED", source="discovered",
+                )
+                session.add(model)
+            elif model.provider != provider or model.layer != layer:
+                model.status = "UNTESTED"
+                model.last_verified_at = None
+            model.display_name = display_name
+            model.provider = provider
+            model.layer = model.category = layer
+            if languages is not None:
+                model.languages = languages
+            await session.commit()
+            return model
+
     async def update_model_verification_status(
         self,
         provider: str,
@@ -376,12 +402,16 @@ class KodewavesDBClient(BaseDBClient):
         status: str,
         latency_ms: Optional[int] = None,
         error_message: Optional[str] = None,
+        model_identifier: Optional[str] = None,
     ) -> int:
         """Persist model verification results to PostgreSQL ai_model_catalog."""
         async with self.get_session() as session:
-            stmt = select(AIModelCatalogModel).where(
-                AIModelCatalogModel.provider == provider.lower().strip()
-            )
+            providers = [provider.lower().strip()]
+            if provider == "gemini" and layer == "tts" and model_identifier and model_identifier.startswith("gemini-"):
+                providers.append("google")
+            stmt = select(AIModelCatalogModel).where(AIModelCatalogModel.provider.in_(providers))
+            if model_identifier:
+                stmt = stmt.where(AIModelCatalogModel.model_identifier == model_identifier)
             if layer:
                 stmt = stmt.where(
                     (AIModelCatalogModel.layer == layer.lower().strip())

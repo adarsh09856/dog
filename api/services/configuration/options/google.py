@@ -7,6 +7,14 @@
 # https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/data-residency
 GOOGLE_VERTEX_DEFAULT_LOCATION = "global"
 
+# Documented Indic coverage, not a promise of identical quality or accents.
+# https://ai.google.dev/gemini-api/docs/speech-generation#supported-languages
+GEMINI_38_INDIC_TTS_LANGUAGES = [
+    "en-IN", "hi-IN", "as-IN", "bn-IN", "gu-IN", "kn-IN", "ks-IN",
+    "mai-IN", "ml-IN", "mni-IN", "mr-IN", "ne-NP", "or-IN", "pa-IN",
+    "sat-IN", "ta-IN", "te-IN",
+]
+
 # Deliberately only the three locations that decide the residency question.
 # Individual regions vary in which models they serve and would go stale here, so
 # operators who need one type it in rather than picking it from a list that

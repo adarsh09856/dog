@@ -42,3 +42,24 @@ def tts_runtime_provider(provider: str, model: str | None) -> str:
     ):
         return "gemini"
     return normalize_provider_name(raw)
+
+
+def google_model_layer(model: dict) -> str | None:
+    """Only discover capabilities supported by our conversational adapters."""
+    name = str(model.get("name", "")).removeprefix("models/").lower()
+    methods = set(model.get("supportedGenerationMethods") or [])
+    if not name.startswith("gemini-"):
+        return None
+    if "embedContent" in methods or "batchEmbedContents" in methods:
+        return "embeddings"
+    if "bidiGenerateContent" in methods:
+        return "s2s"
+    if "generateContent" not in methods:
+        return None
+    if "tts" in name:
+        return "tts"
+    if "transcribe" in name:
+        return "stt"
+    if any(kind in name for kind in ("image", "computer-use", "robotics", "embedding", "live")):
+        return None
+    return "llm"

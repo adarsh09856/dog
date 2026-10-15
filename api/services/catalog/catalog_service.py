@@ -17,10 +17,11 @@ from loguru import logger
 
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import AIModelCatalogModel, VoiceCatalogModel
-from api.services.catalog.normalize import normalize_provider_name, tts_runtime_provider
+from api.services.catalog.normalize import normalize_provider_name, tts_runtime_provider, google_model_layer
 from api.services.catalog.local_inventory import piper_voice_inventory, whisper_api_base
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.registry import GEMINI_TTS_VOICES
+from api.services.configuration.options.google import GEMINI_38_INDIC_TTS_LANGUAGES
 from api.utils.common import normalize_local_ai_endpoint
 
 
@@ -163,6 +164,17 @@ CURATED_PROVIDER_MODELS["gemini"] = [
 ]
 CURATED_PROVIDER_VOICES["gemini"] = CURATED_PROVIDER_VOICES["google"]
 
+for _model in CURATED_PROVIDER_MODELS["gemini"]:
+    if _model["model_identifier"].startswith("gemini-3.8-"):
+        _model["languages"] = list(dict.fromkeys(_model["languages"] + GEMINI_38_INDIC_TTS_LANGUAGES))
+        if _model["model_identifier"] == "gemini-3.8-flash-tts":
+            _model["languages"].append("sd-IN")
+
+CURATED_PROVIDER_VOICES["gemini"] = [
+    {**voice, "languages": list(dict.fromkeys(voice["languages"] + GEMINI_38_INDIC_TTS_LANGUAGES))}
+    for voice in CURATED_PROVIDER_VOICES["google"]
+]
+
 
 class CatalogService:
     """Truth layer catalog service providing live capability manifests and dynamic caches."""
@@ -242,28 +254,23 @@ class CatalogService:
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 if prov_norm in ("google", "gemini") and api_key:
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-                    async with session.get(url) as resp:
+                    url = "https://generativelanguage.googleapis.com/v1beta/models"
+                    async with session.get(url, headers={"x-goog-api-key": api_key}, params={"pageSize": 1000}) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             for m in data.get("models", []):
                                 name = m.get("name", "").replace("models/", "")
-                                if "gemini" not in name.lower():
+                                layer = google_model_layer(m)
+                                if layer is None:
                                     continue
                                 discovered_models.append(name)
-                                layer = "llm"
-                                if "tts" in name.lower():
-                                    layer = "tts"
-                                elif "live" in name.lower():
-                                    layer = "s2s"
-                                await kodewaves_db_client.upsert_model(
+                                await kodewaves_db_client.upsert_discovered_model(
                                     model_identifier=name,
                                     display_name=m.get("displayName") or name,
                                     provider="gemini" if layer == "tts" else "google",
                                     layer=layer,
-                                    enabled=True,
-                                    source="discovered",
-                                    status="UNTESTED",
+                                    languages=next((entry.get("languages") for entry in CURATED_PROVIDER_MODELS["gemini"]
+                                                    if entry["model_identifier"] == name), None),
                                 )
 
                 elif prov_norm == "openai" and api_key:
@@ -479,6 +486,7 @@ class CatalogService:
         start_time = time.monotonic()
         success = False
         error_msg: Optional[str] = None
+        executed_model: str | None = None
 
         timeout = aiohttp.ClientTimeout(total=8)
         try:
@@ -498,9 +506,10 @@ class CatalogService:
 
                     api_key = creds.get("api_key", "")
                     if prov_norm in ("google", "gemini"):
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{test_model}:generateContent?key={api_key}"
+                        executed_model = test_model
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{test_model}:generateContent"
                         payload = {"contents": [{"parts": [{"text": "Hello"}]}]}
-                        async with session.post(url, json=payload) as resp:
+                        async with session.post(url, json=payload, headers={"x-goog-api-key": api_key}) as resp:
                             if resp.status == 200:
                                 success = True
                             else:
@@ -508,6 +517,7 @@ class CatalogService:
                                 error_msg = f"Gemini LLM returned HTTP status {resp.status}: {err_txt[:100]}"
 
                     elif prov_norm == "openai":
+                        executed_model = test_model
                         base_url = (creds or {}).get("base_url") or "https://api.openai.com/v1"
                         url = f"{base_url.rstrip('/')}/chat/completions"
                         payload = {"model": test_model, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 5}
@@ -519,6 +529,7 @@ class CatalogService:
                                 error_msg = f"OpenAI chat completions returned HTTP {resp.status}: {err_txt[:100]}"
 
                     elif prov_norm == "anthropic":
+                        executed_model = test_model
                         url = "https://api.anthropic.com/v1/messages"
                         payload = {
                             "model": test_model,
@@ -534,6 +545,7 @@ class CatalogService:
                                 error_msg = f"Anthropic returned HTTP status {resp.status}: {err_txt[:100]}"
 
                     elif prov_norm == "groq":
+                        executed_model = test_model
                         url = "https://api.groq.com/openai/v1/chat/completions"
                         payload = {"model": test_model, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 5}
                         async with session.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload) as resp:
@@ -583,6 +595,7 @@ class CatalogService:
                         if not test_model:
                             error_msg = "No Gemini TTS model is enabled in the catalog"
                         else:
+                            executed_model = test_model
                             url = (
                                 "https://generativelanguage.googleapis.com/v1beta/models/"
                                 f"{test_model}:generateContent"
@@ -666,7 +679,9 @@ class CatalogService:
             error_msg = str(ex)
 
         latency_ms = int((time.monotonic() - start_time) * 1000)
-        status_str = "PASS" if success else "FAIL"
+        # A successful auth/voice-list probe does not execute a model. Do not
+        # certify all models in a provider layer from that weaker evidence.
+        status_str = ("PASS" if success else "FAIL") if executed_model else "UNTESTED"
 
         # Record test run in DB if reachable
         db_provider = prov_norm
@@ -680,17 +695,19 @@ class CatalogService:
             )
 
             # Update models in database
-            await kodewaves_db_client.update_model_verification_status(
-                provider=db_provider,
-                layer=layer_norm,
-                status=status_str,
-                latency_ms=latency_ms,
-                error_message=error_msg,
-            )
+            if executed_model:
+                await kodewaves_db_client.update_model_verification_status(
+                    provider=db_provider,
+                    layer=layer_norm,
+                    model_identifier=executed_model,
+                    status=status_str,
+                    latency_ms=latency_ms,
+                    error_message=error_msg,
+                )
         except Exception as dberr:
             logger.debug(f"[CatalogService] DB logging skipped (offline): {dberr}")
 
-        self.invalidate_cache()
+        await self.notify_changed()
         return success, latency_ms, error_msg
 
     async def verify_provider_all_layers(
@@ -779,6 +796,12 @@ class CatalogService:
                 continue
             if m.status in ("FAIL", "UNAVAILABLE"):
                 continue
+            if ((m.layer or m.category) == "llm" and prov in ("google", "gemini")
+                    and google_model_layer({"name": f"models/{m.model_identifier}",
+                                            "supportedGenerationMethods": ["generateContent"]}) != "llm"):
+                # Older discovery incorrectly put image, embedding and task
+                # specific models into the voice agent's chat-model menu.
+                continue
 
             entry = {
                 "value": m.model_identifier,
@@ -788,6 +811,8 @@ class CatalogService:
                 "recommended": m.recommended,
                 "supports_tools": m.supports_tools,
                 "supports_streaming": m.supports_streaming,
+                "verification_status": m.status,
+                "languages": m.languages or [],
             }
 
             layer = m.layer or m.category
