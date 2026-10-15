@@ -241,6 +241,10 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
         }
 
         const pc = new RTCPeerConnection(config);
+        // SmallWebRTC expects the client to offer an SCTP data channel. Keep
+        // websocket signaling/feedback, but negotiate this before the SDP offer
+        // so the server can finish its transport handshake without timing out.
+        pc.createDataChannel('pipecat');
 
         // Set up ICE candidate trickling
         pc.addEventListener('icecandidate', (event) => {

@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
@@ -791,16 +792,17 @@ async def execute_text_chat_pending_turn(
             if booking_arguments and has_booking_tool:
                 from api.services.workflow.tools.booking import execute_booking
 
+                booking_call_id = f"confirmed_booking_{uuid4().hex}"
                 capture_processor._append_event(
                     "tool_call_started",
-                    {"function_name": "book_appointment", "arguments": booking_arguments},
+                    {"function_name": "book_appointment", "tool_call_id": booking_call_id, "arguments": booking_arguments},
                 )
                 booking_result = await execute_booking(
                     booking_arguments, workflow.organization_id
                 )
                 capture_processor._append_event(
                     "tool_call_result",
-                    {"function_name": "book_appointment", "result": booking_result},
+                    {"function_name": "book_appointment", "tool_call_id": booking_call_id, "result": booking_result},
                 )
                 if booking_result.get("booked") is True:
                     reply = (
