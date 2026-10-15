@@ -23,6 +23,22 @@ from api.utils.recording_artifacts import get_recording_storage_key
 
 
 class CampaignClient(BaseDBClient):
+    async def count_ready_campaign_dials(self) -> int:
+        """Count queued dial jobs eligible for dispatch in running campaigns."""
+        now = datetime.now(UTC)
+        async with self.async_session() as session:
+            query = (
+                select(func.count(QueuedRunModel.id))
+                .join(CampaignModel, QueuedRunModel.campaign_id == CampaignModel.id)
+                .where(
+                    CampaignModel.state == "running",
+                    QueuedRunModel.state == "queued",
+                    (QueuedRunModel.scheduled_for.is_(None))
+                    | (QueuedRunModel.scheduled_for <= now),
+                )
+            )
+            return int((await session.execute(query)).scalar() or 0)
+
     @staticmethod
     def _possibly_dispatched_workflow_exists():
         return (

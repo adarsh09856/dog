@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 
 from api.db.kodewaves_client import kodewaves_db_client
+from api.db import db_client
 from api.db.kodewaves_models import (
     AIModelCatalogModel,
     PlatformMasterCredentialModel,
@@ -296,19 +297,11 @@ async def get_system_resources(_user=Depends(get_superuser)):
         active_calls = await call_concurrency.get_fleet_active_calls()
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Live concurrency unavailable") from exc
-    queue_size = 0
-    concurrency_cap = 50
-
     try:
-        async with kodewaves_db_client.get_session() as session:
-            queue_stmt = select(func.count(WorkflowRunModel.id)).where(
-                WorkflowRunModel.state == WorkflowRunState.INITIALIZED.value,
-                WorkflowRunModel.is_completed == False,
-                WorkflowRunModel.created_at >= datetime.now(UTC) - timedelta(minutes=20),
-            )
-            queue_size = (await session.execute(queue_stmt)).scalar() or 0
-    except Exception:
-        pass
+        queue_size = await db_client.count_ready_campaign_dials()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Campaign dial queue unavailable") from exc
+    concurrency_cap = 50
 
     try:
         local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
@@ -398,9 +391,9 @@ async def _terminate_call(run_id: int, reason: Optional[str] = None) -> Dict[str
             pass
 
         return {
-            "message": f"Successfully terminated active voice session #{run_id}",
+            "message": f"Run record #{run_id} marked complete; carrier and browser audio are not disconnected",
             "run_id": run_id,
-            "status": "terminated",
+            "status": "record_completed",
         }
 
 

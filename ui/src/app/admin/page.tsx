@@ -216,10 +216,10 @@ export default function AdminDashboardPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Radio className="h-5 w-5 text-destructive" />
-              Live Telemetry & Kill-Switch
+              Live Telemetry & Run Records
             </CardTitle>
             <CardDescription>
-              Monitor active voice sessions in real-time with instant emergency call termination.
+              Monitor active voice sessions and review run records. The record action does not disconnect a call.
             </CardDescription>
           </CardHeader>
           <CardContent>

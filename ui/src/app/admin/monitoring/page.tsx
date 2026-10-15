@@ -130,13 +130,13 @@ export default function AdminMonitoringPage() {
 
         <Card className="border-border/60">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Pipeline Queue Depth</CardTitle>
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Campaign Dial Queue</CardTitle>
             <Layers className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-extrabold">{resources?.queue_size ?? '—'}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              Calls awaiting worker dispatch
+              Ready dial jobs in running campaigns
             </p>
           </CardContent>
         </Card>
@@ -199,7 +199,7 @@ export default function AdminMonitoringPage() {
                   <TableHead className="text-xs">Telecom Carrier</TableHead>
                   <TableHead className="text-xs">Duration</TableHead>
                   <TableHead className="text-xs text-center">Status</TableHead>
-                  <TableHead className="text-xs text-right">Emergency Action</TableHead>
+                  <TableHead className="text-xs text-right">Run Record Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
