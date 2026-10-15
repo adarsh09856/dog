@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 
+from api.db import db_client
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import WebsiteWidgetModel
 from api.db.models import UserModel
@@ -137,6 +138,8 @@ async def create_widget(req: WidgetCreateRequest, user: UserModel = Depends(get_
     wf_id = req.workflow_id or req.agent_id
     if not wf_id:
         raise HTTPException(status_code=400, detail="Workflow / Agent ID is required")
+    if not await db_client.get_workflow(wf_id, organization_id=org_id):
+        raise HTTPException(status_code=404, detail="Agent not found in this workspace")
 
     name = req.widget_name or req.name or "Website Voice Widget"
     title = req.bubble_title or req.welcome_message or "Talk to our AI Agent"
@@ -172,6 +175,9 @@ async def update_widget(widget_id: str, req: WidgetCreateRequest, user: UserMode
     org_id = user.selected_organization_id
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization required")
+    requested_workflow_id = req.workflow_id or req.agent_id
+    if requested_workflow_id and not await db_client.get_workflow(requested_workflow_id, organization_id=org_id):
+        raise HTTPException(status_code=404, detail="Agent not found in this workspace")
 
     async with kodewaves_db_client.get_session() as session:
         try:
