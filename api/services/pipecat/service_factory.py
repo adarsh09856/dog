@@ -19,7 +19,7 @@ from api.services.configuration.options import (
     DEEPGRAM_FLUX_MODELS,
     GOOGLE_VERTEX_DEFAULT_LOCATION,
 )
-from api.services.configuration.registry import GEMINI_TTS_VOICES, ServiceProviders
+from api.services.configuration.registry import ServiceProviders
 from api.services.pipecat.gemini_json_schema_adapter import (
     KodewavesGeminiJSONSchemaAdapter,
 )
@@ -992,7 +992,8 @@ def create_tts_service(
             from api.services.pipecat.gemini_tts import GeminiTTSService
             raw_v = getattr(user_config.tts, "voice", "Puck")
             tts_v = raw_v or "Puck"
-            if tts_v not in GEMINI_TTS_VOICES:
+            from api.services.catalog.gemini_voices import supports_gemini_voice
+            if not supports_gemini_voice(getattr(user_config.tts, "model", None) or "gemini-3.8-flash-lite-tts", tts_v):
                 raise ValueError(f"Unsupported Gemini TTS voice: {tts_v}")
             return GeminiTTSService(
                 api_key=gemini_key,

@@ -12,6 +12,10 @@ def model_voice_ids(provider: str, model: str | None) -> set[str] | None:
     key = "gemini" if raw_provider == "gemini" else normalize_provider_name(provider)
     if key == "google" and model.startswith("gemini"):
         key = "gemini"
+    if key == "gemini" and model.startswith("gemini-3.8-"):
+        # The live voice directory adds model-scoped native locale voices;
+        # limiting this to the legacy named pool hides those real speakers.
+        return None
     config = REGISTRY[ServiceType.TTS].get(key)
     voice = config.model_fields.get("voice") if config else None
     metadata = voice.json_schema_extra if voice else None

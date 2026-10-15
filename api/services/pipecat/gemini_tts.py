@@ -10,7 +10,7 @@ import wave
 import aiohttp
 from loguru import logger
 
-from api.services.configuration.registry import GEMINI_TTS_VOICES
+from api.services.catalog.gemini_voices import supports_gemini_voice
 from pipecat.frames.frames import (
     ErrorFrame,
     Frame,
@@ -36,11 +36,11 @@ class GeminiTTSService(TTSService):
     ):
         super().__init__(sample_rate=sample_rate, **kwargs)
         self._api_key = api_key or ""
+        self._model = model if (model and "tts" in model.lower()) else "gemini-3.8-flash-lite-tts"
         selected_voice = voice or "Puck"
-        if selected_voice not in GEMINI_TTS_VOICES:
+        if not supports_gemini_voice(self._model, selected_voice):
             raise ValueError(f"Unsupported Gemini TTS voice: {selected_voice}")
         self._voice = selected_voice
-        self._model = model if (model and "tts" in model.lower()) else "gemini-3.8-flash-lite-tts"
         self._sample_rate = sample_rate
         # Gemini's raw output is 24kHz even when a transport requests 8/16kHz.
         # Frames must carry the source rate so the transport can resample;

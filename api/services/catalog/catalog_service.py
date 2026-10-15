@@ -19,6 +19,7 @@ from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import AIModelCatalogModel, VoiceCatalogModel
 from api.services.catalog.normalize import normalize_provider_name, tts_runtime_provider, google_model_layer
 from api.services.catalog.local_inventory import piper_voice_inventory, whisper_api_base
+from api.services.catalog.gemini_voices import discover_indian_voices
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.registry import GEMINI_TTS_VOICES
 from api.services.configuration.options.google import GEMINI_38_INDIC_TTS_LANGUAGES
@@ -271,6 +272,17 @@ class CatalogService:
                                     layer=layer,
                                     languages=next((entry.get("languages") for entry in CURATED_PROVIDER_MODELS["gemini"]
                                                     if entry["model_identifier"] == name), None),
+                                )
+
+                    speech_models = [model for model in discovered_models
+                                     if model.startswith("gemini-3.8-") and "tts" in model]
+                    if speech_models:
+                        for voice in await discover_indian_voices(session, api_key):
+                            discovered_voices.append(voice["voice_id"])
+                            for speech_model in speech_models:
+                                await kodewaves_db_client.upsert_voice(
+                                    provider="gemini", tts_model=speech_model,
+                                    **voice, preview_ok=False, is_active=True,
                                 )
 
                 elif prov_norm == "openai" and api_key:
