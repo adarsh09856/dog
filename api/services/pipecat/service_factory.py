@@ -1403,6 +1403,9 @@ def create_llm_service_from_provider(
             # monologues. Voice turns should stay concise; 192 tokens leaves
             # room for structured tool arguments while bounding speech output.
             qwen_settings["max_tokens"] = 192
+        if model.casefold().startswith("qwen3:"):
+            qwen_settings["temperature"] = 0.7
+            qwen_settings["extra"] = {"reasoning_effort": "none"}
         return OpenAILLMService(
             api_key=api_key,
             settings=OpenAILLMSettings(**qwen_settings),

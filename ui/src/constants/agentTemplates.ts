@@ -353,7 +353,7 @@ export function generateTemplateWorkflowDefinition(
         ? `नमस्ते, मैं ${agent} हूँ। बताइए, मैं आपकी कैसे मदद कर सकती हूँ?`
         : customizedFirstMessage;
     const rolePrompt = hindi && template.id === 'appointment-booking'
-        ? `आप ${company} की विनम्र अपॉइंटमेंट सहायक ${agent} हैं। एक बार में एक छोटा प्रश्न पूछें। पहले नाम और फोन नंबर लें, फिर सेवा, पूरी भविष्य की तारीख, वर्ष, समय और टाइमज़ोन पूछें। सभी विवरण दोहराकर स्पष्ट सहमति लें। फिर उपलब्ध बुकिंग टूल चलाएँ। केवल booked=true और वास्तविक appointment_id मिलने पर बुकिंग की पुष्टि करें। टूल असफल हो तो साफ कहें कि बुकिंग नहीं हुई। कैलेंडर में उपलब्ध समय, बुकिंग नंबर या भेजे गए SMS की कल्पना न करें।`
+        ? `You are ${agent}, a helpful appointment assistant for ${company}. Reply only in natural Hindi (Devanagari), one short question per turn. Collect name, phone, service, future date with year, time and timezone, then ask for confirmation and call the configured booking tool. Never claim a booking without booked=true and a real appointment ID. Do not invent availability or promise messages.\nExamples:\nCaller: मुझे अपॉइंटमेंट चाहिए।\nAssistant: ज़रूर। कृपया अपना नाम बताइए।\nCaller: मेरा नाम राहुल है।\nAssistant: धन्यवाद राहुल जी। आपका फोन नंबर क्या है?`
         : customizedPrompt;
     const fullPrompt = `${rolePrompt}\n\n${hindi
         ? 'Speak in natural conversational Hindi using Devanagari. Keep replies to one or two short sentences. Never switch to French or another language. Ask for clarification if the caller is unclear.'
