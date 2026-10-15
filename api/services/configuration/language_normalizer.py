@@ -117,6 +117,15 @@ def speech_language_instruction(language: Optional[str]) -> Optional[str]:
     name = SPEECH_LANGUAGE_NAMES.get(code)
     if not name:
         return None
+    if code == "hi":
+        return (
+            "Final spoken-language rule: understand Hindi, Hinglish (Hindi in "
+            "Latin letters), English, and switches between them in one conversation. "
+            "Never ask the caller to use only Hindi or repeat supplied details in "
+            "another language. For speech, respond in Hindi/Hinglish using the selected "
+            "Hindi voice: write Hindi words in Devanagari and preserve natural "
+            "English names, product terms and numbers."
+        )
     return (
         f"Final spoken-language rule (overrides earlier conflicting prompt text): "
         f"respond in {name}. Use its native script where applicable; do not "
