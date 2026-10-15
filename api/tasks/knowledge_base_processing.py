@@ -64,6 +64,11 @@ async def process_knowledge_base_document(
     temp_file_path = None
 
     try:
+        scoped_document = await db_client.get_document_by_id(document_id)
+        if (scoped_document is None or scoped_document.organization_id != organization_id
+                or (scoped_document.custom_metadata or {}).get("s3_key") != s3_key):
+            logger.error("Rejected knowledge base job with mismatched document/workspace/storage key: {}", document_id)
+            return
         await db_client.update_document_status(document_id, "processing")
 
         filename = s3_key.split("/")[-1]

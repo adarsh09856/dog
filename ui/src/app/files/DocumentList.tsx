@@ -1,7 +1,7 @@
 'use client';
 
 import { FileText, Pencil, RefreshCw, Search, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useOrganizationTimezone } from '@/hooks/useOrganizationTimezone';
 import { formatDateTime } from '@/lib/dateTime';
 import logger from '@/lib/logger';
+import { detailFromError } from '@/lib/apiError';
 
 import DocumentEditor, { isEditableDocument } from './DocumentEditor';
 
@@ -30,35 +31,43 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [editingDoc, setEditingDoc] = useState<DocumentResponseSchema | null>(null);
+  const activeRequest = useRef<AbortController | null>(null);
 
   const fetchDocuments = useCallback(async () => {
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     try {
       setIsLoading(true);
       setError(null);
 
       const response = await listDocumentsApiV1KnowledgeBaseDocumentsGet({
+        signal: controller.signal,
         query: {
           limit: 100,
           offset: 0,
         },
       });
 
+      if (controller.signal.aborted) return;
       if (response.error || !response.data) {
-        throw new Error('Failed to fetch documents');
+        throw new Error(detailFromError(response.error, 'Failed to fetch documents'));
       }
 
       setDocuments(response.data.documents);
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : 'Failed to fetch documents');
       logger.error('Error fetching documents:', err);
     } finally {
-      setIsLoading(false);
+      if (!controller.signal.aborted) setIsLoading(false);
     }
   }, []);
 
   // Fetch documents on mount and when refreshTrigger changes
   useEffect(() => {
     fetchDocuments();
+    return () => activeRequest.current?.abort();
   }, [fetchDocuments, refreshTrigger]);
 
   // Poll for documents that are processing
@@ -88,7 +97,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
       });
 
       if (response.error) {
-        throw new Error('Failed to delete document');
+        throw new Error(detailFromError(response.error, 'Failed to delete document'));
       }
 
       toast.success(`Deleted "${filename}"`);
@@ -166,8 +175,9 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
 
   if (error) {
     return (
-      <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
+      <div role="alert" className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
         {error}
+        <Button variant="outline" className="ml-3" onClick={fetchDocuments}>Retry</Button>
       </div>
     );
   }

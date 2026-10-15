@@ -32,14 +32,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { adminApi, PlatformSettings } from "@/lib/kodewavesApi";
+import LocalSttTest from "./LocalSttTest";
 
 const POPULAR_OLLAMA_MODELS = [
-  { value: "qwen2.5:0.5b", label: "Qwen 2.5 0.5B (~350 MB - Ultra Fast CPU)" },
-  { value: "qwen2.5:1.5b", label: "Qwen 2.5 1.5B (~980 MB - Recommended CPU)" },
-  { value: "llama3.2:1b", label: "Llama 3.2 1B (~1.3 GB - Fast Meta Model)" },
-  { value: "llama3.2:3b", label: "Llama 3.2 3B (~2.0 GB - Smart Meta Model)" },
-  { value: "phi4-mini", label: "Microsoft Phi-4 Mini (~2.4 GB - High IQ)" },
-  { value: "mistral:7b", label: "Mistral 7B (~4.5 GB - Advanced)" },
+  { value: "qwen3:1.7b", label: "Qwen 3 1.7B (~1.4 GB — local default)" },
 ];
 
 const POPULAR_PIPER_VOICES = [
@@ -80,7 +76,7 @@ export default function AdminSettingsPage() {
   // Ollama Model Manager state
   const [ollamaModels, setOllamaModels] = useState<any[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
-  const [pullModelName, setPullModelName] = useState("qwen2.5:0.5b");
+  const [pullModelName, setPullModelName] = useState("qwen3:1.7b");
   const [customPullModel, setCustomPullModel] = useState("");
   const [isPulling, setIsPulling] = useState(false);
   const [pullStatusMessage, setPullStatusMessage] = useState<string | null>(null);
@@ -100,13 +96,10 @@ export default function AdminSettingsPage() {
   // Whisper STT Manager state
   const [whisperModels, setWhisperModels] = useState<any[]>([]);
   const [loadingWhisperModels, setLoadingWhisperModels] = useState(false);
-  const [downloadWhisperName, setDownloadWhisperName] = useState("Systran/faster-whisper-base");
+  const [downloadWhisperName, setDownloadWhisperName] = useState("Systran/faster-whisper-small");
   const [isDownloadingWhisper, setIsDownloadingWhisper] = useState(false);
   const [whisperDownloadStatus, setWhisperDownloadStatus] = useState<string | null>(null);
   const [whisperEndpointStatus, setWhisperEndpointStatus] = useState<string>("");
-  const [testingWhisperLang, setTestingWhisperLang] = useState("hi");
-  const [isTestingWhisper, setIsTestingWhisper] = useState(false);
-  const [whisperTestResult, setWhisperTestResult] = useState<any | null>(null);
 
   // Ollama test state
   const [testingOllamaModel, setTestingOllamaModel] = useState<string | null>(null);
@@ -256,19 +249,6 @@ export default function AdminSettingsPage() {
       await fetchWhisperModels();
     } catch (err: any) {
       alert(`Failed to unload model: ${err.message}`);
-    }
-  };
-
-  const handleTestWhisper = async () => {
-    setIsTestingWhisper(true);
-    setWhisperTestResult(null);
-    try {
-      const res = await adminApi.testWhisper(testingWhisperLang);
-      setWhisperTestResult(res);
-    } catch (err: any) {
-      setWhisperTestResult({ success: false, error: err.message || "Test failed" });
-    } finally {
-      setIsTestingWhisper(false);
     }
   };
 
@@ -1036,62 +1016,7 @@ export default function AdminSettingsPage() {
               )}
             </div>
 
-            {/* Test Transcription Section */}
-            <div className="p-4 rounded-xl border border-sky-500/30 bg-sky-500/5 space-y-3">
-              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <Mic className="h-3.5 w-3.5 text-sky-500" />
-                Live STT Audio Verification (Bundled Clips)
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="w-48">
-                  <Select value={testingWhisperLang} onValueChange={setTestingWhisperLang}>
-                    <SelectTrigger className="w-full h-9 text-xs bg-background">
-                      <SelectValue placeholder="Select Language" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="hi">🇮🇳 Hindi Sample (hi_sample.wav)</SelectItem>
-                      <SelectItem value="en">🇺🇸 English Sample (en_sample.wav)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  onClick={handleTestWhisper}
-                  disabled={isTestingWhisper}
-                  variant="outline"
-                  className="shrink-0 h-9 text-xs gap-2"
-                >
-                  {isTestingWhisper ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5 text-sky-500 fill-sky-500" />
-                  )}
-                  Run STT Audio Test
-                </Button>
-              </div>
-
-              {whisperTestResult && (
-                <div
-                  className={`text-xs p-3 rounded-xl border ${
-                    whisperTestResult.success
-                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
-                      : "bg-destructive/10 border-destructive/20 text-destructive"
-                  }`}
-                >
-                  <div className="font-semibold flex items-center gap-2">
-                    {whisperTestResult.success ? "✓ Faster-Whisper Test Passed" : "✕ Faster-Whisper Test Failed"}
-                    {whisperTestResult.latency_ms && <Badge variant="outline">{whisperTestResult.latency_ms}ms</Badge>}
-                    <Badge variant="secondary" className="uppercase text-[10px]">{whisperTestResult.language}</Badge>
-                  </div>
-                  <div className="text-[11px] mt-1 text-foreground">
-                    {whisperTestResult.transcript ? (
-                      <span className="italic">"{whisperTestResult.transcript}"</span>
-                    ) : (
-                      whisperTestResult.error
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            <LocalSttTest models={whisperModels.filter(model => model.installed).map(model => ({id: model.id, name: model.name}))} />
 
             {/* Installed Models List */}
             <div className="space-y-2">

@@ -620,63 +620,20 @@ async def delete_whisper_model(model_id: str, _user=Depends(get_superuser)):
 
 @router.post("/whisper/test")
 async def test_whisper_stt(payload: Optional[Dict[str, Any]] = None, _user=Depends(get_superuser)):
-    """Transcribe bundled Hindi or English audio fixture using local Whisper instance."""
-    lang = (payload or {}).get("language", "hi")
-    fixture_filename = "hi_sample.wav" if lang.startswith("hi") else "en_sample.wav"
-    import os
-    import time
-    import aiohttp
+    """Test the selected local recognizer using a bounded real audio upload."""
+    from api.services.catalog.speech_diagnostics import decode_test_audio, transcribe_test_audio
 
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-    fixture_path = os.path.join(repo_root, "tests", "fixtures", "audio", fixture_filename)
-    if not os.path.exists(fixture_path):
-        fixture_path = os.path.join(repo_root, "api", "tests", "fixtures", "audio", fixture_filename)
-
-    if not os.path.exists(fixture_path):
-        raise HTTPException(status_code=404, detail=f"Audio test fixture '{fixture_filename}' not found.")
-
-    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    whisper_raw = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-    whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_raw))
-    transcribe_url = f"{whisper_url.rstrip('/')}/audio/transcriptions"
-    start_t = time.time()
+    payload = payload or {}
     try:
-        with open(fixture_path, "rb") as f:
-            audio_bytes = f.read()
-
-        data = aiohttp.FormData()
-        data.add_field("file", audio_bytes, filename=fixture_filename, content_type="audio/wav")
-        data.add_field("model", "Systran/faster-whisper-small")
-        data.add_field("language", lang)
-
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
-            async with session.post(transcribe_url, data=data) as resp:
-                latency_ms = int((time.time() - start_t) * 1000)
-                if resp.status == 200:
-                    res_json = await resp.json()
-                    transcript = res_json.get("text", "")
-                    return {
-                        "success": True,
-                        "transcript": transcript,
-                        "latency_ms": latency_ms,
-                        "language": lang,
-                    }
-                else:
-                    err_text = await resp.text()
-                    return {
-                        "success": False,
-                        "latency_ms": latency_ms,
-                        "error": f"Speaches HTTP {resp.status}: {err_text}",
-                        "language": lang,
-                    }
-    except Exception as e:
-        latency_ms = int((time.time() - start_t) * 1000)
-        return {
-            "success": False,
-            "latency_ms": latency_ms,
-            "error": str(e),
-            "language": lang,
-        }
+        audio = decode_test_audio(payload.get("audio_base64"))
+        language = payload.get("language") or "auto"
+        model = payload.get("model") or "Systran/faster-whisper-small"
+        local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+        endpoint = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+        endpoint = whisper_api_base(normalize_local_ai_endpoint(endpoint))
+        return await transcribe_test_audio(endpoint, audio, model, language)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{key}")

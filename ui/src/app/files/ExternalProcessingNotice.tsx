@@ -9,7 +9,7 @@ export default function ExternalProcessingNotice() {
       <div className="text-xs text-muted-foreground">
         <p className="font-medium text-foreground">Sovereign Knowledge Base</p>
         <p className="mt-1">
-          Documents uploaded here are processed and converted into vector embeddings for retrieval-augmented voice agents. Extracted text and embeddings are stored directly in your local PostgreSQL database.
+          Uploads are saved in the configured file storage. Text extraction and embedding use the configured services, which can be local or external. Full Document retrieval provides the complete text; Chunked retrieval searches relevant sections.
         </p>
       </div>
     </div>

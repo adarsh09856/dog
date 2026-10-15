@@ -95,6 +95,9 @@ async def get_upload_url(
     """
 
     try:
+        if (not request.filename.strip() or request.filename in (".", "..")
+                or any(char in request.filename for char in ("/", "\\", "\x00"))):
+            raise HTTPException(status_code=400, detail="Use a filename without directory paths")
         # Generate unique document UUID for S3 organization
         document_uuid = str(uuid.uuid4())
 
@@ -125,6 +128,8 @@ async def get_upload_url(
             s3_key=s3_key,
         )
 
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error(f"Error generating upload URL: {exc}")
         raise HTTPException(
@@ -158,6 +163,17 @@ async def process_document(
     """
 
     try:
+        try:
+            upload_uuid = str(uuid.UUID(request.document_uuid))
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=400, detail="Invalid upload identifier")
+        expected_prefix = f"knowledge_base/{user.selected_organization_id}/{upload_uuid}/"
+        filename = request.s3_key.removeprefix(expected_prefix)
+        if (not request.s3_key.startswith(expected_prefix) or not filename.strip()
+                or filename in (".", "..") or any(char in filename for char in ("/", "\\", "\x00"))):
+            raise HTTPException(status_code=404, detail="Upload not found in this workspace")
+        if request.retrieval_mode not in ("full_document", "chunked"):
+            raise HTTPException(status_code=400, detail="Choose Full Document or Chunked retrieval")
         # Extract filename from s3_key
         filename = request.s3_key.split("/")[-1]
 
@@ -175,13 +191,19 @@ async def process_document(
         )
 
         # Enqueue background task for processing
-        await enqueue_document_processing(
-            document_id=document.id,
-            s3_key=request.s3_key,
-            organization_id=user.selected_organization_id,
-            created_by_provider_id=str(user.provider_id),
-            retrieval_mode=request.retrieval_mode,
-        )
+        try:
+            await enqueue_document_processing(
+                document_id=document.id,
+                s3_key=request.s3_key,
+                organization_id=user.selected_organization_id,
+                created_by_provider_id=str(user.provider_id),
+                retrieval_mode=request.retrieval_mode,
+            )
+        except Exception:
+            await db_client.update_document_status(
+                document.id, "failed", error_message="Upload saved, but processing could not start."
+            )
+            raise HTTPException(status_code=503, detail="Upload saved, but processing could not start")
 
         logger.info(
             f"Created document {request.document_uuid} (id={document.id}) and enqueued processing "

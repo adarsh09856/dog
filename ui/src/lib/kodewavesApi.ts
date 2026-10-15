@@ -460,10 +460,10 @@ export const adminApi = {
     apiFetch<{ success: boolean; message: string }>(`/admin/settings/whisper/models/${encodeURIComponent(modelId)}`, {
       method: 'DELETE',
     }),
-  testWhisper: (language?: string) =>
+  testWhisper: (language: string, audioBase64: string, model: string) =>
     apiFetch<{ success: boolean; transcript?: string; latency_ms: number; error?: string; language: string }>('/admin/settings/whisper/test', {
       method: 'POST',
-      body: JSON.stringify({ language: language || 'hi' }),
+      body: JSON.stringify({ language, audio_base64: audioBase64, model }),
     }),
 
   // Audit Logs
