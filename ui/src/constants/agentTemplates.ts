@@ -76,10 +76,10 @@ You are an efficient, friendly appointment booking coordinator for {{company_nam
 ## Booking Step-by-Step Flow
 1. Greet the caller and verify their full name and callback phone number.
 2. Ask what service or topic they wish to schedule an appointment for.
-3. Propose two specific upcoming time options (e.g., "Would Tuesday at 10:00 AM or Thursday at 2:00 PM work better for you?").
+3. Ask for the caller's preferred future date, time, year and timezone. Only offer available slots returned by a configured calendar tool.
 4. If neither works, ask what day of the week and time of day suits them best.
 5. Once a time is selected, clearly read back the date, time, and service to confirm accuracy.
-6. Let them know a confirmation SMS/email will be sent, and wish them a wonderful day.
+6. After explicit caller confirmation, call the configured booking tool. Only confirm the reservation after it returns booked=true and an appointment ID. If it fails, explain that the appointment was not saved. Only promise SMS/email when a configured action actually sends it.
 
 ## Rules
 - Keep turns short and conversational (maximum 2-3 sentences per turn).
@@ -333,6 +333,7 @@ export function generateTemplateWorkflowDefinition(
     options?: {
         companyName?: string;
         agentName?: string;
+        language?: 'en' | 'hi';
     }
 ) {
     const company = options?.companyName?.trim() || 'our company';
@@ -347,9 +348,20 @@ export function generateTemplateWorkflowDefinition(
         .replace(/\{\{agent_name\}\}/g, agent);
 
     // Build the complete startCall node prompt including the opening line instruction
-    const fullPrompt = `${customizedPrompt}\n\n### Greeting / First Message\nWhen answering or starting the call, begin by greeting the user with:\n"${customizedFirstMessage}"`;
+    const hindi = options?.language === 'hi';
+    const greeting = hindi
+        ? `नमस्ते, मैं ${agent} हूँ। बताइए, मैं आपकी कैसे मदद कर सकती हूँ?`
+        : customizedFirstMessage;
+    const rolePrompt = hindi && template.id === 'appointment-booking'
+        ? `आप ${company} की विनम्र अपॉइंटमेंट सहायक ${agent} हैं। एक बार में एक छोटा प्रश्न पूछें। पहले नाम और फोन नंबर लें, फिर सेवा, पूरी भविष्य की तारीख, वर्ष, समय और टाइमज़ोन पूछें। सभी विवरण दोहराकर स्पष्ट सहमति लें। फिर उपलब्ध बुकिंग टूल चलाएँ। केवल booked=true और वास्तविक appointment_id मिलने पर बुकिंग की पुष्टि करें। टूल असफल हो तो साफ कहें कि बुकिंग नहीं हुई। कैलेंडर में उपलब्ध समय, बुकिंग नंबर या भेजे गए SMS की कल्पना न करें।`
+        : customizedPrompt;
+    const fullPrompt = `${rolePrompt}\n\n${hindi
+        ? 'Speak in natural conversational Hindi using Devanagari. Keep replies to one or two short sentences. Never switch to French or another language. Ask for clarification if the caller is unclear.'
+        : 'Speak naturally in English. Keep replies to one or two short sentences.'}\nOnly report actions as completed after their configured tools return success. Never invent calendar availability, appointment IDs, messages or transfers.`;
 
     return {
+        template_id: template.id,
+        template_language: options?.language || 'en',
         nodes: [
             {
                 id: '1',
@@ -358,7 +370,9 @@ export function generateTemplateWorkflowDefinition(
                 data: {
                     name: 'start call',
                     prompt: fullPrompt,
-                    allow_interrupt: false,
+                    greeting_type: 'text',
+                    greeting,
+                    allow_interrupt: true,
                     invalid: false,
                     validationMessage: null,
                     add_global_prompt: false,
@@ -371,8 +385,27 @@ export function generateTemplateWorkflowDefinition(
                     dragging: false,
                 },
             },
+            ...(template.id === 'blank-canvas' ? [] : [
+                {
+                    id: '2', type: 'agentNode', position: { x: 175, y: 300 },
+                    data: { name: 'Assist caller', prompt: fullPrompt, allow_interrupt: true,
+                        add_global_prompt: false, extraction_enabled: false },
+                },
+                {
+                    id: '3', type: 'endCall', position: { x: 175, y: 540 },
+                    data: { name: 'Closing', prompt: hindi
+                        ? 'हिंदी में संक्षेप में धन्यवाद कहें और कॉल समाप्त करें। किसी अधूरे काम के पूरा होने का दावा न करें।'
+                        : 'Thank the caller briefly and end the call. Do not claim unfinished actions succeeded.',
+                        is_end: true, allow_interrupt: true, add_global_prompt: false },
+                },
+            ]),
         ],
-        edges: [],
-        viewport: { x: 808, y: 269, zoom: 0.75 },
+        edges: template.id === 'blank-canvas' ? [] : [
+            { id: 'template-assist', source: '1', target: '2',
+                data: { label: 'assist_caller', condition: 'The caller has replied to the greeting and described what they need.' } },
+            { id: 'template-finish', source: '2', target: '3',
+                data: { label: 'finish_call', condition: 'The caller explicitly says they are finished or wants to end the call. Any requested action must have returned its actual result.' } },
+        ],
+        viewport: { x: 0, y: 0, zoom: 0.8 },
     };
 }

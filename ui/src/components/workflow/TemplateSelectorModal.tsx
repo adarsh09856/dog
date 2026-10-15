@@ -154,6 +154,7 @@ export function TemplateSelectorModal({
     const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
     const [customAgentName, setCustomAgentName] = useState('');
     const [customCompanyName, setCustomCompanyName] = useState('');
+    const [templateLanguage, setTemplateLanguage] = useState<'en' | 'hi'>('en');
     const [isDeploying, setIsDeploying] = useState(false);
 
     const filteredTemplates = useMemo(() => {
@@ -192,6 +193,7 @@ export function TemplateSelectorModal({
             const workflowDefinition = generateTemplateWorkflowDefinition(selectedTemplate, {
                 agentName: finalAgentName,
                 companyName: finalCompanyName,
+                language: templateLanguage,
             });
 
             const response = await createWorkflowApiV1WorkflowCreateDefinitionPost({
@@ -311,6 +313,16 @@ export function TemplateSelectorModal({
                                     </div>
 
                                     <div className="space-y-3 pt-2">
+                                        <div>
+                                            <Label htmlFor="modal-template-language">Template language</Label>
+                                            <select id="modal-template-language" value={templateLanguage}
+                                                onChange={e => setTemplateLanguage(e.target.value as 'en' | 'hi')}
+                                                className="mt-1 flex h-9 w-full rounded-md border bg-background px-3 text-sm">
+                                                <option value="en">English</option>
+                                                <option value="hi">हिंदी (Hindi)</option>
+                                            </select>
+                                            <p className="mt-1 text-xs text-muted-foreground">Use a matching speech language and voice in Models.</p>
+                                        </div>
                                         <div>
                                             <Label htmlFor="custom-agent-name" className="text-xs font-semibold">
                                                 Agent Name

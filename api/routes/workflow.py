@@ -578,6 +578,27 @@ async def create_workflow(
     # Auto-mint trigger_path for any trigger node that didn't ship one so
     # clients don't need to generate UUIDs themselves.
     workflow_definition = ensure_trigger_paths(request.workflow_definition)
+    template_id = workflow_definition.get("template_id")
+    template_language = workflow_definition.get("template_language")
+    if isinstance(template_id, str) and template_id and template_language in ("en", "hi"):
+        from api.services.configuration.ai_model_configuration import get_effective_ai_model_configuration_for_workflow
+        from api.services.configuration.language_normalizer import resolve_agent_speech_language
+
+        selected = await get_effective_ai_model_configuration_for_workflow(
+            organization_id=user.selected_organization_id, workflow_configurations=None,
+        )
+        speech_language = resolve_agent_speech_language(selected)
+        if speech_language and speech_language.split("-")[0] not in (template_language, "multi", "auto", "caller"):
+            raise HTTPException(
+                status_code=400,
+                detail="The template language does not match your selected speech voice. Choose a matching voice and language in Models, then create the agent.",
+            )
+    if isinstance(template_id, str) and template_id in {
+        "appointment-booking", "healthcare-clinic", "restaurant-reservation",
+    }:
+        workflow_definition = await _attach_generated_booking_tool(
+            workflow_definition, user, "appointment booking",
+        )
     trigger_path_issues = validate_trigger_paths(workflow_definition)
     if trigger_path_issues:
         raise _trigger_path_validation_http_exception(trigger_path_issues)

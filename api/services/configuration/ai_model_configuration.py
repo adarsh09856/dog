@@ -455,6 +455,19 @@ def _convert_any_kodewaves_legacy_configuration(
         speed = 1.0
     if not KODEWAVES_SPEED_MIN <= speed <= KODEWAVES_SPEED_MAX:
         speed = 1.0
+    def selected_model(service):
+        model = getattr(service, "model", None)
+        return model if model not in (None, "", "default", "auto") else None
+
+    def selected_engine(layer):
+        service = getattr(configuration, layer, None)
+        provider = getattr(_provider(service), "value", _provider(service))
+        source = ((configuration.resolution_info or {}).get(layer) or {}).get("source")
+        key = getattr(service, "api_key", None)
+        if source == "local" or provider in ("speaches", "piper", "whisper", "ollama") or key in ("local-cpu-token", "sovereign-local-cpu"):
+            return "local_cpu"
+        return getattr(service, "engine_type", None)
+
     return OrganizationAIModelConfigurationV2(
         mode="kodewaves",
         kodewaves=KodewavesManagedAIModelConfiguration(
@@ -464,6 +477,15 @@ def _convert_any_kodewaves_legacy_configuration(
             speed=speed,
             language=getattr(configuration.stt, "language", KODEWAVES_DEFAULT_LANGUAGE)
             or KODEWAVES_DEFAULT_LANGUAGE,
+            llm_model=selected_model(configuration.llm),
+            stt_model=selected_model(configuration.stt),
+            tts_model=selected_model(configuration.tts),
+            llm_engine_type=selected_engine("llm"),
+            stt_engine_type=selected_engine("stt"),
+            tts_engine_type=selected_engine("tts"),
+            is_realtime=configuration.is_realtime,
+            realtime_provider=getattr(_provider(configuration.realtime), "value", _provider(configuration.realtime)),
+            realtime_model=selected_model(configuration.realtime),
         ),
     )
 
