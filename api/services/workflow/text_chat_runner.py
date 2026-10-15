@@ -838,10 +838,15 @@ async def execute_text_chat_pending_turn(
         if response_window.outputs
         else None
     )
-    verified_reply = guard_booking_reply(assistant_text, capture_processor.events)
+    from api.services.configuration.language_normalizer import resolve_agent_speech_language
+
+    verified_reply = guard_booking_reply(
+        assistant_text, capture_processor.events,
+        language=resolve_agent_speech_language(user_config),
+    )
     if verified_reply != assistant_text:
-        logger.warning(
-            "Suppressed unsupported booking success claim for workflow_run_id={}",
+        logger.info(
+            "Reconciled booking reply with calendar action result for workflow_run_id={}",
             workflow_run_id,
         )
         assistant_text = verified_reply
