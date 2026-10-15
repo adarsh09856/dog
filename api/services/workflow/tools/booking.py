@@ -51,6 +51,19 @@ def caller_confirmed_booking(messages: list) -> bool:
         return False
     if re.search(r"\b(?:I|we)\s+(?:explicitly\s+)?confirm\b|\bmain\s+confirm\s+kart[ai]\s+(?:hu|hun|hoon)\b|पुष्टि\s+कर(?:ता|ती|ते)|पक्का\s+कर", text, re.I):
         return True
+    # A caller may repeat the details while confirming in Hinglish. The
+    # short-answer fullmatch below intentionally rejects extra words, so keep
+    # this explicit affirmative + imperative case separate.
+    if (
+        re.search(r"\+\d{10,15}(?!\d)", text)
+        and re.search(r"\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b", text)
+        and re.search(
+        r"\b(?:haan|han|yes|ji)\b[\s\S]*\b(?:confirm\s+hai|(?:confirm|book)\s+kar\s+(?:do|dijiye|dena))\b",
+        text,
+        re.I,
+        )
+    ):
+        return True
     if not re.fullmatch(
         r"\s*(?:(?:yes|ok|okay|haan|han|ha|ji|हाँ|हां|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|haan|han|बुक\s+कर\s+दो))?"
         r"|correct|that's right|go ahead|theek hai|ठीक है|(?:confirm|book)\s+kar\s+(?:do|dijiye))[.!।\s]*",

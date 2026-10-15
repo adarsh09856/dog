@@ -15,6 +15,17 @@ _WHEN = re.compile(
     re.IGNORECASE,
 )
 _OFFSET = re.compile(r"UTC\s*([+-])(\d{1,2}):?(\d{2})\b", re.IGNORECASE)
+_IST = re.compile(r"\bIST\b|\bAsia/Kolkata\b", re.IGNORECASE)
+_HINGLISH_NAME = re.compile(
+    r"\bmera\s+naam\s+([A-Za-z][A-Za-z .'-]{1,98}?)(?=,\s*(?:phone|number)|\s+(?:phone|number)\b)",
+    re.IGNORECASE,
+)
+_HINGLISH_WHEN = re.compile(
+    r"\b(\d{1,2})\s+"
+    r"(January|February|March|April|May|June|July|August|September|October|November|December)\s+"
+    r"(\d{4})\s*,?\s*(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\b",
+    re.IGNORECASE,
+)
 _HINDI_NAME = re.compile(
     r"(?:मेरा नाम\s+([^,।\d]+?)\s+है|मैं\s+([^,।\d]+?)\s+(?:अपॉइंटमेंट|बुकिंग))"
 )
@@ -39,14 +50,22 @@ def confirmed_booking_arguments(message: str) -> dict | None:
     when = _WHEN.search(message)
     hindi_name = _HINDI_NAME.search(message)
     hindi_when = _HINDI_WHEN.search(message)
+    hinglish_name = _HINGLISH_NAME.search(message)
+    hinglish_when = _HINGLISH_WHEN.search(message)
     offset = _OFFSET.search(message)
-    if not all((phone, offset)) or not ((name and when) or (hindi_name and hindi_when)):
+    ist = _IST.search(message)
+    if not phone or not (offset or ist) or not (
+        (name and when) or (hindi_name and hindi_when) or (hinglish_name and hinglish_when)
+    ):
         return None
-    sign, hours, minutes = offset.groups()
-    hours, minutes = int(hours), int(minutes)
-    if hours > 14 or minutes > 59 or (hours == 14 and minutes != 0):
-        return None
-    tz = timezone(timedelta(minutes=(1 if sign == "+" else -1) * (hours * 60 + minutes)))
+    if offset:
+        sign, hours, minutes = offset.groups()
+        hours, minutes = int(hours), int(minutes)
+        if hours > 14 or minutes > 59 or (hours == 14 and minutes != 0):
+            return None
+        tz = timezone(timedelta(minutes=(1 if sign == "+" else -1) * (hours * 60 + minutes)))
+    else:
+        tz = timezone(timedelta(hours=5, minutes=30))
     try:
         if name and when:
             day, month, year, hour, minute, meridian = when.groups()
@@ -55,7 +74,7 @@ def confirmed_booking_arguments(message: str) -> dict | None:
                 "%d %B %Y %I:%M %p",
             ).replace(tzinfo=tz)
             customer_name = name.group(1).strip(" .,;:")
-        else:
+        elif hindi_name and hindi_when:
             day, month, year, period, hour, minute = hindi_when.groups()
             hour = int(hour)
             if not 1 <= hour <= 12 or (period == "रात" and hour < 12):
@@ -63,6 +82,13 @@ def confirmed_booking_arguments(message: str) -> dict | None:
             hour = hour % 12 + (12 if period in ("दोपहर", "शाम") else 0)
             parsed = datetime(int(year), _HINDI_MONTHS.index(month) + 1, int(day), hour, int(minute), tzinfo=tz)
             customer_name = next(part for part in hindi_name.groups() if part).strip()
+        else:
+            day, month, year, hour, minute, meridian = hinglish_when.groups()
+            parsed = datetime.strptime(
+                f"{day} {month} {year} {hour}:{minute or '00'} {meridian.upper()}",
+                "%d %B %Y %I:%M %p",
+            ).replace(tzinfo=tz)
+            customer_name = hinglish_name.group(1).strip(" .,;:")
     except ValueError:
         return None
     if len(customer_name) < 2 or customer_name.startswith("["):
