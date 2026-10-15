@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useUserConfig } from "@/context/UserConfigContext";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 
@@ -62,7 +63,7 @@ function validateAddress(rawAddress: string, countryCode: string): string | null
   const stripped = trimmed.replace(ADDRESS_FORMAT_STRIP_RE, "");
   if (ADDRESS_E164_RE.test(stripped)) return null;
   if (ADDRESS_BARE_DIGITS_RE.test(stripped) && !countryCode.trim()) {
-    return "PSTN addresses without a leading '+' need a Country (ISO-2) hint, or include the country code in the address (e.g. +14155551234).";
+    return "PSTN addresses without a leading '+' need a Country (ISO-2) hint, or include the country code in the address (e.g. +919876543210).";
   }
   return null;
 }
@@ -77,6 +78,8 @@ export function PhoneNumberDialog({
   onSaved,
 }: PhoneNumberDialogProps) {
   const { user, getAccessToken } = useAuth();
+  const { organizationPreferences } = useUserConfig();
+  const workspaceRegion = organizationPreferences?.region || "IN";
   const isEdit = !!existing;
 
   const [address, setAddress] = useState("");
@@ -94,7 +97,7 @@ export function PhoneNumberDialog({
   useEffect(() => {
     if (!open) return;
     setAddress(existing?.address ?? "");
-    setCountryCode(existing?.country_code ?? "");
+    setCountryCode(existing?.country_code ?? workspaceRegion);
     setLabel(existing?.label ?? "");
     setIsActive(existing?.is_active ?? true);
     setIsDefaultCallerId(existing?.is_default_caller_id ?? false);
@@ -106,7 +109,7 @@ export function PhoneNumberDialog({
       : (defaultTrunkId ?? null);
     setTrunkId(initialTrunkId ? String(initialTrunkId) : NO_TRUNK);
     setAddressTouched(false);
-  }, [open, existing, defaultTrunkId]);
+  }, [open, existing, defaultTrunkId, workspaceRegion]);
 
   // Only validate the address on create — edits keep the immutable address.
   const addressError = isEdit ? null : validateAddress(address, countryCode);
@@ -218,7 +221,7 @@ export function PhoneNumberDialog({
             <Label htmlFor="pn-address">Address</Label>
             <Input
               id="pn-address"
-              placeholder="+19781899185, sip:101@asterisk.local, or 101"
+              placeholder="+919876543210, sip:101@asterisk.local, or 101"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               onBlur={() => setAddressTouched(true)}
@@ -246,7 +249,7 @@ export function PhoneNumberDialog({
               <Label htmlFor="pn-country">Country (ISO-2)</Label>
               <Input
                 id="pn-country"
-                placeholder="US"
+                placeholder="IN"
                 maxLength={2}
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value.toUpperCase())}
@@ -256,7 +259,7 @@ export function PhoneNumberDialog({
               <Label htmlFor="pn-label">Label</Label>
               <Input
                 id="pn-label"
-                placeholder="e.g. Boston caller ID"
+                placeholder="e.g. Mumbai caller ID"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
               />
