@@ -1,12 +1,13 @@
 """ARQ background task for processing knowledge base documents.
 
-Document conversion and chunking live in the Model Proxy Service (MPS);
-this task downloads the file from S3, calls MPS, then handles the embedding
-and DB writes locally.
+Plain-text full documents are read locally. Rich-document conversion and
+chunking use the configured Model Proxy Service (MPS); embeddings and DB
+writes follow the workspace configuration.
 """
 
 import os
 import tempfile
+import aiofiles
 
 from loguru import logger
 
@@ -140,6 +141,21 @@ async def process_knowledge_base_document(
             file_hash=file_hash,
             mime_type=mime_type,
         )
+
+        if retrieval_mode == "full_document" and file_extension.lower() in (".txt", ".md", ".json"):
+            try:
+                async with aiofiles.open(temp_file_path, "r", encoding="utf-8-sig") as source:
+                    full_text = await source.read()
+            except UnicodeDecodeError as exc:
+                raise ValueError("Save this text document as UTF-8 before uploading") from exc
+            if not full_text.strip():
+                raise ValueError("The document contains no readable text")
+            await db_client.update_document_full_text(document_id, full_text)
+            await db_client.update_document_status(
+                document_id, "completed", total_chunks=0,
+                docling_metadata={"processor": "local_text", "mime_type": mime_type},
+            )
+            return
 
         embeddings_provider = None
         embeddings_api_key = None
