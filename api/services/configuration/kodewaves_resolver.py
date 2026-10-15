@@ -444,14 +444,17 @@ async def apply_kodewaves_sovereign_resolution(
                 metadata.stt = resolved
                 is_using_master_keys = True
             elif engine_enabled and has_local_access:
-                model_to_use = "Systran/faster-whisper-tiny"
+                # Match the warm, multilingual CPU model in the local stack.
+                # Tiny defaults to English in several older configurations and
+                # is noticeably less reliable on Hindi/Hinglish code switching.
+                model_to_use = "Systran/faster-whisper-small"
                 effective.stt = SpeachesSTTConfiguration(
                     api_key="local-cpu-token",
                     model=model_to_use,
-                    language="en",
+                    language="multi",
                     base_url=whisper_v1_url,
                 )
-                metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language="en")
+                metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language="multi")
             else:
                 raise HTTPException(
                     status_code=400,
@@ -480,7 +483,7 @@ async def apply_kodewaves_sovereign_resolution(
                         status_code=403,
                         detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
-                model_to_use = model if model and model != "default" else "Systran/faster-whisper-tiny"
+                model_to_use = model if model and model != "default" else "Systran/faster-whisper-small"
                 effective.stt = SpeachesSTTConfiguration(
                     api_key="local-cpu-token",
                     model=model_to_use,
@@ -501,7 +504,7 @@ async def apply_kodewaves_sovereign_resolution(
                         metadata.stt = resolved
                         is_using_master_keys = True
                     elif engine_enabled and has_local_access:
-                        model_to_use = model if model and model != "default" else "Systran/faster-whisper-tiny"
+                        model_to_use = model if model and model != "default" else "Systran/faster-whisper-small"
                         effective.stt = SpeachesSTTConfiguration(
                             api_key="local-cpu-token",
                             model=model_to_use,

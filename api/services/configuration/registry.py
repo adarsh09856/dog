@@ -2158,6 +2158,7 @@ class SpeechmaticsSTTConfiguration(BaseSTTConfiguration):
 SPEACHES_STT_MODELS = [
     "Systran/faster-whisper-tiny",
     "Systran/faster-whisper-base",
+    "Systran/faster-whisper-small",
     "Systran/faster-distil-whisper-small.en",
     "Systran/faster-whisper-large-v3",
 ]
@@ -2169,8 +2170,8 @@ class SpeachesSTTConfiguration(BaseSTTConfiguration):
     model_config = SPEACHES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
     model: str = Field(
-        default="Systran/faster-whisper-tiny",
-        description="Lightweight Whisper model identifier as served by your STT endpoint.",
+        default="Systran/faster-whisper-small",
+        description="Multilingual Whisper model identifier; small is the local CPU accuracy/latency default.",
         json_schema_extra={
             "examples": SPEACHES_STT_MODELS,
             "allow_custom_input": True,

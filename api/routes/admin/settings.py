@@ -640,7 +640,7 @@ async def test_whisper_stt(payload: Optional[Dict[str, Any]] = None, _user=Depen
 
         data = aiohttp.FormData()
         data.add_field("file", audio_bytes, filename=fixture_filename, content_type="audio/wav")
-        data.add_field("model", "Systran/faster-whisper-tiny")
+        data.add_field("model", "Systran/faster-whisper-small")
         data.add_field("language", lang)
 
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:

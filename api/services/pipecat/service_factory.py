@@ -540,7 +540,7 @@ def create_stt_service(
         if stt_api_key == "sovereign-local-cpu":
             whisper_url = os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1").rstrip("/")
             whisper_v1 = whisper_url if whisper_url.endswith("/v1") else f"{whisper_url}/v1"
-            stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-tiny"
+            stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-small"
             return SpeachesSTTService(
                 base_url=whisper_v1,
                 api_key="local-cpu-token",
@@ -627,7 +627,7 @@ def create_stt_service(
             base_url=base_url,
             api_key=getattr(user_config.stt, "api_key", None) or "none",
             settings=SpeachesSTTSettings(
-                model=user_config.stt.model or "Systran/faster-whisper-tiny",
+                model=user_config.stt.model or "Systran/faster-whisper-small",
                 language=lang_obj,
                 prompt=_speaches_transcription_prompt(lang_str, keyterms),
             ),
