@@ -95,6 +95,10 @@ for attempt in $(seq 1 60); do
     sleep 5
 done
 # No host-wide pruning, environment rewriting or unrelated service cleanup.
+if command -v python3 >/dev/null 2>&1; then
+    python3 scripts/prune_ui_build_cache.py --apply --max-gb "${KODEWAVES_UI_BUILD_CACHE_GB:-8}" ||
+        echo "Warning: application build-cache cleanup failed; deployment remains healthy." >&2
+fi
 
 # 6. Service health verification
 echo -e "${BLUE}[6/6] Verifying running services and API health...${NC}"

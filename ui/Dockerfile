@@ -43,8 +43,9 @@ ENV BACKEND_URL="http://api:8000"
 # Build the application with standalone mode
 # Increase Node.js heap size to prevent out-of-memory errors during build
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN npm run build && \
-    rm -rf /tmp/* /root/.npm /root/.next/cache
+# The marker lets deployment trim only this application's obsolete build snapshots.
+RUN KODEWAVES_UI_BUILD=1 npm run build && \
+    rm -rf /tmp/* /root/.npm /root/.next/cache /app/.next/cache
 
 # Stage 3: Runner (production image)
 FROM node:22-alpine AS runner
