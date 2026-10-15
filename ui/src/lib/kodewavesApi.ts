@@ -139,8 +139,8 @@ export interface MonitoringStats {
   active_calls: number;
   completed_calls: number;
   total_minutes: number;
-  total_revenue_inr: number;
-  gross_margin_percent: number;
+  total_revenue_inr: number | null;
+  gross_margin_percent: number | null;
   system_health: 'healthy' | 'degraded' | 'critical';
   total_users?: number;
   total_organizations?: number;

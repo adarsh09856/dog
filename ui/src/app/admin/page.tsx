@@ -143,15 +143,15 @@ export default function AdminDashboardPage() {
 
         <Card className="border-border/60">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Estimated Platform Margin</CardTitle>
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Configured Model Margin</CardTitle>
             <TrendingUp className="h-4 w-4 text-indigo-500" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold text-indigo-500">
-              {stats?.gross_margin_percent?.toFixed(1) ?? "65.0"}%
+              {stats?.gross_margin_percent?.toFixed(1) ?? "—"}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Retail markup over wholesale provider cost
+              Ratio from active catalog unit prices; excludes usage and operating costs
             </p>
           </CardContent>
         </Card>
@@ -163,10 +163,10 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold text-amber-500">
-              ₹{stats?.total_revenue_inr?.toLocaleString() ?? "0"}
+              {stats?.total_revenue_inr == null ? "Unavailable" : `₹${stats.total_revenue_inr.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              From paid minute credits & subscriptions
+              Payment amount reporting is not configured
             </p>
           </CardContent>
         </Card>

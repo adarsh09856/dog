@@ -89,6 +89,10 @@ class CallConcurrencyService:
         fleet — see get_fleet_concurrent_count)."""
         return await rate_limiter.get_fleet_concurrent_count()
 
+    async def is_workflow_run_active(self, workflow_run_id: int) -> bool:
+        """Whether a run still has a live fleet slot for admin monitoring."""
+        return await rate_limiter.is_workflow_run_active(workflow_run_id)
+
     async def get_org_active_calls(self, organization_id: int) -> int:
         """Occupied org slots across workers, with storage failures propagated.
 

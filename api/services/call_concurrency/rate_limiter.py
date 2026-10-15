@@ -313,6 +313,20 @@ class RateLimiter:
         stale_cutoff = time.time() - self.stale_call_timeout
         return await redis_client.zcount(FLEET_CONCURRENT_KEY, stale_cutoff, "+inf")
 
+    async def is_workflow_run_active(self, workflow_run_id: int) -> bool:
+        """Check that a run still owns a non-stale fleet call slot."""
+        redis_client = await self._get_redis()
+        mapping = await redis_client.hgetall(
+            f"workflow_slot_mapping:{workflow_run_id}"
+        )
+        if not mapping or "org_id" not in mapping or "slot_id" not in mapping:
+            return False
+        score = await redis_client.zscore(
+            FLEET_CONCURRENT_KEY,
+            f"{mapping['org_id']}:{mapping['slot_id']}",
+        )
+        return score is not None and score >= time.time() - self.stale_call_timeout
+
     async def store_workflow_slot_mapping(
         self, workflow_run_id: int, organization_id: int, slot_id: str
     ) -> bool:

@@ -1,7 +1,7 @@
 import os
 import shutil
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,13 +11,12 @@ from sqlalchemy import desc, func, select
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import (
     AIModelCatalogModel,
-    OrganizationWalletModel,
     PlatformMasterCredentialModel,
-    WalletLedgerModel,
 )
 from api.db.models import OrganizationModel, UserModel, WorkflowModel, WorkflowRunModel
 from api.enums import WorkflowRunState
 from api.services.auth.depends import get_superuser
+from api.services.call_concurrency import call_concurrency
 
 router = APIRouter(prefix="/monitoring", tags=["admin-monitoring"])
 
@@ -27,8 +26,8 @@ class MonitoringStatsResponse(BaseModel):
     active_calls: int
     completed_calls: int
     total_minutes: float
-    total_revenue_inr: float
-    gross_margin_percent: float
+    total_revenue_inr: Optional[float] = None
+    gross_margin_percent: Optional[float] = None
     system_health: str
     total_users: int = 0
     total_organizations: int = 0
@@ -73,11 +72,16 @@ class KillCallRequest(BaseModel):
 async def get_monitoring_stats(_user=Depends(get_superuser)):
     """Fetch 100% real aggregated platform metrics directly from PostgreSQL."""
     total_calls = 0
-    active_calls = 0
+    # Workflow runs can remain INITIALIZED after a failed setup or a process
+    # restart. Redis call slots are the fleet-wide live concurrency source.
+    try:
+        active_calls = await call_concurrency.get_fleet_active_calls()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Live call count unavailable") from exc
     completed_calls = 0
     total_minutes = 0.0
-    total_revenue_inr = 0.0
-    gross_margin_percent = 65.0
+    total_revenue_inr = None
+    gross_margin_percent = None
     system_health = "healthy"
 
     try:
@@ -89,21 +93,7 @@ async def get_monitoring_stats(_user=Depends(get_superuser)):
             except Exception:
                 total_calls = 0
 
-            # 2. Active Calls Count
-            try:
-                active_states = [
-                    WorkflowRunState.INITIALIZED.value,
-                    WorkflowRunState.RUNNING.value,
-                ]
-                active_calls_stmt = select(func.count(WorkflowRunModel.id)).where(
-                    WorkflowRunModel.state.in_(active_states),
-                    WorkflowRunModel.is_completed == False,
-                )
-                active_calls = (await session.execute(active_calls_stmt)).scalar() or 0
-            except Exception:
-                active_calls = 0
-
-            # 3. Completed Calls Count
+            # 2. Completed Calls Count
             try:
                 completed_calls_stmt = select(func.count(WorkflowRunModel.id)).where(
                     WorkflowRunModel.is_completed == True
@@ -134,26 +124,23 @@ async def get_monitoring_stats(_user=Depends(get_superuser)):
             except Exception:
                 total_minutes = 0.0
 
-            # 5. Total Revenue INR from WalletLedger (paid credit purchases)
-            try:
-                ledger_stmt = select(func.sum(WalletLedgerModel.amount_minutes)).where(
-                    WalletLedgerModel.amount_minutes > 0,
-                    WalletLedgerModel.reason.in_(["credit_purchase", "plan_subscription"]),
-                )
-                purchased_mins = (await session.execute(ledger_stmt)).scalar() or 0
-                total_revenue_inr = float(purchased_mins * 15.0)
-            except Exception:
-                total_revenue_inr = 0.0
+            # Wallet credits record minutes, not verified payment currency or
+            # amount. Revenue is unavailable until payment settlement is joined.
 
-            # 6. Gross Margin % based on AI Model Catalog markup
+            # 6. Configured model price margin; this is not realized profit.
             try:
-                margin_stmt = select(func.avg(AIModelCatalogModel.retail_price_cents_per_unit - AIModelCatalogModel.base_cost_cents_per_unit)).where(
-                    AIModelCatalogModel.is_active == True
+                margin_stmt = select(
+                    func.sum(AIModelCatalogModel.retail_price_cents_per_unit - AIModelCatalogModel.base_cost_cents_per_unit),
+                    func.sum(AIModelCatalogModel.retail_price_cents_per_unit),
+                ).where(
+                    AIModelCatalogModel.is_active == True,
+                    AIModelCatalogModel.retail_price_cents_per_unit > 0,
                 )
-                avg_diff = (await session.execute(margin_stmt)).scalar()
-                gross_margin_percent = 65.0 if avg_diff is None or avg_diff <= 0 else round(min(90.0, max(30.0, float(avg_diff) * 10)), 1)
+                gross, retail = (await session.execute(margin_stmt)).one()
+                if retail:
+                    gross_margin_percent = round(float(gross or 0) / float(retail) * 100, 1)
             except Exception:
-                gross_margin_percent = 65.0
+                gross_margin_percent = None
 
             # 7. System Health Check
             try:
@@ -238,19 +225,23 @@ async def list_live_calls(_user=Depends(get_superuser)):
     now_utc = datetime.now(UTC)
 
     try:
+        fleet_count = await call_concurrency.get_fleet_active_calls()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Live call list unavailable") from exc
+    if fleet_count == 0:
+        return []
+
+    try:
         async with kodewaves_db_client.get_session() as session:
-            active_states = [
-                WorkflowRunState.INITIALIZED.value,
-                WorkflowRunState.RUNNING.value,
-            ]
             stmt = (
                 select(WorkflowRunModel, WorkflowModel, UserModel, OrganizationModel)
                 .outerjoin(WorkflowModel, WorkflowRunModel.workflow_id == WorkflowModel.id)
                 .outerjoin(UserModel, WorkflowModel.user_id == UserModel.id)
                 .outerjoin(OrganizationModel, WorkflowModel.organization_id == OrganizationModel.id)
                 .where(
-                    WorkflowRunModel.state.in_(active_states),
+                    WorkflowRunModel.state == WorkflowRunState.RUNNING.value,
                     WorkflowRunModel.is_completed == False,
+                    WorkflowRunModel.created_at >= now_utc - timedelta(minutes=20),
                 )
                 .order_by(desc(WorkflowRunModel.created_at))
                 .limit(100)
@@ -259,6 +250,10 @@ async def list_live_calls(_user=Depends(get_superuser)):
             rows = result.all()
 
             for run, workflow, user, org in rows:
+                if len(live_items) >= fleet_count:
+                    break
+                if not await call_concurrency.is_workflow_run_active(run.id):
+                    continue
                 duration = 0.0
                 if run.created_at:
                     diff = now_utc - run.created_at
@@ -288,8 +283,8 @@ async def list_live_calls(_user=Depends(get_superuser)):
                         status="streaming",
                     )
                 )
-    except Exception:
-        pass
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Live call list unavailable") from exc
 
     return live_items
 
@@ -297,21 +292,19 @@ async def list_live_calls(_user=Depends(get_superuser)):
 @router.get("/system-resources", response_model=SystemResourcesResponse)
 async def get_system_resources(_user=Depends(get_superuser)):
     """Fetch live concurrency, queue depth, container CPU and memory stats."""
-    active_calls = 0
+    try:
+        active_calls = await call_concurrency.get_fleet_active_calls()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Live concurrency unavailable") from exc
     queue_size = 0
     concurrency_cap = 50
 
     try:
         async with kodewaves_db_client.get_session() as session:
-            active_stmt = select(func.count(WorkflowRunModel.id)).where(
-                WorkflowRunModel.state == WorkflowRunState.RUNNING.value,
-                WorkflowRunModel.is_completed == False,
-            )
-            active_calls = (await session.execute(active_stmt)).scalar() or 0
-
             queue_stmt = select(func.count(WorkflowRunModel.id)).where(
                 WorkflowRunModel.state == WorkflowRunState.INITIALIZED.value,
                 WorkflowRunModel.is_completed == False,
+                WorkflowRunModel.created_at >= datetime.now(UTC) - timedelta(minutes=20),
             )
             queue_size = (await session.execute(queue_stmt)).scalar() or 0
     except Exception:

@@ -5466,11 +5466,11 @@ export type MonitoringStatsResponse = {
     /**
      * Total Revenue Inr
      */
-    total_revenue_inr: number;
+    total_revenue_inr: number | null;
     /**
      * Gross Margin Percent
      */
-    gross_margin_percent: number;
+    gross_margin_percent: number | null;
     /**
      * System Health
      */
@@ -6053,6 +6053,8 @@ export type OrganizationModelServicesContext = {
  * OrganizationPreferences
  */
 export type OrganizationPreferences = {
+    /** Deployment or workspace country region (ISO 3166-1 alpha-2). */
+    region?: string;
     /**
      * Omit to keep the destination unchanged; null removes it.
      */
@@ -6088,6 +6090,8 @@ export type OrganizationPreferences = {
  */
 export type OrganizationPreferencesResponse = {
     call_events: CallEventsSettings;
+    /** Deployment or workspace country region (ISO 3166-1 alpha-2). */
+    region?: string;
     /**
      * Test Phone Number
      */

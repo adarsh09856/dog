@@ -1,3 +1,5 @@
+import os
+
 from pydantic import BaseModel, Field, field_validator
 
 from api.schemas.call_events import CallEventsSettings
@@ -10,6 +12,11 @@ MAX_DISPOSITION_CODE_LENGTH = 64
 
 
 class OrganizationPreferences(BaseModel):
+    region: str = Field(
+        default_factory=lambda: os.environ.get("KODEWAVES_DEFAULT_REGION", "IN").upper(),
+        pattern=r"^[A-Z]{2}$",
+        description="Deployment or workspace ISO 3166-1 alpha-2 country region.",
+    )
     call_events: CallEventsSettings | None = Field(
         default=None,
         description="Omit to keep the destination unchanged; null removes it.",
@@ -28,6 +35,11 @@ class OrganizationPreferences(BaseModel):
             "the mapping pass through unchanged."
         ),
     )
+
+    @field_validator("region", mode="before")
+    @classmethod
+    def _normalize_region(cls, value):
+        return str(value).strip().upper() if value is not None else "IN"
 
     @field_validator("disposition_mapping", mode="before")
     @classmethod

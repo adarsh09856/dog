@@ -36,11 +36,9 @@ LANGUAGE_NAME_TO_ISO = {
 
 DEFAULT_PIPER_VOICES_BY_LANG = {
     "hi": "hi_IN-priyamvada-medium",
-    "te": "te_IN-rama-medium",
-    "ml": "ml_IN-ananya-medium",
-    "mr": "mr_IN-rashmi-medium",
-    "ta": "ta_IN-valluvar-medium",
-    "bn": "bn_IN-sampa-medium",
+    "te": "te_IN-maya-medium",
+    "ml": "ml_IN-meera-medium",
+    "mr": "mr_IN-google-medium",
     "ne": "ne_NP-google-medium",
     "en": "en_US-lessac-medium",
     "en-gb": "en_GB-alan-medium",

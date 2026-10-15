@@ -21,7 +21,8 @@ import { useAuth } from "@/lib/auth";
 
 const emptyPreferences: OrganizationPreferences = {
   test_phone_number: "",
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+  region: "IN",
+  timezone: "Asia/Kolkata",
   external_pbx_integrations_enabled: false,
   disposition_mapping_enabled: false,
   disposition_mapping: {},
@@ -33,6 +34,7 @@ function toFormPreferences(
 ): OrganizationPreferences {
   return {
     test_phone_number: preferences.test_phone_number || "",
+    region: preferences.region || "IN",
     timezone: preferences.timezone || emptyPreferences.timezone,
     external_pbx_integrations_enabled:
       preferences.external_pbx_integrations_enabled ?? false,
@@ -169,6 +171,7 @@ export function OrganizationPreferencesSection() {
           {
             body: {
               test_phone_number: nextPreferences.test_phone_number || null,
+              region: nextPreferences.region || "IN",
               timezone: getTimezoneValue(timezone),
               external_pbx_integrations_enabled:
                 nextPreferences.external_pbx_integrations_enabled ?? false,
@@ -230,6 +233,23 @@ export function OrganizationPreferencesSection() {
         Set organization-wide defaults used by testing and scheduling flows.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="settings-region">Workspace region</Label>
+          <Input
+            id="settings-region"
+            value={preferences.region || "IN"}
+            maxLength={2}
+            onChange={(event) => setPreferences({
+              ...preferences,
+              region: event.target.value.toUpperCase(),
+            })}
+            placeholder="IN"
+            aria-describedby="settings-region-help"
+          />
+          <p id="settings-region-help" className="text-xs text-muted-foreground">
+            Two-letter country code. India is the installation default; choose the timezone separately.
+          </p>
+        </div>
         <div className="space-y-2">
           <Label htmlFor="settings-test-phone-number">Test Phone Number</Label>
           <Input

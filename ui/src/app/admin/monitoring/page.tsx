@@ -67,7 +67,7 @@ export default function AdminMonitoringPage() {
   }, [fetchCalls]);
 
   const handleKillCall = async (runId: number) => {
-    if (!confirm(`EMERGENCY ACTION: Immediately terminate active voice call #${runId}?`)) return;
+    if (!confirm(`Mark run #${runId} ended in Kodewaves? This does not hang up the carrier call.`)) return;
     setKillingId(runId);
     try {
       await adminApi.killCall(runId, "Admin emergency kill switch triggered");
@@ -81,7 +81,7 @@ export default function AdminMonitoringPage() {
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
@@ -92,7 +92,7 @@ export default function AdminMonitoringPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Real-Time Voice Call Telemetry</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Live monitoring feed of in-flight SIP trunks, WebRTC sessions, and emergency termination control.
+            Live monitoring of voice sessions and run records.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -180,11 +180,11 @@ export default function AdminMonitoringPage() {
               <span>In-Flight Active Sessions ({calls.length})</span>
             </div>
             <Badge variant="destructive" className="text-xs gap-1">
-              <ShieldAlert className="h-3.5 w-3.5" /> Admin Kill-Switch Enabled
+              <ShieldAlert className="h-3.5 w-3.5" /> Run record control
             </Badge>
           </CardTitle>
           <CardDescription>
-            Calls are streaming audio through sovereign Pipecat worker instances. Pressing &quot;Kill Call&quot; immediately sends a SIP BYE / WebRTC close.
+            Only sessions holding a current concurrency slot appear here. Ending a run record does not disconnect a carrier or browser call.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -246,7 +246,7 @@ export default function AdminMonitoringPage() {
                           onClick={() => handleKillCall(c.run_id)}
                         >
                           <PhoneOff className="h-3.5 w-3.5" />
-                          {killingId === c.run_id ? "Terminating..." : "Kill Call"}
+                          {killingId === c.run_id ? "Updating..." : "End run record"}
                         </Button>
                       </TableCell>
                     </TableRow>
