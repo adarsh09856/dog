@@ -1,6 +1,7 @@
 """Organization-scoped caching for independent local Speaches PCM requests."""
 
-from contextlib import aclosing
+import asyncio
+from contextlib import aclosing, suppress
 
 from api.services.pipecat.tts_cache.models import SynthesisRequest
 from api.services.pipecat.tts_cache.synthesis import cached_synthesis
@@ -8,7 +9,28 @@ from pipecat.frames.frames import ErrorFrame
 from pipecat.services.speaches.tts import SpeachesTTSService
 
 
-class SpeachesCachingTTSService(SpeachesTTSService):
+class SpeachesLiveTTSService(SpeachesTTSService):
+    """Keep a synthesis context open while the CPU provider is working."""
+
+    async def run_tts(self, text: str, context_id: str):
+        async def keep_context_open():
+            while True:
+                await asyncio.sleep(min(1.0, self._stop_frame_timeout_s / 2))
+                if context_id in getattr(self, "_audio_contexts", {}):
+                    self._refresh_audio_context(context_id)
+
+        keepalive = asyncio.create_task(keep_context_open())
+        try:
+            async with aclosing(super().run_tts(text, context_id)) as frames:
+                async for frame in frames:
+                    yield frame
+        finally:
+            keepalive.cancel()
+            with suppress(asyncio.CancelledError):
+                await keepalive
+
+
+class SpeachesCachingTTSService(SpeachesLiveTTSService):
     def __init__(self, *, speech_cache, organization_id: int, **kwargs):
         super().__init__(**kwargs)
         self._speech_cache = speech_cache

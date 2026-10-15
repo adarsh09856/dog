@@ -1047,7 +1047,9 @@ def create_tts_service(
                 speaches_url = os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
             _validate_runtime_service_url(speaches_url, "base_url")
             cache = get_speech_cache(organization_id, enabled=tts_cache_enabled)
-            service_type = SpeachesTTSService
+            from api.services.pipecat.speaches_tts import SpeachesLiveTTSService
+
+            service_type = SpeachesLiveTTSService
             cache_kwargs = {}
             if cache:
                 from api.services.pipecat.speaches_tts import SpeachesCachingTTSService
