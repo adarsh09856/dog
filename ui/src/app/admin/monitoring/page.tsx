@@ -14,7 +14,7 @@ import {
   ShieldAlert,
   Zap,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,27 +34,37 @@ export default function AdminMonitoringPage() {
   const [resources, setResources] = useState<SystemResources | null>(null);
   const [loading, setLoading] = useState(true);
   const [killingId, setKillingId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
 
-  const fetchCalls = async () => {
+  const fetchCalls = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     try {
-      const [callsData, resData] = await Promise.all([
+      const [callsResult, resourcesResult] = await Promise.allSettled([
         adminApi.getLiveCalls(),
-        adminApi.getSystemResources().catch(() => null),
+        adminApi.getSystemResources(),
       ]);
-      setCalls(callsData);
-      if (resData) setResources(resData);
-    } catch (err) {
-      console.error("Failed to load live calls:", err);
+      if (!mounted.current) return;
+      const failures = [];
+      if (callsResult.status === 'fulfilled') setCalls(callsResult.value);
+      else failures.push('Live calls could not be refreshed.');
+      if (resourcesResult.status === 'fulfilled') setResources(resourcesResult.value);
+      else { setResources(null); failures.push('System resource measurements are unavailable.'); }
+      setError(failures.join(' ') || null);
     } finally {
-      setLoading(false);
+      inFlight.current = false;
+      if (mounted.current) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    mounted.current = true;
     fetchCalls();
     const interval = setInterval(fetchCalls, 3000);
-    return () => clearInterval(interval);
-  }, []);
+    return () => { mounted.current = false; clearInterval(interval); };
+  }, [fetchCalls]);
 
   const handleKillCall = async (runId: number) => {
     if (!confirm(`EMERGENCY ACTION: Immediately terminate active voice call #${runId}?`)) return;
@@ -88,7 +98,7 @@ export default function AdminMonitoringPage() {
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Live Polling (3s)
+            {error ? 'Refresh failed' : 'Live Polling (3s)'}
           </Badge>
           <Button variant="outline" size="sm" onClick={fetchCalls} className="gap-2">
             <RefreshCw className="h-3.5 w-3.5" />
@@ -96,6 +106,10 @@ export default function AdminMonitoringPage() {
           </Button>
         </div>
       </div>
+
+      {error && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+        {error} Use Refresh to retry. Previously loaded calls may be stale.
+      </div>}
 
       {/* Real Container & Concurrency Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -106,7 +120,7 @@ export default function AdminMonitoringPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-extrabold">
-              {resources?.active_concurrency ?? calls.length} <span className="text-sm font-normal text-muted-foreground">/ {resources?.concurrency_cap ?? 50} cap</span>
+              {resources?.active_concurrency ?? calls.length} <span className="text-sm font-normal text-muted-foreground">/ {resources?.concurrency_cap ?? '—'} cap</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Active concurrent voice channels in flight
@@ -120,7 +134,7 @@ export default function AdminMonitoringPage() {
             <Layers className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-extrabold">{resources?.queue_size ?? 0}</div>
+            <div className="text-2xl font-extrabold">{resources?.queue_size ?? '—'}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Calls awaiting worker dispatch
             </p>
@@ -134,10 +148,10 @@ export default function AdminMonitoringPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-extrabold text-indigo-500">
-              {resources?.memory_percent ? `${resources.memory_percent}%` : "Normal"}
+              {resources ? `${resources.memory_percent}%` : "Unavailable"}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {resources?.memory_used_mb ? `${resources.memory_used_mb} MB used` : "Operating within limits"}
+              {resources ? `${resources.memory_used_mb} MB used` : "Waiting for resource measurements"}
             </p>
           </CardContent>
         </Card>
@@ -149,10 +163,10 @@ export default function AdminMonitoringPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-extrabold text-amber-500">
-              {resources?.disk_free_gb ? `${resources.disk_free_gb} GB` : "Adequate"}
+              {resources ? `${resources.disk_free_gb} GB` : "Unavailable"}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {resources?.disk_usage_percent ? `${resources.disk_usage_percent}% volume used` : "Free space for recording cache"}
+              {resources ? `${resources.disk_usage_percent}% volume used` : "Waiting for resource measurements"}
             </p>
           </CardContent>
         </Card>

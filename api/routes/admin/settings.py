@@ -308,6 +308,7 @@ async def pull_ollama_model(payload: OllamaPullRequest, _user=Depends(get_superu
             async with session.post(f"{ollama_url.rstrip('/')}/api/pull", json={"name": payload.model, "stream": False}) as resp:
                 if resp.status == 200:
                     data = await resp.json()
+                    await catalog_service.notify_changed()
                     return {"success": True, "model": payload.model, "result": data}
                 else:
                     text = await resp.text()
@@ -385,6 +386,7 @@ async def delete_ollama_model(model_name: str, _user=Depends(get_superuser)):
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
             async with session.delete(f"{ollama_url.rstrip('/')}/api/delete", json={"name": model_name}) as resp:
                 if resp.status == 200:
+                    await catalog_service.notify_changed()
                     return {"success": True, "message": f"Model {model_name} deleted successfully"}
                 else:
                     text = await resp.text()
@@ -475,6 +477,7 @@ async def download_piper_voice(payload: PiperDownloadRequest, _user=Depends(get_
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
             async with session.post(f"{piper_url.rstrip('/')}/download", json={"voice": payload.voice}) as resp:
                 if resp.status in (200, 201):
+                    await catalog_service.notify_changed()
                     return {"success": True, "voice": payload.voice, "message": f"Voice '{payload.voice}' is ready on host"}
                 raise HTTPException(status_code=502, detail=f"Piper download failed (HTTP {resp.status})")
     except HTTPException:
@@ -538,6 +541,7 @@ async def delete_piper_voice(voice_id: str, _user=Depends(get_superuser)):
             async with session.delete(f"{piper_url.rstrip('/')}/voices/{voice_id}") as resp:
                 if resp.status not in (200, 204):
                     raise HTTPException(status_code=502, detail=f"Piper delete failed (HTTP {resp.status})")
+                await catalog_service.notify_changed()
                 return {"success": True, "message": f"Voice {voice_id} deleted."}
     except HTTPException:
         raise
@@ -585,6 +589,7 @@ async def download_whisper_model(payload: Dict[str, Any], _user=Depends(get_supe
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180)) as session:
             async with session.post(f"{whisper_url}/models/{model}") as resp:
                 if resp.status in (200, 201):
+                    await catalog_service.notify_changed()
                     return {"success": True, "model": model, "message": f"Model {model} is now ready on host"}
                 raise HTTPException(status_code=502, detail=f"Whisper download failed (HTTP {resp.status})")
     except HTTPException:
@@ -605,6 +610,7 @@ async def delete_whisper_model(model_id: str, _user=Depends(get_superuser)):
             async with session.delete(f"{whisper_url.rstrip('/')}/models/{model_id}") as resp:
                 if resp.status not in (200, 204):
                     raise HTTPException(status_code=502, detail=f"Whisper unload failed (HTTP {resp.status})")
+                await catalog_service.notify_changed()
                 return {"success": True, "message": f"Model {model_id} unloaded."}
     except HTTPException:
         raise

@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth';
+import { detailFromError } from '@/lib/apiError';
 
 import { DispositionChart } from './components/DispositionChart';
 import { DurationChart } from './components/DurationChart';
@@ -57,47 +58,63 @@ export default function ReportsPage() {
   const [report, setReport] = useState<DailyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timezone, setTimezone] = useState('America/New_York');
+  const [timezone, setTimezone] = useState('UTC');
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const auth = useAuth();
 
   // Fetch workflows on mount
   useEffect(() => {
+    let cancelled = false;
     const fetchWorkflows = async () => {
       if (!auth.isAuthenticated) return;
 
       try {
         const response = await getWorkflowOptionsApiV1OrganizationsReportsWorkflowsGet({
         });
-        if (response.data) {
+        if (response.error) throw new Error(detailFromError(response.error, 'Failed to load workflow options'));
+        if (response.data && !cancelled) {
           setWorkflows(response.data);
         }
       } catch (err) {
-        console.error('Failed to fetch workflows:', err);
+        if (!cancelled) setSetupError(err instanceof Error ? err.message : 'Failed to load workflow options');
       }
     };
     fetchWorkflows();
-  }, [auth.isAuthenticated]);
+    return () => { cancelled = true; };
+  }, [auth.isAuthenticated, retry]);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchPreferences = async () => {
       if (!auth.isAuthenticated) return;
+      setPreferencesReady(false);
+      setLoading(true);
+      setSetupError(null);
 
       try {
         const response = await getPreferencesApiV1OrganizationsPreferencesGet();
-        if (response.data?.timezone) {
-          setTimezone(response.data.timezone);
-        }
+        if (response.error) throw new Error(detailFromError(response.error, 'Failed to load workspace timezone'));
+        if (cancelled) return;
+        setTimezone(response.data?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+        setPreferencesReady(true);
       } catch (err) {
-        console.error('Failed to fetch organization preferences:', err);
+        if (!cancelled) {
+          setSetupError(err instanceof Error ? err.message : 'Failed to load workspace timezone');
+          setLoading(false);
+        }
       }
     };
     fetchPreferences();
-  }, [auth.isAuthenticated]);
+    return () => { cancelled = true; };
+  }, [auth.isAuthenticated, retry]);
 
   // Fetch report data when date or workflow changes
   useEffect(() => {
+    let cancelled = false;
     const fetchReport = async () => {
-      if (!auth.isAuthenticated) return;
+      if (!auth.isAuthenticated || !preferencesReady) return;
 
       setLoading(true);
       setError(null);
@@ -114,19 +131,21 @@ export default function ReportsPage() {
           },
         });
 
-        if (response.data) {
+        if (response.error) throw new Error(detailFromError(response.error, 'Failed to load report data'));
+        if (!response.data) throw new Error('The server returned no report data');
+        if (!cancelled) {
           setReport(response.data as DailyReport);
         }
       } catch (err) {
-        console.error('Failed to fetch report:', err);
-        setError('Failed to load report data');
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load report data');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchReport();
-  }, [selectedDate, selectedWorkflow, timezone, auth.isAuthenticated]);
+    return () => { cancelled = true; };
+  }, [selectedDate, selectedWorkflow, timezone, auth.isAuthenticated, preferencesReady]);
 
   const handlePreviousDay = () => {
     setSelectedDate(subDays(selectedDate, 1));
@@ -151,6 +170,7 @@ export default function ReportsPage() {
           ...(workflowId && { workflow_id: workflowId })
         },
       });
+      if (response.error) throw new Error(detailFromError(response.error, 'Failed to download report data'));
 
       if (response.data && response.data.length > 0) {
         // Prepare CSV content
@@ -168,7 +188,7 @@ export default function ReportsPage() {
         // Create CSV content
         const csvContent = [
           headers.join(','),
-          ...rows.map((row: string[]) => row.map((cell: string) => `"${cell}"`).join(','))
+          ...rows.map((row: string[]) => row.map((cell: string) => `"${cell.replace(/"/g, '""')}"`).join(','))
         ].join('\n');
 
         // Create blob and download
@@ -186,12 +206,13 @@ export default function ReportsPage() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
       } else {
         alert('No data available for download');
       }
     } catch (err) {
       console.error('Failed to download CSV:', err);
-      alert('Failed to download CSV data');
+      alert(err instanceof Error ? err.message : 'Failed to download CSV data');
     }
   };
 
@@ -228,6 +249,7 @@ export default function ReportsPage() {
               variant="outline"
               size="icon"
               onClick={handlePreviousDay}
+              aria-label="Previous day"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -253,6 +275,7 @@ export default function ReportsPage() {
               variant="outline"
               size="icon"
               onClick={handleNextDay}
+              aria-label="Next day"
               disabled={isToday}
             >
               <ChevronRight className="h-4 w-4" />
@@ -264,14 +287,14 @@ export default function ReportsPage() {
       {/* Timezone Display and Download Button */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div className="text-sm text-muted-foreground">
-          Showing data for {timezone} timezone
+          {preferencesReady ? `Showing data for ${timezone} timezone` : 'Loading workspace timezone…'}
           {selectedWorkflow !== 'all' && (
             <span> • Filtered by: {workflows.find(w => w.id.toString() === selectedWorkflow)?.name}</span>
           )}
         </div>
 
         {/* Download CSV Button */}
-        {!loading && report && report.metrics.total_runs > 0 && (
+        {!loading && !error && preferencesReady && report && report.metrics.total_runs > 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -283,6 +306,10 @@ export default function ReportsPage() {
           </Button>
         )}
       </div>
+
+      {setupError && <div role="alert" className="rounded-md border border-destructive/30 p-3 text-sm text-destructive">
+        {setupError} <Button variant="outline" size="sm" onClick={() => setRetry(value => value + 1)}>Retry</Button>
+      </div>}
 
       {/* Loading State */}
       {loading && (
@@ -301,12 +328,13 @@ export default function ReportsPage() {
       {/* Error State */}
       {error && !loading && (
         <Card className="p-6">
-          <p className="text-center text-red-500">{error}</p>
+          <p role="alert" className="text-center text-red-500">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => setRetry(value => value + 1)}>Retry</Button>
         </Card>
       )}
 
       {/* Report Content */}
-      {report && !loading && !error && (
+      {report && preferencesReady && !loading && !error && (
         <>
           {/* Metrics Cards */}
           <MetricsCards metrics={report.metrics} />

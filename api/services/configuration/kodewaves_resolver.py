@@ -12,6 +12,7 @@ from typing import Any, Dict, Literal, Optional
 from fastapi import HTTPException
 from loguru import logger
 
+from api.services.configuration.local_defaults import DEFAULT_LOCAL_LLM_MODEL
 from api.db import db_client
 from api.db.kodewaves_client import kodewaves_db_client
 from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
@@ -362,7 +363,7 @@ async def apply_kodewaves_sovereign_resolution(
             metadata.llm = resolved
             is_using_master_keys = True
         elif engine_enabled and has_local_access:
-            model_to_use = "qwen2.5:0.5b"
+            model_to_use = DEFAULT_LOCAL_LLM_MODEL
             effective.llm = OpenAILLMService(
                 api_key="sovereign-local-cpu",
                 model=model_to_use,
@@ -387,7 +388,7 @@ async def apply_kodewaves_sovereign_resolution(
                     status_code=403,
                     detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                 )
-            model_to_use = model if model and model != "default" else "qwen2.5:0.5b"
+            model_to_use = model if model and model != "default" else DEFAULT_LOCAL_LLM_MODEL
             effective.llm = OpenAILLMService(
                 api_key="sovereign-local-cpu",
                 model=model_to_use,
@@ -407,7 +408,7 @@ async def apply_kodewaves_sovereign_resolution(
                     metadata.llm = resolved
                     is_using_master_keys = True
                 elif engine_enabled and has_local_access:
-                    model_to_use = model if model and model != "default" else "qwen2.5:0.5b"
+                    model_to_use = model if model and model != "default" else DEFAULT_LOCAL_LLM_MODEL
                     effective.llm = OpenAILLMService(
                         api_key="sovereign-local-cpu",
                         model=model_to_use,

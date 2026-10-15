@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from typing import Any, Dict, List
 from sqlalchemy import select
 
+from api.services.configuration.local_defaults import DEFAULT_LOCAL_LLM_MODEL
 from api.db import db_client
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import (
@@ -379,8 +380,8 @@ async def seed_ai_model_catalog():
             "sort_order": 26,
         },
         {
-            "model_identifier": "ollama-qwen2.5:0.5b",
-            "display_name": "Ollama Qwen2.5 0.5B (Local CPU LLM)",
+            "model_identifier": f"ollama-{DEFAULT_LOCAL_LLM_MODEL}",
+            "display_name": f"Ollama {DEFAULT_LOCAL_LLM_MODEL} (Local CPU LLM)",
             "provider": "ollama",
             "category": "llm",
             "base_cost_cents_per_unit": 0.00,
@@ -555,17 +556,17 @@ def seed_local_ai_model():
     import urllib.request
 
     endpoint = os.getenv("OLLAMA_ENDPOINT", "http://ollama:11434")
-    print(f"[SEED] Pre-pulling lightweight Ollama LLM model (qwen2.5:0.5b) via {endpoint}...")
+    print(f"[SEED] Pre-pulling lightweight Ollama LLM model ({DEFAULT_LOCAL_LLM_MODEL}) via {endpoint}...")
     try:
         req = urllib.request.Request(
             f"{endpoint}/api/pull",
-            data=json.dumps({"name": "qwen2.5:0.5b", "stream": False}).encode("utf-8"),
+            data=json.dumps({"name": DEFAULT_LOCAL_LLM_MODEL, "stream": False}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=180) as response:
             if response.status == 200:
-                print("[SUCCESS] Ollama qwen2.5:0.5b model ready for Local CPU inference.")
+                print(f"[SUCCESS] Ollama {DEFAULT_LOCAL_LLM_MODEL} model ready for Local CPU inference.")
             else:
                 print(f"[WARN] Ollama model pull returned status {response.status}")
     except Exception as e:

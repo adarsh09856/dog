@@ -12,6 +12,7 @@ from pydantic import (
     model_validator,
 )
 
+from api.services.configuration.local_defaults import DEFAULT_LOCAL_LLM_MODEL
 from api.services.configuration.options import (
     AZURE_EMBEDDING_MODELS,
     AZURE_MODELS,
@@ -674,7 +675,7 @@ class SpeachesLLMConfiguration(BaseLLMConfiguration):
     model_config = SPEACHES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
     model: str = Field(
-        default="qwen2.5:1.5b",
+        default=DEFAULT_LOCAL_LLM_MODEL,
         description="Lightweight CPU-friendly model identifier (e.g. qwen2.5:1.5b, phi4-mini).",
         json_schema_extra={
             "examples": SPEACHES_LLM_MODELS,

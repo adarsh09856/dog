@@ -28,14 +28,16 @@ export default function AdminAuditLogsPage() {
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchLogs = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await adminApi.getAuditLogs();
       setLogs(data);
     } catch (err) {
-      console.error("Failed to load audit logs:", err);
+      setError(err instanceof Error ? err.message : "Failed to load audit logs");
     } finally {
       setLoading(false);
     }
@@ -111,7 +113,7 @@ export default function AdminAuditLogsPage() {
           <CardTitle className="text-base flex items-center justify-between">
             <span>Audit Events ({filteredLogs.length})</span>
             <Badge variant="secondary" className="text-xs gap-1">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> Tamper-Proof
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" /> Audit trail
             </Badge>
           </CardTitle>
           <CardDescription>
@@ -119,6 +121,7 @@ export default function AdminAuditLogsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {error && <p role="alert" className="mb-3 text-sm text-destructive">{error} Use Refresh to retry.</p>}
           <div className="rounded-lg border border-border/60 overflow-hidden">
             <Table>
               <TableHeader className="bg-muted/40">
@@ -135,7 +138,7 @@ export default function AdminAuditLogsPage() {
                 {filteredLogs.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8 text-sm text-muted-foreground">
-                      No audit events recorded yet.
+                      {loading ? 'Loading audit events…' : error ? 'Audit events could not be loaded.' : 'No audit events recorded yet.'}
                     </TableCell>
                   </TableRow>
                 ) : (

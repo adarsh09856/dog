@@ -15,6 +15,28 @@ from pydantic import (
 from api.db import appointments
 
 
+def caller_phone_matches_booking(phone: str, messages: list) -> bool:
+    """Reject altered digits when the caller explicitly supplied an E.164 phone.
+
+    Prefer the latest caller correction. Assistant readbacks are not evidence
+    because the model may itself have copied the number incorrectly.
+    """
+    digits = str.maketrans("०१२३४५६७८९", "0123456789")
+    for message in reversed(messages):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        text = message.get("content")
+        if not isinstance(text, str):
+            continue
+        numbers = re.findall(r"\+\d{10,15}(?!\d)", text.translate(digits))
+        if numbers:
+            supplied = re.sub(r"\D", "", str(phone).translate(digits))
+            return supplied == numbers[-1].lstrip("+")
+    # Caller ID or previously verified contact data may supply the phone when
+    # the caller has not spoken an explicit international number.
+    return True
+
+
 def caller_confirmed_booking(messages: list) -> bool:
     """Read consent from the caller, rather than trusting an LLM boolean."""
     dialogue = [m for m in messages if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
@@ -22,17 +44,21 @@ def caller_confirmed_booking(messages: list) -> bool:
     if caller_index is None:
         return False
     text = dialogue[caller_index].get("content")
-    if not isinstance(text, str) or re.search(r"\b(don't|do not|cancel|not|no|never)\b|नहीं|मत\s", text, re.I):
+    if not isinstance(text, str) or re.search(r"\b(don't|do not|cancel|not|no|never|nahi|nahin|mat)\b|नहीं|मत\s", text, re.I):
         return False
     recent = " ".join(str(m.get("content", "")) for m in dialogue[max(0, caller_index - 4):caller_index + 1])
     if not re.search(r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", recent, re.I):
         return False
-    if re.search(r"\b(?:I|we)\s+(?:explicitly\s+)?confirm\b|पुष्टि\s+कर(?:ता|ती|ते)|पक्का\s+कर", text, re.I):
+    if re.search(r"\b(?:I|we)\s+(?:explicitly\s+)?confirm\b|\bmain\s+confirm\s+kart[ai]\s+(?:hu|hun|hoon)\b|पुष्टि\s+कर(?:ता|ती|ते)|पक्का\s+कर", text, re.I):
         return True
-    if not re.fullmatch(r"\s*(?:yes|yes please|correct|that's right|go ahead|हाँ|हां|जी हाँ|जी हां)[.!।\s]*", text, re.I):
+    if not re.fullmatch(
+        r"\s*(?:(?:yes|haan|han|ha|ji|हाँ|हां|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|haan|han|बुक\s+कर\s+दो))?"
+        r"|correct|that's right|go ahead|(?:confirm|book)\s+kar\s+(?:do|dijiye))[.!।\s]*",
+        text, re.I,
+    ):
         return False
     previous = next((m.get("content", "") for m in reversed(dialogue[:caller_index]) if m.get("role") == "assistant"), "")
-    return isinstance(previous, str) and bool(re.search(r"\bconfirm\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का", previous, re.I))
+    return isinstance(previous, str) and bool(re.search(r"\b(confirm|sahi|theek)\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का", previous, re.I))
 
 
 class BookingArguments(BaseModel):

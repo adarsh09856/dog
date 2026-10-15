@@ -7,6 +7,7 @@ import aiohttp
 from fastapi import HTTPException
 from loguru import logger
 
+from api.services.configuration.local_defaults import DEFAULT_LOCAL_LLM_MODEL
 from api.errors.failure import (
     ErrorSource,
     annotate_failure_metadata,
@@ -1369,9 +1370,9 @@ def create_tts_service(
 def _voice_completion_settings(model: str, temperature: float | None = None) -> dict:
     """Apply the same CPU voice budget through every OpenAI-compatible alias."""
     values = {"model": model, "temperature": 0.1 if temperature is None else temperature}
-    if model.casefold().startswith(("qwen2.5:", "qwen3:")):
+    if model.casefold().startswith(("qwen2.5:", "qwen3:", "qwen3.5:")):
         values["max_tokens"] = 192
-    if model.casefold().startswith("qwen3:"):
+    if model.casefold().startswith(("qwen3:", "qwen3.5:")):
         values["temperature"] = 0.7 if temperature is None else temperature
         values["extra"] = {"reasoning_effort": "none"}
     return values
@@ -1499,9 +1500,9 @@ def create_llm_service_from_provider(
         ollama_host = base_url or os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
         if not ollama_host.endswith("/v1"):
             ollama_host = f"{ollama_host.rstrip('/')}/v1"
-        llm_model = model or "qwen2.5:0.5b"
+        llm_model = model or DEFAULT_LOCAL_LLM_MODEL
         if llm_model == "default":
-            llm_model = "qwen2.5:0.5b"
+            llm_model = DEFAULT_LOCAL_LLM_MODEL
         return KodewavesLLMService(
             base_url=ollama_host,
             api_key=api_key or "ollama",
@@ -1516,9 +1517,9 @@ def create_llm_service_from_provider(
             ollama_host = os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
             if not ollama_host.endswith("/v1"):
                 ollama_host = f"{ollama_host.rstrip('/')}/v1"
-            llm_model = model or "qwen2.5:0.5b"
+            llm_model = model or DEFAULT_LOCAL_LLM_MODEL
             if llm_model == "default":
-                llm_model = "qwen2.5:0.5b"
+                llm_model = DEFAULT_LOCAL_LLM_MODEL
             return KodewavesLLMService(
                 base_url=ollama_host,
                 api_key="sovereign-local-cpu",
@@ -1563,7 +1564,7 @@ def create_llm_service_from_provider(
         return KodewavesLLMService(
             base_url=ollama_host,
             api_key="sovereign-local-cpu",
-            settings=OpenAILLMSettings(**_voice_completion_settings(model or "qwen2.5:0.5b", temperature)),
+            settings=OpenAILLMSettings(**_voice_completion_settings(model or DEFAULT_LOCAL_LLM_MODEL, temperature)),
         )
     elif provider in (ServiceProviders.ANTHROPIC.value, "anthropic"):
         from pipecat.services.anthropic.llm import AnthropicLLMService, AnthropicLLMSettings
@@ -1585,12 +1586,16 @@ def create_llm_service_from_provider(
             settings=AWSBedrockLLMSettings(model=model),
         )
     elif provider == ServiceProviders.SPEACHES.value:
-        base_url = base_url or "http://localhost:11434/v1"
+        base_url = base_url or os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
+        if not base_url.rstrip("/").endswith("/v1"):
+            base_url = f"{base_url.rstrip('/')}/v1"
         _validate_runtime_service_url(base_url, "base_url")
         return OpenAILLMService(
             base_url=base_url,
             api_key=api_key or "none",
-            settings=OpenAILLMSettings(**_voice_completion_settings(model, temperature)),
+            settings=OpenAILLMSettings(**_voice_completion_settings(
+                model if model and model != "default" else DEFAULT_LOCAL_LLM_MODEL, temperature,
+            )),
         )
     elif provider == ServiceProviders.HUGGINGFACE.value:
         base_url = base_url or "https://router.huggingface.co/v1"

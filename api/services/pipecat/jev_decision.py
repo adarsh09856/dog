@@ -28,6 +28,7 @@ import httpx
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from api.services.configuration.local_defaults import DEFAULT_LOCAL_LLM_MODEL
 from api.services.credentials.master_credential_service import master_credential_service
 
 
@@ -313,7 +314,7 @@ class KodewavesSystem1Service:
             )
             res = await client.post(
                 f"{ollama_url}/api/generate",
-                json={"model": "qwen2.5:1.5b", "prompt": prompt, "stream": False},
+                json={"model": DEFAULT_LOCAL_LLM_MODEL, "prompt": prompt, "stream": False},
                 timeout=0.6,
             )
             if res.status_code == 200:

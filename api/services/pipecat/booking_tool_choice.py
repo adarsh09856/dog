@@ -41,8 +41,10 @@ def booking_tool_choice(params: dict) -> dict | None:
     last = messages[-1]
     if not isinstance(last, dict) or last.get("role") != "user":
         return None
+    from api.services.workflow.tools.booking import caller_confirmed_booking
+
     caller_text = _message_text(last)
-    if not _CONFIRMATION.search(caller_text) or _NEGATION.search(caller_text):
+    if not caller_confirmed_booking(messages) or _NEGATION.search(caller_text):
         return None
     recent_dialogue = " ".join(
         _message_text(message)
@@ -102,6 +104,29 @@ class _BookingToolChoiceMixin:
 
     def build_chat_completion_params(self, params_from_context):
         params = super().build_chat_completion_params(params_from_context)
+        from api.services.workflow.tools.booking import caller_confirmed_booking
+
+        tools = params.get("tools")
+        messages = params.get("messages")
+        if (
+            isinstance(tools, list) and isinstance(messages, list)
+            and any(tool.get("function", {}).get("name") == "book_appointment"
+                    for tool in tools if isinstance(tool, dict))
+            and not caller_confirmed_booking(messages)
+        ):
+            # Match the native handler's consent requirement. This also keeps
+            # small CPU models from spending a turn emitting an invalid booking
+            # while the assistant is still gathering the caller's details.
+            remaining = [tool for tool in tools
+                         if tool.get("function", {}).get("name") != "book_appointment"]
+            if remaining:
+                params["tools"] = remaining
+            else:
+                params.pop("tools", None)
+            selected = params.get("tool_choice")
+            if not remaining or (isinstance(selected, dict)
+                                 and selected.get("function", {}).get("name") == "book_appointment"):
+                params.pop("tool_choice", None)
         choice = booking_tool_choice(params)
         messages = params.get("messages")
         if isinstance(messages, list):
