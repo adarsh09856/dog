@@ -796,6 +796,13 @@ class CatalogService:
                 continue
             if m.status in ("FAIL", "UNAVAILABLE"):
                 continue
+            if (prov in ("google", "gemini")
+                    and any(kind in m.model_identifier.lower() for kind in
+                            ("image", "nano-banana", "computer-use", "robotics", "translate"))):
+                continue
+            if ((m.layer or m.category) in ("s2s", "realtime") and prov in ("google", "gemini")
+                    and "transcribe" in m.model_identifier.lower()):
+                continue
             if ((m.layer or m.category) == "llm" and prov in ("google", "gemini")
                     and google_model_layer({"name": f"models/{m.model_identifier}",
                                             "supportedGenerationMethods": ["generateContent"]}) != "llm"):

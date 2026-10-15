@@ -50,9 +50,11 @@ def google_model_layer(model: dict) -> str | None:
     methods = set(model.get("supportedGenerationMethods") or [])
     if not name.startswith("gemini-"):
         return None
+    if any(kind in name for kind in ("image", "nano-banana", "computer-use", "robotics", "translate")):
+        return None
     if "embedContent" in methods or "batchEmbedContents" in methods:
         return "embeddings"
-    if "bidiGenerateContent" in methods:
+    if "bidiGenerateContent" in methods and "transcribe" not in name:
         return "s2s"
     if "generateContent" not in methods:
         return None
