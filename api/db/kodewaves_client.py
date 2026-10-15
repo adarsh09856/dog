@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 from sqlalchemy import delete, desc, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.dialects.postgresql import insert
 
 from api.db.base_client import BaseDBClient
 from api.db.kodewaves_models import (
@@ -294,6 +295,23 @@ class KodewavesDBClient(BaseDBClient):
                 lang_clean = language.lower().strip()
                 voices = [v for v in voices if any(lang_clean in str(l).lower() for l in (v.languages or []))]
             return voices
+
+    async def upsert_discovered_voices(self, rows: List[Dict[str, Any]]) -> None:
+        """Import model-scoped directory voices without resetting admin/preview state."""
+        async with self.get_session() as session:
+            for offset in range(0, len(rows), 200):
+                statement = insert(VoiceCatalogModel).values(rows[offset:offset + 200])
+                statement = statement.on_conflict_do_update(
+                    constraint="uq_voice_provider_model_voice",
+                    set_={
+                        "name": statement.excluded.name,
+                        "gender": statement.excluded.gender,
+                        "languages": statement.excluded.languages,
+                        "updated_at": datetime.now(UTC),
+                    },
+                )
+                await session.execute(statement)
+            await session.commit()
 
     async def upsert_voice(
         self,

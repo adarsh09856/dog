@@ -774,8 +774,11 @@ async def get_voices(
                 "voice_id": v.voice_id,
                 "name": v.name,
                 "gender": v.gender,
+                "accent": "in" if (v.provider == "gemini" and v.languages
+                                     and len(v.languages) == 1
+                                     and v.languages[0].lower().endswith("-in")) else None,
                 "language": (
-                    "multi" if norm_key == "google"
+                    "multi" if norm_key == "google" or len(v.languages or []) > 1
                     else (v.languages[0] if v.languages else "en-US")
                 ),
                 "languages": list(v.languages or []),

@@ -221,6 +221,22 @@ class CatalogService:
                     supports_streaming=True,
                 )
 
+        if prov_norm == "gemini":
+            # The shared named speakers work across documented model languages.
+            # Native directory locale != the model's entire language coverage.
+            # Keep these model-scoped rows so e.g. Tamil isn't hidden merely
+            # because a native locale directory page contains Hindi/English.
+            rows = [dict(
+                provider="gemini", tts_model=model["model_identifier"],
+                voice_id=voice["voice_id"], name=voice["name"], gender=voice.get("gender"),
+                languages=list(dict.fromkeys(voice.get("languages", []) + model.get("languages", []))),
+                preview_ok=False, is_active=True,
+            ) for model in CURATED_PROVIDER_MODELS.get("gemini", []) if model["layer"] == "tts"
+              for voice in CURATED_PROVIDER_VOICES["google"]]
+            if rows:
+                await kodewaves_db_client.upsert_discovered_voices(rows)
+            return
+
         voices = CURATED_PROVIDER_VOICES.get(prov_norm, [])
         for v in voices:
             await kodewaves_db_client.upsert_voice(
@@ -277,13 +293,19 @@ class CatalogService:
                     speech_models = [model for model in discovered_models
                                      if model.startswith("gemini-3.8-") and "tts" in model]
                     if speech_models:
+                        voice_rows = []
                         for voice in await discover_indian_voices(session, api_key):
                             discovered_voices.append(voice["voice_id"])
                             for speech_model in speech_models:
-                                await kodewaves_db_client.upsert_voice(
-                                    provider="gemini", tts_model=speech_model,
-                                    **voice, preview_ok=False, is_active=True,
-                                )
+                                if (voice["languages"][0].split("-")[0].lower() == "sd"
+                                        and "lite" in speech_model):
+                                    continue
+                                voice_rows.append(dict(
+                                    provider="gemini", tts_model=speech_model, **voice,
+                                    preview_ok=False, is_active=True,
+                                ))
+                        if voice_rows:
+                            await kodewaves_db_client.upsert_discovered_voices(voice_rows)
 
                 elif prov_norm == "openai" and api_key:
                     base_url = (creds or {}).get("base_url") or "https://api.openai.com/v1"
