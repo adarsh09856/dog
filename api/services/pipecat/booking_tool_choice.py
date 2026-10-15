@@ -9,6 +9,10 @@ from pipecat.services.openai.llm import OpenAILLMService
 _CONFIRMATION = re.compile(r"\b(confirm(?:ed)?|save|proceed|book it)\b|पुष्टि|पक्क[ाी]|सेव", re.IGNORECASE)
 _BOOKING = re.compile(r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", re.IGNORECASE)
 _NEGATION = re.compile(r"\b(don't|do not|not now|cancel|stop|never|no,?\s)\b|मत\s|नहीं", re.IGNORECASE)
+_OPENING_GREETING = re.compile(
+    r"^\s*(?:नमस्ते|नमस्कार|सुप्रभात|शुभ संध्या|namaste|hello|hi|good morning|good afternoon|good evening)",
+    re.IGNORECASE,
+)
 
 
 def _message_text(message: dict) -> str:
@@ -79,6 +83,39 @@ class _BookingToolChoiceMixin:
         params = super().build_chat_completion_params(params_from_context)
         choice = booking_tool_choice(params)
         messages = params.get("messages")
+        if isinstance(messages, list):
+            user_messages = [
+                message for message in messages
+                if isinstance(message, dict) and message.get("role") == "user"
+            ]
+            opening = next((
+                message for message in messages
+                if isinstance(message, dict) and message.get("role") == "assistant"
+            ), None)
+            # Small local models often copy a configured Start-node greeting
+            # verbatim even when the prompt tells them not to greet again.
+            # The greeting has already played, so omit its text on the first
+            # caller turn and retain that fact as an explicit system message.
+            if (
+                len(user_messages) == 1
+                and opening is not None
+                and _OPENING_GREETING.search(_message_text(opening))
+            ):
+                messages = [message for message in messages if message is not opening]
+                opening_note = {
+                    "role": "system",
+                    "content": (
+                        "The configured opening greeting has already been spoken. "
+                        "Answer the caller's latest message directly; do not greet, "
+                        "introduce yourself, or repeat the opening words."
+                    ),
+                }
+                insert_at = (
+                    1 if messages and isinstance(messages[0], dict)
+                    and messages[0].get("role") == "system" else 0
+                )
+                messages.insert(insert_at, opening_note)
+                params["messages"] = messages
         if isinstance(messages, list) and messages:
             latest_user = next((message for message in reversed(messages) if isinstance(message, dict) and message.get("role") == "user"), None)
             if latest_user and _CONFIRMATION.search(_message_text(latest_user)):
