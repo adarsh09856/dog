@@ -1046,7 +1046,15 @@ def create_tts_service(
             if "piper" in speaches_url or not speaches_url:
                 speaches_url = os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
             _validate_runtime_service_url(speaches_url, "base_url")
-            return SpeachesTTSService(
+            cache = get_speech_cache(organization_id, enabled=tts_cache_enabled)
+            service_type = SpeachesTTSService
+            cache_kwargs = {}
+            if cache:
+                from api.services.pipecat.speaches_tts import SpeachesCachingTTSService
+
+                service_type = SpeachesCachingTTSService
+                cache_kwargs = {"speech_cache": cache, "organization_id": organization_id}
+            return service_type(
                 api_key="local",
                 base_url=speaches_url.rstrip("/"),
                 sample_rate=24000,
@@ -1057,6 +1065,7 @@ def create_tts_service(
                 ),
                 text_filters=[xml_function_tag_filter],
                 skip_aggregator_types=["recording_router", "recording"],
+                **cache_kwargs,
             )
         from pipecat.services.piper.tts import PiperHttpTTSSettings
         from api.services.pipecat.piper_tts import PiperOwnedSessionTTSService

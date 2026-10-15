@@ -50,6 +50,31 @@ def booking_tool_choice(params: dict) -> dict | None:
 
 
 class _BookingToolChoiceMixin:
+    async def _process_context(self, context):
+        from uuid import uuid4
+
+        from api.services.workflow.confirmed_booking import confirmed_booking_arguments
+        from pipecat.services.llm_service import FunctionCallFromLLM
+
+        messages = context.get_messages()
+        tools = getattr(context.tools, "standard_tools", [])
+        if (
+            messages and isinstance(messages[-1], dict)
+            and messages[-1].get("role") == "user"
+            and any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
+        ):
+            arguments = confirmed_booking_arguments(_message_text(messages[-1]))
+            if arguments:
+                # Use the registered native handler so org ownership, caller
+                # consent, persistence and normal tool-result frames are shared
+                # by web and telephone calls. No model request is necessary.
+                await self.run_function_calls([FunctionCallFromLLM(
+                    context=context, function_name="book_appointment",
+                    tool_call_id=f"confirmed_booking_{uuid4().hex}", arguments=arguments,
+                )])
+                return
+        await super()._process_context(context)
+
     def build_chat_completion_params(self, params_from_context):
         params = super().build_chat_completion_params(params_from_context)
         choice = booking_tool_choice(params)

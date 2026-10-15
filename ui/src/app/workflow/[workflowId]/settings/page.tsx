@@ -770,7 +770,7 @@ function GeneralSection({
                         <h3 className="text-sm font-medium">Speech Caching</h3>
                         <p className="text-xs text-muted-foreground mt-0.5">
                             Reuse generated audio for repeated phrases to reduce response time and speech generation costs.
-                            Cached audio expires after 24 hours. Currently available with MiniMax TTS.
+                            Cached audio expires after 24 hours. Available with MiniMax and local Speaches/Kokoro TTS. Changing the model, voice or speed uses separate audio.
                         </p>
                     </div>
                     <div className="flex items-center justify-between">
