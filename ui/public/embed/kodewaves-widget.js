@@ -784,7 +784,12 @@
 
       // Request microphone permission
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: {
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+          channelCount: { ideal: 1 },
+        } });
         // Release any stream still held from a prior attempt before retaining
         // the new one, so a re-entrant start can't leak the microphone.
         if (state.stream) {

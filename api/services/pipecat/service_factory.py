@@ -1366,6 +1366,17 @@ def create_tts_service(
         )
 
 
+def _voice_completion_settings(model: str, temperature: float | None = None) -> dict:
+    """Apply the same CPU voice budget through every OpenAI-compatible alias."""
+    values = {"model": model, "temperature": 0.1 if temperature is None else temperature}
+    if model.casefold().startswith(("qwen2.5:", "qwen3:")):
+        values["max_tokens"] = 192
+    if model.casefold().startswith("qwen3:"):
+        values["temperature"] = 0.7 if temperature is None else temperature
+        values["extra"] = {"reasoning_effort": "none"}
+    return values
+
+
 def _migrate_deprecated_google_model(model: str) -> str:
     """Ensure Google model ID is canonical and valid for official Gemini API (Gemini 3.5)."""
     if not model or model in ("default", "none"):
@@ -1434,18 +1445,9 @@ def create_llm_service_from_provider(
                 ),
                 **kwargs,
             )
-        qwen_settings = {"model": model, "temperature": 0.1}
-        if model.casefold().startswith(("qwen2.5:", "qwen3:")):
-            # Local CPU chat models slow down sharply when they emit long
-            # monologues. Voice turns should stay concise; 192 tokens leaves
-            # room for structured tool arguments while bounding speech output.
-            qwen_settings["max_tokens"] = 192
-        if model.casefold().startswith("qwen3:"):
-            qwen_settings["temperature"] = 0.7
-            qwen_settings["extra"] = {"reasoning_effort": "none"}
         return OpenAILLMService(
             api_key=api_key,
-            settings=OpenAILLMSettings(**qwen_settings),
+            settings=OpenAILLMSettings(**_voice_completion_settings(model, temperature)),
             **kwargs,
         )
     elif provider == ServiceProviders.GROQ.value:
@@ -1503,7 +1505,7 @@ def create_llm_service_from_provider(
         return KodewavesLLMService(
             base_url=ollama_host,
             api_key=api_key or "ollama",
-            settings=OpenAILLMSettings(model=llm_model, temperature=temperature if temperature is not None else 0.1),
+            settings=OpenAILLMSettings(**_voice_completion_settings(llm_model, temperature)),
         )
     elif provider in (
         ServiceProviders.KODEWAVES.value,
@@ -1520,7 +1522,7 @@ def create_llm_service_from_provider(
             return KodewavesLLMService(
                 base_url=ollama_host,
                 api_key="sovereign-local-cpu",
-                settings=OpenAILLMSettings(model=llm_model),
+                settings=OpenAILLMSettings(**_voice_completion_settings(llm_model, temperature)),
             )
 
         # Fallback to direct cloud LLM from environment credentials before local CPU
@@ -1561,7 +1563,7 @@ def create_llm_service_from_provider(
         return KodewavesLLMService(
             base_url=ollama_host,
             api_key="sovereign-local-cpu",
-            settings=OpenAILLMSettings(model=model or "qwen2.5:0.5b"),
+            settings=OpenAILLMSettings(**_voice_completion_settings(model or "qwen2.5:0.5b", temperature)),
         )
     elif provider in (ServiceProviders.ANTHROPIC.value, "anthropic"):
         from pipecat.services.anthropic.llm import AnthropicLLMService, AnthropicLLMSettings
@@ -1585,10 +1587,10 @@ def create_llm_service_from_provider(
     elif provider == ServiceProviders.SPEACHES.value:
         base_url = base_url or "http://localhost:11434/v1"
         _validate_runtime_service_url(base_url, "base_url")
-        return SpeachesLLMService(
+        return OpenAILLMService(
             base_url=base_url,
             api_key=api_key or "none",
-            settings=SpeachesLLMSettings(model=model),
+            settings=OpenAILLMSettings(**_voice_completion_settings(model, temperature)),
         )
     elif provider == ServiceProviders.HUGGINGFACE.value:
         base_url = base_url or "https://router.huggingface.co/v1"

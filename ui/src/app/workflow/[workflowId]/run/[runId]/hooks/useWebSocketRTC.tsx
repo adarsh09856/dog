@@ -808,7 +808,12 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
             };
 
             if (useAudio) {
-                const audioConstraints: MediaTrackConstraints = {};
+                const audioConstraints: MediaTrackConstraints = {
+                    echoCancellation: { ideal: true },
+                    noiseSuppression: { ideal: true },
+                    autoGainControl: { ideal: true },
+                    channelCount: { ideal: 1 },
+                };
                 if (selectedAudioInput) {
                     audioConstraints.deviceId = { exact: selectedAudioInput };
                 }
