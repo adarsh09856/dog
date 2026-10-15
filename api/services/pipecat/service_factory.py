@@ -1397,9 +1397,15 @@ def create_llm_service_from_provider(
                 ),
                 **kwargs,
             )
+        qwen_settings = {"model": model, "temperature": 0.1}
+        if model.casefold().startswith(("qwen2.5:", "qwen3:")):
+            # Local CPU chat models slow down sharply when they emit long
+            # monologues. Voice turns should stay concise; 192 tokens leaves
+            # room for structured tool arguments while bounding speech output.
+            qwen_settings["max_tokens"] = 192
         return OpenAILLMService(
             api_key=api_key,
-            settings=OpenAILLMSettings(model=model, temperature=0.1),
+            settings=OpenAILLMSettings(**qwen_settings),
             **kwargs,
         )
     elif provider == ServiceProviders.GROQ.value:
