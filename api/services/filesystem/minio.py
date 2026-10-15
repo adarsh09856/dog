@@ -1,6 +1,7 @@
 import asyncio
 import io
-import json
+from datetime import timedelta
+from urllib.parse import urlsplit
 from typing import Any, Dict, Optional
 
 from loguru import logger
@@ -28,6 +29,7 @@ class MinioFileSystem(BaseFileSystem):
         bucket_name: str = "voice-audio",
         secure: bool = False,
         public_endpoint: Optional[str] = None,
+        region: str = "us-east-1",
     ):
         if not public_endpoint:
             raise ValueError(
@@ -44,51 +46,36 @@ class MinioFileSystem(BaseFileSystem):
 
         self.bucket_name = bucket_name
         self.endpoint = endpoint
-        self.public_endpoint = public_endpoint.rstrip("/")
+        public_url = urlsplit(public_endpoint)
+        if (public_url.username or public_url.password or public_url.query
+                or public_url.fragment or not public_url.hostname
+                or public_url.path.rstrip("/") not in ("", f"/{bucket_name}")):
+            raise ValueError("MinIO public endpoint must be an origin, optionally ending in the bucket name")
+        self.public_endpoint = f"{public_url.scheme}://{public_url.netloc}"
         self.secure = secure
         self.access_key = access_key
         self.secret_key = secret_key
 
         # Client for internal operations (uploads, etc.)
         self.client = Minio(
-            endpoint, access_key=access_key, secret_key=secret_key, secure=secure
+            endpoint, access_key=access_key, secret_key=secret_key, secure=secure, region=region
+        )
+        # Sign the browser-facing host itself: changing the host after signing
+        # invalidates SigV4, even when both hosts reach the same MinIO service.
+        self.public_client = Minio(
+            public_url.netloc, access_key=access_key, secret_key=secret_key,
+            secure=public_url.scheme == "https", region=region,
         )
 
-        # Ensure bucket exists and configure anonymous access (using internal client)
+        # This bucket contains tenant documents and call recordings. Access is
+        # granted through expiring URLs, never an anonymous bucket policy.
         try:
             if not self.client.bucket_exists(self.bucket_name):
                 self.client.make_bucket(self.bucket_name)
 
-            # Set public read/write policy for local development
-            # This allows:
-            # 1. Anonymous downloads (s3:GetObject)
-            # 2. Anonymous uploads (s3:PutObject) - bypasses presigned URL signature issues
-            # 3. List bucket contents (s3:ListBucket) for debugging
-            # Note: This is set on every initialization to ensure policy is correct
-            # WARNING: Only use in local development, not production!
-            policy = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Effect": "Allow",
-                        "Principal": {"AWS": "*"},
-                        "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
-                        "Resource": [f"arn:aws:s3:::{self.bucket_name}/*"],
-                    },
-                    {
-                        "Effect": "Allow",
-                        "Principal": {"AWS": "*"},
-                        "Action": ["s3:ListBucket"],
-                        "Resource": [f"arn:aws:s3:::{self.bucket_name}"],
-                    },
-                ],
-            }
-
-            self.client.set_bucket_policy(self.bucket_name, json.dumps(policy))
+            self.client.delete_bucket_policy(self.bucket_name)
         except Exception as e:
-            # Bucket might already exist or we might be in a restricted environment
-            logger.debug(f"Bucket setup note: {e}")
-            pass
+            raise RuntimeError("Unable to initialize private MinIO storage") from e
 
     async def acreate_file(self, file_path: str, content: AsyncReadable) -> bool:
         try:
@@ -127,12 +114,12 @@ class MinioFileSystem(BaseFileSystem):
         use_internal_endpoint: bool = False,
     ) -> Optional[str]:
         try:
-            if use_internal_endpoint:
-                protocol = "https" if self.secure else "http"
-                base = f"{protocol}://{self.endpoint}"
-            else:
-                base = self.public_endpoint
-            return f"{base}/{self.bucket_name}/{file_path}"
+            client = self.client if use_internal_endpoint else self.public_client
+            response_headers = {"response-content-disposition": "inline"} if force_inline else None
+            return await asyncio.to_thread(
+                client.presigned_get_object, self.bucket_name, file_path,
+                expires=timedelta(seconds=expiration), response_headers=response_headers,
+            )
         except Exception as e:
             logger.error(f"Error generating MinIO URL: {e}")
             return None
@@ -163,19 +150,12 @@ class MinioFileSystem(BaseFileSystem):
         content_type: str = "text/csv",
         max_size: int = 10_485_760,
     ) -> Optional[str]:
-        """Generate an unsigned URL for direct file upload.
-
-        For local MinIO development with anonymous upload enabled, we return
-        a simple unsigned URL instead of a presigned URL. This avoids signature
-        mismatch issues when the internal endpoint (minio:9000) differs from
-        the public endpoint (localhost:9000).
-
-        The bucket policy allows anonymous s3:PutObject, so no signature is needed.
-        """
+        """Generate an expiring PUT URL signed for the public storage host."""
         try:
-            url = f"{self.public_endpoint}/{self.bucket_name}/{file_path}"
-            logger.debug(f"Generated unsigned upload URL: {url}")
-            return url
+            return await asyncio.to_thread(
+                self.public_client.presigned_put_object, self.bucket_name, file_path,
+                expires=timedelta(seconds=expiration),
+            )
         except Exception as e:
             logger.error(f"Error generating MinIO upload URL: {e}")
             return None
