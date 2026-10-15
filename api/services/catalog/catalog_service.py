@@ -366,13 +366,22 @@ class CatalogService:
                             vdata = await resp.json()
                             vdict = vdata if isinstance(vdata, dict) else {x: x for x in vdata}
                             for vid, vinfo in vdict.items():
-                                discovered_voices.append(vid)
                                 name = vinfo.get("name") if isinstance(vinfo, dict) else vid
+                                language_info = vinfo.get("language") if isinstance(vinfo, dict) else None
+                                language_code = language_info.get("code") if isinstance(language_info, dict) else None
+                                if not language_code:
+                                    language_code = vid.split("-", 1)[0]
+                                language_code = language_code.replace("_", "-")
+                                language_parts = language_code.split("-")
+                                if len(language_parts) != 2 or not all(part.isalpha() for part in language_parts):
+                                    logger.warning(f"[CatalogService] Skipping Piper voice with invalid language: {vid}")
+                                    continue
+                                discovered_voices.append(vid)
                                 await kodewaves_db_client.upsert_voice(
                                     provider="piper",
                                     voice_id=vid,
                                     name=name or vid,
-                                    languages=["hi-IN"] if "hi" in vid else ["en-US"],
+                                    languages=[language_code],
                                 )
         except Exception as e:
             logger.debug(f"[CatalogService] Discovery error for {prov_norm}: {e}")
