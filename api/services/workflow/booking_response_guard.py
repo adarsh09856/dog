@@ -18,8 +18,7 @@ UNVERIFIED_BOOKING_REPLY = (
 
 def guard_booking_reply(reply: str | None, events: list[dict], *, language: str | None = None) -> str | None:
     """Replace an unsupported success claim; never turn an action failure into success."""
-    if not reply or not _SAVED_CLAIM.search(reply):
-        return reply
+    failed_action = False
     for event in events:
         if event.get("type") != "tool_call_result":
             continue
@@ -27,6 +26,8 @@ def guard_booking_reply(reply: str | None, events: list[dict], *, language: str 
         if payload.get("function_name") != "book_appointment":
             continue
         result = payload.get("result") or {}
+        if isinstance(result, dict) and result.get("booked") is False:
+            failed_action = True
         if isinstance(result, dict) and result.get("booked") is True and result.get("appointment_id"):
             if (language or "").split("-")[0] == "hi":
                 return (
@@ -39,6 +40,8 @@ def guard_booking_reply(reply: str | None, events: list[dict], *, language: str 
                 f"Appointment ID: {result['appointment_id']}. "
                 f"Time: {result.get('start_time', 'see the appointments calendar')}."
             )
+    if not failed_action and (not reply or not _SAVED_CLAIM.search(reply)):
+        return reply
     if (language or "").split("-")[0] == "hi":
         return "कैलेंडर में आपकी बुकिंग की पुष्टि नहीं हो सकी। कृपया विवरण जाँचकर फिर कोशिश करें।"
     return UNVERIFIED_BOOKING_REPLY
