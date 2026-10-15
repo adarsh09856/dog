@@ -181,6 +181,10 @@ export default function CreateWorkflowPage() {
     const [customAgentName, setCustomAgentName] = useState('');
     const [customCompanyName, setCustomCompanyName] = useState('');
     const [templateLanguage, setTemplateLanguage] = useState<'en' | 'hi'>('en');
+    const templatePreview = useMemo(() => previewTemplate
+        ? generateTemplateWorkflowDefinition(previewTemplate, {
+            agentName: customAgentName, companyName: customCompanyName, language: templateLanguage,
+        }) : null, [previewTemplate, customAgentName, customCompanyName, templateLanguage]);
     const [isCreating, setIsCreating] = useState(false);
 
     const [customBuilderName, setCustomBuilderName] = useState('');
@@ -691,9 +695,7 @@ export default function CreateWorkflowPage() {
                                     </Label>
                                     <div className="bg-muted/30 p-3 rounded-lg border text-xs text-foreground italic">
                                         &ldquo;
-                                        {previewTemplate.suggestedFirstMessage
-                                            .replace(/\{\{company_name\}\}/g, customCompanyName.trim() || 'our company')
-                                            .replace(/\{\{agent_name\}\}/g, customAgentName.trim() || previewTemplate.name)}
+                                        {templatePreview?.nodes[0].data.greeting}
                                         &rdquo;
                                     </div>
                                 </div>
@@ -704,9 +706,7 @@ export default function CreateWorkflowPage() {
                                         System Prompt Preview
                                     </Label>
                                     <div className="bg-muted/20 p-3 rounded-lg border text-xs font-mono text-muted-foreground max-h-52 overflow-y-auto whitespace-pre-wrap">
-                                        {previewTemplate.suggestedPrompt
-                                            .replace(/\{\{company_name\}\}/g, customCompanyName.trim() || 'our company')
-                                            .replace(/\{\{agent_name\}\}/g, customAgentName.trim() || previewTemplate.name)}
+                                        {templatePreview?.nodes[0].data.prompt}
                                     </div>
                                 </div>
                             </div>
