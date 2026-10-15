@@ -980,7 +980,11 @@ export function AIModelConfigurationV2Editor({
                                         <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5 text-[11px]">
                                             <button
                                                 type="button"
-                                                onClick={() => setKodewaves({ ...kodewaves, llm_engine_type: "cloud" })}
+                                                onClick={() => setKodewaves({
+                                                    ...kodewaves,
+                                                    llm_engine_type: "cloud",
+                                                    llm_model: kodewaves.llm_engine_type === "cloud" ? kodewaves.llm_model : undefined,
+                                                })}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
                                                     kodewaves.llm_engine_type !== "local_cpu"
                                                         ? "bg-primary text-primary-foreground shadow-xs"
@@ -993,7 +997,13 @@ export function AIModelConfigurationV2Editor({
                                                 type="button"
                                                 onClick={() => {
                                                     if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
-                                                    setKodewaves({ ...kodewaves, llm_engine_type: "local_cpu" });
+                                                    setKodewaves({
+                                                        ...kodewaves,
+                                                        llm_engine_type: "local_cpu",
+                                                        llm_model: kodewaves.llm_engine_type === "local_cpu"
+                                                            ? kodewaves.llm_model
+                                                            : catalogManifest?.local_llm_models?.[0]?.value,
+                                                    });
                                                 }}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
                                                     kodewaves.llm_engine_type === "local_cpu"
@@ -1053,7 +1063,11 @@ export function AIModelConfigurationV2Editor({
                                         <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-0.5 text-[11px]">
                                             <button
                                                 type="button"
-                                                onClick={() => setKodewaves({ ...kodewaves, stt_engine_type: "cloud" })}
+                                                onClick={() => setKodewaves({
+                                                    ...kodewaves,
+                                                    stt_engine_type: "cloud",
+                                                    stt_model: kodewaves.stt_engine_type === "cloud" ? kodewaves.stt_model : undefined,
+                                                })}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
                                                     kodewaves.stt_engine_type !== "local_cpu"
                                                         ? "bg-primary text-primary-foreground shadow-xs"
@@ -1066,7 +1080,13 @@ export function AIModelConfigurationV2Editor({
                                                 type="button"
                                                 onClick={() => {
                                                     if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
-                                                    setKodewaves({ ...kodewaves, stt_engine_type: "local_cpu" });
+                                                    setKodewaves({
+                                                        ...kodewaves,
+                                                        stt_engine_type: "local_cpu",
+                                                        stt_model: kodewaves.stt_engine_type === "local_cpu"
+                                                            ? kodewaves.stt_model
+                                                            : catalogManifest?.local_stt_models?.[0]?.value,
+                                                    });
                                                 }}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
                                                     kodewaves.stt_engine_type === "local_cpu"

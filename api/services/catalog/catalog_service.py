@@ -916,7 +916,9 @@ class CatalogService:
                             local_stt = [
                                 {"value": model["id"], "label": model.get("name") or model["id"], "provider": "whisper"}
                                 for model in data.get("data", data.get("models", []))
-                                if isinstance(model, dict) and model.get("id") and model.get("installed", True)
+                                if (isinstance(model, dict) and model.get("id")
+                                    and model.get("installed", True)
+                                    and model.get("task") == "automatic-speech-recognition")
                             ]
             except Exception:
                 local_stt = []
