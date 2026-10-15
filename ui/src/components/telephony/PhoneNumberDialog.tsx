@@ -282,8 +282,8 @@ export function PhoneNumberDialog({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Used when per-number inbound routing is enabled. Today, inbound calls still
-              route by the workflow_id in the webhook URL.
+              Inbound calls to this number route to the selected workflow. The provider webhook
+              identifies the account and called number; leave this empty to reject inbound calls.
             </p>
           </div>
 
