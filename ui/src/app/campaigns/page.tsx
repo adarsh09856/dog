@@ -2,7 +2,7 @@
 
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { getCampaignsApiV1CampaignGet } from '@/client/sdk.gen';
 import type { CampaignsResponse } from '@/client/types.gen';
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/table';
 import { useOrganizationTimezone } from '@/hooks/useOrganizationTimezone';
 import { useAuth } from '@/lib/auth';
+import { detailFromError } from '@/lib/apiError';
 import { formatDate } from '@/lib/dateTime';
 
 export default function CampaignsPage() {
@@ -28,7 +29,8 @@ export default function CampaignsPage() {
 
     const [campaignsData, setCampaignsData] = useState<CampaignsResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const hasFetched = useRef(false);
+    const [error, setError] = useState<string | null>(null);
+    const [retry, setRetry] = useState(0);
 
     // Redirect if not authenticated
     useEffect(() => {
@@ -39,13 +41,14 @@ export default function CampaignsPage() {
 
     // Fetch campaigns once when user is ready
     useEffect(() => {
-        if (loading || !user || hasFetched.current) {
+        if (loading || !user) {
             return;
         }
-        hasFetched.current = true;
+        let cancelled = false;
 
         const fetchCampaigns = async () => {
             setIsLoading(true);
+            setError(null);
             try {
                 const accessToken = await getAccessToken();
                 const response = await getCampaignsApiV1CampaignGet({
@@ -54,18 +57,20 @@ export default function CampaignsPage() {
                     }
                 });
 
-                if (response.data) {
+                if (response.error) throw new Error(detailFromError(response.error, 'Failed to load campaigns'));
+                if (response.data && !cancelled) {
                     setCampaignsData(response.data);
                 }
             } catch (error) {
-                console.error('Failed to fetch campaigns:', error);
+                if (!cancelled) setError(error instanceof Error ? error.message : 'Failed to load campaigns');
             } finally {
-                setIsLoading(false);
+                if (!cancelled) setIsLoading(false);
             }
         };
 
         fetchCampaigns();
-    }, [loading, user, getAccessToken]);
+        return () => { cancelled = true; };
+    }, [loading, user, getAccessToken, retry]);
 
     const handleRowClick = (campaignId: number) => {
         router.push(`/campaigns/${campaignId}`);
@@ -118,6 +123,11 @@ export default function CampaignsPage() {
                                 {[...Array(5)].map((_, i) => (
                                     <div key={i} className="h-12 bg-muted rounded"></div>
                                 ))}
+                            </div>
+                        ) : error ? (
+                            <div role="alert" className="space-y-3 text-destructive">
+                                <p>{error}</p>
+                                <Button variant="outline" onClick={() => setRetry(value => value + 1)}>Retry</Button>
                             </div>
                         ) : campaignsData && campaignsData.campaigns.length > 0 ? (
                             <div className="overflow-x-auto">

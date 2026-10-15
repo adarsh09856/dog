@@ -14,6 +14,7 @@ from pipecat.frames.frames import (
     BotStoppedSpeakingFrame,
     CancelFrame,
     EndFrame,
+    ErrorFrame,
     FunctionCallInProgressFrame,
     FunctionCallResultFrame,
     LLMAssistantPushAggregationFrame,
@@ -38,6 +39,7 @@ from pipecat.utils.run_context import set_current_org_id
 
 from api.db import db_client
 from api.enums import WorkflowRunMode, WorkflowRunState
+from api.errors.failure import redact_failure_message
 from api.schemas.workflow_configurations import WorkflowConfigurationDefaults
 from api.services.configuration.registry import ServiceProviders
 from api.services.pipecat.audio_config import create_audio_config
@@ -269,6 +271,17 @@ class _TextChatCaptureProcessor(FrameProcessor):
                 "payload": jsonable_encoder(payload),
             }
         )
+
+    def record_pipeline_error(self, frame: ErrorFrame) -> None:
+        """Persist upstream provider failures in the text tester's error format."""
+        category = str(getattr(frame.category, "value", frame.category) or "")
+        message = (
+            "The selected model provider has reached its rate or usage limit. "
+            "Check the provider quota before retrying."
+            if category == "rate_limit" else redact_failure_message(frame.error)
+        )
+        self._touch()
+        self._append_event("execution_error", {"message": message, "category": category})
 
     async def process_frame(self, frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -732,6 +745,12 @@ async def execute_text_chat_pending_turn(
         conversation_type="text",
         additional_span_attributes=trace_span_attributes,
     )
+
+    @task.event_handler("on_pipeline_error")
+    async def _capture_pipeline_error(_worker, frame):
+        if isinstance(frame, ErrorFrame):
+            capture_processor.record_pipeline_error(frame)
+
     runner_task = asyncio.create_task(run_pipeline_worker(task))
 
     engine.call_worker = task

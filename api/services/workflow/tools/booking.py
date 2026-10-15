@@ -66,7 +66,7 @@ def caller_confirmed_booking(messages: list) -> bool:
     confirmation_question = re.search(
         r"\b(confirm|sahi|theek)\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का"
         r"|\b(?:shall|should|may|can) I\b[^?]*\bbook\b|\bgo ahead and book\b"
-        r"|बुक\s+कर\s*(?:दूँ|दूं|दें)|\bbook\s+kar\s+(?:du|doon|dun)\b", previous, re.I,
+        r"|(?:बुक|कन्फर्म|कंफर्म)\s+कर\s*(?:दूँ|दूं|दें)|\bbook\s+kar\s+(?:du|doon|dun)\b", previous, re.I,
     )
     return bool(booking_readback and confirmation_question)
 

@@ -105,11 +105,12 @@ export default function ToolsPage() {
                 },
             });
 
+            if (response.error) throw new Error(detailFromError(response.error, "Failed to fetch tools"));
             if (response.data) {
                 setTools(response.data);
             }
         } catch (err) {
-            setError("Failed to fetch tools");
+            setError(err instanceof Error ? err.message : "Failed to fetch tools");
             console.error("Error fetching tools:", err);
         } finally {
             setIsLoading(false);
@@ -252,7 +253,7 @@ export default function ToolsPage() {
             setError(null);
             const accessToken = await getAccessToken();
 
-            await deleteToolApiV1ToolsToolUuidDelete({
+            const response = await deleteToolApiV1ToolsToolUuidDelete({
                 path: {
                     tool_uuid: toolUuid,
                 },
@@ -261,9 +262,11 @@ export default function ToolsPage() {
                 },
             });
 
+            if (response.error) throw new Error(detailFromError(response.error, "Failed to archive tool"));
+
             fetchTools();
         } catch (err) {
-            setError("Failed to archive tool");
+            setError(err instanceof Error ? err.message : "Failed to archive tool");
             console.error("Error archiving tool:", err);
         }
     };
@@ -275,7 +278,7 @@ export default function ToolsPage() {
             setError(null);
             const accessToken = await getAccessToken();
 
-            await unarchiveToolApiV1ToolsToolUuidUnarchivePost({
+            const response = await unarchiveToolApiV1ToolsToolUuidUnarchivePost({
                 path: {
                     tool_uuid: toolUuid,
                 },
@@ -284,9 +287,11 @@ export default function ToolsPage() {
                 },
             });
 
+            if (response.error) throw new Error(detailFromError(response.error, "Failed to unarchive tool"));
+
             fetchTools();
         } catch (err) {
-            setError("Failed to unarchive tool");
+            setError(err instanceof Error ? err.message : "Failed to unarchive tool");
             console.error("Error unarchiving tool:", err);
         }
     };
@@ -357,8 +362,9 @@ export default function ToolsPage() {
                     </div>
 
                     {error && (
-                        <div className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
+                        <div role="alert" className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
                             {error}
+                            <Button variant="outline" size="sm" className="ml-3" onClick={fetchTools}>Retry</Button>
                         </div>
                     )}
 
@@ -404,7 +410,7 @@ export default function ToolsPage() {
                                         </div>
                                     ))}
                                 </div>
-                            ) : activeTools.length === 0 && archivedTools.length === 0 ? (
+                            ) : error && tools.length === 0 ? null : activeTools.length === 0 && archivedTools.length === 0 ? (
                                 <div className="text-center py-12">
                                     {renderToolIcon("http_api", "w-12 h-12 text-muted-foreground mx-auto mb-4")}
                                     <p className="text-muted-foreground mb-4">
