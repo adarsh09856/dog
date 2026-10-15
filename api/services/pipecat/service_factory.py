@@ -117,6 +117,9 @@ SmallestTTSService, SmallestTTSSettings = _optional_import("pipecat.services.sma
 SpeachesLLMService, SpeachesLLMSettings = _optional_import("pipecat.services.speaches.llm", "SpeachesLLMService", "SpeachesLLMSettings")
 SpeachesSTTService, SpeachesSTTSettings = _optional_import("pipecat.services.speaches.stt", "SpeachesSTTService", "SpeachesSTTSettings")
 SpeachesTTSService, SpeachesTTSSettings = _optional_import("pipecat.services.speaches.tts", "SpeachesTTSService", "SpeachesTTSSettings")
+from api.services.pipecat.speaches_stt import BoundedSpeachesSTTService
+
+SpeachesSTTService = BoundedSpeachesSTTService
 SpeechmaticsSTTService, SpeechmaticsSTTSettings = _optional_import(
     "pipecat.services.speechmatics.stt", "SpeechmaticsSTTService", "SpeechmaticsSTTSettings"
 )
@@ -215,6 +218,24 @@ def _resolve_speaches_language(language: str | None) -> Language | None:
         return Language(language)
     except ValueError as exc:
         raise ValueError(f"Unsupported selected speech language: {language}") from exc
+
+
+def _speaches_transcription_prompt(language: str | None, keyterms: list[str] | None) -> str:
+    """Give Whisper concise code-switch and vocabulary hints without forcing a language."""
+    language_code = (language or "multi").casefold().split("-", 1)[0]
+    if language_code in {"multi", "auto", "default", "hi", "en"}:
+        prompt = (
+            "Hindi and English conversation, including Hinglish and mid-sentence code-switching. "
+            "Transcribe the words as spoken; do not translate or summarize. Preserve names, "
+            "English terms, and number words."
+        )
+    else:
+        prompt = "Transcribe the words as spoken; do not translate or summarize. Preserve names and numbers."
+    terms = [str(term).replace("\n", " ").strip() for term in (keyterms or [])]
+    terms = [term[:60] for term in terms if term][:20]
+    if terms:
+        prompt += " Vocabulary spellings: " + ", ".join(terms)
+    return prompt[:900]
 
 
 dograh_stt_uses_flux_language = kodewaves_stt_uses_flux_language
@@ -523,7 +544,11 @@ def create_stt_service(
             return SpeachesSTTService(
                 base_url=whisper_v1,
                 api_key="local-cpu-token",
-                settings=SpeachesSTTSettings(model=stt_model, language=_resolve_speaches_language(language)),
+                settings=SpeachesSTTSettings(
+                    model=stt_model,
+                    language=_resolve_speaches_language(language),
+                    prompt=_speaches_transcription_prompt(language, keyterms),
+                ),
                 sample_rate=audio_config.transport_in_sample_rate,
             )
 
@@ -604,6 +629,7 @@ def create_stt_service(
             settings=SpeachesSTTSettings(
                 model=user_config.stt.model or "Systran/faster-whisper-tiny",
                 language=lang_obj,
+                prompt=_speaches_transcription_prompt(lang_str, keyterms),
             ),
             sample_rate=audio_config.transport_in_sample_rate,
         )

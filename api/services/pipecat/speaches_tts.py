@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import aclosing, suppress
 
+from openai import DefaultAsyncHttpxClient
 from api.services.pipecat.tts_cache.models import SynthesisRequest
 from api.services.pipecat.tts_cache.synthesis import cached_synthesis
 from pipecat.frames.frames import ErrorFrame
@@ -11,6 +12,12 @@ from pipecat.services.speaches.tts import SpeachesTTSService
 
 class SpeachesLiveTTSService(SpeachesTTSService):
     """Keep a synthesis context open while the CPU provider is working."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=45.0))
+        super().__init__(**kwargs)
+        # Avoid multiplying a stalled speech request through SDK retries.
+        self._client.max_retries = 0
 
     async def run_tts(self, text: str, context_id: str):
         async def keep_context_open():

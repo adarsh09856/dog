@@ -2,6 +2,7 @@
 
 import re
 from loguru import logger
+from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 
 from pipecat.services.kodewaves.llm import KodewavesLLMService
 from pipecat.services.openai.llm import OpenAILLMService
@@ -54,6 +55,26 @@ def booking_tool_choice(params: dict) -> dict | None:
 
 
 class _BookingToolChoiceMixin:
+    def create_client(
+        self,
+        api_key=None,
+        base_url=None,
+        organization=None,
+        project=None,
+        default_headers=None,
+        **kwargs,
+    ):
+        """Bound provider stalls so a voice turn cannot wait for SDK retries for minutes."""
+        return AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            project=project,
+            default_headers=default_headers,
+            http_client=DefaultAsyncHttpxClient(timeout=45.0),
+            max_retries=0,
+        )
+
     async def _process_context(self, context):
         from uuid import uuid4
 

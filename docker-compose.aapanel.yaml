@@ -319,16 +319,27 @@ services:
     volumes:
       - kodewaves_whisper_cache:/home/ubuntu/.cache/huggingface/hub
     environment:
-      - PRELOAD_MODELS=Systran/faster-whisper-tiny
+      - PRELOAD_MODELS=${WHISPER_PRELOAD_MODELS:-Systran/faster-whisper-small}
       - DEFAULT_DEVICE=cpu
       - OMP_NUM_THREADS=1
       - MKL_NUM_THREADS=1
       - OPENBLAS_NUM_THREADS=1
+      - STT_MODEL_TTL=${WHISPER_STT_MODEL_TTL:--1}
+      - TTS_MODEL_TTL=${WHISPER_TTS_MODEL_TTL:-3600}
+      - WHISPER__INFERENCE_DEVICE=cpu
+      - WHISPER__COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
+      - WHISPER__CPU_THREADS=${WHISPER_CPU_THREADS:-2}
+      - WHISPER__NUM_WORKERS=1
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 15s
-      timeout: 5s
+      test:
+        [
+          "CMD-SHELL",
+          "code=$$(curl -sS -o /dev/null -w '%{http_code}' -X POST 'http://localhost:8000/api/ps/Systran%2Ffaster-whisper-small'); [ \"$$code\" = 200 ] || [ \"$$code\" = 409 ]",
+        ]
+      interval: 60s
+      timeout: 60s
       retries: 3
+      start_period: 30s
     deploy:
       resources:
         limits:
