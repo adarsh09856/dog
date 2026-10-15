@@ -313,6 +313,20 @@ def stt_uses_external_turns(user_config) -> bool:
 class KodewavesGoogleLLMService(GoogleLLMService):
     adapter_class = KodewavesGeminiJSONSchemaAdapter
 
+    def __init__(self, **kwargs):
+        from google.genai.types import HttpOptions, HttpRetryOptions
+
+        # Bound request establishment too: the framework's chunk timeout only
+        # starts after generate_content_stream returns. SDK retries before that
+        # can otherwise turn a quota error into a long silent voice turn.
+        if kwargs.get("http_options") is None:
+            kwargs["http_options"] = HttpOptions(
+                timeout=12000, retry_options=HttpRetryOptions(attempts=1),
+            )
+        kwargs.setdefault("stream_idle_timeout_secs", 12.0)
+        kwargs.setdefault("retry_on_timeout", False)
+        super().__init__(**kwargs)
+
 
 class KodewavesGoogleVertexLLMService(GoogleVertexLLMService):
     adapter_class = KodewavesGeminiJSONSchemaAdapter
@@ -1105,11 +1119,11 @@ def create_tts_service(
         from api.services.pipecat.piper_tts import PiperOwnedSessionTTSService
         piper_host = (getattr(user_config.tts, "base_url", None) or os.environ.get("PIPER_ENDPOINT") or "http://piper:5000").rstrip("/")
         piper_url = piper_host if piper_host.endswith("/synthesize") else f"{piper_host}/synthesize"
-        lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None) or "hi"
-        default_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
-        voice = getattr(user_config.tts, "voice", default_voice) or default_voice
+        voice = getattr(user_config.tts, "voice", None)
         if not voice or voice == "default":
-            voice = default_voice
+            from api.services.configuration.language_normalizer import get_default_piper_voice_for_language
+            lang = getattr(user_config.tts, "language", None) or getattr(user_config.stt, "language", None) or "en"
+            voice = get_default_piper_voice_for_language(lang)
         session = aiohttp.ClientSession()
         return PiperOwnedSessionTTSService(
             base_url=piper_url,

@@ -19,7 +19,7 @@ from api.db.kodewaves_client import kodewaves_db_client
 from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
 from api.utils.common import normalize_local_ai_endpoint
 from api.services.configuration.language_normalizer import (
-    get_default_piper_voice_for_language,
+    get_default_piper_voice_for_language as _piper_default,
     normalize_language_code,
     normalize_stt_language,
 )
@@ -49,6 +49,13 @@ from api.services.configuration.registry import (
 from api.services.credentials.master_credential_service import master_credential_service
 
 CredentialSource = Literal["user_key", "master_key", "local"]
+
+
+def get_default_piper_voice_for_language(language):
+    try:
+        return _piper_default(language)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @dataclass
@@ -579,8 +586,7 @@ async def apply_kodewaves_sovereign_resolution(
                         status_code=403,
                         detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
-                default_voice = get_default_piper_voice_for_language(tts_lang)
-                voice_to_use = current_voice if current_voice and current_voice != "default" else default_voice
+                voice_to_use = current_voice if current_voice and current_voice != "default" else get_default_piper_voice_for_language(tts_lang)
                 selected_model = model if model not in (None, "", "default") else "piper"
                 if selected_model == "speaches-ai/Kokoro-82M-v1.0-ONNX":
                     from api.services.catalog.voice_selection import model_voice_ids
@@ -623,8 +629,7 @@ async def apply_kodewaves_sovereign_resolution(
                         metadata.tts = resolved
                         is_using_master_keys = True
                     elif engine_enabled and has_local_access:
-                        default_voice = get_default_piper_voice_for_language(tts_lang)
-                        voice_to_use = current_voice if current_voice and current_voice != "default" else default_voice
+                        voice_to_use = current_voice if current_voice and current_voice != "default" else get_default_piper_voice_for_language(tts_lang)
                         effective.tts = SpeachesTTSConfiguration(
                             api_key="local-cpu-token",
                             model="piper",

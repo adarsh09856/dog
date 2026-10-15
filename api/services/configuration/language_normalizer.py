@@ -191,7 +191,9 @@ def get_default_piper_voice_for_language(lang: Optional[str]) -> str:
     clean = str(lang or "").lower().replace("_", "-")
     if clean in ("en-gb", "british", "uk"):
         return DEFAULT_PIPER_VOICES_BY_LANG["en-gb"]
-    return DEFAULT_PIPER_VOICES_BY_LANG.get(iso2, "en_US-lessac-medium")
+    if iso2 not in DEFAULT_PIPER_VOICES_BY_LANG:
+        raise ValueError(f"No Piper voice is configured for language '{iso2}'. Select an installed voice for that language.")
+    return DEFAULT_PIPER_VOICES_BY_LANG[iso2]
 
 
 def normalize_stt_language(provider: Optional[str], lang: Optional[str]) -> str:
