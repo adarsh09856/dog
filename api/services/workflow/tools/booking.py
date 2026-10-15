@@ -53,7 +53,7 @@ def caller_confirmed_booking(messages: list) -> bool:
         return True
     if not re.fullmatch(
         r"\s*(?:(?:yes|ok|okay|haan|han|ha|ji|हाँ|हां|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|haan|han|बुक\s+कर\s+दो))?"
-        r"|correct|that's right|go ahead|(?:confirm|book)\s+kar\s+(?:do|dijiye))[.!।\s]*",
+        r"|correct|that's right|go ahead|theek hai|ठीक है|(?:confirm|book)\s+kar\s+(?:do|dijiye))[.!।\s]*",
         text, re.I,
     ):
         return False
@@ -65,7 +65,8 @@ def caller_confirmed_booking(messages: list) -> bool:
     )
     confirmation_question = re.search(
         r"\b(confirm|sahi|theek)\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का"
-        r"|\b(?:shall|should|may|can) I\b[^?]*\bbook\b|\bgo ahead and book\b", previous, re.I,
+        r"|\b(?:shall|should|may|can) I\b[^?]*\bbook\b|\bgo ahead and book\b"
+        r"|बुक\s+कर\s*(?:दूँ|दूं|दें)|\bbook\s+kar\s+(?:du|doon|dun)\b", previous, re.I,
     )
     return bool(booking_readback and confirmation_question)
 

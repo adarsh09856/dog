@@ -13,6 +13,7 @@ import aiohttp
 from loguru import logger
 
 from pipecat.frames.frames import (
+    ErrorFrame,
     Frame,
     TranscriptionFrame,
 )
@@ -33,13 +34,14 @@ class GeminiSTTService(STTService):
     ):
         super().__init__(sample_rate=sample_rate, **kwargs)
         self._api_key = api_key or ""
-        self._model = "gemini-3.8-flash" if (not model or "stt" in model.lower() or model in ("default", "none") or "2.5" in model) else model
+        self._model = "gemini-3.8-flash" if (not model or "stt" in model.lower() or model in ("default", "none")) else model
         self._language = language
         self._sample_rate = sample_rate
 
     async def run_stt(self, audio: bytes) -> AsyncGenerator[Frame, None]:
         if not self._api_key:
             logger.warning("[Gemini STT] Cannot transcribe: missing Gemini API key")
+            yield ErrorFrame(error="Gemini STT API key is missing")
             return
 
         if not audio or len(audio) < 1000:
@@ -59,7 +61,7 @@ class GeminiSTTService(STTService):
             wav_bytes = audio
 
         encoded_audio = base64.b64encode(wav_bytes).decode("utf-8")
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self._model}:generateContent?key={self._api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self._model}:generateContent"
 
         language_instruction = (
             "Detect the spoken language and preserve its original language and script. "
@@ -93,7 +95,7 @@ class GeminiSTTService(STTService):
 
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
-                async with session.post(url, json=payload) as resp:
+                async with session.post(url, json=payload, headers={"x-goog-api-key": self._api_key}) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         candidates = data.get("candidates", [])
@@ -110,7 +112,8 @@ class GeminiSTTService(STTService):
                                     timestamp=time.time(),
                                 )
                     else:
-                        err_body = await resp.text()
-                        logger.warning(f"[Gemini STT] API error {resp.status}: {err_body[:200]}")
+                        logger.warning("[Gemini STT] API error {}", resp.status)
+                        yield ErrorFrame(error=f"Gemini STT request failed (HTTP {resp.status})")
         except Exception as e:
-            logger.warning(f"[Gemini STT] Exception during transcription: {e}")
+            logger.warning("[Gemini STT] Transcription failed: {}", type(e).__name__)
+            yield ErrorFrame(error=f"Gemini STT request failed ({type(e).__name__})")
