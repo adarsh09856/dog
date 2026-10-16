@@ -15,6 +15,7 @@ import {
   User,
 } from "lucide-react";
 import { appointmentInputTime, appointmentTimes } from "@/lib/appointmentTime";
+import { useOrgConfig } from "@/context/OrgConfigContext";
 import { useAuth } from "@/lib/auth";
 import React, { useEffect, useState } from "react";
 
@@ -50,6 +51,8 @@ import { Appointment, appointmentsApi } from "@/lib/kodewavesApi";
 
 export default function AppointmentsPage() {
   const { user, loading: authLoading } = useAuth();
+  const { organizationPreferences, loading: configLoading } = useOrgConfig();
+  const timeZone = organizationPreferences?.timezone || "Asia/Kolkata";
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -84,7 +87,7 @@ export default function AppointmentsPage() {
     }
     setSaving(true);
     try {
-      const payload = { ...editingAppt, ...appointmentTimes(editingAppt.start_time, editingAppt.end_time) };
+      const payload = { ...editingAppt, ...appointmentTimes(editingAppt.start_time, editingAppt.end_time, timeZone) };
       if (editingAppt.id) {
         await appointmentsApi.updateAppointment(editingAppt.id, payload);
       } else {
@@ -124,6 +127,7 @@ export default function AppointmentsPage() {
         <div className="flex items-center gap-3">
           <Button
             size="sm"
+            disabled={configLoading}
             className="gap-2"
             onClick={() => {
               const now = new Date();
@@ -133,8 +137,8 @@ export default function AppointmentsPage() {
                 customer_name: "",
                 customer_phone: "",
                 customer_email: "",
-                start_time: appointmentInputTime(now),
-                end_time: appointmentInputTime(end),
+                start_time: appointmentInputTime(now, timeZone),
+                end_time: appointmentInputTime(end, timeZone),
                 status: "confirmed",
                 notes: "",
               });
@@ -203,6 +207,7 @@ export default function AppointmentsPage() {
                       </TableCell>
                       <TableCell className="text-xs font-mono text-primary font-medium">
                         {new Date(a.start_time).toLocaleString([], {
+                          timeZone,
                           dateStyle: "short",
                           timeStyle: "short",
                         })}
@@ -228,9 +233,10 @@ export default function AppointmentsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            disabled={configLoading}
                             className="h-7 w-7"
                             onClick={() => {
-                              setEditingAppt({ ...a, start_time: appointmentInputTime(a.start_time), end_time: appointmentInputTime(a.end_time) });
+                              setEditingAppt({ ...a, start_time: appointmentInputTime(a.start_time, timeZone), end_time: appointmentInputTime(a.end_time, timeZone) });
                               setModalOpen(true);
                             }}
                           >
@@ -306,7 +312,7 @@ export default function AppointmentsPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Start Time *</Label>
+                <Label className="text-xs">Start Time * ({timeZone})</Label>
                 <Input
                   type="datetime-local"
                   value={editingAppt?.start_time ? editingAppt.start_time.slice(0, 16) : ""}
@@ -315,7 +321,7 @@ export default function AppointmentsPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">End Time</Label>
+                <Label className="text-xs">End Time ({timeZone})</Label>
                 <Input
                   type="datetime-local"
                   value={editingAppt?.end_time ? editingAppt.end_time.slice(0, 16) : ""}
@@ -347,7 +353,7 @@ export default function AppointmentsPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSaveAppointment} disabled={saving}>
+            <Button onClick={handleSaveAppointment} disabled={saving || configLoading}>
               Save Booking
             </Button>
           </DialogFooter>

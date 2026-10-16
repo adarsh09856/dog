@@ -265,6 +265,7 @@ services:
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
       KODEWAVES_DEFAULT_REGION: "${KODEWAVES_DEFAULT_REGION:-IN}"
+      KODEWAVES_DEFAULT_TIMEZONE: "${KODEWAVES_DEFAULT_TIMEZONE:-Asia/Kolkata}"
 
       # Telephony media WebSocket capability token. The carrier dials the media
       # socket back, so its URL is caller-visible and the ids in it are otherwise

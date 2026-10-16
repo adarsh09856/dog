@@ -1,4 +1,5 @@
 import os
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -22,7 +23,10 @@ class OrganizationPreferences(BaseModel):
         description="Omit to keep the destination unchanged; null removes it.",
     )
     test_phone_number: str | None = None
-    timezone: str | None = None
+    timezone: str | None = Field(
+        default_factory=lambda: os.environ.get("KODEWAVES_DEFAULT_TIMEZONE", "Asia/Kolkata"),
+        validate_default=True,
+    )
     external_pbx_integrations_enabled: bool = False
     disposition_mapping_enabled: bool = False
     disposition_mapping: dict[str, str] = Field(
@@ -40,6 +44,16 @@ class OrganizationPreferences(BaseModel):
     @classmethod
     def _normalize_region(cls, value):
         return str(value).strip().upper() if value is not None else "IN"
+
+    @field_validator("timezone", mode="before")
+    @classmethod
+    def _normalize_timezone(cls, value):
+        timezone = str(value).strip() if value else os.environ.get("KODEWAVES_DEFAULT_TIMEZONE", "Asia/Kolkata")
+        try:
+            ZoneInfo(timezone)
+        except (ValueError, ZoneInfoNotFoundError) as exc:
+            raise ValueError("Choose a valid IANA timezone") from exc
+        return timezone
 
     @field_validator("disposition_mapping", mode="before")
     @classmethod
