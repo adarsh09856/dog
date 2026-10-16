@@ -613,6 +613,7 @@ async def apply_kodewaves_sovereign_resolution(
                     model=selected_model,
                     voice=voice_to_use,
                     speed=getattr(effective.tts, "speed", 1.0),
+                    language=tts_lang,
                     base_url=local_tts_url,
                 )
                 metadata.tts = ResolvedLayerInfo(provider="speaches" if selected_model != "piper" else "piper", model=selected_model, voice=voice_to_use, source="local")

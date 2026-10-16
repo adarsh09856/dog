@@ -1547,6 +1547,11 @@ SPEACHES_TTS_MODELS = [
 class SpeachesTTSConfiguration(BaseTTSConfiguration):
     model_config = SPEACHES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
+    language: str | None = Field(
+        default=None,
+        description="Selected speech language; auto/multi follows the installed model's capabilities.",
+        json_schema_extra={"allow_custom_input": True},
+    )
     model: str = Field(
         default="piper",
         description="Model name as served by your TTS endpoint (e.g. piper).",
