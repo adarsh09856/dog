@@ -978,7 +978,26 @@ async def _run_pipeline_impl(
         get_parent_context=engine._get_otel_context,
     )
     user_mute_strategies = _create_user_mute_strategies(engine, answer_supervisor)
-    vad_stop_s = float(run_configs.get("vad_stop_secs", 0.2))
+    # Segmented local Whisper needs the full phrase for reliable language
+    # detection. A 200 ms pause splits ordinary Hinglish speech into tiny
+    # clips; the resulting fragments can be empty or misdetected. Preserve an
+    # explicit workflow override and keep the faster default for streaming STT.
+    local_segmented_stt = (
+        not is_realtime
+        and getattr(user_config.stt, "provider", None) in {
+            ServiceProviders.SPEACHES.value,
+            ServiceProviders.KODEWAVES.value,
+            "speaches",
+            "kodewaves",
+        }
+        and getattr(user_config.stt, "api_key", None) in {
+            "sovereign-local-cpu",
+            "local-cpu-token",
+            "none",
+            None,
+        }
+    )
+    vad_stop_s = float(run_configs.get("vad_stop_secs", 0.5 if local_segmented_stt else 0.2))
     user_vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=vad_stop_s))
 
     # Configure turn strategies based on STT provider, model, and workflow configuration
