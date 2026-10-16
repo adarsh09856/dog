@@ -590,7 +590,7 @@ export function AIModelConfigurationV2Editor({
 
     const effectiveTtsProvider = useMemo(() => {
         if (kodewaves.tts_engine_type === "local_cpu") {
-            return effectiveTtsModels.find(model => model.value === kodewaves.tts_model)?.provider || "piper";
+            return effectiveTtsModels.find(model => model.value === kodewaves.tts_model)?.provider || "all";
         }
         const selectedProvider = effectiveTtsModels.find(model => model.value === kodewaves.tts_model)?.provider;
         return selectedProvider && selectedProvider !== "auto" ? selectedProvider : "all";
@@ -653,7 +653,7 @@ export function AIModelConfigurationV2Editor({
                     ["STT", kodewaves.stt_model, effectiveSttModels],
                     ["TTS", kodewaves.tts_model, effectiveTtsModels],
                 ] as const) {
-                    if (models.length === 0 || (selected && !models.some(model => model.value === selected))) {
+                    if (!models.some(model => model.value === (selected || "auto"))) {
                         throw new Error(`Select an available ${label} model before saving.`);
                     }
                 }
@@ -1022,7 +1022,7 @@ export function AIModelConfigurationV2Editor({
                                                 ? "none"
                                                 : (kodewaves.llm_model && effectiveLlmModels.some((m) => m.value === kodewaves.llm_model)
                                                     ? kodewaves.llm_model
-                                                    : (effectiveLlmModels[0]?.value || "auto"))
+                                                    : (!kodewaves.llm_model && effectiveLlmModels.some(model => model.value === "auto") ? "auto" : ""))
                                         }
                                         onValueChange={(llm_model) => setKodewaves({ ...kodewaves, llm_model: llm_model === "auto" || llm_model === "none" ? undefined : llm_model })}
                                     >
@@ -1105,7 +1105,7 @@ export function AIModelConfigurationV2Editor({
                                                 ? "none"
                                                 : (kodewaves.stt_model && effectiveSttModels.some((m) => m.value === kodewaves.stt_model)
                                                     ? kodewaves.stt_model
-                                                    : (effectiveSttModels[0]?.value || "auto"))
+                                                    : (!kodewaves.stt_model && effectiveSttModels.some(model => model.value === "auto") ? "auto" : ""))
                                         }
                                         onValueChange={(stt_model) => setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" || stt_model === "none" ? undefined : stt_model })}
                                     >
@@ -1170,7 +1170,9 @@ export function AIModelConfigurationV2Editor({
                                                         ...kodewaves,
                                                         tts_engine_type: "local_cpu",
                                                         voice: kodewaves.tts_engine_type === "local_cpu" ? kodewaves.voice : "",
-                                                        tts_model: "piper",
+                                                        tts_model: kodewaves.tts_engine_type === "local_cpu"
+                                                            ? kodewaves.tts_model
+                                                            : catalogManifest?.local_tts_models?.[0]?.value,
                                                     });
                                                 }}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
@@ -1190,7 +1192,7 @@ export function AIModelConfigurationV2Editor({
                                                 ? "none"
                                                 : (kodewaves.tts_model && effectiveTtsModels.some((m) => m.value === kodewaves.tts_model)
                                                     ? kodewaves.tts_model
-                                                    : (effectiveTtsModels[0]?.value || "auto"))
+                                                    : (!kodewaves.tts_model && effectiveTtsModels.some(model => model.value === "auto") ? "auto" : ""))
                                         }
                                         onValueChange={(tts_model) => {
                                             const nextModel = tts_model === "auto" || tts_model === "none" ? undefined : tts_model;
@@ -1205,7 +1207,7 @@ export function AIModelConfigurationV2Editor({
                                             {effectiveTtsModels.length === 0 ? (
                                                 <SelectItem key="none" value="none" disabled>
                                                     {kodewaves.tts_engine_type === "local_cpu"
-                                                        ? "Local Piper ONNX TTS unavailable"
+                                                        ? "No self-hosted TTS models available"
                                                         : "No active synthesizer keys (Add Cartesia / ElevenLabs in Admin > Models)"}
                                                 </SelectItem>
                                             ) : (
