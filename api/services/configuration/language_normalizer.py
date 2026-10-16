@@ -107,27 +107,15 @@ def resolve_agent_speech_language(user_config) -> Optional[str]:
 
 
 def speech_language_instruction(language: Optional[str]) -> Optional[str]:
-    """Build concise language rules for multilingual speech generation."""
-    transcript_rule = (
-        "Speech recognition may write borrowed English words phonetically in the "
-        "selected language's script. Infer the caller's intended words from context; "
-        "do not mistake script alone for language. Preserve English names and phrases "
-        "in Latin script, and ask briefly when meaning is unclear instead of guessing."
-    )
+    """Build a concise text-generation rule so the LLM output matches TTS."""
     if _is_auto_language(language):
-        return (
-            "Final spoken-language rule: support all configured Indian languages, "
-            "English, and natural code-switching. Match the caller's language and "
-            "script on each turn; do not force one language across the conversation. "
-            + transcript_rule
-        )
+        return None
     if language == "caller":
         return (
             "Final spoken-language rule (overrides earlier conflicting prompt text): "
             "reply in the same language the caller used, and use that language's "
             "normal writing system. Do not translate or transliterate into English. "
-            "Keep the caller's language consistent throughout the response. "
-            + transcript_rule
+            "Keep the caller's language consistent throughout the response."
         )
     code = normalize_language_code(language)
     name = SPEECH_LANGUAGE_NAMES.get(code)
@@ -142,8 +130,7 @@ def speech_language_instruction(language: Optional[str]) -> Optional[str]:
             "in Hinglish. Never claim that you understand or speak only Hindi, ask "
             "the caller to use only Hindi, or translate English into Hindi. For speech, "
             "write Hindi words in Devanagari and keep English words, names, product "
-            "terms, and numbers in their natural spoken form. "
-            + transcript_rule
+            "terms, and numbers in their natural spoken form."
         )
     return (
         f"Final spoken-language rule (overrides earlier conflicting prompt text): "
@@ -153,8 +140,7 @@ def speech_language_instruction(language: Optional[str]) -> Optional[str]:
         "in both languages. Never claim to understand or speak only one language, "
         "require the caller to use only one language, or translate a language switch "
         "away. Write native-language words in their normal script for speech; preserve "
-        "English words, names, numbers, and product terms clearly. "
-        + transcript_rule
+        "English words, names, numbers, and product terms clearly."
     )
 
 
