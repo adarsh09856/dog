@@ -5,8 +5,9 @@ reusable functions. Defines recording response mode markers and instructions.
 """
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Callable, Optional
+from zoneinfo import ZoneInfo
 
 if TYPE_CHECKING:
     from api.services.workflow.pipecat_engine_custom_tools import CustomToolManager
@@ -24,14 +25,15 @@ TTS_MARKER = "▸"  # Generate dynamic TTS text
 
 ACTION_GROUNDING_INSTRUCTIONS = (
     "Continue from the conversation history. After the opening greeting, answer "
-    "the caller's latest request without greeting again or asking for details "
-    "they have already provided. "
-    "Only confirm an action after its action tool returns a successful result. "
-    "Changing workflow steps is not an action confirmation. Never invent booking "
-    "IDs or other tool results. Before a successful booking tool result, collect "
-    "the required details and ask for confirmation; do not say an appointment "
-    "is booked. If no suitable tool is available, explain that the action cannot "
-    "be completed here."
+    "the caller's latest request directly, without greeting again or asking for "
+    "details they already gave. Use a configured tool for actions and only confirm "
+    "success when that tool returns success; never invent results. If a required "
+    "tool is unavailable, say clearly what you cannot do. "
+    "For speech, use one or two short conversational sentences. Use commas and "
+    "sentence breaks where a person would naturally pause; avoid run-on speech, "
+    "lists, markdown, repeated filler, and generic 'I'm listening' replies. If the "
+    "caller audio or words are unclear, say briefly that you did not hear them "
+    "clearly and ask them to repeat; do not guess what they said."
 )
 
 # ---------------------------------------------------------------------------
@@ -98,12 +100,12 @@ def compose_system_prompt_for_node(
         p for p in (global_prompt, formatted_node_prompt, ACTION_GROUNDING_INSTRUCTIONS)
         if p
     ]
+    india_now = datetime.now(ZoneInfo("Asia/Kolkata"))
     parts.append(
-        f"Current server time: {datetime.now(UTC).isoformat(timespec='seconds')} (UTC). "
-        "Resolve today/tomorrow against this actual date in the caller's confirmed "
-        "timezone; ask for the timezone when it is unknown. Never invent the current "
-        "date. For bookings, verify a complete phone number and read back the exact "
-        "calendar date, time and timezone before asking permission to save."
+        f"Current India local time: {india_now.isoformat(timespec='seconds')} (IST, "
+        "Asia/Kolkata). Interpret dates and times as India local time by default; "
+        "do not ask the caller for a timezone. Use another timezone only when the "
+        "caller explicitly requests one. Never invent the current date."
     )
     if node.out_edges:
         transitions = "\n".join(

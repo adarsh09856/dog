@@ -1,6 +1,7 @@
 'use client';
 
 import {
+    AlertTriangle,
     ArrowRight,
     Bot,
     Calendar,
@@ -18,7 +19,6 @@ import {
     UtensilsCrossed,
     Volume2,
     Wand2,
-    AlertTriangle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -26,7 +26,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { createWorkflowApiV1WorkflowCreateDefinitionPost } from '@/client/sdk.gen';
-import { apiFetch } from '@/lib/kodewavesApi';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -48,8 +47,10 @@ import {
     generateTemplateWorkflowDefinition,
     TEMPLATE_CATEGORIES,
 } from '@/constants/agentTemplates';
+import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
-import { catalogApi, type AvailableCatalogResponse } from '@/lib/kodewavesApi';
+import { apiFetch } from '@/lib/kodewavesApi';
+import { type AvailableCatalogResponse,catalogApi } from '@/lib/kodewavesApi';
 import logger from '@/lib/logger';
 import { getRandomId } from '@/lib/utils';
 
@@ -180,7 +181,7 @@ export default function CreateWorkflowPage() {
     const [previewTemplate, setPreviewTemplate] = useState<AgentTemplate | null>(null);
     const [customAgentName, setCustomAgentName] = useState('');
     const [customCompanyName, setCustomCompanyName] = useState('');
-    const [templateLanguage, setTemplateLanguage] = useState<'en' | 'hi'>('en');
+    const [templateLanguage, setTemplateLanguage] = useState<string>('en');
     const templatePreview = useMemo(() => previewTemplate
         ? generateTemplateWorkflowDefinition(previewTemplate, {
             agentName: customAgentName, companyName: customCompanyName, language: templateLanguage,
@@ -190,6 +191,7 @@ export default function CreateWorkflowPage() {
     const [customBuilderName, setCustomBuilderName] = useState('');
     const [customBuilderDescription, setCustomBuilderDescription] = useState('');
     const [customBuilderPrompt, setCustomBuilderPrompt] = useState('');
+    const [customBuilderLanguage, setCustomBuilderLanguage] = useState('model');
 
     const [catalog, setCatalog] = useState<AvailableCatalogResponse | null>(null);
     const [catalogLoading, setCatalogLoading] = useState(true);
@@ -317,6 +319,7 @@ export default function CreateWorkflowPage() {
                         name: customBuilderName.trim(),
                         description,
                         instructions: customBuilderPrompt.trim() || undefined,
+                        language: customBuilderLanguage === 'model' ? undefined : customBuilderLanguage,
                     }),
                 },
             );
@@ -575,6 +578,24 @@ export default function CreateWorkflowPage() {
                                 </div>
 
                                 <div className="space-y-2">
+                                    <Label htmlFor="custom-builder-language">Agent Language</Label>
+                                    <select
+                                        id="custom-builder-language"
+                                        value={customBuilderLanguage}
+                                        onChange={(event) => setCustomBuilderLanguage(event.target.value)}
+                                        className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"
+                                    >
+                                        <option value="model">Use the language configured in Models</option>
+                                        {INDIAN_TEMPLATE_LANGUAGES.map(({ code, name }) => (
+                                            <option key={code} value={code}>{name}</option>
+                                        ))}
+                                    </select>
+                                    <p className="text-xs text-muted-foreground">
+                                        The agent prompt follows this language and supports natural English code-switching. Configure compatible STT and TTS models in Models.
+                                    </p>
+                                </div>
+
+                                <div className="space-y-2">
                                     <Label htmlFor="custom-builder-prompt">
                                         System Prompt & Instructions (Optional)
                                     </Label>
@@ -638,12 +659,14 @@ export default function CreateWorkflowPage() {
                                 <div className="space-y-1.5">
                                     <Label htmlFor="template-language">Template language</Label>
                                     <select id="template-language" value={templateLanguage}
-                                        onChange={e => setTemplateLanguage(e.target.value as 'en' | 'hi')}
+                                        onChange={e => setTemplateLanguage(e.target.value)}
                                         className="flex h-9 w-full rounded-md border bg-background px-3 text-sm">
                                         <option value="en">English</option>
-                                        <option value="hi">हिंदी (Hindi)</option>
+                                        {INDIAN_TEMPLATE_LANGUAGES.map(({ code, name }) => (
+                                            <option key={code} value={code}>{name}</option>
+                                        ))}
                                     </select>
-                                    <p className="text-xs text-muted-foreground">Use a matching speech language and voice in Models.</p>
+                                    <p className="text-xs text-muted-foreground">Choose a language for the agent prompt. Select models and a voice that support it in Models.</p>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-1.5">

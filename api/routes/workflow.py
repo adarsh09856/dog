@@ -333,6 +333,7 @@ class GenerateWorkflowRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=3, max_length=4000)
     instructions: str | None = Field(default=None, max_length=8000)
+    language: str | None = Field(default=None, max_length=32)
 
 
 class GenerateWorkflowResponse(BaseModel):
@@ -353,9 +354,20 @@ async def generate_workflow_definition(
 
     try:
         from api.services.workflow.generation import generate_voice_workflow
+        from api.services.configuration.language_normalizer import (
+            SPEECH_LANGUAGE_NAMES,
+            normalize_language_code,
+        )
+
+        requested_language = None
+        if request.language:
+            requested_language = normalize_language_code(request.language)
+            if requested_language not in SPEECH_LANGUAGE_NAMES:
+                raise HTTPException(status_code=400, detail="Choose a supported language.")
 
         definition, provider, model = await generate_voice_workflow(
             organization_id, request.name, request.description, request.instructions,
+            language=requested_language,
         )
         definition = await _attach_generated_booking_tool(
             definition, user, " ".join((request.name, request.description, request.instructions or "")),
@@ -580,7 +592,12 @@ async def create_workflow(
     workflow_definition = ensure_trigger_paths(request.workflow_definition)
     template_id = workflow_definition.get("template_id")
     template_language = workflow_definition.get("template_language")
-    if isinstance(template_id, str) and template_id and template_language in ("en", "hi"):
+    from api.services.configuration.language_normalizer import SPEECH_LANGUAGE_NAMES
+
+    template_language_code = str(template_language or "en").strip().lower().replace("_", "-").split("-", 1)[0]
+    if (isinstance(template_id, str) and template_id) or template_language is not None:
+        if template_language_code not in SPEECH_LANGUAGE_NAMES and template_language_code not in {"multi", "auto", "caller"}:
+            raise HTTPException(status_code=400, detail="Choose a supported template language.")
         from api.services.configuration.ai_model_configuration import get_effective_ai_model_configuration_for_workflow
         from api.services.configuration.language_normalizer import resolve_agent_speech_language
 
@@ -588,7 +605,7 @@ async def create_workflow(
             organization_id=user.selected_organization_id, workflow_configurations=None,
         )
         speech_language = resolve_agent_speech_language(selected)
-        if speech_language and speech_language.split("-")[0] not in (template_language, "multi", "auto", "caller"):
+        if speech_language and speech_language.split("-")[0].lower() not in (template_language_code, "multi", "auto", "caller"):
             raise HTTPException(
                 status_code=400,
                 detail="The template language does not match your selected speech voice. Choose a matching voice and language in Models, then create the agent.",

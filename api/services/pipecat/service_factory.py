@@ -1623,7 +1623,7 @@ def create_llm_service_from_provider(
         if not base_url.rstrip("/").endswith("/v1"):
             base_url = f"{base_url.rstrip('/')}/v1"
         _validate_runtime_service_url(base_url, "base_url")
-        return OpenAILLMService(
+        return KodewavesLLMService(
             base_url=base_url,
             api_key=api_key or "none",
             settings=OpenAILLMSettings(**_voice_completion_settings(

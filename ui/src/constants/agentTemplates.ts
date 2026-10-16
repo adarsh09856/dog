@@ -1,3 +1,5 @@
+import { INDIAN_TEMPLATE_LANGUAGES } from './languages';
+
 /**
  * Pre-built AI Voice Agent Templates
  * Industry-ready conversational agents with optimized system prompts, greetings, and workflow definitions.
@@ -76,7 +78,7 @@ You are an efficient, friendly appointment booking coordinator for {{company_nam
 ## Booking Step-by-Step Flow
 1. Greet the caller and verify their full name and callback phone number.
 2. Ask what service or topic they wish to schedule an appointment for.
-3. Ask for the caller's preferred future date, time, year and timezone. Only offer available slots returned by a configured calendar tool.
+3. Ask for the caller's preferred future date and time in India Standard Time (IST, Asia/Kolkata). Do not ask for a timezone; use another timezone only if the caller explicitly requests it. Only offer available slots returned by a configured calendar tool.
 4. If neither works, ask what day of the week and time of day suits them best.
 5. Once a time is selected, clearly read back the date, time, and service to confirm accuracy.
 6. After explicit caller confirmation, call the configured booking tool. Only confirm the reservation after it returns booked=true and an appointment ID. If it fails, explain that the appointment was not saved. Only promise SMS/email when a configured action actually sends it.
@@ -333,7 +335,7 @@ export function generateTemplateWorkflowDefinition(
     options?: {
         companyName?: string;
         agentName?: string;
-        language?: 'en' | 'hi';
+        language?: string;
     }
 ) {
     const company = options?.companyName?.trim() || 'our company';
@@ -343,25 +345,22 @@ export function generateTemplateWorkflowDefinition(
         .replace(/\{\{company_name\}\}/g, company)
         .replace(/\{\{agent_name\}\}/g, agent);
 
-    const customizedFirstMessage = template.suggestedFirstMessage
-        .replace(/\{\{company_name\}\}/g, company)
-        .replace(/\{\{agent_name\}\}/g, agent);
-
     // Build the complete startCall node prompt including the opening line instruction
-    const hindi = options?.language === 'hi';
-    const greeting = hindi
-        ? `नमस्ते, मैं ${agent} हूँ। बताइए, मैं आपकी कैसे मदद कर सकती हूँ?`
-        : customizedFirstMessage;
+    const language = options?.language || 'en';
+    const hindi = language === 'hi';
+    const languageName = language === 'en'
+        ? 'English'
+        : INDIAN_TEMPLATE_LANGUAGES.find((item) => item.code === language)?.name || 'English';
     const rolePrompt = hindi && template.id === 'appointment-booking'
-        ? `You are ${agent}, a helpful appointment assistant for ${company}. Reply only in natural Hindi (Devanagari), one short question per turn. Collect name, phone, service, future date with year, time and timezone, then ask for confirmation and call the configured booking tool. Never claim a booking without booked=true and a real appointment ID. Do not invent availability or promise messages.\nExamples:\nCaller: मुझे अपॉइंटमेंट चाहिए।\nAssistant: ज़रूर। कृपया अपना नाम बताइए।\nCaller: मेरा नाम राहुल है।\nAssistant: धन्यवाद राहुल जी। आपका फोन नंबर क्या है?`
+        ? `You are ${agent}, a helpful appointment assistant for ${company}. Speak naturally in Hindi and Hinglish. Use Devanagari for Hindi and preserve English words or sentences when the caller uses them. Ask one short question per turn. Collect name, phone, service and future date/time in IST (Asia/Kolkata); do not ask for a timezone unless the caller explicitly requests another. Then ask for confirmation and call the configured booking tool. Never claim a booking without booked=true and a real appointment ID. Do not invent availability or promise messages.\nExamples:\nCaller: मुझे अपॉइंटमेंट चाहिए।\nAssistant: ज़रूर। कृपया अपना नाम बताइए।\nCaller: I want to book an appointment.\nAssistant: बिल्कुल, किस तारीख़ और समय पर आपको आना है?`
         : customizedPrompt;
     const fullPrompt = `${rolePrompt}\n\n${hindi
-        ? 'Speak in natural conversational Hindi using Devanagari. Keep replies to one or two short sentences. Never switch to French or another language. Ask for clarification if the caller is unclear.'
-        : 'Speak naturally in English. Keep replies to one or two short sentences.'}\nOnly report actions as completed after their configured tools return success. Never invent calendar availability, appointment IDs, messages or transfers.`;
+        ? 'These language rules override any conflicting language advice above. Speak in natural conversational Hindi using Devanagari. Allow English words and natural Hinglish when the caller uses them. Start with a brief greeting in Hindi or Hinglish and one clear question. Keep replies to one or two short sentences. Ask for clarification if the caller is unclear.'
+        : `These language rules override any conflicting language advice above. Speak naturally in ${languageName}. Use its normal script when applicable, and allow natural English code-switching when the caller uses English. Start with a brief greeting in ${languageName} and one clear question. Keep replies to one or two short sentences. Ask for clarification if the caller is unclear.`}\nOnly report actions as completed after their configured tools return success. Never invent calendar availability, appointment IDs, messages or transfers.`;
 
     return {
         template_id: template.id,
-        template_language: options?.language || 'en',
+        template_language: language,
         nodes: [
             {
                 id: '1',
@@ -371,7 +370,7 @@ export function generateTemplateWorkflowDefinition(
                     name: 'start call',
                     prompt: fullPrompt,
                     greeting_type: 'text',
-                    greeting,
+                    greeting: '',
                     allow_interrupt: true,
                     invalid: false,
                     validationMessage: null,

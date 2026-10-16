@@ -184,6 +184,38 @@ class _BookingToolChoiceMixin:
 
     def build_chat_completion_params(self, params_from_context):
         params = super().build_chat_completion_params(params_from_context)
+        model = str(getattr(self._settings, "model", "") or "").casefold()
+        messages = params.get("messages")
+        if model.startswith(("qwen3:", "qwen3.5:")) and isinstance(messages, list):
+            # Qwen's /no_think control is honored by local Ollama models where
+            # OpenAI-compatible reasoning_effort metadata may be ignored. Keep
+            # it on every custom workflow node, not only generated templates.
+            found_system_prompt = False
+            for index in range(len(messages) - 1, -1, -1):
+                message = messages[index]
+                if not isinstance(message, dict) or message.get("role") != "system":
+                    continue
+                content = message.get("content")
+                if isinstance(content, str):
+                    found_system_prompt = True
+                    if "/no_think" not in content:
+                        messages = list(messages)
+                        messages[index] = {
+                            **message,
+                            "content": f"{content.rstrip()}\n/no_think",
+                        }
+                        params["messages"] = messages
+                    break
+            if not found_system_prompt:
+                first_user = next(
+                    (index for index, message in enumerate(messages)
+                     if isinstance(message, dict) and message.get("role") == "user"),
+                    len(messages),
+                )
+                messages = list(messages)
+                messages.insert(first_user, {"role": "system", "content": "/no_think"})
+                params["messages"] = messages
+
         from api.services.workflow.tools.booking import caller_confirmed_booking
 
         tools = params.get("tools")

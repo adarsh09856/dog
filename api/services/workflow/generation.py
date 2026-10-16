@@ -31,17 +31,14 @@ def _fallback_voice_workflow(name: str, description: str, instructions: str | No
     agent_prompt = f"Help the caller with this purpose: {purpose}."
     if extra:
         agent_prompt += f" Follow these instructions: {extra}"
+    language_rule = speech_language_instruction(language)
     agent_prompt += " Ask for missing information, perform only available actions, and state the real result."
-    greeting = (
-        "नमस्ते, बताइए, मैं आपकी कैसे मदद करूँ?"
-        if (language or "").split("-")[0].lower() == "hi"
-        else "Hello, how may I help you today?"
-    )
+    if language_rule:
+        agent_prompt += f" {language_rule}"
     definition = {
         "nodes": [
             {"id": "generated-0", "type": "startCall", "position": {"x": 240, "y": 0},
-             "data": {"name": "Greeting", "prompt": f"Greet the caller as {safe_name} and ask how you can help.",
-                      "greeting_type": "text", "greeting": greeting,
+             "data": {"name": "Greeting", "prompt": f"Greet the caller as {safe_name} and ask how you can help. {language_rule or ''}".strip(),
                       "is_start": True, "allow_interrupt": True, "add_global_prompt": False}},
             {"id": "generated-1", "type": "agentNode", "position": {"x": 240, "y": 220},
              "data": {"name": "Assist caller", "prompt": agent_prompt,
@@ -66,6 +63,7 @@ def _fallback_voice_workflow(name: str, description: str, instructions: str | No
 
 async def generate_voice_workflow(
     organization_id: int, name: str, description: str, instructions: str | None = None,
+    language: str | None = None,
 ) -> tuple[dict, str, str]:
     configuration = await get_effective_ai_model_configuration_for_workflow(
         organization_id=organization_id,
@@ -85,7 +83,7 @@ async def generate_voice_workflow(
         raise HTTPException(status_code=400, detail="No active LLM is configured for this organization")
     provider = str(getattr(configuration.llm.provider, "value", configuration.llm.provider))
     model = configuration.llm.model
-    selected_language = resolve_agent_speech_language(configuration)
+    selected_language = language or resolve_agent_speech_language(configuration)
     llm = create_llm_service(configuration, usage_context="agent_builder")
     language = speech_language_instruction(selected_language)
 
@@ -179,11 +177,14 @@ Use one or two steps. Keep each prompt to one or two short sentences suited to a
         WorkflowGraph(dto)
         definition = json.loads(dto.model_dump_json(exclude_none=True))
         definition["viewport"] = {"x": 0, "y": 0, "zoom": 0.8}
+        definition["template_language"] = selected_language or "caller"
         return definition, provider, model
     except ValueError as error:
         if raw is None:
             raise
         logger.warning("Selected workflow builder model returned an invalid plan ({}); using a validated starter graph", type(error).__name__)
-        return _fallback_voice_workflow(name, description, instructions, selected_language), provider, model
+        definition = _fallback_voice_workflow(name, description, instructions, selected_language)
+        definition["template_language"] = selected_language or "caller"
+        return definition, provider, model
     finally:
         await llm.cleanup()

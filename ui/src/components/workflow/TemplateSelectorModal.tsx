@@ -41,6 +41,7 @@ import {
     generateTemplateWorkflowDefinition,
     TEMPLATE_CATEGORIES,
 } from '@/constants/agentTemplates';
+import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
 
@@ -154,7 +155,7 @@ export function TemplateSelectorModal({
     const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null);
     const [customAgentName, setCustomAgentName] = useState('');
     const [customCompanyName, setCustomCompanyName] = useState('');
-    const [templateLanguage, setTemplateLanguage] = useState<'en' | 'hi'>('en');
+    const [templateLanguage, setTemplateLanguage] = useState<string>('en');
     const templatePreview = useMemo(() => selectedTemplate
         ? generateTemplateWorkflowDefinition(selectedTemplate, {
             agentName: customAgentName, companyName: customCompanyName, language: templateLanguage,
@@ -320,12 +321,14 @@ export function TemplateSelectorModal({
                                         <div>
                                             <Label htmlFor="modal-template-language">Template language</Label>
                                             <select id="modal-template-language" value={templateLanguage}
-                                                onChange={e => setTemplateLanguage(e.target.value as 'en' | 'hi')}
+                                                onChange={e => setTemplateLanguage(e.target.value)}
                                                 className="mt-1 flex h-9 w-full rounded-md border bg-background px-3 text-sm">
                                                 <option value="en">English</option>
-                                                <option value="hi">हिंदी (Hindi)</option>
+                                                {INDIAN_TEMPLATE_LANGUAGES.map(({ code, name }) => (
+                                                    <option key={code} value={code}>{name}</option>
+                                                ))}
                                             </select>
-                                            <p className="mt-1 text-xs text-muted-foreground">Use a matching speech language and voice in Models.</p>
+                                            <p className="mt-1 text-xs text-muted-foreground">Choose the prompt language. The speech models and voice must support it in Models.</p>
                                         </div>
                                         <div>
                                             <Label htmlFor="custom-agent-name" className="text-xs font-semibold">
@@ -398,7 +401,7 @@ export function TemplateSelectorModal({
                                         </Label>
                                         <div className="bg-muted/40 p-3 rounded-lg border text-xs text-foreground italic">
                                             &ldquo;
-                                            {templatePreview?.nodes[0].data.greeting}
+                                            {templatePreview?.nodes[0].data.greeting || 'The agent will generate a brief greeting in the selected language when the call starts.'}
                                             &rdquo;
                                         </div>
                                     </div>
