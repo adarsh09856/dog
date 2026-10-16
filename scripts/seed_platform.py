@@ -540,7 +540,11 @@ async def seed_prompt_templates():
 
     async with kodewaves_db_client.get_session() as session:
         for t in default_templates:
-            stmt = select(PromptTemplateModel).where(PromptTemplateModel.title == t["title"])
+            stmt = select(PromptTemplateModel).where(
+                PromptTemplateModel.title == t["title"],
+                PromptTemplateModel.is_system_template.is_(True),
+                PromptTemplateModel.organization_id.is_(None),
+            ).limit(1)
             res = await session.execute(stmt)
             if not res.scalar_one_or_none():
                 session.add(PromptTemplateModel(**t))

@@ -40,6 +40,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { PromptTemplate, promptTemplatesApi } from "@/lib/kodewavesApi";
+import { createWorkflowApiV1WorkflowCreateDefinitionPost } from "@/client/sdk.gen";
+import { detailFromError } from "@/lib/apiError";
+import { promptTemplateWorkflow } from "@/lib/promptTemplateWorkflow";
 
 export default function PromptTemplatesPage() {
   const { user, loading: authLoading } = useAuth();
@@ -49,6 +52,8 @@ export default function PromptTemplatesPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<number | string | null>(null);
+  const [creatingAgentId, setCreatingAgentId] = useState<number | string | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -81,23 +86,50 @@ export default function PromptTemplatesPage() {
     fetchTemplates();
   }, [authLoading, user]);
 
-  const handleCopyPrompt = (t: PromptTemplate) => {
-    navigator.clipboard.writeText(t.system_prompt);
-    setCopiedId(t.id);
-    setTimeout(() => setCopiedId(null), 2500);
+  const handleCopyPrompt = async (t: PromptTemplate) => {
+    try {
+      await navigator.clipboard.writeText(t.system_prompt);
+      setCopiedId(t.id);
+      setTimeout(() => setCopiedId(null), 2500);
+    } catch {
+      setLoadError("Unable to copy the prompt. Please retry.");
+    }
+  };
+
+  const handleUseTemplate = async (template: PromptTemplate) => {
+    if (!user || creatingAgentId !== null) return;
+    setCreatingAgentId(template.id);
+    setLoadError(null);
+    try {
+      const response = await createWorkflowApiV1WorkflowCreateDefinitionPost({ body: {
+        name: template.title, workflow_definition: promptTemplateWorkflow(template),
+      } });
+      if (response.error || !response.data?.id) {
+        throw new Error(detailFromError(response.error, "Unable to create an agent from this template."));
+      }
+      router.push(`/workflow/${response.data.id}?onboarding=web_call`);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to create an agent from this template.");
+    } finally {
+      setCreatingAgentId(null);
+    }
   };
 
   const handleCreateTemplate = async () => {
+    if (savingTemplate) return;
     if (!newTemplate.title || !newTemplate.system_prompt) {
       alert("Title and system prompt are required.");
       return;
     }
+    setSavingTemplate(true);
     try {
       await promptTemplatesApi.createTemplate(newTemplate);
       setModalOpen(false);
       await fetchTemplates();
     } catch (err: any) {
       alert(err.message || "Failed to create template");
+    } finally {
+      setSavingTemplate(false);
     }
   };
 
@@ -118,7 +150,7 @@ export default function PromptTemplatesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Voice Prompt Templates Gallery</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Production-ready conversational voice prompts engineered for low latency, natural interruptions, and Indian contexts.
+            Reusable prompts and greetings for your workspace’s voice agents.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -228,9 +260,10 @@ export default function PromptTemplatesPage() {
                 <Button
                   size="sm"
                   className="text-xs gap-1.5"
-                  onClick={() => router.push("/workflow")}
+                  disabled={creatingAgentId !== null}
+                  onClick={() => handleUseTemplate(t)}
                 >
-                  Use in Voice Studio <ExternalLink className="h-3.5 w-3.5" />
+                  {creatingAgentId === t.id ? "Creating Agent…" : "Use in Voice Studio"} <ExternalLink className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </CardContent>
@@ -300,7 +333,7 @@ export default function PromptTemplatesPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateTemplate}>Save Template</Button>
+            <Button onClick={handleCreateTemplate} disabled={savingTemplate}>{savingTemplate ? "Saving…" : "Save Template"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

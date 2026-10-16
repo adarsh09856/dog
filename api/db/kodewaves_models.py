@@ -370,6 +370,7 @@ class PromptTemplateModel(Base):
     __tablename__ = "prompt_templates"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=True, index=True)
     category = Column(String(50), nullable=False, index=True)                      # 'Real Estate', 'Healthcare', 'Banking', 'Support'
     title = Column(String(150), nullable=False)
     description = Column(Text, nullable=False)
