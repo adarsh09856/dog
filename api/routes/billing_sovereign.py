@@ -139,6 +139,14 @@ class SaaSPlanPublicItem(BaseModel):
     is_active: bool
 
 
+def _public_plan_prices(price_cents: int, currency: str) -> tuple[int, int]:
+    """Convert stored minor units to whole-unit display prices."""
+    amount = max(0, int(price_cents or 0))
+    if str(currency or "INR").upper() == "USD":
+        return round(amount * 0.83), round(amount / 100)
+    return round(amount / 100), round(amount / 8300)
+
+
 @router.get("/public/plans", response_model=List[SaaSPlanPublicItem])
 async def list_public_plans():
     """Retrieve public SaaS plans without authentication."""
@@ -174,10 +182,10 @@ async def list_public_plans():
             records = result.scalars().all()
 
         feature_map = {
-            "starter": ["100 Included Voice Minutes", "2 Concurrent Channels", "All 20+ Model Providers", "WebRTC Web Widget", "Visual Node Workflow Builder"],
-            "pro": ["500 Included Voice Minutes", "8 Concurrent Channels", "Navana Bodhi 10 Indic Languages", "Twilio & Exotel Native SIP", "System 1 Jev Guardrail", "Priority Support"],
-            "scale": ["2,000 Included Voice Minutes", "25 Concurrent Channels", "Lowest ₹0.55/min Internal Route", "Custom Voice Cloning Support", "Direct CRM & Webhook Sync", "Dedicated Account Engineer"],
-            "enterprise": ["10,000 Included Voice Minutes", "100+ Concurrent Channels", "Local CPU AI Engine (Ollama + Whisper)", "Zero External Data Transmission", "Full White-Label Branding", "24/7 Phone Support"],
+            "starter": ["Available cloud and self-hosted model providers", "WebRTC Web Widget", "Visual Node Workflow Builder"],
+            "pro": ["Outbound call campaigns", "Twilio and Exotel telephony options", "CRM and appointment tools", "Priority support"],
+            "scale": ["Direct CRM and webhook integrations", "Advanced campaign controls", "Dedicated account support"],
+            "enterprise": ["Local CPU AI engine option", "White-label branding", "Custom telecom integrations"],
         }
 
         overage_map = {"starter": 1.20, "pro": 0.95, "scale": 0.75, "enterprise": 0.55}
@@ -188,13 +196,17 @@ async def list_public_plans():
                 name=r.name,
                 code=r.code,
                 description=r.description,
-                monthly_price_inr=r.monthly_price_cents,
-                monthly_price_usd=max(19, int(r.monthly_price_cents / 83)),
+                monthly_price_inr=_public_plan_prices(r.monthly_price_cents, r.currency)[0],
+                monthly_price_usd=_public_plan_prices(r.monthly_price_cents, r.currency)[1],
                 included_minutes=r.included_monthly_minutes,
                 overage_rate_per_minute=overage_map.get(r.code, 1.0),
                 max_concurrent_calls=r.max_concurrent_calls,
                 allow_user_byok=r.allow_user_byok,
-                features=feature_map.get(r.code, ["All Standard Voice Features"]),
+                features=[
+                    f"{r.included_monthly_minutes:,} Included Voice Minutes",
+                    f"{r.max_concurrent_calls:,} Concurrent Channels",
+                    *feature_map.get(r.code, ["All standard voice features"]),
+                ],
                 is_active=r.is_active,
             )
             for r in records
