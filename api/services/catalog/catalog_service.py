@@ -418,6 +418,12 @@ class CatalogService:
                 provider=prov_norm,
                 enabled_only=True,
             )
+            if prov_norm == "gemini" and layer_norm != "tts":
+                db_models += await kodewaves_db_client.list_models(
+                    layer=layer_norm,
+                    provider="google",
+                    enabled_only=True,
+                )
             if db_models:
                 recom = [m for m in db_models if getattr(m, "recommended", False)]
                 target = recom[0] if recom else db_models[0]
@@ -643,19 +649,23 @@ class CatalogService:
                                 "https://generativelanguage.googleapis.com/v1beta/models/"
                                 f"{test_model}:generateContent"
                             )
+                            part = {"text": "नमस्ते, यह आवाज़ की जाँच है।"}
+                            if test_model.startswith("gemini-3.8-"):
+                                part["speech_metadata"] = {
+                                    "style": "natural, relaxed conversational delivery"
+                                }
+                                voice_config = {"voice": "Kore"}
+                            else:
+                                # Earlier TTS models reject turn-level metadata
+                                # and require the legacy prebuilt voice shape.
+                                voice_config = {
+                                    "prebuiltVoiceConfig": {"voiceName": "Kore"}
+                                }
                             payload = {
-                                "contents": [{
-                                    "role": "user",
-                                    "parts": [{
-                                        "text": "नमस्ते, यह आवाज़ की जाँच है।",
-                                        "speech_metadata": {
-                                            "style": "natural, relaxed conversational delivery"
-                                        },
-                                    }],
-                                }],
+                                "contents": [{"role": "user", "parts": [part]}],
                                 "generationConfig": {
                                     "responseModalities": ["AUDIO"],
-                                    "speechConfig": {"voiceConfig": {"voice": "Kore"}},
+                                    "speechConfig": {"voiceConfig": voice_config},
                                 },
                             }
                             async with session.post(
@@ -727,7 +737,7 @@ class CatalogService:
         status_str = ("PASS" if success else "FAIL") if executed_model else "UNTESTED"
 
         # Record test run in DB if reachable
-        db_provider = prov_norm
+        db_provider = "google" if prov_norm == "gemini" and layer_norm != "tts" else prov_norm
         try:
             await kodewaves_db_client.record_verify_run(
                 provider=db_provider,
@@ -761,11 +771,15 @@ class CatalogService:
         """Verify all layers supported by a provider."""
         raw_provider = (provider or "").lower().strip()
         prov_norm = "gemini" if raw_provider == "gemini" else normalize_provider_name(provider)
-        models = CURATED_PROVIDER_MODELS.get(prov_norm, [])
+        models = list(CURATED_PROVIDER_MODELS.get(prov_norm, []))
+        if prov_norm == "gemini":
+            models.extend(CURATED_PROVIDER_MODELS.get("google", []))
         layers = list({m["layer"] for m in models})
 
         try:
             db_models = await kodewaves_db_client.list_models(provider=prov_norm, enabled_only=False)
+            if prov_norm == "gemini":
+                db_models += await kodewaves_db_client.list_models(provider="google", enabled_only=False)
             for m in db_models:
                 if m.layer and m.layer not in layers:
                     layers.append(m.layer)
@@ -923,6 +937,31 @@ class CatalogService:
             except Exception:
                 local_stt = []
 
+            # Advertise the CPU Indic recognizer only when its weights and
+            # selected language checkpoints are present in the running sidecar.
+            indic_stt_url = local_ai_setting.get("indic_stt_endpoint") or os.environ.get(
+                "INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"
+            )
+            indic_stt_url = whisper_api_base(normalize_local_ai_endpoint(indic_stt_url))
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
+                    async with session.get(f"{indic_stt_url.rstrip('/')}/models") as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            for installed_model in data.get("data", []):
+                                if (isinstance(installed_model, dict)
+                                        and installed_model.get("task") == "automatic-speech-recognition"
+                                        and installed_model.get("installed", True)
+                                        and installed_model.get("id")):
+                                    local_stt.append({
+                                        "value": installed_model["id"],
+                                        "label": "IndicConformer CTC INT8 (installed languages)",
+                                        "provider": "whisper",
+                                        "languages": installed_model.get("languages", []),
+                                    })
+            except (aiohttp.ClientError, TimeoutError):
+                pass
+
             # Probe Local TTS (Piper ONNX)
             piper_url = local_ai_setting.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
             piper_url = normalize_local_ai_endpoint(piper_url).rstrip("/").removesuffix("/synthesize")
@@ -951,6 +990,32 @@ class CatalogService:
                                     local_tts.append({
                                         "value": model_id,
                                         "label": model_id.split("/")[-1] + " (Local CPU)",
+                                        "provider": "speaches",
+                                    })
+            except Exception:
+                pass
+
+            # Model and voice metadata come from the running local TTS engine;
+            # do not advertise the Indian voice if its service is unavailable.
+            indus_tts_url = local_ai_setting.get("indus_tts_endpoint") or os.environ.get(
+                "INDUS_TTS_ENDPOINT", "http://indus-tts:8000/v1"
+            )
+            indus_tts_url = whisper_api_base(normalize_local_ai_endpoint(indus_tts_url)).rstrip("/")
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
+                    async with session.get(f"{indus_tts_url}/models") as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            for installed_model in data.get("data", []):
+                                if (
+                                    isinstance(installed_model, dict)
+                                    and installed_model.get("task") == "text-to-speech"
+                                    and installed_model.get("id")
+                                    and installed_model.get("installed", True)
+                                ):
+                                    local_tts.append({
+                                        "value": installed_model["id"],
+                                        "label": installed_model.get("name") or "Indus Pocket TTS — Hindi/Hinglish (CPU)",
                                         "provider": "speaches",
                                     })
             except Exception:

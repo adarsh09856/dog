@@ -6,6 +6,7 @@ Part 2.1 Step 8, Part 3.2, and Work Package 4 of Master Plan.
 """
 
 import os
+import aiohttp
 from dataclasses import asdict, dataclass
 from typing import Any, Dict, Literal, Optional
 
@@ -360,6 +361,18 @@ async def apply_kodewaves_sovereign_resolution(
     whisper_raw = local_engine.get("whisper_endpoint", "http://whisper:8000/v1")
     whisper_base = normalize_local_ai_endpoint(whisper_raw).rstrip("/")
     whisper_v1_url = f"{whisper_base}/v1" if not whisper_base.endswith("/v1") else whisper_base
+    indic_stt_raw = local_engine.get(
+        "indic_stt_endpoint",
+        os.environ.get("INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"),
+    )
+    indic_stt_base = normalize_local_ai_endpoint(indic_stt_raw).rstrip("/")
+    indic_stt_v1_url = f"{indic_stt_base}/v1" if not indic_stt_base.endswith("/v1") else indic_stt_base
+    indus_raw = local_engine.get(
+        "indus_tts_endpoint",
+        os.environ.get("INDUS_TTS_ENDPOINT", "http://indus-tts:8000/v1"),
+    )
+    indus_base = normalize_local_ai_endpoint(indus_raw).rstrip("/")
+    indus_v1_url = f"{indus_base}/v1" if not indus_base.endswith("/v1") else indus_base
 
     is_using_master_keys = False
 
@@ -495,11 +508,27 @@ async def apply_kodewaves_sovereign_resolution(
                         detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
                 model_to_use = model if model and model != "default" else "Systran/faster-whisper-small"
+                if model_to_use == "indicconformer-ctc-int8":
+                    from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
+                    from api.services.catalog.local_inventory import get_local_stt_models
+
+                    selected_language = LANGUAGE_NAME_TO_ISO.get(norm_lang, norm_lang).split("-", 1)[0]
+                    if selected_language in ("auto", "multi", "unknown", "default"):
+                        raise HTTPException(status_code=400, detail="IndicConformer requires an explicit installed Indian language; choose multilingual Whisper for auto detection")
+                    try:
+                        installed_models = await get_local_stt_models(indic_stt_v1_url)
+                    except (aiohttp.ClientError, TimeoutError):
+                        raise HTTPException(status_code=503, detail="Local Indic STT engine is unavailable")
+                    manifest = installed_models.get(model_to_use) or {}
+                    supported_languages = {str(code).casefold().split("-", 1)[0] for code in manifest.get("languages", [])}
+                    if selected_language not in supported_languages:
+                        raise HTTPException(status_code=400, detail=f"Indic STT language '{selected_language}' is not installed")
+                    norm_lang = selected_language
                 effective.stt = SpeachesSTTConfiguration(
                     api_key="local-cpu-token",
                     model=model_to_use,
                     language=norm_lang,
-                    base_url=whisper_v1_url,
+                    base_url=indic_stt_v1_url if model_to_use == "indicconformer-ctc-int8" else whisper_v1_url,
                 )
                 metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language=norm_lang)
 
@@ -586,25 +615,47 @@ async def apply_kodewaves_sovereign_resolution(
                         status_code=403,
                         detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
-                voice_to_use = current_voice if current_voice and current_voice != "default" else get_default_piper_voice_for_language(tts_lang)
                 selected_model = model if model not in (None, "", "default") else "piper"
+                voice_to_use = current_voice if current_voice and current_voice != "default" else None
                 if selected_model != "piper" and not selected_model.startswith("piper/"):
-                    from api.services.catalog.local_inventory import local_tts_inventory, local_model_voice_ids
+                    from api.services.catalog.local_inventory import (
+                        get_local_tts_models,
+                        local_model_voice_ids_for_language,
+                    )
                     import aiohttp
 
+                    inventory_url = indus_v1_url if selected_model == "indus-pocket-tts" else whisper_v1_url
                     try:
-                        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
-                            async with session.get(f"{whisper_v1_url}/models") as response:
-                                inventory = await response.json() if response.status == 200 else {}
+                        installed_models = await get_local_tts_models(inventory_url)
                     except (aiohttp.ClientError, TimeoutError):
                         raise HTTPException(status_code=503, detail="Local TTS model inventory is unavailable")
-                    installed_model = local_tts_inventory(inventory).get(selected_model)
+                    installed_model = installed_models.get(selected_model)
                     if installed_model is None:
                         raise HTTPException(status_code=400, detail="Selected local TTS model is not installed")
-                    if voice_to_use not in local_model_voice_ids(installed_model):
+                    if str(tts_lang).strip().casefold() in {"auto", "multi", "multilingual", "default"} and not voice_to_use:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Select a local TTS voice or a spoken language before starting the call",
+                        )
+                    supported_voices = local_model_voice_ids_for_language(
+                        installed_model, tts_lang
+                    )
+                    if not supported_voices:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Selected local TTS model '{selected_model}' has no voice "
+                                f"advertised for language '{tts_lang}'. Choose an installed "
+                                "model that supports this language."
+                            ),
+                        )
+                    if not voice_to_use and supported_voices:
+                        voice_to_use = sorted(supported_voices)[0]
+                    if voice_to_use not in supported_voices:
                         raise HTTPException(status_code=400, detail="Select a voice supported by the selected installed local TTS model")
-                    local_tts_url = whisper_v1_url
+                    local_tts_url = inventory_url
                 elif selected_model == "piper" or selected_model.startswith("piper/"):
+                    voice_to_use = voice_to_use or get_default_piper_voice_for_language(tts_lang)
                     local_tts_url = piper_endpoint
                 else:
                     raise HTTPException(status_code=400, detail="Selected local TTS model is not supported")

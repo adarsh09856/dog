@@ -1,8 +1,55 @@
 """Read installed local speech capabilities from the serving engines."""
 
+import time
 from typing import Any
 
 import aiohttp
+
+
+_tts_model_cache: dict[str, tuple[float, dict[str, dict]]] = {}
+_stt_model_cache: dict[str, tuple[float, dict[str, dict]]] = {}
+_TTS_MODEL_CACHE_SECONDS = 30
+
+
+async def get_local_stt_models(api_base: str) -> dict[str, dict]:
+    endpoint = api_base.rstrip("/")
+    now = time.monotonic()
+    cached = _stt_model_cache.get(endpoint)
+    if cached and now - cached[0] < _TTS_MODEL_CACHE_SECONDS:
+        return cached[1]
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+        async with session.get(f"{endpoint}/models") as response:
+            response.raise_for_status()
+            payload = await response.json()
+    models = {
+        model["id"]: model
+        for model in payload.get("data", [])
+        if isinstance(model, dict)
+        and isinstance(model.get("id"), str)
+        and model.get("task") == "automatic-speech-recognition"
+        and model.get("installed") is not False
+    }
+    _stt_model_cache[endpoint] = (time.monotonic(), models)
+    return models
+
+
+async def get_local_tts_models(api_base: str) -> dict[str, dict]:
+    """Avoid a model-discovery network hop on every voice-call start.
+
+    The cache is short-lived so an uninstalled model is rejected soon after a
+    serving-engine change. Failed inventory requests are never cached.
+    """
+    endpoint = api_base.rstrip("/")
+    cached = _tts_model_cache.get(endpoint)
+    now = time.monotonic()
+    if cached and now - cached[0] < _TTS_MODEL_CACHE_SECONDS:
+        return cached[1]
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
+        async with session.get(f"{endpoint}/models") as response:
+            response.raise_for_status()
+            models = local_tts_inventory(await response.json())
+    _tts_model_cache[endpoint] = (time.monotonic(), models)
+    return models
 
 
 def piper_voice_inventory(payload: Any) -> dict[str, dict]:
@@ -70,6 +117,54 @@ def local_model_voice_ids(model: dict) -> set[str]:
             and (voice.get("id") or voice.get("voice_id") or voice.get("name"))
         )
     }
+
+
+def local_model_voice_ids_for_language(model: dict, language: str | None) -> set[str]:
+    """Return voices that explicitly advertise the requested language.
+
+    A model without per-voice language metadata keeps the legacy behavior; a
+    multilingual model with metadata must not silently select a mismatched
+    voice just because it is first alphabetically.
+    """
+    voices = model.get("voices") or []
+    if not isinstance(voices, list) or not language:
+        return local_model_voice_ids(model)
+
+    if language.strip().casefold() in {"auto", "multi", "multilingual", "default"}:
+        return local_model_voice_ids(model)
+
+    requested = _language_aliases(language)
+    has_language_metadata = any(
+        isinstance(voice, dict) and (voice.get("languages") or voice.get("language"))
+        for voice in voices
+    )
+    if not has_language_metadata:
+        return local_model_voice_ids(model)
+
+    result: set[str] = set()
+    for voice in voices:
+        if not isinstance(voice, dict) or voice.get("installed") is False:
+            continue
+        voice_id = voice.get("id") or voice.get("voice_id") or voice.get("name")
+        languages = voice.get("languages") or voice.get("language") or []
+        if isinstance(languages, str):
+            languages = [languages]
+        if not isinstance(languages, (list, tuple, set)):
+            continue
+        if voice_id and requested.intersection(
+            alias for item in languages for alias in _language_aliases(str(item))
+        ):
+            result.add(voice_id)
+    return result
+
+
+def _language_aliases(language: str) -> set[str]:
+    normalized = language.strip().replace("_", "-").casefold()
+    base = normalized.split("-", 1)[0]
+    aliases = {normalized, base}
+    if base in {"hinglish", "hi-en", "en-hi"}:
+        aliases.update({"hinglish", "hi", "en", "hi-in", "en-in"})
+    return aliases
 
 
 def local_model_voice_catalog(model: dict) -> list[dict]:
