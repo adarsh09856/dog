@@ -184,6 +184,14 @@ class _BookingToolChoiceMixin:
 
     def build_chat_completion_params(self, params_from_context):
         params = super().build_chat_completion_params(params_from_context)
+        # Routing and greeting guards below rewrite messages for this request.
+        # The adapter can share message dictionaries with the conversation;
+        # never remove routes or insert runtime guidance into that history.
+        if isinstance(params.get("messages"), list):
+            params["messages"] = [
+                dict(message) if isinstance(message, dict) else message
+                for message in params["messages"]
+            ]
         model = str(getattr(self._settings, "model", "") or "").casefold()
         messages = params.get("messages")
         if model.startswith(("qwen3:", "qwen3.5:")) and isinstance(messages, list):
