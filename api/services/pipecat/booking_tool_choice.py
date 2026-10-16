@@ -147,45 +147,53 @@ class _BookingToolChoiceMixin:
 
         tools = params.get("tools")
         messages = params.get("messages")
-        suppress_initial_handoff = False
+        suppress_assist_handoff = False
         if isinstance(tools, list) and isinstance(messages, list):
             # The Start node has already spoken its greeting. A basic caller
             # check such as "hello, are you listening?" needs an answer from
             # that node, not an extra model call that only hands control to the
             # next node. Keep operational tools (booking, etc.) available.
-            user_messages = [
-                message for message in messages
-                if isinstance(message, dict) and message.get("role") == "user"
-            ]
             opening = next((
                 message for message in messages
                 if isinstance(message, dict) and message.get("role") == "assistant"
             ), None)
             if (
-                len(user_messages) == 1 and opening is not None
+                opening is not None
                 and _OPENING_GREETING.search(_message_text(opening))
+                and any(
+                    isinstance(tool, dict)
+                    and tool.get("function", {}).get("name") == "assist_caller"
+                    for tool in tools
+                )
             ):
-                suppress_initial_handoff = True
-                params["tools"] = [
-                    tool for tool in tools
-                    if tool.get("function", {}).get("name") != "assist_caller"
-                ]
-                if not params["tools"]:
-                    params.pop("tools", None)
-                selected = params.get("tool_choice")
-                if (
-                    isinstance(selected, dict)
-                    and selected.get("function", {}).get("name") == "assist_caller"
+                # The generated Start node already has this assistant's full
+                # prompt and operational tools. Treat the greeting as the
+                # conversation start, so a redundant assist_caller edge cannot
+                # burn another inference turn for the same conversation.
+                suppress_assist_handoff = True
+            if suppress_assist_handoff:
+                direct_reply_text = (
+                    "This current node already has the complete assistant prompt "
+                    "and tools. Continue the conversation here; do not call "
+                    "assist_caller or transfer to a duplicate assistant node. "
+                    "For Asha, use feminine Hindi forms (for example, मैं सुन रही "
+                    "हूँ and कर सकती हूँ), not masculine forms."
+                )
+                if not any(
+                    isinstance(message, dict)
+                    and message.get("role") == "system"
+                    and direct_reply_text in _message_text(message)
+                    for message in messages
                 ):
-                    params.pop("tool_choice", None)
-                direct_reply_note = {
-                    "role": "system",
-                    "content": (
-                        "The caller has just spoken after the opening greeting. "
-                        "Answer that caller directly in this workflow step. Do not "
-                        "transfer or invoke assist_caller for this first reply."
-                    ),
-                }
+                    direct_reply_note = {
+                        "role": "system",
+                        "content": direct_reply_text,
+                    }
+                else:
+                    direct_reply_note = None
+            else:
+                direct_reply_note = None
+            if direct_reply_note:
                 first_user_index = next(
                     index for index, message in enumerate(messages)
                     if isinstance(message, dict) and message.get("role") == "user"
@@ -224,17 +232,20 @@ class _BookingToolChoiceMixin:
                 if isinstance(message, dict) and message.get("role") == "user"
             ), "")
             disallowed = set()
-            if suppress_initial_handoff:
+            if suppress_assist_handoff:
                 disallowed.add("assist_caller")
             if not _EXPLICIT_END_REQUEST.search(latest_user_text):
                 disallowed.update(_END_CALL_TOOLS)
             if disallowed:
-                params["tools"] = [
+                remaining = [
                     tool for tool in tools
                     if tool.get("function", {}).get("name") not in disallowed
                 ]
-                if not params["tools"]:
+                if remaining:
+                    params["tools"] = remaining
+                else:
                     params.pop("tools", None)
+                    params.pop("tool_choice", None)
                 selected = params.get("tool_choice")
                 if (isinstance(selected, dict)
                         and selected.get("function", {}).get("name") in disallowed):
