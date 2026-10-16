@@ -36,6 +36,7 @@ class _ResponseWatch:
     expired: bool = False
     awaiting_generation: bool = False
     awaiting_tool_response: bool = False
+    from_user_turn: bool = False
     latest_scope: str | None = None
     scopes: set[str] = field(default_factory=set)
     audible_scopes: set[str] = field(default_factory=set)
@@ -145,6 +146,25 @@ class CallMonitorProcessor(FrameProcessor):
         # create another response expectation after fast playback completes.
         if was_active:
             self._confirm_user_response()
+        # Speaking frames arrive before the aggregator's completed message.
+        # VAD may have detected noise that STT could not recognize. In cascade
+        # mode no context/inference is queued for an empty message, so do not
+        # leave a phantom response deadline that will hang up a listening call.
+        message = _args[-1] if _args else None
+        watch = self._response_watch
+        if (
+            message is not None
+            and hasattr(message, "content")
+            and not (message.content or "").strip()
+            and not getattr(_aggregator, "_realtime_service_mode", False)
+            and watch is not None
+            and watch.from_user_turn
+            and watch.awaiting_generation
+            and not watch.scopes
+            and not watch.tools
+        ):
+            self.cancel()
+            self._waiting_for_user = True
         self._arm_idle()
 
     def _user_inference_requested(self, _controller, _strategy, speculation) -> None:
@@ -163,6 +183,8 @@ class CallMonitorProcessor(FrameProcessor):
             self._complete_response(watch)
         elif not self._response_during_user_turn:
             self.expect_response()
+            if self._response_watch is not None:
+                self._response_watch.from_user_turn = True
 
     @property
     def active(self) -> bool:
@@ -340,6 +362,7 @@ class CallMonitorProcessor(FrameProcessor):
             return
         watch = self._start_response(source, confirmed=True)
         watch.awaiting_generation = True
+        watch.from_user_turn = False
 
     def _start_response(
         self, source: FrameProcessor, *, confirmed: bool

@@ -246,17 +246,11 @@ class _BookingToolChoiceMixin:
                 suppress_assist_handoff = True
             if suppress_assist_handoff:
                 _suppress_assist_route_instructions(messages)
-                persona_note = ""
-                if re.search(r"\basha\b|आशा", _message_text(opening), re.IGNORECASE):
-                    persona_note = (
-                        " For Asha, use feminine Hindi forms (for example, मैं सुन रही "
-                        "हूँ and कर सकती हूँ), not masculine forms."
-                    )
                 direct_reply_text = (
                     "This current node already has the complete assistant prompt "
                     "and tools. Continue the conversation here; do not call "
                     "assist_caller or transfer to a duplicate assistant node."
-                    f"{persona_note} In a booking task, "
+                    " In a booking task, "
                     "review all caller turns, do not ask again for details already "
                     "given, and ask one concise question for the next missing "
                     "booking detail. Never invent or claim a booking."

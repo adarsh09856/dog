@@ -46,6 +46,7 @@ from api.services.configuration.language_normalizer import (
     resolve_agent_speech_language,
     speech_language_instruction,
 )
+from api.services.configuration.speech_persona import selected_voice_persona_instruction
 from api.services.workflow.agent_runtime import AgentRuntime, new_visit_id
 from api.services.workflow.workflow_graph import Node, WorkflowGraph
 
@@ -874,6 +875,9 @@ class PipecatEngine:
                 system_prompt = "\n\n".join(
                     part for part in (system_prompt, language_instruction) if part
                 )
+            system_prompt = "\n\n".join((
+                system_prompt, await selected_voice_persona_instruction(agent.user_config)
+            ))
         functions = await compose_functions_for_node(
             node=node, custom_tool_manager=manager
         )
