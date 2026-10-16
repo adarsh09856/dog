@@ -648,14 +648,25 @@ def create_stt_service(
         )
     elif user_config.stt.provider in (ServiceProviders.SPEACHES.value, "speaches", "whisper"):
         lang_str = getattr(user_config.stt, "language", None)
-        lang_obj = _resolve_speaches_language(lang_str)
+        stt_model = user_config.stt.model or "Systran/faster-whisper-small"
+        local_cpu = getattr(user_config.stt, "api_key", None) in (
+            "local-cpu-token", "sovereign-local-cpu"
+        )
+        # The selected assistant language is a hint, not a constraint on what
+        # callers can say. Local Whisper must detect each utterance so a Hindi
+        # agent can understand English and Hinglish follow-ups. IndicConformer
+        # is language-specific and still needs the explicit selection.
+        lang_obj = (
+            None if local_cpu and stt_model != "indicconformer-ctc-int8"
+            else _resolve_speaches_language(lang_str)
+        )
         base_url = getattr(user_config.stt, "base_url", None) or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
         _validate_runtime_service_url(base_url, "base_url")
         return SpeachesSTTService(
             base_url=base_url,
             api_key=getattr(user_config.stt, "api_key", None) or "none",
             settings=SpeachesSTTSettings(
-                model=user_config.stt.model or "Systran/faster-whisper-small",
+                model=stt_model,
                 language=lang_obj,
                 prompt=_speaches_transcription_prompt(lang_str, keyterms),
                 temperature=0.0,
