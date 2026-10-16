@@ -54,10 +54,16 @@ def first_booking_question(messages: list[dict]) -> str | None:
         message for message in messages
         if isinstance(message, dict) and message.get("role") == "user"
     ]
-    if len(user_messages) != 1:
+    if not user_messages:
         return None
-    content = user_messages[0].get("content")
+    content = user_messages[-1].get("content")
     caller_text = content if isinstance(content, str) else ""
+    if any(
+        isinstance(message.get("content"), str)
+        and _CALLER_NAME.search(message["content"])
+        for message in user_messages
+    ):
+        return None
     if not _BOOKING_REQUEST.search(caller_text) or _CALLER_NAME.search(caller_text):
         return None
     if re.search(r"[\u0900-\u097f]", caller_text):
