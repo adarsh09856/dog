@@ -573,6 +573,9 @@ def create_stt_service(
                     # can detect the spoken language for each utterance.
                     language=None,
                     prompt=_speaches_transcription_prompt(language, keyterms),
+                    # A fixed zero temperature avoids Whisper's expensive
+                    # compression-ratio fallback ladder on noisy phone silence.
+                    temperature=0.0,
                 ),
                 sample_rate=audio_config.transport_in_sample_rate,
             )
@@ -655,6 +658,7 @@ def create_stt_service(
                 model=user_config.stt.model or "Systran/faster-whisper-small",
                 language=lang_obj,
                 prompt=_speaches_transcription_prompt(lang_str, keyterms),
+                temperature=0.0,
             ),
             sample_rate=audio_config.transport_in_sample_rate,
         )
