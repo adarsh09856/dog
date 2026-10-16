@@ -14,6 +14,30 @@ _OPENING_GREETING = re.compile(
     r"^\s*(?:नमस्ते|नमस्कार|सुप्रभात|शुभ संध्या|namaste|hello|hi|good morning|good afternoon|good evening)",
     re.IGNORECASE,
 )
+_END_CALL_TOOLS = frozenset(
+    {"finish_call", "end_call", "close_conversation", "hang_up"}
+)
+_EXPLICIT_END_REQUEST = re.compile(
+    r"\b(?:goodbye|bye(?:\s+bye)?|hang\s*up|end\s+(?:the\s+)?call|disconnect|"
+    r"that's\s+all|that\s+is\s+all|i(?:'m| am)\s+done|we(?:'re| are)\s+done)\b"
+    r"|अलविदा|बस\s+इतना\s+ही|कॉल\s+काट|बंद\s+कर(?:ो|ें)|"
+    r"వీడ్కోలు|ఇంతే|కాల్\s+కట్|ముగించు|"
+    r"விடைபெறுகிறேன்|அவ்வளவுதான்|அழைப்பை\s+முடி|"
+    r"বিদায়|এইটুকুই|কল\s+কেটে|"
+    r"বিদায়|बस\s+झालं|इथेच\s+थांबू|"
+    r"વિદાય|બસ\s+આટલું|કૉલ\s+બંધ|"
+    r"ವಿದಾಯ|ಇಷ್ಟೇ|ಕರೆ\s+ಮುಗಿಸು|"
+    r"വിട|ഇത്രയും\s+മതി|കോൾ\s+അവസാനിപ്പി|"
+    r"ଭଲ\s+ଥାଅ|ଏତିକି|କଲ୍\s+କାଟ|"
+    r"বিদায়|এতটুকুই|কথা\s+শেষ|"
+    r"الوداع|بس\s+هذا|أنه(?:ي|ِ)\s+المكالمة|"
+    r"خداحافظ|همین\s+کافیه|تماس\s+رو\s+قطع|"
+    r"خدا حافظ|بس\s+این\s+قدر|کال\s+ختم|"
+    r"خدای\s+په\s+امان|همدومره|"
+    r"دا\s+ختم|تماس\s+قطع|"
+    r"خداینگهدار|بس\s+ايترو|فون\s+بند",
+    re.IGNORECASE,
+)
 
 
 def _message_text(message: dict) -> str:
@@ -23,6 +47,21 @@ def _message_text(message: dict) -> str:
     if isinstance(content, list):
         return " ".join(part.get("text", "") for part in content if isinstance(part, dict))
     return ""
+
+
+def caller_explicitly_ends(messages: list[dict] | None) -> bool:
+    """Only treat a clear caller farewell as permission to end a live call."""
+    if not isinstance(messages, list):
+        return False
+    latest_user = next(
+        (message for message in reversed(messages)
+         if isinstance(message, dict) and message.get("role") == "user"),
+        None,
+    )
+    return bool(
+        latest_user
+        and _EXPLICIT_END_REQUEST.search(_message_text(latest_user))
+    )
 
 
 def booking_tool_choice(params: dict) -> dict | None:
@@ -108,6 +147,53 @@ class _BookingToolChoiceMixin:
 
         tools = params.get("tools")
         messages = params.get("messages")
+        suppress_initial_handoff = False
+        if isinstance(tools, list) and isinstance(messages, list):
+            # The Start node has already spoken its greeting. A basic caller
+            # check such as "hello, are you listening?" needs an answer from
+            # that node, not an extra model call that only hands control to the
+            # next node. Keep operational tools (booking, etc.) available.
+            user_messages = [
+                message for message in messages
+                if isinstance(message, dict) and message.get("role") == "user"
+            ]
+            opening = next((
+                message for message in messages
+                if isinstance(message, dict) and message.get("role") == "assistant"
+            ), None)
+            if (
+                len(user_messages) == 1 and opening is not None
+                and _OPENING_GREETING.search(_message_text(opening))
+            ):
+                suppress_initial_handoff = True
+                params["tools"] = [
+                    tool for tool in tools
+                    if tool.get("function", {}).get("name") != "assist_caller"
+                ]
+                if not params["tools"]:
+                    params.pop("tools", None)
+                selected = params.get("tool_choice")
+                if (
+                    isinstance(selected, dict)
+                    and selected.get("function", {}).get("name") == "assist_caller"
+                ):
+                    params.pop("tool_choice", None)
+                direct_reply_note = {
+                    "role": "system",
+                    "content": (
+                        "The caller has just spoken after the opening greeting. "
+                        "Answer that caller directly in this workflow step. Do not "
+                        "transfer or invoke assist_caller for this first reply."
+                    ),
+                }
+                first_user_index = next(
+                    index for index, message in enumerate(messages)
+                    if isinstance(message, dict) and message.get("role") == "user"
+                )
+                messages.insert(first_user_index, direct_reply_note)
+
+        tools = params.get("tools")
+        messages = params.get("messages")
         if (
             isinstance(tools, list) and isinstance(messages, list)
             and any(tool.get("function", {}).get("name") == "book_appointment"
@@ -127,6 +213,32 @@ class _BookingToolChoiceMixin:
             if not remaining or (isinstance(selected, dict)
                                  and selected.get("function", {}).get("name") == "book_appointment"):
                 params.pop("tool_choice", None)
+        # Booking-tool filtering above may rebuild the list of remaining tools;
+        # reapply transition guards last so a hidden handoff/end tool cannot be
+        # accidentally restored as a side effect.
+        tools = params.get("tools")
+        messages = params.get("messages")
+        if isinstance(tools, list):
+            latest_user_text = next((
+                _message_text(message) for message in reversed(messages or [])
+                if isinstance(message, dict) and message.get("role") == "user"
+            ), "")
+            disallowed = set()
+            if suppress_initial_handoff:
+                disallowed.add("assist_caller")
+            if not _EXPLICIT_END_REQUEST.search(latest_user_text):
+                disallowed.update(_END_CALL_TOOLS)
+            if disallowed:
+                params["tools"] = [
+                    tool for tool in tools
+                    if tool.get("function", {}).get("name") not in disallowed
+                ]
+                if not params["tools"]:
+                    params.pop("tools", None)
+                selected = params.get("tool_choice")
+                if (isinstance(selected, dict)
+                        and selected.get("function", {}).get("name") in disallowed):
+                    params.pop("tool_choice", None)
         choice = booking_tool_choice(params)
         messages = params.get("messages")
         if isinstance(messages, list):

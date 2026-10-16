@@ -421,11 +421,37 @@ class PipecatEngine:
         transition_speech_recording_id: Optional[str] = None,
         *,
         agent: AgentRuntime | None = None,
+        require_explicit_end: bool = False,
     ):
         agent = agent or self.active_agent
 
         async def transition_func(function_call_params: FunctionCallParams) -> None:
             """Inner function that handles the node change tool calls"""
+            if require_explicit_end:
+                from api.services.pipecat.booking_tool_choice import (
+                    caller_explicitly_ends,
+                )
+
+                context = getattr(function_call_params, "context", None)
+                messages = context.get_messages() if context is not None else None
+                if not caller_explicitly_ends(messages):
+                    logger.info(
+                        "Ignoring end-of-call transition {} because the caller has "
+                        "not explicitly asked to end the conversation",
+                        name,
+                    )
+                    await function_call_params.result_callback(
+                        {
+                            "status": "not_transitioned",
+                            "action": "workflow_transition_blocked",
+                            "message": (
+                                "The caller has not asked to end the conversation. "
+                                "Stay on the current step and answer the caller's "
+                                "latest message."
+                            ),
+                        }
+                    )
+                    return
             logger.info(f"LLM Function Call EXECUTED: {name}")
             logger.info(
                 f"Function: {name} -> transitioning to node: {transition_to_node}"
@@ -520,6 +546,7 @@ class PipecatEngine:
         transition_speech_recording_id: Optional[str] = None,
         *,
         agent: AgentRuntime | None = None,
+        require_explicit_end: bool = False,
     ):
         agent = agent or self.active_agent
         logger.debug(
@@ -534,6 +561,7 @@ class PipecatEngine:
             transition_speech_type,
             transition_speech_recording_id,
             agent=agent,
+            require_explicit_end=require_explicit_end,
         )
 
         # Register function with LLM
@@ -820,6 +848,7 @@ class PipecatEngine:
                     edge.data.transition_speech_type,
                     edge.data.transition_speech_recording_id,
                     agent=agent,
+                    require_explicit_end=agent.workflow.nodes[edge.target].is_end,
                 )
         if node.tool_uuids and manager:
             await manager.register_handlers(
