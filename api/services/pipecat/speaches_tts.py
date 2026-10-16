@@ -8,6 +8,8 @@ from api.services.pipecat.tts_cache.models import SynthesisRequest
 from api.services.pipecat.tts_cache.synthesis import cached_synthesis
 from pipecat.frames.frames import ErrorFrame
 from pipecat.services.speaches.tts import SpeachesTTSService
+from api.services.pipecat.local_speech_aggregator import LocalSpeechAggregator
+from pipecat.services.tts_service import TextAggregationMode
 
 
 class SpeachesLiveTTSService(SpeachesTTSService):
@@ -16,6 +18,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
     def __init__(self, **kwargs):
         kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=45.0))
         super().__init__(**kwargs)
+        if self._text_aggregation_mode == TextAggregationMode.SENTENCE:
+            self._text_aggregator = LocalSpeechAggregator()
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
 

@@ -88,9 +88,11 @@ class SynthesisRequest:
             hashlib.sha256(canonical.encode()).hexdigest(),
             sample_rate,
             channels,
-            str(payload.get("text", ""))[:1000],
+            str(payload.get("text", payload.get("input", "")))[:1000],
             str(payload.get("model", ""))[:200],
-            str((payload.get("voice_setting") or {}).get("voice_id", ""))[:200],
+            str((payload.get("voice_setting") or {}).get(
+                "voice_id", payload.get("voice", "")
+            ))[:200],
         )
 
 
