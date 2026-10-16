@@ -10,18 +10,6 @@ from pipecat.services.openai.llm import OpenAILLMService
 
 _CONFIRMATION = re.compile(r"\b(confirm(?:ed)?|save|proceed|book it)\b|पुष्टि|पक्क[ाी]|सेव", re.IGNORECASE)
 _BOOKING = re.compile(r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", re.IGNORECASE)
-_BOOKING_REQUEST = re.compile(
-    r"\b(?:book|schedule|make|set\s+up)\b.{0,45}\b(?:appointment|booking|consultation)\b"
-    r"|\b(?:appointment|booking|consultation)\b.{0,30}\b(?:book|schedule)\b"
-    r"|अपॉइंटमेंट.{0,24}(?:बुक|रख)|बुकिंग.{0,24}(?:कर|चाहत)|"
-    r"\b(?:appointment|booking)\s+(?:book|schedule)\s+kar(?:na|ni)?\b",
-    re.IGNORECASE,
-)
-_CALLER_NAME = re.compile(
-    r"\b(?:my name is|i'm|this is|mera naam)\s+[A-Za-z][A-Za-z .'-]{1,50}"
-    r"|मेरा नाम\s*[^,।\d]{2,50}",
-    re.IGNORECASE,
-)
 _NEGATION = re.compile(r"\b(don't|do not|not now|cancel|stop|never|no,?\s)\b|मत\s|नहीं", re.IGNORECASE)
 _OPENING_GREETING = re.compile(
     r"^\s*(?:नमस्ते|नमस्कार|सुप्रभात|शुभ संध्या|namaste|hello|hi|good morning|good afternoon|good evening)",
@@ -162,30 +150,19 @@ class _BookingToolChoiceMixin:
 
         messages = context.get_messages()
         tools = getattr(context.tools, "standard_tools", [])
-        user_messages = [
-            message for message in messages
-            if isinstance(message, dict) and message.get("role") == "user"
-        ]
-        if (
-            len(user_messages) == 1
-            and any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
-            and _BOOKING_REQUEST.search(_message_text(user_messages[-1]))
-            and not _CALLER_NAME.search(_message_text(user_messages[-1]))
+        from api.services.workflow.confirmed_booking import first_booking_question
+
+        fast_booking_question = first_booking_question(messages)
+        if fast_booking_question and any(
+            getattr(tool, "name", None) == "book_appointment" for tool in tools
         ):
             # Small CPU models can take many seconds to ask this obvious
             # question, and often repeat date/time details already supplied.
             # Send it through the normal transcript and TTS path without an
             # extra inference request.
-            caller_text = _message_text(user_messages[-1])
-            if re.search(r"[\u0900-\u097f]", caller_text):
-                reply = "ज़रूर। अपॉइंटमेंट किस नाम से बुक करूँ?"
-            elif re.search(r"\b(?:mujhe|mera|naam|karna|chahiye|haan)\b", caller_text, re.IGNORECASE):
-                reply = "Bilkul. Appointment kis naam se book karun?"
-            else:
-                reply = "Sure. What name should I use for the appointment?"
             await self.start_ttfb_metrics()
             await self.push_frame(LLMFullResponseStartFrame())
-            await self._push_llm_text(reply)
+            await self._push_llm_text(fast_booking_question)
             await self.push_frame(LLMFullResponseEndFrame())
             return
         if (

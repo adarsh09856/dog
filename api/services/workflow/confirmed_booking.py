@@ -34,6 +34,37 @@ _HINDI_WHEN = re.compile(
     r"(\d{1,2})\s+(" + "|".join(_HINDI_MONTHS) + r")\s+(\d{4})\s*(?:को\s*)?"
     r"(सुबह|दोपहर|शाम|रात)\s+(\d{1,2}):(\d{2})\s*बजे"
 )
+_BOOKING_REQUEST = re.compile(
+    r"\b(?:book|schedule|make|set\s+up)\b.{0,45}\b(?:appointment|booking|consultation)\b"
+    r"|\b(?:appointment|booking|consultation)\b.{0,30}\b(?:book|schedule)\b"
+    r"|अपॉइंटमेंट.{0,24}(?:बुक|रख)|बुकिंग.{0,24}(?:कर|चाहत)|"
+    r"\b(?:appointment|booking)\s+(?:book|schedule)\s+kar(?:na|ni)?\b",
+    re.IGNORECASE,
+)
+_CALLER_NAME = re.compile(
+    r"\b(?:my name is|i'm|this is|mera naam)\s+[A-Za-z][A-Za-z .'-]{1,50}"
+    r"|मेरा नाम\s*[^,।\d]{2,50}",
+    re.IGNORECASE,
+)
+
+
+def first_booking_question(messages: list[dict]) -> str | None:
+    """Return one fast, language-matched name question for a first booking turn."""
+    user_messages = [
+        message for message in messages
+        if isinstance(message, dict) and message.get("role") == "user"
+    ]
+    if len(user_messages) != 1:
+        return None
+    content = user_messages[0].get("content")
+    caller_text = content if isinstance(content, str) else ""
+    if not _BOOKING_REQUEST.search(caller_text) or _CALLER_NAME.search(caller_text):
+        return None
+    if re.search(r"[\u0900-\u097f]", caller_text):
+        return "ज़रूर। अपॉइंटमेंट किस नाम से बुक करूँ?"
+    if re.search(r"\b(?:mujhe|mera|naam|karna|chahiye|haan)\b", caller_text, re.IGNORECASE):
+        return "Bilkul. Appointment kis naam se book karun?"
+    return "Sure. What name should I use for the appointment?"
 
 
 def confirmed_booking_arguments(message: str) -> dict | None:

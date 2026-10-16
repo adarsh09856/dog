@@ -802,7 +802,10 @@ async def execute_text_chat_pending_turn(
 
         if pending_user_message is not None:
             context.add_message({"role": "user", "content": pending_user_message})
+            from api.services.workflow.confirmed_booking import first_booking_question
+
             booking_arguments = confirmed_booking_arguments(pending_user_message)
+            fast_booking_question = first_booking_question(context.get_messages())
             active_tools = getattr(context.tools, "standard_tools", [])
             has_booking_tool = any(
                 getattr(tool, "name", None) == "book_appointment"
@@ -836,6 +839,11 @@ async def execute_text_chat_pending_turn(
                     )
                 response_window.outputs.append(reply)
                 context.add_message({"role": "assistant", "content": reply})
+            elif fast_booking_question and has_booking_tool:
+                # Match live voice behavior: ask the first missing booking
+                # detail directly instead of waiting on a small CPU model.
+                response_window.outputs.append(fast_booking_question)
+                context.add_message({"role": "assistant", "content": fast_booking_question})
             else:
                 generation_marker = capture_processor.activity_count
                 response_window.note_direct_context_request()
