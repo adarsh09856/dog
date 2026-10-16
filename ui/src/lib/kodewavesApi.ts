@@ -583,6 +583,8 @@ export interface WebsiteWidget {
   position: 'bottom-right' | 'bottom-left' | string;
   welcome_message?: string;
   bubble_title?: string;
+  bubble_subtitle?: string;
+  allowed_domains?: string[];
   is_active: boolean;
   embed_code?: string;
   embed_snippet?: string;

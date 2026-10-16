@@ -110,6 +110,7 @@ class EmbedTokenClient(BaseDBClient):
                 and_(
                     EmbedTokenModel.workflow_id == workflow_id,
                     EmbedTokenModel.organization_id == organization_id,
+                    EmbedTokenModel.settings["websiteWidgetId"].as_string().is_(None),
                 )
             )
 

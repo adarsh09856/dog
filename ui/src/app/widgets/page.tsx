@@ -49,10 +49,14 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { WebsiteWidget, widgetsApi } from "@/lib/kodewavesApi";
+import { getWorkflowsApiV1WorkflowFetchGet } from "@/client/sdk.gen";
+import type { WorkflowListResponse } from "@/client/types.gen";
+import { detailFromError } from "@/lib/apiError";
 
 export default function WidgetsPage() {
   const { user, loading: authLoading } = useAuth();
   const [widgets, setWidgets] = useState<WebsiteWidget[]>([]);
+  const [agents, setAgents] = useState<WorkflowListResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -60,6 +64,7 @@ export default function WidgetsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingWidget, setEditingWidget] = useState<Partial<WebsiteWidget> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [allowedDomainsText, setAllowedDomainsText] = useState("");
 
   // Embed Code Dialog
   const [embedCodeOpen, setEmbedCodeOpen] = useState(false);
@@ -71,8 +76,12 @@ export default function WidgetsPage() {
     setLoadError(null);
     setLoading(true);
     try {
-      const data = await widgetsApi.getWidgets();
+      const [data, agentResponse] = await Promise.all([
+        widgetsApi.getWidgets(), getWorkflowsApiV1WorkflowFetchGet({ query: { status: "active" } }),
+      ]);
+      if (agentResponse.error) throw new Error(detailFromError(agentResponse.error, "Unable to load agents."));
       setWidgets(data);
+      setAgents(agentResponse.data || []);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load widgets:", err);
@@ -91,12 +100,25 @@ export default function WidgetsPage() {
       alert("Widget name is required.");
       return;
     }
+    const workflowId = editingWidget.workflow_id || editingWidget.agent_id;
+    if (!workflowId) {
+      alert("Select a voice agent for this widget.");
+      return;
+    }
     setSaving(true);
     try {
+      const payload = {
+        name: editingWidget.name, workflow_id: workflowId,
+        primary_color: editingWidget.primary_color || "#6366f1",
+        welcome_message: editingWidget.welcome_message || "Talk to our AI Agent",
+        bubble_subtitle: editingWidget.bubble_subtitle ?? "Click to start voice call",
+        position: editingWidget.position || "bottom-right",
+        allowed_domains: allowedDomainsText.split(",").map((domain) => domain.trim()).filter(Boolean), is_active: editingWidget.is_active ?? true,
+      };
       if (editingWidget.id) {
-        await widgetsApi.updateWidget(editingWidget.id, editingWidget);
+        await widgetsApi.updateWidget(editingWidget.id, payload);
       } else {
-        await widgetsApi.createWidget(editingWidget);
+        await widgetsApi.createWidget(payload);
       }
       setModalOpen(false);
       setEditingWidget(null);
@@ -118,25 +140,28 @@ export default function WidgetsPage() {
     }
   };
 
-  const showEmbedCode = (w: WebsiteWidget) => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://app.kodewaves.ai";
-    const snippet = `<!-- Kodewaves Sovereign Voice Widget -->
-<script
-  src="${origin}/widget/loader.js"
-  data-widget-id="${w.id}"
-  data-primary-color="${w.primary_color || "#6366f1"}"
-  data-position="${w.position || "bottom-right"}"
-  async>
-</script>`;
-    setCurrentSnippet(snippet);
-    setCopied(false);
-    setEmbedCodeOpen(true);
+  const showEmbedCode = async (w: WebsiteWidget) => {
+    try {
+      // Saving provisions a token for widgets created before token integration.
+      const result = w.embed_code || w.embed_snippet ? w : await widgetsApi.updateWidget(w.id, {});
+      const snippet = result.embed_code || result.embed_snippet;
+      if (!snippet) throw new Error("Unable to generate embed code. Save this widget and retry.");
+      setCurrentSnippet(snippet);
+      setCopied(false);
+      setEmbedCodeOpen(true);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load embed code.");
+    }
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(currentSnippet);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(currentSnippet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setLoadError("Unable to copy. Select the embed code and copy it manually.");
+    }
   };
 
   return (
@@ -153,8 +178,10 @@ export default function WidgetsPage() {
         <div className="flex items-center gap-3">
           <Button
             size="sm"
+            disabled={loading}
             className="gap-2"
             onClick={() => {
+              setAllowedDomainsText("");
               setEditingWidget({
                 name: "Homepage Voice Assistant",
                 primary_color: "#6366f1",
@@ -194,7 +221,7 @@ export default function WidgetsPage() {
                   <TableHead className="text-xs">Widget Name</TableHead>
                   <TableHead className="text-xs">Position</TableHead>
                   <TableHead className="text-xs">Color Theme</TableHead>
-                  <TableHead className="text-xs">Welcome Greeting</TableHead>
+                  <TableHead className="text-xs">Button Text</TableHead>
                   <TableHead className="text-xs text-center">Status</TableHead>
                   <TableHead className="text-xs text-right">Embed Script</TableHead>
                   <TableHead className="text-xs text-right">Actions</TableHead>
@@ -227,7 +254,7 @@ export default function WidgetsPage() {
                       <TableCell className="text-center">
                         {w.is_active ? (
                           <Badge className="bg-emerald-500/10 text-emerald-600 text-[10px]">
-                            Live
+                            Active
                           </Badge>
                         ) : (
                           <Badge variant="secondary" className="text-[10px]">
@@ -254,6 +281,7 @@ export default function WidgetsPage() {
                             className="h-7 w-7"
                             onClick={() => {
                               setEditingWidget(w);
+                              setAllowedDomainsText((w.allowed_domains || []).join(", "));
                               setModalOpen(true);
                             }}
                           >
@@ -293,9 +321,24 @@ export default function WidgetsPage() {
               <Label className="text-xs">Widget Name *</Label>
               <Input
                 value={editingWidget?.name || ""}
+                maxLength={100}
                 onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, name: e.target.value } : null)}
                 placeholder="Product Landing Page Voice Button"
               />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Voice Agent *</Label>
+              <Select
+                value={String(editingWidget?.workflow_id || editingWidget?.agent_id || "")}
+                onValueChange={(value) => setEditingWidget((previous) => previous ? { ...previous, workflow_id: Number(value), agent_id: Number(value) } : null)}
+              >
+                <SelectTrigger><SelectValue placeholder="Select a voice agent" /></SelectTrigger>
+                <SelectContent>
+                  {agents.map((agent) => <SelectItem key={agent.id} value={String(agent.id)}>{agent.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {agents.length === 0 && <p className="text-xs text-muted-foreground">Create a voice agent before adding a widget.</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -334,13 +377,24 @@ export default function WidgetsPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Welcome Greeting Message</Label>
+              <Label className="text-xs">Widget Button Text</Label>
               <Textarea
                 rows={2}
+                maxLength={100}
                 value={editingWidget?.welcome_message || ""}
                 onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, welcome_message: e.target.value } : null)}
                 placeholder="Hi there! Tap the mic to talk with our voice assistant in real-time."
               />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Allowed Domains (optional)</Label>
+              <Input
+                value={allowedDomainsText}
+                onChange={(event) => setAllowedDomainsText(event.target.value)}
+                placeholder="example.com, www.example.com"
+              />
+              <p className="text-xs text-muted-foreground">Leave empty to allow any domain. The agent settings control the spoken greeting.</p>
             </div>
 
             <div className="flex items-center justify-between pt-1">

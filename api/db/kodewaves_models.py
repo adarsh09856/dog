@@ -350,6 +350,7 @@ class WebsiteWidgetModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    embed_token_id = Column(Integer, ForeignKey("embed_tokens.id", ondelete="SET NULL"), nullable=True, unique=True)
     widget_name = Column(String(100), nullable=False)
     primary_color = Column(String(20), default="#4f46e5", nullable=False)
     bubble_title = Column(String(100), default="Talk to our AI Agent", nullable=False)
