@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 MODEL_ID = "indus-pocket-tts"
 MODEL_REPO = "Indus-Labs/indus-pocket-tts"
+MODEL_REVISION = "39899d3c1dcda47a7ef167cd222419feb86abeb9"
 MODEL_DIR = Path(os.environ.get("INDUS_MODEL_DIR", "/models/indus-pocket-tts"))
 MODEL: Any = None
 VOICE: Any = None
@@ -29,7 +30,7 @@ SYNTHESIS_LOCK = asyncio.Lock()
 def _load_model() -> None:
     global MODEL, VOICE
     model_dir = Path(
-        snapshot_download(repo_id=MODEL_REPO, local_dir=str(MODEL_DIR))
+        snapshot_download(repo_id=MODEL_REPO, revision=MODEL_REVISION, local_dir=str(MODEL_DIR))
     )
     speak_path = model_dir / "speak.py"
     spec = importlib.util.spec_from_file_location("indus_pocket_speak", speak_path)
