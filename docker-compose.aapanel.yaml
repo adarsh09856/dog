@@ -274,7 +274,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
+          cpus: "3.0"
           memory: 4096M
         reservations:
           memory: 2048M
@@ -328,7 +328,7 @@ services:
       - WHISPER__TTL=${WHISPER_MODEL_TTL:--1}
       - WHISPER__INFERENCE_DEVICE=cpu
       - WHISPER__COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
-      - WHISPER__CPU_THREADS=${WHISPER_CPU_THREADS:-2}
+      - WHISPER__CPU_THREADS=${WHISPER_CPU_THREADS:-3}
       - WHISPER__NUM_WORKERS=1
     healthcheck:
       test:
@@ -343,7 +343,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2.0"
+          cpus: "3.0"
           memory: 3072M
         reservations:
           memory: 1024M

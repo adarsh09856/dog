@@ -7,6 +7,27 @@ import time
 from loguru import logger
 
 
+def _mu_law_rms(audio: bytes) -> float:
+    """Return RMS for an 8-bit mu-law packet without retaining its contents."""
+    if not audio:
+        return 0.0
+
+    squared_total = 0
+    for sample in audio:
+        value = (~sample) & 0xFF
+        magnitude = ((value & 0x0F) << 3) + 0x84
+        magnitude <<= (value & 0x70) >> 4
+        decoded = 0x84 - magnitude if value & 0x80 else magnitude - 0x84
+        squared_total += decoded * decoded
+    return (squared_total / len(audio)) ** 0.5
+
+
+def _has_speech_energy(audio: bytes) -> bool:
+    # A decoded RMS gate ignores mu-law quantization around silence while
+    # retaining ordinary telephone speech. It only yields a boolean signal.
+    return _mu_law_rms(audio) >= 128
+
+
 class TwilioMediaSocket:
     """Delegate the socket while checking delivery through Twilio's mark protocol."""
 
@@ -20,7 +41,7 @@ class TwilioMediaSocket:
         self._cleared = False
         self._inbound_packets = 0
         self._inbound_bytes = 0
-        self._inbound_non_silent_packets = 0
+        self._inbound_speech_energy_packets = 0
 
     def __getattr__(self, name):
         return getattr(self._websocket, name)
@@ -41,12 +62,11 @@ class TwilioMediaSocket:
             audio = base64.b64decode(message["media"]["payload"], validate=True)
         except (KeyError, ValueError, TypeError):
             return
-        # Both mu-law zero encodings occur in silence; do not count idle mixer output.
-        if not any(sample not in (0xFF, 0x7F) for sample in audio):
+        if not _has_speech_energy(audio):
             return
         self._sent_at = time.monotonic()
         logger.info(
-            "[run {}] First non-silent Twilio media sent ({} mu-law bytes)",
+            "[run {}] First Twilio audio above speech-energy threshold sent ({} mu-law bytes)",
             self._run_id,
             len(audio),
         )
@@ -85,9 +105,8 @@ class TwilioMediaSocket:
                 if audio:
                     self._inbound_packets += 1
                     self._inbound_bytes += len(audio)
-                    # Mu-law silence uses 0xff (some gateways also send 0x7f).
-                    if any(sample not in (0xFF, 0x7F) for sample in audio):
-                        self._inbound_non_silent_packets += 1
+                    if _has_speech_energy(audio):
+                        self._inbound_speech_energy_packets += 1
                     if self._inbound_packets == 1:
                         logger.info(
                             "[run {}] First inbound Twilio media received ({} mu-law bytes)",
@@ -97,11 +116,11 @@ class TwilioMediaSocket:
                     elif self._inbound_packets % 250 == 0:
                         logger.info(
                             "[run {}] Twilio inbound audio: {} packets, {} bytes, "
-                            "{} non-silent packets",
+                            "{} packets above speech-energy threshold",
                             self._run_id,
                             self._inbound_packets,
                             self._inbound_bytes,
-                            self._inbound_non_silent_packets,
+                            self._inbound_speech_energy_packets,
                         )
             if not isinstance(event.get("mark", {}), dict):
                 return message
@@ -122,10 +141,10 @@ class TwilioMediaSocket:
         elif message.get("type") == "websocket.disconnect":
             logger.info(
                 "[run {}] Twilio inbound audio ended: {} packets, {} bytes, "
-                "{} non-silent packets",
+                "{} packets above speech-energy threshold",
                 self._run_id,
                 self._inbound_packets,
                 self._inbound_bytes,
-                self._inbound_non_silent_packets,
+                self._inbound_speech_energy_packets,
             )
         return message
