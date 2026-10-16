@@ -1,4 +1,4 @@
-"""Observe the first non-silent media packet and its carrier acknowledgement."""
+"""Observe call audio delivery and media flow without recording audio content."""
 
 import base64
 import json
@@ -18,6 +18,9 @@ class TwilioMediaSocket:
         self._sent_at = None
         self._acknowledged = False
         self._cleared = False
+        self._inbound_packets = 0
+        self._inbound_bytes = 0
+        self._inbound_non_silent_packets = 0
 
     def __getattr__(self, name):
         return getattr(self._websocket, name)
@@ -44,18 +47,25 @@ class TwilioMediaSocket:
         self._sent_at = time.monotonic()
         logger.info(
             "[run {}] First non-silent Twilio media sent ({} mu-law bytes)",
-            self._run_id, len(audio),
+            self._run_id,
+            len(audio),
         )
         try:
-            await self._websocket.send_text(json.dumps({
-                "event": "mark", "streamSid": self._stream_sid,
-                "mark": {"name": self._mark_name},
-            }))
-        except Exception as exc:
+            await self._websocket.send_text(
+                json.dumps(
+                    {
+                        "event": "mark",
+                        "streamSid": self._stream_sid,
+                        "mark": {"name": self._mark_name},
+                    }
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 — diagnostics must not interrupt media
             # Media already went out. Diagnostic failure must not stop the call.
             logger.warning(
                 "[run {}] Twilio playback mark could not be sent ({})",
-                self._run_id, type(exc).__name__,
+                self._run_id,
+                type(exc).__name__,
             )
 
     async def receive(self):
@@ -65,7 +75,35 @@ class TwilioMediaSocket:
                 event = json.loads(message["text"])
             except (ValueError, TypeError):
                 return message
-            if not isinstance(event, dict) or not isinstance(event.get("mark", {}), dict):
+            if not isinstance(event, dict):
+                return message
+            if event.get("event") == "media":
+                try:
+                    audio = base64.b64decode(event["media"]["payload"], validate=True)
+                except (KeyError, ValueError, TypeError):
+                    audio = b""
+                if audio:
+                    self._inbound_packets += 1
+                    self._inbound_bytes += len(audio)
+                    # Mu-law silence uses 0xff (some gateways also send 0x7f).
+                    if any(sample not in (0xFF, 0x7F) for sample in audio):
+                        self._inbound_non_silent_packets += 1
+                    if self._inbound_packets == 1:
+                        logger.info(
+                            "[run {}] First inbound Twilio media received ({} mu-law bytes)",
+                            self._run_id,
+                            len(audio),
+                        )
+                    elif self._inbound_packets % 250 == 0:
+                        logger.info(
+                            "[run {}] Twilio inbound audio: {} packets, {} bytes, "
+                            "{} non-silent packets",
+                            self._run_id,
+                            self._inbound_packets,
+                            self._inbound_bytes,
+                            self._inbound_non_silent_packets,
+                        )
+            if not isinstance(event.get("mark", {}), dict):
                 return message
             if (
                 event.get("event") == "mark"
@@ -77,7 +115,17 @@ class TwilioMediaSocket:
                 self._acknowledged = True
                 logger.info(
                     "[run {}] Twilio first-audio mark acknowledged after {} ms (cleared={})",
-                    self._run_id, round((time.monotonic() - self._sent_at) * 1000),
+                    self._run_id,
+                    round((time.monotonic() - self._sent_at) * 1000),
                     self._cleared,
                 )
+        elif message.get("type") == "websocket.disconnect":
+            logger.info(
+                "[run {}] Twilio inbound audio ended: {} packets, {} bytes, "
+                "{} non-silent packets",
+                self._run_id,
+                self._inbound_packets,
+                self._inbound_bytes,
+                self._inbound_non_silent_packets,
+            )
         return message
