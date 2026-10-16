@@ -351,7 +351,7 @@ services:
     image: kodewaves-indic-stt:v1.0.0
     container_name: kodewaves_indic_stt
     restart: unless-stopped
-    profiles: ["local"]
+    profiles: ["experimental"]
     environment:
       INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-hi}"
       INDIC_STT_THREADS: "${INDIC_STT_THREADS:-2}"
