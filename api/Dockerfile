@@ -112,7 +112,7 @@ FROM python:3.13-slim AS runner
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+RUN apt-get update && apt-get install -y --no-install-recommends curl tzdata tzdata-legacy \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --system kodewaves \
  && useradd --system --gid kodewaves --no-log-init --home-dir /app --shell /usr/sbin/nologin kodewaves \
