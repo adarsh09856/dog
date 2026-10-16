@@ -1,7 +1,7 @@
 import uuid
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc, func, select
 
 from api.db.kodewaves_client import kodewaves_db_client
@@ -34,6 +34,19 @@ class FormCreateRequest(BaseModel):
     fields: Optional[List[Dict[str, Any]]] = None
     is_active: Optional[bool] = True
 
+    @field_validator("fields", "fields_schema")
+    @classmethod
+    def unique_field_keys(cls, value):
+        keys = set()
+        for field in value or []:
+            key = field.get("name") or field.get("id") or field.get("label")
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("Each form field needs a name")
+            if key in keys:
+                raise ValueError("Form field names must be unique")
+            keys.add(key)
+        return value
+
 
 class SubmissionItem(BaseModel):
     id: str
@@ -45,7 +58,7 @@ class SubmissionItem(BaseModel):
 
 class SubmitFormRequest(BaseModel):
     data: Dict[str, Any] = {}
-    call_id: Optional[int] = None
+    call_id: Optional[int] = Field(default=None, gt=0)
     contact_id: Optional[str] = None
 
 
@@ -184,7 +197,7 @@ async def update_form(form_id: str, req: FormCreateRequest, user: UserModel = De
             form.fields_schema = req.fields
         elif req.fields_schema is not None:
             form.fields_schema = req.fields_schema
-        if req.is_active is not None:
+        if "is_active" in req.model_fields_set and req.is_active is not None:
             form.is_active = req.is_active
 
         await session.commit()
@@ -255,32 +268,14 @@ async def submit_form(form_id: str, req: SubmitFormRequest, user: UserModel = De
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization required")
 
-    async with kodewaves_db_client.get_session() as session:
-        try:
-            f_uuid = uuid.UUID(form_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid form ID")
+    from api.services.forms import submit_answers
 
-        stmt = select(FormModel).where(FormModel.id == f_uuid, FormModel.organization_id == org_id)
-        result = await session.execute(stmt)
-        form = result.scalar_one_or_none()
-        if not form:
-            raise HTTPException(status_code=404, detail="Form not found")
-
-        contact_uuid = None
-        if req.contact_id:
-            try:
-                contact_uuid = uuid.UUID(req.contact_id)
-            except ValueError:
-                pass
-
-        sub = FormSubmissionModel(
-            form_id=f_uuid,
-            organization_id=org_id,
-            call_id=req.call_id,
-            contact_id=contact_uuid,
-            submitted_data=req.data,
+    try:
+        submission = await submit_answers(
+            org_id, form_id, req.data, contact_id=req.contact_id, call_id=req.call_id,
         )
-        session.add(sub)
-        await session.commit()
-        return {"id": str(sub.id), "message": "Form submission recorded successfully"}
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"id": str(submission.id), "message": "Form submission recorded successfully"}

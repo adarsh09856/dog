@@ -63,6 +63,7 @@ export default function FormsPage() {
   const [selectedFormTitle, setSelectedFormTitle] = useState("");
   const [submissions, setSubmissions] = useState<Array<{ id: number | string; data: Record<string, any>; created_at: string }>>([]);
   const [loadingSubs, setLoadingSubs] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState<string | null>(null);
 
   const fetchForms = async () => {
     if (authLoading || !user) return;
@@ -120,12 +121,14 @@ export default function FormsPage() {
     setSelectedFormTitle(form.title);
     setSubmissionsOpen(true);
     setLoadingSubs(true);
+    setSubmissionsError(null);
+    setSubmissions([]);
     try {
       const data = await formsApi.getSubmissions(form.id);
       setSubmissions(data);
     } catch (err) {
       console.error("Failed to load submissions:", err);
-      setSubmissions([]);
+      setSubmissionsError(err instanceof Error ? err.message : "Unable to load form submissions.");
     } finally {
       setLoadingSubs(false);
     }
@@ -133,8 +136,10 @@ export default function FormsPage() {
 
   const addField = () => {
     const fields = [...(editingForm?.fields || [])];
+    let fieldNumber = fields.length + 1;
+    while (fields.some((field) => field.name === `field_${fieldNumber}`)) fieldNumber++;
     fields.push({
-      name: `field_${fields.length + 1}`,
+      name: `field_${fieldNumber}`,
       label: `Question ${fields.length + 1}`,
       type: "text",
       required: true,
@@ -392,6 +397,18 @@ export default function FormsPage() {
                       </Button>
                     </div>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Required answer</span>
+                    <Switch
+                      aria-label={`Require ${field.label || field.name}`}
+                      checked={field.required}
+                      onCheckedChange={(required) => {
+                        const fields = [...(editingForm?.fields || [])];
+                        fields[idx] = { ...fields[idx], required };
+                        setEditingForm((previous) => previous ? { ...previous, fields } : null);
+                      }}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -427,7 +444,7 @@ export default function FormsPage() {
           </DialogHeader>
 
           <div className="py-2">
-            {loadingSubs ? (
+            {submissionsError ? <div role="alert" className="text-sm text-destructive">{submissionsError}</div> : loadingSubs ? (
               <div className="flex justify-center p-8">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
