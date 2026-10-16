@@ -753,20 +753,20 @@ async def get_voices(
         language=language,
     )
 
-    if provider_key == "speaches" and model == "speaches-ai/Kokoro-82M-v1.0-ONNX":
-        raw_catalog = [dict(v) for v in UNIVERSAL_VOICE_CATALOG["speaches"]]
+    if provider_key == "speaches" and model and model != "piper" and not model.startswith("piper/"):
+        raw_catalog = []
         whisper_endpoint = local_ai_setting.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-        from api.services.catalog.local_inventory import whisper_api_base
+        from api.services.catalog.local_inventory import whisper_api_base, local_tts_inventory, local_model_voice_catalog
         whisper_base = whisper_api_base(normalize_local_ai_endpoint(whisper_endpoint))
         try:
             import aiohttp
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                 async with session.get(f"{whisper_base.rstrip('/')}/models") as response:
                     payload = await response.json() if response.status == 200 else {}
-            installed_ids = {entry.get("id") for entry in payload.get("data", [])}
+            installed_model = local_tts_inventory(payload).get(model)
+            if local_engine_enabled and installed_model:
+                raw_catalog = local_model_voice_catalog(installed_model)
         except Exception:
-            installed_ids = set()
-        if not local_engine_enabled or model not in installed_ids:
             raw_catalog = []
     elif db_voices:
         raw_catalog = [
@@ -938,7 +938,8 @@ async def preview_voice(
     if not user.selected_organization_id:
         raise HTTPException(status_code=400, detail="Select an organization first")
 
-    is_kokoro = provider_lower == "speaches" and model == "speaches-ai/Kokoro-82M-v1.0-ONNX"
+    is_local_model = provider_lower == "speaches" and bool(model) and model != "piper" and not model.startswith("piper/")
+    local_voice_metadata = {}
     if provider_lower in ("piper", "speaches"):
         from api.services.catalog.catalog_service import catalog_service
         catalog = await catalog_service.get_available_catalog(
@@ -948,8 +949,8 @@ async def preview_voice(
         if not catalog.get("local_engine_enabled"):
             raise HTTPException(status_code=403, detail="Local AI is disabled or unavailable for this organization")
         settings = await kodewaves_db_client.get_setting("local_ai") or {}
-        if is_kokoro:
-            from api.services.catalog.local_inventory import whisper_api_base
+        if is_local_model:
+            from api.services.catalog.local_inventory import whisper_api_base, local_tts_inventory, local_model_voice_ids
             endpoint = settings.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
             speaches_url = whisper_api_base(normalize_local_ai_endpoint(endpoint)).rstrip("/")
             import aiohttp
@@ -957,8 +958,13 @@ async def preview_voice(
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                     async with session.get(f"{speaches_url}/models") as response:
                         data = await response.json() if response.status == 200 else {}
-                if model not in {entry.get("id") for entry in data.get("data", [])}:
+                installed_model = local_tts_inventory(data).get(model)
+                if installed_model is None:
                     raise HTTPException(status_code=400, detail="Selected local TTS model is not installed")
+                if voice_id not in local_model_voice_ids(installed_model):
+                    raise HTTPException(status_code=400, detail="Selected voice is not supported by the installed local TTS model")
+                local_voice_metadata = next((voice for voice in installed_model.get("voices", [])
+                    if isinstance(voice, dict) and (voice.get("id") or voice.get("voice_id") or voice.get("name")) == voice_id), {})
             except (aiohttp.ClientError, TimeoutError):
                 raise HTTPException(status_code=503, detail="Unable to verify installed local TTS model")
         else:
@@ -992,8 +998,23 @@ async def preview_voice(
         )
 
     # 0. Piper ONNX (OHF-Voice/piper1-gpl HTTP server, local CPU)
-    if is_kokoro:
-        text = "नमस्ते, मैं आपकी अपॉइंटमेंट बुक करने में मदद कर सकती हूँ।" if voice_id.startswith("h") else "Hello from Kodewaves."
+    if is_local_model:
+        samples = {
+            "en": "Hello, welcome to Kodewaves. How may I help you?",
+            "hi": "नमस्ते, मैं आपकी कैसे मदद कर सकती हूँ?",
+            "fr": "Bonjour, comment puis-je vous aider ?",
+            "es": "Hola, ¿cómo puedo ayudarte?",
+            "pt": "Olá, como posso ajudar?",
+            "it": "Ciao, come posso aiutarti?",
+            "ja": "こんにちは。どのようにお手伝いできますか？",
+            "zh": "你好，我能帮你什么？",
+        }
+        voice_language = local_voice_metadata.get("language") or language or ""
+        if not isinstance(voice_language, str):
+            voice_language = ""
+        text = local_voice_metadata.get("preview_text") or samples.get(voice_language.lower().split("-")[0])
+        if not text:
+            raise HTTPException(status_code=400, detail="The installed voice does not advertise a preview text for its language")
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=20)) as session:
                 async with session.post(f"{speaches_url}/audio/speech", json={
@@ -1002,7 +1023,7 @@ async def preview_voice(
                     if response.status == 200:
                         return _cache_and_respond(await response.read(), "audio/wav")
         except Exception as error:
-            logger.warning("Kokoro voice preview failed: %s", type(error).__name__)
+            logger.warning("Local model voice preview failed: {}", type(error).__name__)
         raise HTTPException(status_code=503, detail="Local voice synthesis failed")
     if provider_lower in ("piper", "speaches"):
         samples = {

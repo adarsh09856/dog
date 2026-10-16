@@ -70,3 +70,28 @@ def local_model_voice_ids(model: dict) -> set[str]:
             and (voice.get("id") or voice.get("voice_id") or voice.get("name"))
         )
     }
+
+
+def local_model_voice_catalog(model: dict) -> list[dict]:
+    """Expose only voices and locales actually advertised for this model."""
+    rows = []
+    voices = model.get("voices") or []
+    if not isinstance(voices, list):
+        return rows
+    for voice in voices:
+        metadata = voice if isinstance(voice, dict) else {}
+        voice_id = voice if isinstance(voice, str) else metadata.get("id") or metadata.get("voice_id") or metadata.get("name")
+        if not voice_id or metadata.get("installed") is False:
+            continue
+        languages = metadata.get("languages") or metadata.get("language") or []
+        if isinstance(languages, str):
+            languages = [languages]
+        if not isinstance(languages, list):
+            languages = []
+        rows.append({
+            "voice_id": voice_id, "name": metadata.get("name") or voice_id,
+            "provider": "speaches", "gender": metadata.get("gender"),
+            "accent": metadata.get("accent"), "languages": languages,
+            "language": languages[0] if len(languages) == 1 else "multi",
+        })
+    return rows
