@@ -134,6 +134,34 @@ export interface CreditPackage {
   is_active: boolean;
 }
 
+export interface PublicCreditPackage {
+  id: string | number;
+  name: string;
+  minutes: number;
+  bonus_minutes: number;
+  price_cents: number;
+  currency: string;
+}
+
+export function normalizePublicCreditPackage(pkg: PublicCreditPackage): CreditPackage {
+  const amount = Number(pkg.price_cents || 0) / 100;
+  const isInr = pkg.currency?.toUpperCase() === 'INR';
+  const isUsd = pkg.currency?.toUpperCase() === 'USD';
+  const priceInr = isInr ? amount : isUsd ? amount * 83 : amount;
+  const priceUsd = isUsd ? amount : isInr ? amount / 83 : amount;
+
+  return {
+    id: pkg.id,
+    name: pkg.name,
+    minutes: Number(pkg.minutes || 0),
+    bonus_minutes: Number(pkg.bonus_minutes || 0),
+    price_inr: priceInr,
+    price_usd: priceUsd,
+    is_popular: Number(pkg.bonus_minutes || 0) > 0,
+    is_active: true,
+  };
+}
+
 export interface MonitoringStats {
   total_calls: number;
   active_calls: number;
@@ -699,7 +727,10 @@ export const sovereignBillingApi = {
 
 export const publicApi = {
   getPublicPlans: () => apiFetch<SaaSPlan[]>('/billing-sovereign/public/plans'),
-  getPublicCreditPackages: () => apiFetch<CreditPackage[]>('/billing-sovereign/public/packages'),
+  getPublicCreditPackages: async () => {
+    const packages = await apiFetch<PublicCreditPackage[]>('/billing-sovereign/public/packages');
+    return packages.map(normalizePublicCreditPackage);
+  },
 };
 
 export interface PaymentConfig {
