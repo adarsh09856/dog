@@ -687,7 +687,13 @@ async def authorize_workflow_run_start(
         # Check organization wallet minute balance in local PostgreSQL
         from api.db.kodewaves_client import kodewaves_db_client
         wallet = await kodewaves_db_client.get_or_create_wallet(organization_id)
-        total_minutes = wallet.credit_balance_minutes + wallet.bonus_minutes
+        if getattr(wallet, "is_frozen", False):
+            return QuotaCheckResult(
+                has_quota=False,
+                error_code="wallet_frozen",
+                error_message="Your organization wallet has been suspended or frozen by the administrator.",
+            )
+        total_minutes = (wallet.credit_balance_minutes or 0) + (wallet.bonus_minutes or 0)
 
         is_managed = (
             uses_managed_model_services_v2(user_config)
@@ -703,7 +709,7 @@ async def authorize_workflow_run_start(
         # If using Sovereign Platform Managed cloud keys, require > 0 minutes
         is_admin = getattr(actor_user, "is_superuser", False) or getattr(actor_user, "is_admin", False)
         if total_minutes > 0 or not is_managed or is_local_cpu or is_admin:
-            if workflow_run_id is not None:
+            if workflow_run_id is not None and is_managed and not is_local_cpu:
                 try:
                     await _store_run_correlation_id(
                         workflow_run_id=workflow_run_id,

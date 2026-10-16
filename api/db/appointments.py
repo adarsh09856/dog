@@ -122,19 +122,33 @@ async def save_appointment(organization_id, values, appointment_id=None):
                 )
 
         contact_id = appointment.contact_id if appointment else None
+        contact = None
         if values.get("contact_id"):
             contact_id = uuid.UUID(values["contact_id"])
             result = await session.execute(
-                select(ContactModel.id).where(
+                select(ContactModel).where(
                     ContactModel.id == contact_id,
                     ContactModel.organization_id == organization_id,
                 )
             )
-            if result.scalar_one_or_none() is None:
+            contact = result.scalar_one_or_none()
+            if contact is None:
                 raise LookupError("Contact not found")
         elif "contact_id" in values:
             contact_id = None
-        if not values.get("contact_id") and values.get("customer_phone"):
+        elif contact_id and any(
+            field in values for field in ("customer_name", "customer_phone", "customer_email")
+        ):
+            result = await session.execute(
+                select(ContactModel).where(
+                    ContactModel.id == contact_id,
+                    ContactModel.organization_id == organization_id,
+                )
+            )
+            contact = result.scalar_one_or_none()
+            if contact is None:
+                raise LookupError("Contact not found")
+        if contact is None and not values.get("contact_id") and values.get("customer_phone"):
             result = await session.execute(
                 select(ContactModel)
                 .where(
@@ -154,6 +168,15 @@ async def save_appointment(organization_id, values, appointment_id=None):
                 session.add(contact)
                 await session.flush()
             contact_id = contact.id
+        if contact is not None:
+            if values.get("customer_name") is not None:
+                full_name = values["customer_name"].strip()
+                if full_name:
+                    contact.first_name, _, contact.last_name = full_name.partition(" ")
+            if values.get("customer_phone") is not None:
+                contact.phone = values["customer_phone"].strip()
+            if "customer_email" in values:
+                contact.email = values["customer_email"]
         if appointment is None:
             appointment = AppointmentModel(organization_id=organization_id)
             session.add(appointment)
