@@ -32,12 +32,16 @@ async def handle_user_idle(engine: "PipecatEngine", aggregator, attempt: int) ->
     """Execute the monitor's idle decision; timing and retry state live there."""
     logger.debug(f"Handling user_idle, attempt: {attempt}")
     content = (
-        "The user has been quiet. Politely and briefly ask if they're still there in the language that the user has been speaking so far."
+        "The user has been quiet. Continue the existing conversation naturally: "
+        "do not greet or introduce yourself again. Ask one short check-in question "
+        "in the language the caller used most recently."
         if attempt == 1
-        else "The user has been quiet. We will be disconnecting the call now. Wish them a good day in the language that the user has been speaking so far."
+        else "The user has been quiet and this call is ending. Do not greet or "
+        "introduce yourself again. Give one short, polite goodbye in the language "
+        "the caller used most recently."
     )
     await aggregator.push_frame(
-        LLMMessagesAppendFrame([{"role": "user", "content": content}], run_llm=True)
+        LLMMessagesAppendFrame([{"role": "system", "content": content}], run_llm=True)
     )
     if attempt > 1:
         await engine.end_call_with_reason(
