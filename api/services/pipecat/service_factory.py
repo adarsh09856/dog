@@ -566,7 +566,12 @@ def create_stt_service(
                 api_key="local-cpu-token",
                 settings=SpeachesSTTSettings(
                     model=stt_model,
-                    language=_resolve_speaches_language(language),
+                    # The organization language selects the assistant voice and
+                    # gives the recognizer a transcript hint. Do not force that
+                    # language on every caller turn: Hindi agents must still
+                    # understand English/Hinglish, and the local Whisper model
+                    # can detect the spoken language for each utterance.
+                    language=None,
                     prompt=_speaches_transcription_prompt(language, keyterms),
                 ),
                 sample_rate=audio_config.transport_in_sample_rate,
