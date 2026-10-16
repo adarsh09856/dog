@@ -64,6 +64,31 @@ def caller_explicitly_ends(messages: list[dict] | None) -> bool:
     )
 
 
+def _suppress_assist_route_instructions(messages: list[dict]) -> None:
+    """Remove the prompt-side handoff instruction when its tool is suppressed."""
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") != "system":
+            continue
+        content = _message_text(message)
+        if "Workflow step routing:" not in content or "assist_caller" not in content:
+            continue
+        blocks = content.split("\n\n")
+        kept_blocks = []
+        for block in blocks:
+            if not block.startswith("Workflow step routing:"):
+                kept_blocks.append(block)
+                continue
+            lines = block.splitlines()
+            routes = [line for line in lines if line.lstrip().startswith("- ")]
+            remaining = [line for line in routes if "assist_caller:" not in line]
+            if remaining:
+                kept_blocks.append("\n".join(
+                    [line for line in lines if not line.lstrip().startswith("- ")]
+                    + remaining
+                ))
+        message["content"] = "\n\n".join(kept_blocks)
+
+
 def booking_tool_choice(params: dict) -> dict | None:
     """Return a forced function choice only for an unambiguous caller request."""
     tools = params.get("tools")
@@ -172,12 +197,21 @@ class _BookingToolChoiceMixin:
                 # burn another inference turn for the same conversation.
                 suppress_assist_handoff = True
             if suppress_assist_handoff:
+                _suppress_assist_route_instructions(messages)
+                persona_note = ""
+                if re.search(r"\basha\b|आशा", _message_text(opening), re.IGNORECASE):
+                    persona_note = (
+                        " For Asha, use feminine Hindi forms (for example, मैं सुन रही "
+                        "हूँ and कर सकती हूँ), not masculine forms."
+                    )
                 direct_reply_text = (
                     "This current node already has the complete assistant prompt "
                     "and tools. Continue the conversation here; do not call "
-                    "assist_caller or transfer to a duplicate assistant node. "
-                    "For Asha, use feminine Hindi forms (for example, मैं सुन रही "
-                    "हूँ and कर सकती हूँ), not masculine forms."
+                    "assist_caller or transfer to a duplicate assistant node."
+                    f"{persona_note} In a booking task, "
+                    "review all caller turns, do not ask again for details already "
+                    "given, and ask one concise question for the next missing "
+                    "booking detail. Never invent or claim a booking."
                 )
                 if not any(
                     isinstance(message, dict)
