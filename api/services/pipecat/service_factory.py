@@ -557,7 +557,7 @@ def create_stt_service(
         stt_api_key = getattr(user_config.stt, "api_key", None)
 
         # Local CPU Whisper STT
-        if stt_api_key == "sovereign-local-cpu":
+        if stt_api_key in ("sovereign-local-cpu", "local-cpu-token"):
             whisper_url = os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1").rstrip("/")
             whisper_v1 = whisper_url if whisper_url.endswith("/v1") else f"{whisper_url}/v1"
             stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-small"
@@ -974,9 +974,10 @@ def create_tts_service(
         piper_host = os.environ.get("PIPER_ENDPOINT", "http://piper:5000").rstrip("/")
         piper_url = piper_host if piper_host.endswith("/synthesize") else f"{piper_host}/synthesize"
         lang = getattr(user_config.stt, "language", None) or getattr(user_config.tts, "language", None) or "hi"
-        default_voice = "hi_IN-priyamvada-medium" if str(lang).startswith("hi") else "en_US-lessac-medium"
+        from api.services.configuration.language_normalizer import get_default_piper_voice_for_language
+        default_voice = get_default_piper_voice_for_language(str(lang))
 
-        if getattr(user_config.tts, "api_key", None) == "sovereign-local-cpu":
+        if getattr(user_config.tts, "api_key", None) in ("sovereign-local-cpu", "local-cpu-token"):
             voice = getattr(user_config.tts, "voice", default_voice)
             if not voice or voice == "default":
                 voice = default_voice
@@ -1085,8 +1086,6 @@ def create_tts_service(
     elif user_config.tts.provider in (ServiceProviders.SPEACHES.value, "speaches", "piper"):
         selected_model = getattr(user_config.tts, "model", None) or "piper"
         if selected_model != "piper" and not selected_model.startswith("piper/"):
-            if selected_model != "speaches-ai/Kokoro-82M-v1.0-ONNX":
-                raise ValueError(f"Unsupported local TTS model: {selected_model}")
             if SpeachesTTSService is None or SpeachesTTSSettings is None:
                 raise ValueError("The selected Speaches TTS service is unavailable")
             speaches_url = getattr(user_config.tts, "base_url", None) or ""
@@ -1542,7 +1541,7 @@ def create_llm_service_from_provider(
         ServiceProviders.DOGRAH.value,
         "kodewaves",
     ):
-        if api_key == "sovereign-local-cpu":
+        if api_key in ("sovereign-local-cpu", "local-cpu-token"):
             ollama_host = os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
             if not ollama_host.endswith("/v1"):
                 ollama_host = f"{ollama_host.rstrip('/')}/v1"

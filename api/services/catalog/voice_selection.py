@@ -10,6 +10,10 @@ def model_voice_ids(provider: str, model: str | None) -> set[str] | None:
         return None
     raw_provider = (provider or "").lower().strip()
     key = "gemini" if raw_provider == "gemini" else normalize_provider_name(provider)
+    if key == "speaches":
+        # Local voices are declared by the installed engine's model manifest.
+        # A static registry list silently hides newly installed language voices.
+        return None
     if key == "google" and model.startswith("gemini"):
         key = "gemini"
     if key == "gemini" and model.startswith("gemini-3.8-"):

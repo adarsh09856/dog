@@ -40,3 +40,33 @@ def whisper_api_base(endpoint: str) -> str:
     """Resolve the OpenAI-compatible API base, including root-only settings."""
     base = endpoint.rstrip("/").removesuffix("/models")
     return base if base.endswith("/v1") else f"{base}/v1"
+
+
+def local_tts_inventory(payload: Any) -> dict[str, dict]:
+    """Use installed serving-engine capabilities, never a guessed voice pool."""
+    models = payload.get("data", []) if isinstance(payload, dict) else []
+    if not isinstance(models, list):
+        return {}
+    return {
+        model["id"]: model
+        for model in models
+        if isinstance(model, dict)
+        and isinstance(model.get("id"), str)
+        and model.get("task") == "text-to-speech"
+        and model.get("installed") is not False
+    }
+
+
+def local_model_voice_ids(model: dict) -> set[str]:
+    voices = model.get("voices") or []
+    if not isinstance(voices, (list, dict)):
+        return set()
+    return {
+        voice if isinstance(voice, str) else voice.get("id") or voice.get("voice_id") or voice.get("name")
+        for voice in voices
+        if isinstance(voice, str) or (
+            isinstance(voice, dict)
+            and voice.get("installed") is not False
+            and (voice.get("id") or voice.get("voice_id") or voice.get("name"))
+        )
+    }

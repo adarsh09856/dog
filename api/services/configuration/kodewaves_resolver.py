@@ -588,21 +588,21 @@ async def apply_kodewaves_sovereign_resolution(
                     )
                 voice_to_use = current_voice if current_voice and current_voice != "default" else get_default_piper_voice_for_language(tts_lang)
                 selected_model = model if model not in (None, "", "default") else "piper"
-                if selected_model == "speaches-ai/Kokoro-82M-v1.0-ONNX":
-                    from api.services.catalog.voice_selection import model_voice_ids
+                if selected_model != "piper" and not selected_model.startswith("piper/"):
+                    from api.services.catalog.local_inventory import local_tts_inventory, local_model_voice_ids
                     import aiohttp
 
-                    allowed_voices = model_voice_ids("speaches", selected_model) or set()
-                    if voice_to_use not in allowed_voices:
-                        raise HTTPException(status_code=400, detail="Select a voice supported by the selected local TTS model")
                     try:
                         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                             async with session.get(f"{whisper_v1_url}/models") as response:
                                 inventory = await response.json() if response.status == 200 else {}
                     except (aiohttp.ClientError, TimeoutError):
                         raise HTTPException(status_code=503, detail="Local TTS model inventory is unavailable")
-                    if selected_model not in {entry.get("id") for entry in inventory.get("data", [])}:
+                    installed_model = local_tts_inventory(inventory).get(selected_model)
+                    if installed_model is None:
                         raise HTTPException(status_code=400, detail="Selected local TTS model is not installed")
+                    if voice_to_use not in local_model_voice_ids(installed_model):
+                        raise HTTPException(status_code=400, detail="Select a voice supported by the selected installed local TTS model")
                     local_tts_url = whisper_v1_url
                 elif selected_model == "piper" or selected_model.startswith("piper/"):
                     local_tts_url = piper_endpoint
