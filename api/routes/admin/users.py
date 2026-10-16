@@ -11,6 +11,7 @@ from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import OrganizationWalletModel, SaaSPlanModel, WalletLedgerModel
 from api.db.models import OrganizationModel, UserModel, WorkflowRunModel
 from api.services.auth.depends import get_superuser
+from api.services.catalog.catalog_service import catalog_service
 from api.services.organization_bootstrap import ensure_organization_bootstrapped
 from api.utils.auth import create_jwt_token, hash_password
 
@@ -256,6 +257,7 @@ async def create_admin_user(req: CreateUserRequest, _user=Depends(get_superuser)
     if req.has_local_ai_access:
         await kodewaves_db_client.set_setting(f"local_ai_user_{user.id}", {"enabled": True}, category="local_ai")
         await kodewaves_db_client.set_setting(f"local_ai_org_{organization.id}", {"enabled": True}, category="local_ai")
+        await catalog_service.notify_changed()
 
     return {
         "message": f"Successfully created user {req.email}",
@@ -313,6 +315,7 @@ async def update_admin_user(user_id: int, req: UpdateUserRequest, _user=Depends(
                     {"enabled": bool(req.has_local_ai_access)},
                     category="local_ai",
                 )
+            await catalog_service.notify_changed()
 
         if req.plan_name and selected_org_id:
             clean_plan = req.plan_name.lower().replace(" plan", "").strip()

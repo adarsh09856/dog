@@ -123,21 +123,24 @@ def speech_language_instruction(language: Optional[str]) -> Optional[str]:
         return None
     if code == "hi":
         return (
-            "Final spoken-language rule: understand Hindi, Hinglish (Hindi in "
-            "Latin letters), English, and switches between them in one conversation. "
-            "Never ask the caller to use only Hindi or repeat supplied details in "
-            "another language. For speech, respond in Hindi/Hinglish using the selected "
-            "Hindi voice: write Hindi words in Devanagari and preserve natural "
-            "English names, product terms and numbers."
+            "Final spoken-language rule: understand Hindi (Devanagari), Hinglish "
+            "(Hindi written in Latin letters), English, and natural switches between "
+            "them in one conversation. Match the caller's language on each turn: "
+            "answer English in English, Hindi in Hindi, and mixed speech naturally "
+            "in Hinglish. Never claim that you understand or speak only Hindi, ask "
+            "the caller to use only Hindi, or translate English into Hindi. For speech, "
+            "write Hindi words in Devanagari and keep English words, names, product "
+            "terms, and numbers in their natural spoken form."
         )
     return (
         f"Final spoken-language rule (overrides earlier conflicting prompt text): "
-        f"understand {name}, English, and switches between them, including "
-        f"{name} written in Latin letters. Respond naturally in {name} with "
-        "English terms where the caller uses them. Never require the caller to "
-        "use only one language or repeat supplied details in another language. "
-        "Write native-language words in their normal script for speech; preserve "
-        "English names, numbers, and product terms clearly."
+        f"understand {name}, English, and natural switches between them, including "
+        f"{name} written in Latin letters. Match the caller's language on each turn: "
+        f"answer English in English, {name} in {name}, and mixed speech naturally "
+        "in both languages. Never claim to understand or speak only one language, "
+        "require the caller to use only one language, or translate a language switch "
+        "away. Write native-language words in their normal script for speech; preserve "
+        "English words, names, numbers, and product terms clearly."
     )
 
 
