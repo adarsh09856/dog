@@ -65,31 +65,6 @@ def caller_explicitly_ends(messages: list[dict] | None) -> bool:
     )
 
 
-def _suppress_assist_route_instructions(messages: list[dict]) -> None:
-    """Remove the prompt-side handoff instruction when its tool is suppressed."""
-    for message in messages:
-        if not isinstance(message, dict) or message.get("role") != "system":
-            continue
-        content = _message_text(message)
-        if "Workflow step routing:" not in content or "assist_caller" not in content:
-            continue
-        blocks = content.split("\n\n")
-        kept_blocks = []
-        for block in blocks:
-            if not block.startswith("Workflow step routing:"):
-                kept_blocks.append(block)
-                continue
-            lines = block.splitlines()
-            routes = [line for line in lines if line.lstrip().startswith("- ")]
-            remaining = [line for line in routes if "assist_caller:" not in line]
-            if remaining:
-                kept_blocks.append("\n".join(
-                    [line for line in lines if not line.lstrip().startswith("- ")]
-                    + remaining
-                ))
-        message["content"] = "\n\n".join(kept_blocks)
-
-
 def booking_tool_choice(params: dict) -> dict | None:
     """Return a forced function choice only for an unambiguous caller request."""
     tools = params.get("tools")
@@ -226,64 +201,9 @@ class _BookingToolChoiceMixin:
 
         from api.services.workflow.tools.booking import caller_confirmed_booking
 
-        tools = params.get("tools")
-        messages = params.get("messages")
-        suppress_assist_handoff = False
-        if isinstance(tools, list) and isinstance(messages, list):
-            # The Start node has already spoken its greeting. A basic caller
-            # check such as "hello, are you listening?" needs an answer from
-            # that node, not an extra model call that only hands control to the
-            # next node. Keep operational tools (booking, etc.) available.
-            opening = next((
-                message for message in messages
-                if isinstance(message, dict) and message.get("role") == "assistant"
-            ), None)
-            if (
-                opening is not None
-                and _OPENING_GREETING.search(_message_text(opening))
-                and any(
-                    isinstance(tool, dict)
-                    and tool.get("function", {}).get("name") == "assist_caller"
-                    for tool in tools
-                )
-            ):
-                # The generated Start node already has this assistant's full
-                # prompt and operational tools. Treat the greeting as the
-                # conversation start, so a redundant assist_caller edge cannot
-                # burn another inference turn for the same conversation.
-                suppress_assist_handoff = True
-            if suppress_assist_handoff:
-                _suppress_assist_route_instructions(messages)
-                direct_reply_text = (
-                    "This current node already has the complete assistant prompt "
-                    "and tools. Continue the conversation here; do not call "
-                    "assist_caller or transfer to a duplicate assistant node."
-                    " In a booking task, "
-                    "review all caller turns, do not ask again for details already "
-                    "given, and ask one concise question for the next missing "
-                    "booking detail. Never invent or claim a booking."
-                )
-                if not any(
-                    isinstance(message, dict)
-                    and message.get("role") == "system"
-                    and direct_reply_text in _message_text(message)
-                    for message in messages
-                ):
-                    direct_reply_note = {
-                        "role": "system",
-                        "content": direct_reply_text,
-                    }
-                else:
-                    direct_reply_note = None
-            else:
-                direct_reply_note = None
-            if direct_reply_note:
-                first_user_index = next(
-                    index for index, message in enumerate(messages)
-                    if isinstance(message, dict) and message.get("role") == "user"
-                )
-                messages.insert(first_user_index, direct_reply_note)
-
+        # Transition names are user-defined. An assist_caller edge can lead
+        # to a different role or toolset; only the workflow engine can decide
+        # which destination to enter. Preserve its schema and routing prompt.
         tools = params.get("tools")
         messages = params.get("messages")
         if (
@@ -316,8 +236,6 @@ class _BookingToolChoiceMixin:
                 if isinstance(message, dict) and message.get("role") == "user"
             ), "")
             disallowed = set()
-            if suppress_assist_handoff:
-                disallowed.add("assist_caller")
             if not _EXPLICIT_END_REQUEST.search(latest_user_text):
                 disallowed.update(_END_CALL_TOOLS)
             if disallowed:
