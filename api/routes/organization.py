@@ -486,9 +486,29 @@ async def _model_configuration_v2_response(
     user: UserModel,
     configuration: OrganizationAIModelConfigurationV2 | None = None,
 ) -> OrganizationAIModelConfigurationResponse:
-    resolved = await get_resolved_ai_model_configuration(
-        organization_id=user.selected_organization_id,
-    )
+    resolution_error = None
+    try:
+        resolved = await get_resolved_ai_model_configuration(
+            organization_id=user.selected_organization_id,
+        )
+    except HTTPException as exc:
+        # A previously saved provider/model choice may no longer resolve (for
+        # example, an IndicConformer model with auto language). Keep the editor
+        # available so the owner can repair it instead of rendering a blank page.
+        saved = configuration or await get_organization_ai_model_configuration_v2(
+            user.selected_organization_id
+        )
+        if saved is None:
+            raise
+        resolution_error = str(exc.detail)
+        return OrganizationAIModelConfigurationResponse(
+            configuration=mask_ai_model_configuration_v2(saved),
+            effective_configuration=mask_user_config(
+                compile_ai_model_configuration_v2(saved)
+            ),
+            source="organization_v2",
+            resolution_error=resolution_error,
+        )
     raw_configuration = (
         configuration
         if configuration is not None
@@ -498,6 +518,7 @@ async def _model_configuration_v2_response(
         configuration=mask_ai_model_configuration_v2(raw_configuration),
         effective_configuration=mask_user_config(resolved.effective),
         source=resolved.source,
+        resolution_error=resolution_error,
     )
 
 
@@ -614,6 +635,10 @@ async def save_model_configuration_v2(
             organization_id=organization_id,
             created_by=user.provider_id,
         )
+        from api.services.configuration.kodewaves_resolver import (
+            require_explicit_indic_stt_language,
+        )
+        require_explicit_indic_stt_language(effective.stt.model, effective.stt.language)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=exc.args[0])
 

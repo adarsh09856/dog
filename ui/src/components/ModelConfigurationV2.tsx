@@ -31,6 +31,7 @@ export default function ModelConfigurationV2({ docsUrl }: { docsUrl?: string }) 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
+    const [resolutionError, setResolutionError] = useState<string | null>(null);
 
     useEffect(() => {
         if (auth.loading || !auth.user || hasFetched.current) return;
@@ -64,6 +65,7 @@ export default function ModelConfigurationV2({ docsUrl }: { docsUrl?: string }) 
             }
             setDefaults(nextDefaults);
             setResponse(configResult.data);
+            setResolutionError((configResult.data as OrganizationAiModelConfigurationResponse & { resolution_error?: string | null }).resolution_error ?? null);
             setPricing(pricingResult);
             setLoading(false);
         };
@@ -89,6 +91,7 @@ export default function ModelConfigurationV2({ docsUrl }: { docsUrl?: string }) 
         }
 
         setResponse(result.data);
+        setResolutionError(null);
         void fetchModelConfigurationPricing().then(setPricing);
         await refreshConfig();
         setNotice("Model configuration saved");
@@ -128,6 +131,11 @@ export default function ModelConfigurationV2({ docsUrl }: { docsUrl?: string }) 
             {notice && (
                 <div className="rounded-md border border-green-500/40 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-300">
                     {notice}
+                </div>
+            )}
+            {resolutionError && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+                    Saved model settings need correction: {resolutionError}
                 </div>
             )}
 

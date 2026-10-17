@@ -160,6 +160,7 @@ class OrganizationAIModelConfigurationResponse(BaseModel):
     configuration: dict | None
     effective_configuration: dict
     source: Literal["organization_v2", "legacy_user_v1", "empty"]
+    resolution_error: str | None = None
 
 
 def compile_ai_model_configuration_v2(

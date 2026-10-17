@@ -298,6 +298,20 @@ async def _require_enabled_platform_model(layer: str, provider: str, model: str)
         raise HTTPException(status_code=400, detail=f"Selected {layer.upper()} model '{model}' is disabled or unavailable.")
 
 
+def require_explicit_indic_stt_language(model: str, language: str | None) -> None:
+    """Reject a single-language Indic recognizer paired with auto detection."""
+    if model != "indicconformer-ctc-int8":
+        return
+    from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
+
+    code = LANGUAGE_NAME_TO_ISO.get(str(language or "auto").lower(), str(language or "auto").lower()).split("-", 1)[0]
+    if code in ("auto", "multi", "unknown", "default"):
+        raise HTTPException(
+            status_code=400,
+            detail="IndicConformer requires an explicit installed Indian language; choose multilingual Whisper for auto detection",
+        )
+
+
 async def apply_kodewaves_sovereign_resolution(
     effective: EffectiveAIModelConfiguration,
     organization_id: Optional[int] = None,
@@ -507,8 +521,7 @@ async def apply_kodewaves_sovereign_resolution(
                     from api.services.catalog.local_inventory import get_local_stt_models
 
                     selected_language = LANGUAGE_NAME_TO_ISO.get(norm_lang, norm_lang).split("-", 1)[0]
-                    if selected_language in ("auto", "multi", "unknown", "default"):
-                        raise HTTPException(status_code=400, detail="IndicConformer requires an explicit installed Indian language; choose multilingual Whisper for auto detection")
+                    require_explicit_indic_stt_language(model_to_use, selected_language)
                     try:
                         installed_models = await get_local_stt_models(indic_stt_v1_url)
                     except (aiohttp.ClientError, TimeoutError):
