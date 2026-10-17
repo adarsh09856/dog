@@ -265,10 +265,11 @@ class _BookingToolChoiceMixin:
             ), None)
             # Small local models often copy a configured Start-node greeting
             # verbatim even when the prompt tells them not to greet again.
-            # The greeting has already played, so omit its text on the first
-            # caller turn and retain that fact as an explicit system message.
+            # The greeting has already played, so omit it on every caller
+            # turn. Restoring it on later turns encourages repeated greetings
+            # and invalidates the local model's reusable prompt prefix.
             if (
-                len(user_messages) == 1
+                user_messages
                 and opening is not None
                 and _OPENING_GREETING.search(_message_text(opening))
             ):
