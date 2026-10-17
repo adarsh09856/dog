@@ -43,6 +43,7 @@ import {
 } from '@/constants/agentTemplates';
 import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
+import { detailFromError } from '@/lib/apiError';
 import logger from '@/lib/logger';
 
 interface TemplateSelectorModalProps {
@@ -221,7 +222,7 @@ export function TemplateSelectorModal({
                     router.push(`/workflow/${newId}?onboarding=web_call`);
                 }
             } else {
-                toast.error('Failed to create agent. Please try again.');
+                toast.error(detailFromError(response.error, 'Failed to create agent. Please try again.'));
             }
         } catch (err) {
             logger.error(`Error deploying template: ${err}`);

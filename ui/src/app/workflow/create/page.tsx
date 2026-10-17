@@ -49,6 +49,7 @@ import {
 } from '@/constants/agentTemplates';
 import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
+import { detailFromError } from '@/lib/apiError';
 import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
 import { apiFetch } from '@/lib/kodewavesApi';
 import { type AvailableCatalogResponse,catalogApi } from '@/lib/kodewavesApi';
@@ -235,7 +236,7 @@ export default function CreateWorkflowPage() {
                 setPreviewTemplate(null);
                 router.push(`/workflow/${response.data.id}?onboarding=web_call`);
             } else {
-                toast.error('Failed to create agent.');
+                toast.error(detailFromError(response.error, 'Failed to create agent.'));
             }
         } catch (err) {
             logger.error(`Error deploying template: ${err}`);
