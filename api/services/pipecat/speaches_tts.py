@@ -19,13 +19,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=45.0))
         super().__init__(**kwargs)
         if self._text_aggregation_mode == TextAggregationMode.SENTENCE:
-            # Indus renders each HTTP request independently. Splitting a short
-            # answer into separate requests produces an audible voice reset and
-            # an unnatural pause between adjacent sentences. Keep concise
-            # replies together; longer replies can still stream at boundaries.
-            model = str(self._settings.model or "").casefold()
-            min_characters = 120 if model == "indus-pocket-tts" else 48
-            self._text_aggregator = LocalSpeechAggregator(min_characters=min_characters)
+            self._text_aggregator = LocalSpeechAggregator()
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
 
