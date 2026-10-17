@@ -49,6 +49,7 @@ import {
 } from '@/constants/agentTemplates';
 import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
+import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
 import { apiFetch } from '@/lib/kodewavesApi';
 import { type AvailableCatalogResponse,catalogApi } from '@/lib/kodewavesApi';
 import logger from '@/lib/logger';
@@ -144,33 +145,6 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
         border: 'border-indigo-200 dark:border-indigo-800',
         iconBg: 'bg-indigo-500 text-white',
     },
-};
-
-const BLANK_WORKFLOW_DEFINITION = {
-    nodes: [
-        {
-            id: '1',
-            type: 'startCall',
-            position: { x: 175, y: 60 },
-            data: {
-                prompt: '# Goal\nYou are a helpful agent who is handing a conversation over voice with a human. This is a voice conversation, so transcripts can be error prone.\n\n## Rules\n- Language: English\n- Keep responses short and 2-3 sentences max\n\n### Flow\nStart by greeting the caller politely.',
-                name: 'start call',
-                allow_interrupt: false,
-                invalid: false,
-                validationMessage: null,
-                add_global_prompt: false,
-                delayed_start: false,
-                is_start: true,
-                selected_through_edge: false,
-                hovered_through_edge: false,
-                extraction_enabled: false,
-                selected: false,
-                dragging: false,
-            },
-        },
-    ],
-    edges: [],
-    viewport: { x: 808, y: 269, zoom: 0.75 },
 };
 
 export default function CreateWorkflowPage() {
