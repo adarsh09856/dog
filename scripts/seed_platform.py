@@ -438,6 +438,7 @@ async def seed_ai_model_catalog():
                     display_name=m["display_name"],
                     provider=m["provider"],
                     category=m["category"],
+                    layer=m["category"],
                     base_cost_cents_per_unit=m["base_cost_cents_per_unit"],
                     retail_price_cents_per_unit=m["retail_price_cents_per_unit"],
                     allowed_plan_ids=["starter", "pro", "enterprise"],
@@ -445,6 +446,10 @@ async def seed_ai_model_catalog():
                     sort_order=m["sort_order"],
                 )
                 session.add(item)
+            elif existing.layer == "llm" and existing.category in {"stt", "tts", "sts", "s2s", "embeddings"}:
+                # Older seeds omitted layer, so speech rows inherited its LLM
+                # default. Preserve admin enablement, pricing and identifiers.
+                existing.layer = existing.category
         await session.commit()
     print("[SUCCESS] AI Model Catalog verified.")
 
