@@ -270,7 +270,14 @@ def _compile_kodewaves_configuration(
             api_key=tts_key,
             model=configuration.tts_model or "default",
             voice=configuration.voice,
-            speed=configuration.speed,
+            # Indus currently serves one fixed-pace voice. Keep the effective
+            # configuration aligned with its actual synthesis behavior, even
+            # for older saved configurations with a different speed value.
+            speed=(
+                1.0 if configuration.tts_engine_type == "local_cpu"
+                and configuration.tts_model == "indus-pocket-tts"
+                else configuration.speed
+            ),
         ),
         stt=KodewavesSTTService(
             provider=ServiceProviders.KODEWAVES,
