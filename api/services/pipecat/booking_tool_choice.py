@@ -316,6 +316,17 @@ class _BookingToolChoiceMixin:
                     "detail is missing, ask for that detail instead."
                 ),
             }]
+        # An empty conversation is the opening announcement, not a caller
+        # request. Do not spend that turn routing away before anyone speaks.
+        # Keep tool-result and assistant history eligible for normal routing.
+        messages = params.get("messages")
+        if isinstance(messages, list) and not any(
+            isinstance(message, dict)
+            and message.get("role") in {"user", "assistant", "tool"}
+            for message in messages
+        ):
+            params.pop("tools", None)
+            params.pop("tool_choice", None)
         return params
 
 
