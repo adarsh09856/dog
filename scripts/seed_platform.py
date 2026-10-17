@@ -560,8 +560,23 @@ def seed_local_ai_model():
     import urllib.request
 
     endpoint = os.getenv("OLLAMA_ENDPOINT", "http://ollama:11434")
-    print(f"[SEED] Pre-pulling lightweight Ollama LLM model ({DEFAULT_LOCAL_LLM_MODEL}) via {endpoint}...")
+    print(f"[SEED] Checking local Ollama LLM model ({DEFAULT_LOCAL_LLM_MODEL}) via {endpoint}...")
     try:
+        show_req = urllib.request.Request(
+            f"{endpoint}/api/show",
+            data=json.dumps({"model": DEFAULT_LOCAL_LLM_MODEL}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(show_req, timeout=5) as response:
+                if response.status == 200:
+                    print(f"[SUCCESS] Ollama {DEFAULT_LOCAL_LLM_MODEL} is already installed.")
+                    return
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+        print(f"[SEED] Downloading missing Ollama model ({DEFAULT_LOCAL_LLM_MODEL})...")
         req = urllib.request.Request(
             f"{endpoint}/api/pull",
             data=json.dumps({"name": DEFAULT_LOCAL_LLM_MODEL, "stream": False}).encode("utf-8"),
