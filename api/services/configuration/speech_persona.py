@@ -40,6 +40,16 @@ async def selected_voice_persona_instruction(user_config) -> str:
         return voice_persona_instruction(None)
     if provider == "speaches" and (model == "piper" or str(model).startswith("piper/")):
         provider = "piper"
+    # Indus Pocket TTS exposes its voice metadata from its installed-model
+    # inventory rather than the shared voice_catalog table. Keep the LLM's
+    # first-person Hindi grammar aligned with the only bundled voice instead
+    # of falling back to neutral wording for a known female voice.
+    if (
+        provider == "speaches"
+        and str(model or "").casefold() == "indus-pocket-tts"
+        and str(voice).casefold() == "inaya"
+    ):
+        return voice_persona_instruction("female")
     try:
         rows = await kodewaves_db_client.list_voices(provider=provider, tts_model=model)
         genders = {
