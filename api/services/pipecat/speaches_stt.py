@@ -22,6 +22,8 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         super().__init__(*args, **kwargs)
         # The SDK otherwise retries timeouts, multiplying the per-request wait.
         self._client.max_retries = 0
+        self.latest_detected_language: str | None = None
+        self.latest_detected_text: str | None = None
 
     async def _segment_task_handler(self):
         """Drain slow CPU recognition without answering an unfinished backlog.
@@ -97,12 +99,41 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         to silence. An empty transcription is intentionally ignored by Pipecat's
         BaseWhisperSTTService, so the caller gets no invented answer.
         """
-        result = await super()._transcribe(_normalize_quiet_pcm16_wav(audio))
+        normalized = _normalize_quiet_pcm16_wav(audio)
+        # Whisper's verbose response carries the language detected for this
+        # utterance. Keep it out of the saved transcript, but make it available
+        # to the call's LLM so an English reply does not follow a Hindi greeting
+        # merely because Hindi was selected for the assistant voice.
+        settings = getattr(self, "_settings", None)
+        if (
+            settings is not None
+            and str(settings.model).startswith("Systran/faster-whisper-")
+            and not settings.language
+        ):
+            kwargs = {
+                "file": ("audio.wav", normalized, "audio/wav"),
+                "model": settings.model,
+                "response_format": "verbose_json",
+            }
+            if settings.prompt is not None:
+                kwargs["prompt"] = settings.prompt
+            if settings.temperature is not None:
+                kwargs["temperature"] = settings.temperature
+            result = await self._client.audio.transcriptions.create(**kwargs)
+            detected = getattr(result, "language", None)
+            self.latest_detected_language = (
+                detected.strip().lower() if isinstance(detected, str) and detected.strip() else None
+            )
+        else:
+            self.latest_detected_language = None
+            result = await super()._transcribe(normalized)
         text = (getattr(result, "text", None) or "").strip()
         if text and not any(
             unicodedata.category(char)[0] in {"L", "N"} for char in text
         ):
+            self.latest_detected_text = None
             return result.model_copy(update={"text": ""})
+        self.latest_detected_text = text or None
         return result
 
 

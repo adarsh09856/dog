@@ -773,6 +773,11 @@ async def _run_pipeline_impl(
             tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
         )
         llm = create_llm_service(user_config, correlation_id=mps_correlation_id)
+        # The recognizer's detected language is call-scoped and changes on
+        # every utterance. The LLM adapter reads it only for the outgoing
+        # request, without adding diagnostic text to transcript history.
+        if llm is not None and stt is not None:
+            llm._caller_language_source = stt
         inference_llm = None
 
     # Variable and disposition extraction may share this out-of-band LLM. A
