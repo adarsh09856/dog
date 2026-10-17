@@ -367,12 +367,6 @@ async def apply_kodewaves_sovereign_resolution(
     )
     indic_stt_base = normalize_local_ai_endpoint(indic_stt_raw).rstrip("/")
     indic_stt_v1_url = f"{indic_stt_base}/v1" if not indic_stt_base.endswith("/v1") else indic_stt_base
-    indus_raw = local_engine.get(
-        "indus_tts_endpoint",
-        os.environ.get("INDUS_TTS_ENDPOINT", "http://indus-tts:8000/v1"),
-    )
-    indus_base = normalize_local_ai_endpoint(indus_raw).rstrip("/")
-    indus_v1_url = f"{indus_base}/v1" if not indus_base.endswith("/v1") else indus_base
 
     is_using_master_keys = False
 
@@ -620,11 +614,12 @@ async def apply_kodewaves_sovereign_resolution(
                 if selected_model != "piper" and not selected_model.startswith("piper/"):
                     from api.services.catalog.local_inventory import (
                         get_local_tts_models,
+                        local_tts_api_base,
                         local_model_voice_ids_for_language,
                     )
                     import aiohttp
 
-                    inventory_url = indus_v1_url if selected_model == "indus-pocket-tts" else whisper_v1_url
+                    inventory_url = local_tts_api_base(local_engine, selected_model)
                     try:
                         installed_models = await get_local_tts_models(inventory_url)
                     except (aiohttp.ClientError, TimeoutError):

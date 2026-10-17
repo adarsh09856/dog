@@ -18,7 +18,7 @@ from loguru import logger
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import AIModelCatalogModel, VoiceCatalogModel
 from api.services.catalog.normalize import normalize_provider_name, tts_runtime_provider, google_model_layer
-from api.services.catalog.local_inventory import piper_voice_inventory, whisper_api_base
+from api.services.catalog.local_inventory import piper_voice_inventory, whisper_api_base, local_tts_api_base
 from api.services.catalog.gemini_voices import discover_indian_voices
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.registry import GEMINI_TTS_VOICES
@@ -997,10 +997,7 @@ class CatalogService:
 
             # Model and voice metadata come from the running local TTS engine;
             # do not advertise the Indian voice if its service is unavailable.
-            indus_tts_url = local_ai_setting.get("indus_tts_endpoint") or os.environ.get(
-                "INDUS_TTS_ENDPOINT", "http://indus-tts:8000/v1"
-            )
-            indus_tts_url = whisper_api_base(normalize_local_ai_endpoint(indus_tts_url)).rstrip("/")
+            indus_tts_url = local_tts_api_base(local_ai_setting, "indus-pocket-tts")
             try:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
                     async with session.get(f"{indus_tts_url}/models") as resp:

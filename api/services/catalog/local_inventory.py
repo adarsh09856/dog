@@ -1,9 +1,12 @@
 """Read installed local speech capabilities from the serving engines."""
 
+import os
 import time
 from typing import Any
 
 import aiohttp
+
+from api.utils.common import normalize_local_ai_endpoint
 
 
 _tts_model_cache: dict[str, tuple[float, dict[str, dict]]] = {}
@@ -87,6 +90,19 @@ def whisper_api_base(endpoint: str) -> str:
     """Resolve the OpenAI-compatible API base, including root-only settings."""
     base = endpoint.rstrip("/").removesuffix("/models")
     return base if base.endswith("/v1") else f"{base}/v1"
+
+
+def local_tts_api_base(settings: dict, model: str) -> str:
+    """Use one engine choice for discovery, voice previews and live synthesis."""
+    if model == "indus-pocket-tts":
+        endpoint = settings.get("indus_tts_endpoint") or os.environ.get(
+            "INDUS_TTS_ENDPOINT", "http://indus-tts:8000/v1"
+        )
+    else:
+        endpoint = settings.get("whisper_endpoint") or os.environ.get(
+            "WHISPER_ENDPOINT", "http://whisper:8000/v1"
+        )
+    return whisper_api_base(normalize_local_ai_endpoint(endpoint))
 
 
 def local_tts_inventory(payload: Any) -> dict[str, dict]:

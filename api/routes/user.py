@@ -755,13 +755,12 @@ async def get_voices(
 
     if provider_key == "speaches" and model and model != "piper" and not model.startswith("piper/"):
         raw_catalog = []
-        whisper_endpoint = local_ai_setting.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-        from api.services.catalog.local_inventory import whisper_api_base, local_tts_inventory, local_model_voice_catalog
-        whisper_base = whisper_api_base(normalize_local_ai_endpoint(whisper_endpoint))
+        from api.services.catalog.local_inventory import local_tts_api_base, local_tts_inventory, local_model_voice_catalog
+        local_base = local_tts_api_base(local_ai_setting, model)
         try:
             import aiohttp
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
-                async with session.get(f"{whisper_base.rstrip('/')}/models") as response:
+                async with session.get(f"{local_base.rstrip('/')}/models") as response:
                     payload = await response.json() if response.status == 200 else {}
             installed_model = local_tts_inventory(payload).get(model)
             if local_engine_enabled and installed_model:
@@ -950,9 +949,8 @@ async def preview_voice(
             raise HTTPException(status_code=403, detail="Local AI is disabled or unavailable for this organization")
         settings = await kodewaves_db_client.get_setting("local_ai") or {}
         if is_local_model:
-            from api.services.catalog.local_inventory import whisper_api_base, local_tts_inventory, local_model_voice_ids
-            endpoint = settings.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-            speaches_url = whisper_api_base(normalize_local_ai_endpoint(endpoint)).rstrip("/")
+            from api.services.catalog.local_inventory import local_tts_api_base, local_tts_inventory, local_model_voice_ids
+            speaches_url = local_tts_api_base(settings, model).rstrip("/")
             import aiohttp
             try:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
@@ -1001,7 +999,7 @@ async def preview_voice(
     if is_local_model:
         samples = {
             "en": "Hello, welcome to Kodewaves. How may I help you?",
-            "hi": "नमस्ते, मैं आपकी कैसे मदद कर सकती हूँ?",
+            "hi": "नमस्ते। बताइए, कैसे मदद करूँ?",
             "fr": "Bonjour, comment puis-je vous aider ?",
             "es": "Hola, ¿cómo puedo ayudarte?",
             "pt": "Olá, como posso ajudar?",
