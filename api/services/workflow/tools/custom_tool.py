@@ -407,6 +407,17 @@ async def execute_http_tool(
                 "rendered_url": _rendered_url,
                 "request_body_preview": _request_body_preview,
             }
+        if result.get("status") == "error":
+            # Upstream error bodies and exception strings can contain private
+            # URLs, credentials or stack traces. Keep diagnostics in the
+            # authenticated tool tester/logs, outside the caller's LLM context.
+            safe_result = {
+                "status": "error",
+                "error": "The requested action could not be completed. Do not claim it succeeded.",
+            }
+            if isinstance(result.get("status_code"), int):
+                safe_result["status_code"] = result["status_code"]
+            return safe_result
         return result
 
     # Get timeout
