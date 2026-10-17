@@ -6,6 +6,7 @@ import asyncio
 import importlib.util
 import io
 import os
+import re
 import wave
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -25,6 +26,13 @@ MODEL: Any = None
 VOICE: Any = None
 _stream_speech: Any = None
 SYNTHESIS_LOCK = asyncio.Lock()
+
+
+def _prepare_speech_text(text: str) -> str:
+    # This checkpoint ends synthesis at an internal Devanagari danda even
+    # though its HTTP stream completes successfully. A comma keeps the pause
+    # and lets the rest of the utterance reach the caller.
+    return re.sub(r"[।॥](?=\s*\S)", ",", text)
 
 
 def _load_model() -> None:
@@ -107,7 +115,7 @@ async def speech(request: SpeechRequest):
         # A single autoregressive generator is kept on this one-CPU service so
         # concurrent calls do not multiply latency or RAM use on small hosts.
         async with SYNTHESIS_LOCK:
-            generator = iter(_stream_speech(MODEL, VOICE, request.input))
+            generator = iter(_stream_speech(MODEL, VOICE, _prepare_speech_text(request.input)))
             while True:
                 def take_next():
                     try:
