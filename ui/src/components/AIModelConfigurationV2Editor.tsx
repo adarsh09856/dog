@@ -649,6 +649,9 @@ export function AIModelConfigurationV2Editor({
             const isRt = overrideRealtime !== undefined ? overrideRealtime : Boolean(kodewaves.is_realtime);
             if (!catalogManifest || catalogError) throw new Error("Refresh the model catalog before saving.");
             if (!isRt) {
+                if (kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
+                    throw new Error("IndicConformer needs a specific Indian language. Select one, or choose multilingual Whisper for automatic language detection.");
+                }
                 if (!kodewaves.voice.trim()) throw new Error("Select a voice for the selected TTS model before saving.");
                 for (const [label, selected, models] of [
                     ["LLM", kodewaves.llm_model, effectiveLlmModels],
@@ -1135,6 +1138,11 @@ export function AIModelConfigurationV2Editor({
                                             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                                             Selected transcriber &quot;{kodewaves.stt_model}&quot; is no longer active in the catalog.
                                         </div>
+                                    )}
+                                    {kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
+                                        <p className="text-xs text-amber-600 dark:text-amber-300">
+                                            Choose a specific Indian language for IndicConformer, or select multilingual Whisper for automatic detection.
+                                        </p>
                                     )}
                                 </div>
 
