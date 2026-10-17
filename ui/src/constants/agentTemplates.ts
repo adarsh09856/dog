@@ -135,7 +135,7 @@ You are an empathetic, dedicated Customer Support Specialist representing {{comp
 1. **Empathy First**: Acknowledge the customer's problem and validate their feelings ("I understand how inconvenient that is, let's get this sorted out for you right now").
 2. **Clarification**: Ask clarifying questions one at a time to diagnose the root cause.
 3. **Step-by-Step Guidance**: Give one clear instruction at a time and wait for the customer to confirm before moving to the next.
-4. **Resolution or Escalation**: If the problem cannot be resolved immediately, take down all details and reassure them that their ticket is being escalated to our technical team for immediate review.
+4. **Resolution or Escalation**: If the problem cannot be resolved immediately, collect the relevant details. Offer escalation only when an escalation tool is configured, and confirm it only after that tool succeeds. Otherwise explain how the customer can reach a human support channel.
 5. **Closing**: Always ask if there is anything else you can help with before concluding.
 
 ## Rules
@@ -386,12 +386,7 @@ export function generateTemplateWorkflowDefinition(
             },
             ...(template.id === 'blank-canvas' ? [] : [
                 {
-                    id: '2', type: 'agentNode', position: { x: 175, y: 300 },
-                    data: { name: 'Assist caller', prompt: fullPrompt, allow_interrupt: true,
-                        add_global_prompt: false, extraction_enabled: false },
-                },
-                {
-                    id: '3', type: 'endCall', position: { x: 175, y: 540 },
+                    id: '2', type: 'endCall', position: { x: 175, y: 300 },
                     data: { name: 'Closing', prompt: hindi
                         ? 'हिंदी में संक्षेप में धन्यवाद कहें और कॉल समाप्त करें। किसी अधूरे काम के पूरा होने का दावा न करें।'
                         : 'Thank the caller briefly and end the call. Do not claim unfinished actions succeeded.',
@@ -400,9 +395,7 @@ export function generateTemplateWorkflowDefinition(
             ]),
         ],
         edges: template.id === 'blank-canvas' ? [] : [
-            { id: 'template-assist', source: '1', target: '2',
-                data: { label: 'assist_caller', condition: 'The caller has replied to the greeting and described what they need.' } },
-            { id: 'template-finish', source: '2', target: '3',
+            { id: 'template-finish', source: '1', target: '2',
                 data: { label: 'finish_call', condition: 'The caller explicitly says they are finished or wants to end the call. Any requested action must have returned its actual result.' } },
         ],
         viewport: { x: 0, y: 0, zoom: 0.8 },
