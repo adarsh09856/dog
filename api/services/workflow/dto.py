@@ -258,7 +258,9 @@ class _ToolDocumentRefsMixin(BaseModel):
             "display_name": "Greeting Text",
             "description": (
                 "Text spoken via TTS at the start of the call. Supports "
-                "{{template_variables}}. Leave empty to skip the greeting. "
+                "{{template_variables}}. Set a short greeting to avoid waiting for "
+                "the language model at call startup. If empty, the agent generates "
+                "its opening from the prompt, which can delay the first response."
             ),
             "display_options": DisplayOptions(show={"greeting_type": ["text"]}),
             "placeholder": "Hi {{first_name}}, this is Sarah from Acme.",
