@@ -28,7 +28,7 @@ def _fallback_voice_workflow(name: str, description: str, instructions: str | No
     safe_name = name.replace("{{", "(").replace("}}", ")")
     purpose = description.replace("{{", "(").replace("}}", ")")[:1800]
     extra = (instructions or "").replace("{{", "(").replace("}}", ")")[:1500]
-    agent_prompt = f"Help the caller with this purpose: {purpose}."
+    agent_prompt = f"You are {safe_name}. Greet the caller briefly when the conversation opens. Help the caller with this purpose: {purpose}."
     if extra:
         agent_prompt += f" Follow these instructions: {extra}"
     language_rule = speech_language_instruction(language)
@@ -38,20 +38,15 @@ def _fallback_voice_workflow(name: str, description: str, instructions: str | No
     definition = {
         "nodes": [
             {"id": "generated-0", "type": "startCall", "position": {"x": 240, "y": 0},
-             "data": {"name": "Greeting", "prompt": f"Greet the caller as {safe_name} and ask how you can help. {language_rule or ''}".strip(),
-                      "is_start": True, "allow_interrupt": True, "add_global_prompt": False}},
-            {"id": "generated-1", "type": "agentNode", "position": {"x": 240, "y": 220},
              "data": {"name": "Assist caller", "prompt": agent_prompt,
-                      "allow_interrupt": True, "add_global_prompt": False}},
-            {"id": "generated-2", "type": "endCall", "position": {"x": 240, "y": 440},
+                      "is_start": True, "allow_interrupt": True, "add_global_prompt": False}},
+            {"id": "generated-1", "type": "endCall", "position": {"x": 240, "y": 220},
              "data": {"name": "Closing", "prompt": "Thank the caller and end the conversation politely.",
                       "is_end": True, "allow_interrupt": True, "add_global_prompt": False}},
         ],
         "edges": [
             {"id": "generated-edge-0", "source": "generated-0", "target": "generated-1",
-             "data": {"label": "continue_to_assistance", "condition": "The caller replies or states their request."}},
-            {"id": "generated-edge-1", "source": "generated-1", "target": "generated-2",
-             "data": {"label": "finish_assistance", "condition": "The caller confirms their request is complete."}},
+             "data": {"label": "finish_assistance", "condition": "The caller explicitly confirms their request is complete or asks to end the call."}},
         ],
     }
     dto = ReactFlowDTO.model_validate(definition)
