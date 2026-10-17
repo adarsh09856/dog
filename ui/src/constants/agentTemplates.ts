@@ -21,6 +21,47 @@ export interface AgentTemplate {
     isPopular?: boolean;
 }
 
+// Keep template openings out of the LLM request path. A configured greeting is
+// synthesized directly by the selected TTS provider, which avoids waiting for
+// a cold local LLM before the caller hears the first words. Keep these short,
+// neutral prompts in each language's normal script so the selected voice and
+// language agree from the start of the call.
+const INDIAN_TEMPLATE_OPENINGS: Record<string, string> = {
+    as: 'নমস্কাৰ। মই আপোনাক কেনেকৈ সহায় কৰিব পাৰোঁ?',
+    bn: 'নমস্কার। আমি আপনাকে কীভাবে সাহায্য করতে পারি?',
+    brx: 'रावजों। आं नोंखौ माबोरै मदद होनो हायो?',
+    doi: 'नमस्कार। तुसेंगी केह् मदद चाहिदी ऐ?',
+    gu: 'નમસ્તે. તમને શેમાં મદદ જોઈએ છે?',
+    hi: 'नमस्ते। बताइए, मैं आपकी किस तरह मदद करूँ?',
+    kn: 'ನಮಸ್ಕಾರ. ನಿಮಗೆ ಯಾವ ರೀತಿಯ ಸಹಾಯ ಬೇಕು?',
+    ks: 'آداب۔ توہہِ کِہِ مدد پٲٹھۍ ضرورت چھِ؟',
+    kok: 'नमस्कार. तुमकां कसली मदत जाय?',
+    mai: 'नमस्कार। अहाँ केहन सहायता चाहैत छी?',
+    ml: 'നമസ്കാരം. നിങ്ങൾക്ക് എന്ത് സഹായമാണ് വേണ്ടത്?',
+    mni: 'ꯈꯨꯔꯨꯝꯖꯔꯤ꯫ ꯅꯪꯅ ꯀꯔꯝꯅ ꯃꯇꯦꯡ ꯄꯥꯡꯕꯤꯒꯅꯤ?',
+    mr: 'नमस्कार। तुम्हाला कोणत्या मदतीची गरज आहे?',
+    ne: 'नमस्कार। तपाईंलाई कस्तो सहयोग चाहिएको छ?',
+    or: 'ନମସ୍କାର। ଆପଣଙ୍କୁ କେଉଁ ସାହାଯ୍ୟ ଦରକାର?',
+    pa: 'ਸਤ ਸ੍ਰੀ ਅਕਾਲ। ਤੁਹਾਨੂੰ ਕਿਸ ਚੀਜ਼ ਵਿੱਚ ਮਦਦ ਚਾਹੀਦੀ ਹੈ?',
+    sa: 'नमस्कारः। भवते किम् साहाय्यम् अपेक्षितम्?',
+    sat: 'ᱡᱚᱦᱟᱨ। ᱟᱢ ᱪᱮᱫ ᱜᱚᱲᱚ ᱥᱟᱸᱣ ᱠᱟᱱᱟ?',
+    sd: 'سلام۔ اوهان کي ڪهڙي مدد گهرجي؟',
+    ta: 'வணக்கம். உங்களுக்கு என்ன உதவி தேவை?',
+    te: 'నమస్కారం. మీకు ఏ సహాయం కావాలి?',
+    ur: 'السلام علیکم۔ آپ کو کس مدد کی ضرورت ہے؟',
+};
+
+function getTemplateOpening(template: AgentTemplate, language: string): string {
+    const code = language.toLowerCase().split('-')[0];
+    if (code === 'en') {
+        return template.suggestedFirstMessage;
+    }
+    return INDIAN_TEMPLATE_OPENINGS[code]
+        ?? (['multi', 'auto', 'caller'].includes(code)
+            ? 'Namaste. How may I help you today?'
+            : template.suggestedFirstMessage);
+}
+
 export const TEMPLATE_CATEGORIES = [
     { value: 'all', label: 'All Templates' },
     { value: 'inbound', label: 'Inbound' },
@@ -332,13 +373,17 @@ export function generateTemplateWorkflowDefinition(
     const customizedPrompt = template.suggestedPrompt
         .replace(/\{\{company_name\}\}/g, company)
         .replace(/\{\{agent_name\}\}/g, agent);
+    const customizedOpening = getTemplateOpening(template, options?.language || 'en')
+        .replace(/\{\{company_name\}\}/g, company)
+        .replace(/\{\{agent_name\}\}/g, agent);
 
     // Build the complete startCall node prompt including the opening line instruction
     const language = options?.language || 'en';
-    const hindi = language === 'hi';
-    const languageName = language === 'en'
+    const languageCode = language.toLowerCase().split('-')[0];
+    const hindi = languageCode === 'hi';
+    const languageName = languageCode === 'en'
         ? 'English'
-        : INDIAN_TEMPLATE_LANGUAGES.find((item) => item.code === language)?.name || 'English';
+        : INDIAN_TEMPLATE_LANGUAGES.find((item) => item.code === languageCode)?.name || 'English';
     const rolePrompt = hindi && template.id === 'appointment-booking'
         ? `You are ${agent}, a helpful appointment assistant for ${company}. Speak naturally in Hindi and Hinglish. Use Devanagari for Hindi and preserve English words or sentences when the caller uses them. Ask one short question per turn. Collect name, phone, service and future date/time in IST (Asia/Kolkata); do not ask for a timezone unless the caller explicitly requests another. Then ask for confirmation and call the configured booking tool. Never claim a booking without booked=true and a real appointment ID. Do not invent availability or promise messages.\nExamples:\nCaller: मुझे अपॉइंटमेंट चाहिए।\nAssistant: ज़रूर। कृपया अपना नाम बताइए।\nCaller: I want to book an appointment.\nAssistant: Sure. What date and time would you prefer?`
         : customizedPrompt;
@@ -358,7 +403,7 @@ export function generateTemplateWorkflowDefinition(
                     name: 'start call',
                     prompt: fullPrompt,
                     greeting_type: 'text',
-                    greeting: '',
+                    greeting: customizedOpening,
                     allow_interrupt: true,
                     invalid: false,
                     validationMessage: null,
