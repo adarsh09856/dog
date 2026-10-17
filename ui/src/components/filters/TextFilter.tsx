@@ -18,7 +18,7 @@ export const TextFilter: React.FC<TextFilterProps> = ({
   placeholder = "Enter text",
   maxLength,
 }) => {
-  // Local state for fast typing - only syncs to parent on blur
+  // Publish edits immediately so keyboard Apply uses the visible value.
   const [localValue, setLocalValue] = useState(value.value || "");
 
   // Sync local state when parent value changes (e.g., from URL or clear)
@@ -26,17 +26,15 @@ export const TextFilter: React.FC<TextFilterProps> = ({
     setLocalValue(value.value || "");
   }, [value.value]);
 
-  const handleBlur = () => {
-    onChange({ value: localValue });
-  };
-
   return (
     <div className="space-y-2">
       <Input
         type="text"
         value={localValue}
-        onChange={(e) => setLocalValue(e.target.value)}
-        onBlur={handleBlur}
+        onChange={(e) => {
+          setLocalValue(e.target.value);
+          onChange({ value: e.target.value });
+        }}
         placeholder={placeholder}
         maxLength={maxLength}
         className={error ? "border-red-500" : ""}

@@ -26,7 +26,7 @@ export const NumberRangeFilter: React.FC<NumberRangeFilterProps> = ({
   step = 1,
   presets = [],
 }) => {
-  // Local state for fast typing - only syncs to parent on blur
+  // Keep draft bounds current for validation and keyboard Apply.
   const [localMin, setLocalMin] = useState<string>(value.min?.toString() ?? "");
   const [localMax, setLocalMax] = useState<string>(value.max?.toString() ?? "");
 
@@ -35,16 +35,6 @@ export const NumberRangeFilter: React.FC<NumberRangeFilterProps> = ({
     setLocalMin(value.min?.toString() ?? "");
     setLocalMax(value.max?.toString() ?? "");
   }, [value.min, value.max]);
-
-  const handleMinBlur = () => {
-    const newValue = localMin === "" ? null : Number(localMin);
-    onChange({ ...value, min: newValue });
-  };
-
-  const handleMaxBlur = () => {
-    const newValue = localMax === "" ? null : Number(localMax);
-    onChange({ ...value, max: newValue });
-  };
 
   const handlePresetClick = (preset: { min: number; max: number }) => {
     onChange({ min: preset.min, max: preset.max });
@@ -77,8 +67,11 @@ export const NumberRangeFilter: React.FC<NumberRangeFilterProps> = ({
             type="number"
             placeholder={`Min ${unit || 'value'}`}
             value={localMin}
-            onChange={(e) => setLocalMin(e.target.value)}
-            onBlur={handleMinBlur}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              setLocalMin(nextValue);
+              onChange({ ...value, min: nextValue === "" ? null : Number(nextValue) });
+            }}
             min={min}
             max={max}
             step={step}
@@ -94,8 +87,11 @@ export const NumberRangeFilter: React.FC<NumberRangeFilterProps> = ({
             type="number"
             placeholder={`Max ${unit || 'value'}`}
             value={localMax}
-            onChange={(e) => setLocalMax(e.target.value)}
-            onBlur={handleMaxBlur}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              setLocalMax(nextValue);
+              onChange({ ...value, max: nextValue === "" ? null : Number(nextValue) });
+            }}
             min={min}
             max={max}
             step={step}

@@ -23,7 +23,7 @@ export const NumberFilter: React.FC<NumberFilterProps> = ({
   max,
   step = 1,
 }) => {
-  // Local state for fast typing - only syncs to parent on blur
+  // Keep the editable value while publishing the current draft for Apply.
   const [localValue, setLocalValue] = useState<string>(value.value?.toString() ?? '');
 
   // Sync local state when parent value changes (e.g., from URL or clear)
@@ -32,14 +32,12 @@ export const NumberFilter: React.FC<NumberFilterProps> = ({
   }, [value.value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalValue(e.target.value);
-  };
-
-  const handleBlur = () => {
-    if (localValue === '') {
+    const nextValue = e.target.value;
+    setLocalValue(nextValue);
+    if (nextValue === '') {
       onChange({ value: null });
     } else {
-      const num = parseInt(localValue, 10);
+      const num = parseInt(nextValue, 10);
       if (!isNaN(num)) {
         onChange({ value: num });
       }
@@ -55,7 +53,6 @@ export const NumberFilter: React.FC<NumberFilterProps> = ({
           type="number"
           value={localValue}
           onChange={handleChange}
-          onBlur={handleBlur}
           placeholder={placeholder}
           min={min}
           max={max}
