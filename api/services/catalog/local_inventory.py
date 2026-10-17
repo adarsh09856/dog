@@ -150,6 +150,7 @@ def local_model_voice_ids_for_language(model: dict, language: str | None) -> set
         return local_model_voice_ids(model)
 
     requested = _language_aliases(language)
+    mixed_hindi_english = _is_hinglish(language)
     has_language_metadata = any(
         isinstance(voice, dict) and (voice.get("languages") or voice.get("language"))
         for voice in voices
@@ -167,8 +168,13 @@ def local_model_voice_ids_for_language(model: dict, language: str | None) -> set
             languages = [languages]
         if not isinstance(languages, (list, tuple, set)):
             continue
-        if voice_id and requested.intersection(
+        supported = {
             alias for item in languages for alias in _language_aliases(str(item))
+        }
+        if voice_id and (
+            {"hi", "en"}.issubset(supported)
+            if mixed_hindi_english
+            else bool(requested.intersection(supported))
         ):
             result.add(voice_id)
     return result
@@ -178,9 +184,15 @@ def _language_aliases(language: str) -> set[str]:
     normalized = language.strip().replace("_", "-").casefold()
     base = normalized.split("-", 1)[0]
     aliases = {normalized, base}
-    if base in {"hinglish", "hi-en", "en-hi"}:
-        aliases.update({"hinglish", "hi", "en", "hi-in", "en-in"})
+    if _is_hinglish(normalized):
+        aliases.update({"hinglish", "hi-en", "en-hi", "hi", "en"})
     return aliases
+
+
+def _is_hinglish(language: str) -> bool:
+    return language.strip().replace("_", "-").casefold() in {
+        "hinglish", "hi-en", "en-hi",
+    }
 
 
 def local_model_voice_catalog(model: dict) -> list[dict]:
