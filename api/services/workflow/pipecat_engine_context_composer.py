@@ -106,7 +106,7 @@ def compose_system_prompt_for_node(
     ]
     india_now = datetime.now(ZoneInfo("Asia/Kolkata"))
     parts.append(
-        f"Current India local time: {india_now.isoformat(timespec='seconds')} (IST, "
+        f"Current India local time: {india_now.isoformat(timespec='minutes')} (IST, "
         "Asia/Kolkata). Interpret dates and times as India local time by default; "
         "do not ask the caller for a timezone. Use another timezone only when the "
         "caller explicitly requests one. Never invent the current date."
