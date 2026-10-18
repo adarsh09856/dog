@@ -19,7 +19,14 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=45.0))
         super().__init__(**kwargs)
         if self._text_aggregation_mode == TextAggregationMode.SENTENCE:
-            self._text_aggregator = LocalSpeechAggregator()
+            # Indus streams PCM while its autoregressive generator is still
+            # running. Release the first complete sentence sooner so callers
+            # hear it before the LLM finishes later sentences. Keep a larger
+            # batch for non-streaming models to avoid paying their full
+            # request/startup cost on very short clauses.
+            model = str(getattr(self._settings, "model", "")).casefold()
+            min_characters = 24 if model == "indus-pocket-tts" else 48
+            self._text_aggregator = LocalSpeechAggregator(min_characters=min_characters)
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
 
