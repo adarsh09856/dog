@@ -337,36 +337,21 @@ class _BookingToolChoiceMixin:
         ):
             params.pop("tools", None)
             params.pop("tool_choice", None)
-        # Whisper auto-detects each utterance independently. Pass that result
-        # to the local model for this request only; a Hindi greeting or voice
-        # persona otherwise tends to make a small model answer an English
-        # caller in Hindi. Match the exact transcript so idle/tool turns do
-        # not inherit a stale language hint. Persisted history stays intact.
-        source = getattr(self, "_caller_language_source", None)
-        detected = getattr(source, "latest_detected_language", None)
-        detected_text = getattr(source, "latest_detected_text", None)
+        # Preserve each recognized utterance's request-only language hint on
+        # later turns. Removing old hints changes the prompt prefix and forces
+        # CPU inference to reprocess conversation history unnecessarily.
         messages = params.get("messages")
         if (
             model.startswith(("qwen2.5:", "qwen3:", "qwen3.5:"))
-            and isinstance(detected, str) and isinstance(detected_text, str)
-            and isinstance(messages, list) and messages
-            and isinstance(messages[-1], dict) and messages[-1].get("role") == "user"
-            and isinstance(messages[-1].get("content"), str)
-            and detected_text.casefold() in messages[-1]["content"].casefold()
+            and isinstance(messages, list)
         ):
-            from api.services.configuration.language_normalizer import SPEECH_LANGUAGE_NAMES
+            from api.services.pipecat.caller_language_context import CallerLanguageContext
 
-            code = detected.strip().lower().split("-", 1)[0]
-            language_name = SPEECH_LANGUAGE_NAMES.get(code)
-            if language_name:
-                instruction = (
-                    f"The caller just spoke {language_name}. Answer in {language_name}; "
-                    "follow their latest language choice and do not repeat the greeting."
-                )
-                messages[-1] = {
-                    **messages[-1],
-                    "content": f"[{instruction}]\n{messages[-1]['content']}",
-                }
+            if not hasattr(self, "_caller_language_context"):
+                self._caller_language_context = CallerLanguageContext()
+            params["messages"] = self._caller_language_context.apply(
+                messages, getattr(self, "_caller_language_source", None)
+            )
         return params
 
 
