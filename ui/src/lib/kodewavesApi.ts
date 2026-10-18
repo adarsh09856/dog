@@ -494,6 +494,13 @@ export const adminApi = {
       method: 'POST',
       body: JSON.stringify({ language, audio_base64: audioBase64, model }),
     }),
+  getIndicSttModels: () =>
+    apiFetch<{ model: string; languages: string[]; status: string; detail?: string }>('/admin/settings/indic-stt/models'),
+  testIndicStt: (language: string, audioBase64: string) =>
+    apiFetch<{ success: boolean; model: string; transcript?: string; latency_ms: number; error?: string; language: string }>('/admin/settings/indic-stt/test', {
+      method: 'POST',
+      body: JSON.stringify({ language, audio_base64: audioBase64 }),
+    }),
 
   // Audit Logs
   getAuditLogs: (params?: {

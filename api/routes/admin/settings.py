@@ -9,6 +9,7 @@ from api.db.kodewaves_models import GlobalPlatformSettingModel
 from api.services.auth.depends import get_superuser
 from api.services.catalog.catalog_service import catalog_service
 from api.services.catalog.local_inventory import whisper_api_base
+from api.services.catalog.speech_diagnostics import INDIC_STT_LANGUAGE_CODES
 from api.utils.common import normalize_local_ai_endpoint
 
 router = APIRouter(prefix="/settings", tags=["admin-settings"])
@@ -583,6 +584,90 @@ async def get_whisper_models(_user=Depends(get_superuser)):
                 return {"models": KNOWN_MODELS, "endpoint": whisper_url, "status": f"HTTP {resp.status}"}
     except Exception:
         return {"models": KNOWN_MODELS, "endpoint": whisper_url, "status": "offline"}
+
+
+async def _get_indic_stt_inventory(endpoint: str) -> dict[str, Any]:
+    """Read the live IndicConformer inventory used to constrain admin tests."""
+    import aiohttp
+
+    url = whisper_api_base(normalize_local_ai_endpoint(endpoint))
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=5)) as session:
+        async with session.get(f"{url.rstrip('/')}/models") as response:
+            if response.status != 200:
+                raise HTTPException(status_code=502, detail="IndicConformer STT is unavailable")
+            payload = await response.json()
+
+    models = payload.get("data", []) if isinstance(payload, dict) else []
+    model = next((
+        item for item in models
+        if isinstance(item, dict)
+        and item.get("id") == "indicconformer-ctc-int8"
+        and item.get("task") == "automatic-speech-recognition"
+        and item.get("installed") is not False
+    ), None)
+    if not model:
+        raise HTTPException(status_code=503, detail="IndicConformer STT has no installed model")
+    raw_languages = model.get("languages", [])
+    if not isinstance(raw_languages, list):
+        raw_languages = []
+    installed_languages = {
+        str(value).strip().lower().replace("_", "-").split("-", 1)[0]
+        for value in raw_languages
+        if isinstance(value, str)
+    } & INDIC_STT_LANGUAGE_CODES
+    return {"model": model, "languages": sorted(installed_languages), "endpoint": url}
+
+
+@router.get("/indic-stt/models")
+async def get_indic_stt_models(_user=Depends(get_superuser)):
+    """Report installed IndicConformer languages without guessing from settings."""
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    endpoint = local_ai.get("indic_stt_endpoint") or os.environ.get(
+        "INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"
+    )
+    try:
+        inventory = await _get_indic_stt_inventory(endpoint)
+        return {
+            "model": inventory["model"]["id"],
+            "languages": inventory["languages"],
+            "endpoint": inventory["endpoint"],
+            "status": "online",
+        }
+    except HTTPException as exc:
+        return {"model": "indicconformer-ctc-int8", "languages": [], "status": "offline", "detail": exc.detail}
+    except Exception:
+        return {"model": "indicconformer-ctc-int8", "languages": [], "status": "offline", "detail": "IndicConformer STT is unavailable"}
+
+
+@router.post("/indic-stt/test")
+async def test_indic_stt(payload: Optional[Dict[str, Any]] = None, _user=Depends(get_superuser)):
+    """Run a bounded, language-pinned diagnostic against local IndicConformer."""
+    from api.services.catalog.speech_diagnostics import decode_test_audio, transcribe_test_audio
+
+    payload = payload or {}
+    language = str(payload.get("language") or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    if language not in INDIC_STT_LANGUAGE_CODES:
+        raise HTTPException(status_code=400, detail="Choose one of the 22 supported IndicConformer languages")
+    try:
+        audio = decode_test_audio(payload.get("audio_base64"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+    endpoint = local_ai.get("indic_stt_endpoint") or os.environ.get(
+        "INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"
+    )
+    try:
+        inventory = await _get_indic_stt_inventory(endpoint)
+        if language not in inventory["languages"]:
+            raise HTTPException(status_code=400, detail="The selected IndicConformer language is not installed")
+        return await transcribe_test_audio(
+            inventory["endpoint"], audio, inventory["model"]["id"], language
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="IndicConformer speech test failed") from exc
 
 
 @router.post("/whisper/download")

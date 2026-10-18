@@ -33,6 +33,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { adminApi, PlatformSettings } from "@/lib/kodewavesApi";
 import LocalSttTest from "./LocalSttTest";
+import IndicSttTest from "./IndicSttTest";
 
 const POPULAR_OLLAMA_MODELS = [
   { value: "qwen3.5:2b", label: "Qwen 3.5 2B (installed local default)" },
@@ -768,6 +769,7 @@ export default function AdminSettingsPage() {
             </div>
 
             <LocalSttTest models={whisperModels.filter(model => model.installed).map(model => ({id: model.id, name: model.name}))} />
+            <IndicSttTest />
 
             {/* Installed Models List */}
             <div className="space-y-2">

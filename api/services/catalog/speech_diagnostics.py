@@ -11,6 +11,12 @@ import aiohttp
 
 MAX_TEST_AUDIO_BYTES = 2 * 1024 * 1024
 
+# Language codes exposed by the installed IndicConformer CTC bundle.
+INDIC_STT_LANGUAGE_CODES = frozenset({
+    "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
+    "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
+})
+
 
 def decode_test_audio(encoded: str) -> bytes:
     if not isinstance(encoded, str) or len(encoded) > 4 * ((MAX_TEST_AUDIO_BYTES + 2) // 3):
