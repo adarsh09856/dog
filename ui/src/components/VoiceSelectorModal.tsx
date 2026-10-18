@@ -44,8 +44,7 @@ const EMPTY_FACETS: Facets = { genders: [], accents: [], languages: [], provider
 
 const PROVIDER_TABS = [
     { id: "__all__", label: "All Active Voices" },
-    { id: "piper", label: "Piper Hindi & Indic (Local)" },
-    { id: "speaches", label: "Kokoro (Local CPU)" },
+    { id: "speaches", label: "Installed Local Voices" },
     { id: "sarvam", label: "Sarvam Indic" },
     { id: "cartesia", label: "Cartesia Sonic" },
     { id: "openai", label: "OpenAI" },
