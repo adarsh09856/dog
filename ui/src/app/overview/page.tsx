@@ -481,8 +481,8 @@ export default function OverviewPage() {
           </div>
         ))}
 
-        {/* Sovereign Admin Control Plane Card */}
-        <Card className="border border-border/70 bg-muted/20">
+        {/* Platform administration is available only to backend superusers. */}
+        {user?.is_superuser === true && <Card className="border border-border/70 bg-muted/20">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -516,7 +516,7 @@ export default function OverviewPage() {
               </Button>
             </div>
           </CardContent>
-        </Card>
+        </Card>}
       </div>
     </div>
   );

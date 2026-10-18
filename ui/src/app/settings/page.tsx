@@ -22,7 +22,7 @@ import { useAuth } from "@/lib/auth";
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const isSuper = (user as any)?.is_superuser || (user as any)?.role === 'admin' || (user as any)?.is_admin;
+  const isSuper = user?.is_superuser === true;
 
   return (
     <div className="flex justify-center py-12 px-4">

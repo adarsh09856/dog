@@ -189,6 +189,7 @@ export function AppSidebar() {
   const { state, isMobile, setOpenMobile } = useSidebar();
   const { provider, logout, user } = useAuth();
   const { config } = useAppConfig();
+  const canAccessAdmin = user?.is_superuser === true;
   const { openHireExpert } = useLeadForms();
   const {
     telnyxMissingWebhookPublicKeyCount,
@@ -205,7 +206,7 @@ export function AppSidebar() {
   // Check for updates only on self-hosted (OSS) deployments — cloud is managed for the user.
   const { latest: latestRelease, isBehind, isLatest } = useLatestReleaseVersion(
     versionInfo?.ui,
-    { enabled: config?.deploymentMode === "oss" },
+    { enabled: config?.deploymentMode === "oss" && canAccessAdmin },
   );
 
   const isActive = (path: string) => pathname.startsWith(path);
@@ -389,7 +390,7 @@ export function AppSidebar() {
                 </span>
               )}
             </Link>
-            {isBehind && latestRelease && (
+            {canAccessAdmin && isBehind && latestRelease && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link
@@ -494,12 +495,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
 
-        {Boolean(
-          user?.is_superuser ||
-          (user as any)?.is_admin ||
-          (user as any)?.role === 'admin' ||
-          (user as any)?.role === 'superadmin'
-        ) && (
+        {canAccessAdmin && (
           <SidebarGroup className="mt-6">
             <SidebarGroupLabel
               className={cn(
@@ -550,13 +546,7 @@ export function AppSidebar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {Boolean(
-                    user?.is_superuser ||
-                    (user as any)?.is_admin ||
-                    (user as any)?.role === 'admin' ||
-                    (user as any)?.role === 'superadmin' ||
-                    config?.deploymentMode === 'oss'
-                  ) && (
+                  {canAccessAdmin && (
                     <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-purple-600 dark:text-purple-400 font-medium">
                       <ShieldCheck className="mr-2 h-4 w-4" />
                       Sovereign Admin
@@ -599,7 +589,7 @@ export function AppSidebar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {Boolean(user?.is_superuser || (user as any)?.role === 'admin') && (
+                  {canAccessAdmin && (
                     <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-purple-600 dark:text-purple-400 font-medium">
                       <ShieldCheck className="mr-2 h-4 w-4" />
                       Sovereign Admin

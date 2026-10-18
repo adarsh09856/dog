@@ -289,7 +289,7 @@ export default function RunsPage() {
         [auth],
     );
 
-    const isSuper = (auth.user as any)?.is_superuser || (auth.user as any)?.role === 'admin' || (auth.user as any)?.is_admin;
+    const isSuper = auth.user?.is_superuser === true;
 
     if (!auth.loading && (!auth.isAuthenticated || !isSuper)) {
         return (

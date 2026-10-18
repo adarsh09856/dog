@@ -79,7 +79,7 @@ export default function SuperadminPage() {
         await handleImpersonate("email", email);
     };
 
-    const isSuper = (user as any)?.is_superuser || (user as any)?.role === 'admin' || (user as any)?.is_admin;
+    const isSuper = user?.is_superuser === true;
 
     if (!isSuper) {
         return (
