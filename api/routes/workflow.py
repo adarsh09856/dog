@@ -439,7 +439,9 @@ async def _attach_generated_booking_tool(definition: dict, user: UserModel, purp
         data["tool_uuids"] = list(dict.fromkeys([*(data.get("tool_uuids") or []), tool_uuid]))
         data["prompt"] = (
             f"{data.get('prompt', '').rstrip()}\n\n"
-            f"For a booking, collect the caller's name, phone, exact future date, time and timezone. "
+            "For a booking, collect the caller's name, phone, exact future date and time. "
+            "Use Asia/Kolkata (IST) unless the caller explicitly requests another timezone; "
+            "do not ask for a timezone or repeat questions whose answers are already known. "
             f"Repeat the details and ask for explicit confirmation. Then call {action_name}. "
             "Only say the appointment is booked when that tool returns booked=true and an appointment_id; "
             "otherwise explain the failure and ask for a new time."
