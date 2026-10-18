@@ -494,6 +494,7 @@ async def execute_text_chat_pending_turn(
     session_data: dict[str, Any],
     checkpoint: dict[str, Any] | None,
 ) -> TextChatTurnExecutionResult:
+    turn_started_at = time.monotonic()
     turns = list(session_data.get("turns") or [])
     if not turns or turns[-1].get("status") != "pending":
         raise ValueError("Text chat session has no pending turn to execute")
@@ -555,6 +556,7 @@ async def execute_text_chat_pending_turn(
     )
 
     llm = create_llm_service(user_config, correlation_id=mps_correlation_id)
+    preparation_done_at = time.monotonic()
     inference_llm = llm
     call_dispositions = WorkflowConfigurationDefaults.model_validate(
         {"call_dispositions": run_configs.get("call_dispositions") or []}
@@ -765,6 +767,7 @@ async def execute_text_chat_pending_turn(
 
     try:
         await wait_for_pipeline_worker_started(task, timeout=5.0, run_task=runner_task)
+        pipeline_ready_at = time.monotonic()
 
         await engine.initialize()
 
@@ -799,6 +802,7 @@ async def execute_text_chat_pending_turn(
                 runner_task=runner_task,
                 activity_marker=opening_marker,
             )
+        opening_done_at = time.monotonic()
 
         if pending_user_message is not None:
             context.add_message({"role": "user", "content": pending_user_message})
@@ -855,6 +859,7 @@ async def execute_text_chat_pending_turn(
                     runner_task=runner_task,
                     activity_marker=generation_marker,
                 )
+        response_done_at = time.monotonic()
     finally:
         try:
             if not task.has_finished():
@@ -863,6 +868,19 @@ async def execute_text_chat_pending_turn(
         finally:
             await engine.close_mcp_sessions()
             await engine.cleanup()
+
+    cleanup_done_at = time.monotonic()
+    logger.info(
+        "Text chat turn timing run_id={} preparation_ms={} pipeline_start_ms={} "
+        "opening_ms={} response_ms={} cleanup_ms={} total_ms={}",
+        workflow_run_id,
+        round((preparation_done_at - turn_started_at) * 1000),
+        round((pipeline_ready_at - preparation_done_at) * 1000),
+        round((opening_done_at - pipeline_ready_at) * 1000),
+        round((response_done_at - opening_done_at) * 1000),
+        round((cleanup_done_at - response_done_at) * 1000),
+        round((cleanup_done_at - turn_started_at) * 1000),
+    )
 
     gathered_context = await engine.get_gathered_context()
     assistant_text = (
