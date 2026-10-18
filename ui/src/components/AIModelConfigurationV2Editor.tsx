@@ -570,20 +570,37 @@ export function AIModelConfigurationV2Editor({
     }, [kodewaves.stt_engine_type, catalogManifest]);
 
     useEffect(() => {
-        if (kodewaves.stt_engine_type !== "local_cpu" || !kodewaves.stt_model) return;
-        const installed = catalogManifest?.local_stt_models || [];
-        if (!installed.length || installed.some((model) => model.value === kodewaves.stt_model)) return;
-        const autoModel = installed.find(
+        if (kodewaves.stt_engine_type !== "local_cpu"
+            || kodewaves.stt_model !== "indicconformer-ctc-int8"
+            || kodewaves.language !== MULTILINGUAL_LANGUAGE_CODE) return;
+        const autoModel = catalogManifest?.local_stt_models?.find(
             (model) => /whisper-small(?:$|[.-])/i.test(model.value),
-        ) || installed[0];
+        );
         if (autoModel) {
-            setKodewaves((current) => current.stt_model === kodewaves.stt_model
+            setKodewaves((current) => current.stt_model === "indicconformer-ctc-int8"
+                && current.language === MULTILINGUAL_LANGUAGE_CODE
                 ? { ...current, stt_model: autoModel.value }
                 : current);
         }
-    }, [catalogManifest, kodewaves.stt_engine_type, kodewaves.stt_model]);
+    }, [catalogManifest, kodewaves.stt_engine_type, kodewaves.stt_model, kodewaves.language]);
 
     const setRecognitionLanguage = (language: string) => {
+        const autoDetectModels = catalogManifest?.local_stt_models?.filter(
+            (model) => /whisper/i.test(model.value) && !/whisper-(tiny|base)(?:$|[.-])/i.test(model.value),
+        ) || [];
+        const autoDetectModel = autoDetectModels.find((model) => /whisper-small(?:$|[.-])/i.test(model.value))
+            || autoDetectModels[0];
+        if (language === MULTILINGUAL_LANGUAGE_CODE
+            && kodewaves.stt_engine_type === "local_cpu"
+            && kodewaves.stt_model === "indicconformer-ctc-int8") {
+            if (!autoDetectModel) {
+                setError("No installed multilingual STT model is available for automatic language detection.");
+                return;
+            }
+            setKodewaves({ ...kodewaves, language, stt_model: autoDetectModel.value });
+            setError(null);
+            return;
+        }
         setKodewaves({ ...kodewaves, language });
     };
 
@@ -667,6 +684,9 @@ export function AIModelConfigurationV2Editor({
             const isRt = overrideRealtime !== undefined ? overrideRealtime : Boolean(kodewaves.is_realtime);
             if (!catalogManifest || catalogError) throw new Error("Refresh the model catalog before saving.");
             if (!isRt) {
+                if (kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
+                    throw new Error("IndicConformer needs a specific Indian language. Select one, or choose multilingual Whisper for automatic language detection.");
+                }
                 if (!kodewaves.voice.trim()) throw new Error("Select a voice for the selected TTS model before saving.");
                 for (const [label, selected, models] of [
                     ["LLM", kodewaves.llm_model, effectiveLlmModels],
@@ -1129,6 +1149,10 @@ export function AIModelConfigurationV2Editor({
                                                     : (!kodewaves.stt_model && effectiveSttModels.some(model => model.value === "auto") ? "auto" : ""))
                                         }
                                         onValueChange={(stt_model) => {
+                                            if (stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
+                                                setError("IndicConformer requires a selected installed language. For auto detection, use multilingual Whisper.");
+                                                return;
+                                            }
                                             setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" || stt_model === "none" ? undefined : stt_model });
                                             setError(null);
                                         }}
@@ -1157,6 +1181,11 @@ export function AIModelConfigurationV2Editor({
                                             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                                             Selected transcriber &quot;{kodewaves.stt_model}&quot; is no longer active in the catalog.
                                         </div>
+                                    )}
+                                    {kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
+                                        <p className="text-xs text-amber-600 dark:text-amber-300">
+                                            Choose a specific Indian language for IndicConformer, or select multilingual Whisper for automatic detection.
+                                        </p>
                                     )}
                                 </div>
 

@@ -155,6 +155,7 @@ services:
       # Local CPU AI Engine (Ollama + Indus TTS + Faster-Whisper STT)
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
+      INDIC_STT_ENDPOINT: "${INDIC_STT_ENDPOINT:-http://indic-stt:8000/v1}"
       INDUS_TTS_ENDPOINT: "${INDUS_TTS_ENDPOINT:-http://indus-tts:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
       KODEWAVES_DEFAULT_REGION: "${KODEWAVES_DEFAULT_REGION:-IN}"
@@ -337,6 +338,32 @@ services:
     networks:
       - kodewaves-network
 
+  # Faster-Whisper Local STT Server (CTranslate2 CPU inference, OpenAI-compatible /v1/audio/transcriptions)
+  indic-stt:
+    build:
+      context: ./api/local_models/indic_stt
+    image: kodewaves-indic-stt:v1.0.0
+    container_name: kodewaves_indic_stt
+    restart: unless-stopped
+    environment:
+      INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-all}"
+      INDIC_STT_THREADS: "${INDIC_STT_THREADS:-2}"
+    volumes:
+      - kodewaves_indic_stt_models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+    networks:
+      - kodewaves-network
+
   whisper:
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     container_name: kodewaves_whisper
@@ -383,6 +410,7 @@ volumes:
   kodewaves_minio_data:
   kodewaves_ollama_data:
   kodewaves_whisper_cache:
+  kodewaves_indic_stt_models:
   kodewaves_indus_tts_models:
 
 networks:

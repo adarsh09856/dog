@@ -298,6 +298,20 @@ async def _require_enabled_platform_model(layer: str, provider: str, model: str)
         raise HTTPException(status_code=400, detail=f"Selected {layer.upper()} model '{model}' is disabled or unavailable.")
 
 
+def require_explicit_indic_stt_language(model: str, language: str | None) -> None:
+    """Reject a single-language Indic recognizer paired with auto detection."""
+    if model != "indicconformer-ctc-int8":
+        return
+    from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
+
+    code = LANGUAGE_NAME_TO_ISO.get(str(language or "auto").lower(), str(language or "auto").lower()).split("-", 1)[0]
+    if code in ("auto", "multi", "unknown", "default"):
+        raise HTTPException(
+            status_code=400,
+            detail="IndicConformer requires an explicit installed Indian language; choose multilingual Whisper for auto detection",
+        )
+
+
 async def apply_kodewaves_sovereign_resolution(
     effective: EffectiveAIModelConfiguration,
     organization_id: Optional[int] = None,
@@ -361,6 +375,13 @@ async def apply_kodewaves_sovereign_resolution(
     whisper_raw = local_engine.get("whisper_endpoint", "http://whisper:8000/v1")
     whisper_base = normalize_local_ai_endpoint(whisper_raw).rstrip("/")
     whisper_v1_url = f"{whisper_base}/v1" if not whisper_base.endswith("/v1") else whisper_base
+    indic_stt_raw = local_engine.get(
+        "indic_stt_endpoint",
+        os.environ.get("INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"),
+    )
+    indic_stt_base = normalize_local_ai_endpoint(indic_stt_raw).rstrip("/")
+    indic_stt_v1_url = f"{indic_stt_base}/v1" if not indic_stt_base.endswith("/v1") else indic_stt_base
+
     is_using_master_keys = False
 
 
@@ -495,30 +516,40 @@ async def apply_kodewaves_sovereign_resolution(
                         detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
                 model_to_use = model if model and model != "default" else "Systran/faster-whisper-small"
-                if model_to_use == "indicconformer-ctc-int8":
-                    # Existing organizations can still have the retired local
-                    # recognizer saved. Route those calls through an installed
-                    # multilingual Whisper model until their settings are saved.
+                if model_to_use == "indicconformer-ctc-int8" and norm_lang == "multi":
+                    # A saved auto-detect selection cannot run through the
+                    # single-language Indic endpoint. Resolve the requested
+                    # auto capability to the installed multilingual engine.
                     from api.services.catalog.local_inventory import get_local_stt_models
 
                     try:
                         auto_models = await get_local_stt_models(whisper_v1_url)
                     except (aiohttp.ClientError, TimeoutError):
                         raise HTTPException(status_code=503, detail="Multilingual STT engine is unavailable")
-                    preferred = "Systran/faster-whisper-small"
-                    auto_model = preferred if preferred in auto_models else next(
-                        (item for item in auto_models if "whisper" in item.casefold()), None
-                    )
-                    if auto_model is None:
+                    auto_model = "Systran/faster-whisper-small"
+                    if auto_model not in auto_models:
                         raise HTTPException(status_code=503, detail="No installed multilingual STT model is available for auto detection")
                     model_to_use = auto_model
-                if "whisper" not in model_to_use.casefold():
-                    raise HTTPException(status_code=400, detail="Select an installed local Whisper STT model")
+                if model_to_use == "indicconformer-ctc-int8":
+                    from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
+                    from api.services.catalog.local_inventory import get_local_stt_models
+
+                    selected_language = LANGUAGE_NAME_TO_ISO.get(norm_lang, norm_lang).split("-", 1)[0]
+                    require_explicit_indic_stt_language(model_to_use, selected_language)
+                    try:
+                        installed_models = await get_local_stt_models(indic_stt_v1_url)
+                    except (aiohttp.ClientError, TimeoutError):
+                        raise HTTPException(status_code=503, detail="Local Indic STT engine is unavailable")
+                    manifest = installed_models.get(model_to_use) or {}
+                    supported_languages = {str(code).casefold().split("-", 1)[0] for code in manifest.get("languages", [])}
+                    if selected_language not in supported_languages:
+                        raise HTTPException(status_code=400, detail=f"Indic STT language '{selected_language}' is not installed")
+                    norm_lang = selected_language
                 effective.stt = SpeachesSTTConfiguration(
                     api_key="local-cpu-token",
                     model=model_to_use,
                     language=norm_lang,
-                    base_url=whisper_v1_url,
+                    base_url=indic_stt_v1_url if model_to_use == "indicconformer-ctc-int8" else whisper_v1_url,
                 )
                 metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language=norm_lang)
 

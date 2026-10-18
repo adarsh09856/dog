@@ -635,6 +635,10 @@ async def save_model_configuration_v2(
             organization_id=organization_id,
             created_by=user.provider_id,
         )
+        from api.services.configuration.kodewaves_resolver import (
+            require_explicit_indic_stt_language,
+        )
+        require_explicit_indic_stt_language(effective.stt.model, effective.stt.language)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=exc.args[0])
 

@@ -652,11 +652,14 @@ def create_stt_service(
         local_cpu = getattr(user_config.stt, "api_key", None) in (
             "local-cpu-token", "sovereign-local-cpu"
         )
-        # A local agent's language guides its replies; callers may switch
-        # languages mid-call, so Whisper detects each utterance independently.
-        if local_cpu and "whisper" not in stt_model.casefold():
-            raise ValueError("Select an installed local Whisper STT model")
-        lang_obj = None if local_cpu else _resolve_speaches_language(lang_str)
+        # The selected assistant language is a hint, not a constraint on what
+        # callers can say. Local Whisper must detect each utterance so a Hindi
+        # agent can understand English and Hinglish follow-ups. IndicConformer
+        # is language-specific and still needs the explicit selection.
+        lang_obj = (
+            None if local_cpu and stt_model != "indicconformer-ctc-int8"
+            else _resolve_speaches_language(lang_str)
+        )
         base_url = getattr(user_config.stt, "base_url", None) or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
         _validate_runtime_service_url(base_url, "base_url")
         return SpeachesSTTService(
