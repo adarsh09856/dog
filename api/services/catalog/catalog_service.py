@@ -934,6 +934,14 @@ class CatalogService:
                                     and model.get("installed", True)
                                     and model.get("task") == "automatic-speech-recognition")
                             ]
+                            # Keep previously saved small checkpoints usable while
+                            # omitting tiny/base from new selections when a stronger
+                            # multilingual checkpoint is actually installed.
+                            if any("faster-whisper-small" in item["value"].casefold() for item in local_stt):
+                                local_stt = [
+                                    item for item in local_stt
+                                    if not item["value"].casefold().endswith(("faster-whisper-tiny", "faster-whisper-base"))
+                                ]
             except Exception:
                 local_stt = []
 
@@ -985,6 +993,7 @@ class CatalogService:
                             for installed_model in data.get("data", []):
                                 if (isinstance(installed_model, dict)
                                         and installed_model.get("task") == "text-to-speech"
+                                        and installed_model.get("installed") is not False
                                         and installed_model.get("id")):
                                     model_id = installed_model["id"]
                                     local_tts.append({

@@ -569,6 +569,26 @@ export function AIModelConfigurationV2Editor({
         return list;
     }, [kodewaves.stt_engine_type, catalogManifest]);
 
+    const setRecognitionLanguage = (language: string) => {
+        const autoDetectModels = catalogManifest?.local_stt_models?.filter(
+            (model) => /whisper/i.test(model.value) && !/whisper-(tiny|base)(?:$|[.-])/i.test(model.value),
+        ) || [];
+        const autoDetectModel = autoDetectModels.find((model) => /whisper-small(?:$|[.-])/i.test(model.value))
+            || autoDetectModels[0];
+        if (language === MULTILINGUAL_LANGUAGE_CODE
+            && kodewaves.stt_engine_type === "local_cpu"
+            && kodewaves.stt_model === "indicconformer-ctc-int8") {
+            if (!autoDetectModel) {
+                setError("No installed multilingual STT model is available for automatic language detection.");
+                return;
+            }
+            setKodewaves({ ...kodewaves, language, stt_model: autoDetectModel.value });
+            setError(null);
+            return;
+        }
+        setKodewaves({ ...kodewaves, language });
+    };
+
     const effectiveTtsModels = useMemo(() => {
         const isLocal = kodewaves.tts_engine_type === "local_cpu";
         if (isLocal) {
@@ -869,7 +889,7 @@ export function AIModelConfigurationV2Editor({
                                 {/* Language Selector */}
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label className="text-xs font-semibold">Language</Label>
-                                    <Select value={kodewaves.language} onValueChange={(language) => setKodewaves({ ...kodewaves, language })}>
+                                    <Select value={kodewaves.language} onValueChange={setRecognitionLanguage}>
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Select language" />
                                         </SelectTrigger>
@@ -1090,7 +1110,8 @@ export function AIModelConfigurationV2Editor({
                                                         stt_engine_type: "local_cpu",
                                                         stt_model: kodewaves.stt_engine_type === "local_cpu"
                                                             ? kodewaves.stt_model
-                                                            : catalogManifest?.local_stt_models?.[0]?.value,
+                                                            : (catalogManifest?.local_stt_models?.find((model) => /whisper-small(?:$|[.-])/i.test(model.value))
+                                                                || catalogManifest?.local_stt_models?.[0])?.value,
                                                     });
                                                 }}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
@@ -1112,7 +1133,14 @@ export function AIModelConfigurationV2Editor({
                                                     ? kodewaves.stt_model
                                                     : (!kodewaves.stt_model && effectiveSttModels.some(model => model.value === "auto") ? "auto" : ""))
                                         }
-                                        onValueChange={(stt_model) => setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" || stt_model === "none" ? undefined : stt_model })}
+                                        onValueChange={(stt_model) => {
+                                            if (stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
+                                                setError("IndicConformer requires a selected installed language. For auto detection, use multilingual Whisper.");
+                                                return;
+                                            }
+                                            setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" || stt_model === "none" ? undefined : stt_model });
+                                            setError(null);
+                                        }}
                                     >
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder={effectiveSttModels.length === 0 ? "No active transcribers available" : "Select STT model"} />
@@ -1259,7 +1287,7 @@ export function AIModelConfigurationV2Editor({
 
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Recognition language (STT)</Label>
-                                    <Select value={kodewaves.language} onValueChange={(language) => setKodewaves({ ...kodewaves, language })}>
+                                    <Select value={kodewaves.language} onValueChange={setRecognitionLanguage}>
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Select language" />
                                         </SelectTrigger>

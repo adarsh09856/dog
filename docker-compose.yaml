@@ -444,7 +444,7 @@ services:
     volumes:
       - whisper_cache:/home/ubuntu/.cache/huggingface/hub
     environment:
-      - PRELOAD_MODELS=Systran/faster-whisper-tiny
+      - PRELOAD_MODELS=${WHISPER_PRELOAD_MODELS:-Systran/faster-whisper-small}
       - DEFAULT_DEVICE=cpu
       - OMP_NUM_THREADS=1
       - MKL_NUM_THREADS=1
