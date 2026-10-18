@@ -932,7 +932,8 @@ class CatalogService:
                                 for model in data.get("data", data.get("models", []))
                                 if (isinstance(model, dict) and model.get("id")
                                     and model.get("installed", True)
-                                    and model.get("task") == "automatic-speech-recognition")
+                                    and model.get("task") == "automatic-speech-recognition"
+                                    and "whisper" in model["id"].casefold())
                             ]
                             # Keep previously saved small checkpoints usable while
                             # omitting tiny/base from new selections when a stronger
@@ -944,31 +945,6 @@ class CatalogService:
                                 ]
             except Exception:
                 local_stt = []
-
-            # Advertise the CPU Indic recognizer only when its weights and
-            # selected language checkpoints are present in the running sidecar.
-            indic_stt_url = local_ai_setting.get("indic_stt_endpoint") or os.environ.get(
-                "INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"
-            )
-            indic_stt_url = whisper_api_base(normalize_local_ai_endpoint(indic_stt_url))
-            try:
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
-                    async with session.get(f"{indic_stt_url.rstrip('/')}/models") as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            for installed_model in data.get("data", []):
-                                if (isinstance(installed_model, dict)
-                                        and installed_model.get("task") == "automatic-speech-recognition"
-                                        and installed_model.get("installed", True)
-                                        and installed_model.get("id")):
-                                    local_stt.append({
-                                        "value": installed_model["id"],
-                                        "label": "IndicConformer CTC INT8 (installed languages)",
-                                        "provider": "whisper",
-                                        "languages": installed_model.get("languages", []),
-                                    })
-            except (aiohttp.ClientError, TimeoutError):
-                pass
 
             # Probe Local TTS (Piper ONNX)
             piper_url = local_ai_setting.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
