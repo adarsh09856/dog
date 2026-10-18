@@ -10,12 +10,16 @@ def voice_persona_instruction(gender: str | None) -> str:
     if gender == "male":
         grammar = (
             "Use masculine first-person grammar where the language marks it "
-            "(Hindi example: मैं आपकी मदद कर सकता हूँ)."
+            "(Hindi examples: मैं आपकी मदद कर सकता हूँ; मैं जाँच करूँगा). "
+            "For Hindi self-reference, never use feminine forms such as "
+            "सकती हूँ, करूँगी, or रही हूँ."
         )
     elif gender == "female":
         grammar = (
             "Use feminine first-person grammar where the language marks it "
-            "(Hindi example: मैं आपकी मदद कर सकती हूँ)."
+            "(Hindi examples: मैं आपकी मदद कर सकती हूँ; मैं जाँच करूँगी). "
+            "For Hindi self-reference, never use masculine forms such as "
+            "सकता हूँ, करूँगा, or रहा हूँ."
         )
     else:
         grammar = (
