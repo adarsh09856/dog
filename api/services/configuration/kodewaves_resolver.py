@@ -664,6 +664,22 @@ async def apply_kodewaves_sovereign_resolution(
                     local_tts_url = inventory_url
                 elif selected_model == "piper" or selected_model.startswith("piper/"):
                     voice_to_use = voice_to_use or get_default_piper_voice_for_language(tts_lang)
+                    from api.services.configuration.language_normalizer import (
+                        _is_auto_language,
+                        infer_language_from_voice,
+                        normalize_language_code,
+                    )
+
+                    voice_language = infer_language_from_voice("piper", voice_to_use)
+                    if voice_language and _is_auto_language(tts_lang):
+                        # A single installed Piper voice cannot synthesize every
+                        # language just because STT is in auto-detect mode.
+                        tts_lang = voice_language
+                    elif voice_language and normalize_language_code(tts_lang) != voice_language:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="The selected Piper voice does not match the TTS language. Choose a matching voice.",
+                        )
                     local_tts_url = piper_endpoint
                 else:
                     raise HTTPException(status_code=400, detail="Selected local TTS model is not supported")

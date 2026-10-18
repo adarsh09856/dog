@@ -1258,7 +1258,7 @@ export function AIModelConfigurationV2Editor({
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">
-                                    <Label>Language</Label>
+                                    <Label>Recognition language (STT)</Label>
                                     <Select value={kodewaves.language} onValueChange={(language) => setKodewaves({ ...kodewaves, language })}>
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Select language" />
@@ -1274,6 +1274,11 @@ export function AIModelConfigurationV2Editor({
                                     {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
                                         <p className="text-xs text-muted-foreground">
                                             Speech recognition auto-detects only languages supported by the selected STT model. Voice output uses the selected voice and its supported language.
+                                        </p>
+                                    )}
+                                    {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "piper" && /^([a-z]{2,3})[-_][A-Z]{2}[-_]/.test(kodewaves.voice) && (
+                                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                                            Piper voice output: {LANGUAGE_DISPLAY_NAMES[kodewaves.voice.split(/[-_]/)[0]] || kodewaves.voice.split(/[-_]/)[0]}. This voice does not gain other languages when recognition is set to multilingual.
                                         </p>
                                     )}
                                 </div>
