@@ -1346,6 +1346,12 @@ def _voice_completion_settings(model: str, temperature: float | None = None) -> 
     return values
 
 
+def _mark_local_ollama_service(service):
+    """Allow the request adapter to apply Ollama-only low-latency fields."""
+    service._kodewaves_local_ollama = True
+    return service
+
+
 def _google_model_or_default(model: str) -> str:
     """Keep an explicit selection; only resolve the platform's default aliases.
 
@@ -1415,11 +1421,14 @@ def create_llm_service_from_provider(
                 ),
                 **kwargs,
             )
-        return OpenAILLMService(
+        service = OpenAILLMService(
             api_key=api_key,
             settings=OpenAILLMSettings(**_voice_completion_settings(model, temperature)),
             **kwargs,
         )
+        if base_url and ("ollama" in base_url.casefold() or ":11434" in base_url):
+            return _mark_local_ollama_service(service)
+        return service
     elif provider == ServiceProviders.GROQ.value:
         return GroqLLMService(
             api_key=api_key,
@@ -1480,11 +1489,13 @@ def create_llm_service_from_provider(
         llm_model = model or DEFAULT_LOCAL_LLM_MODEL
         if llm_model == "default":
             llm_model = DEFAULT_LOCAL_LLM_MODEL
-        return KodewavesLLMService(
+        return _mark_local_ollama_service(KodewavesLLMService(
             base_url=ollama_host,
             api_key=api_key or "ollama",
             settings=OpenAILLMSettings(**_voice_completion_settings(llm_model, temperature)),
-        )
+            correlation_id=correlation_id,
+            usage_context=usage_context,
+        ))
     elif provider in (
         ServiceProviders.KODEWAVES.value,
         ServiceProviders.DOGRAH.value,
@@ -1497,11 +1508,13 @@ def create_llm_service_from_provider(
             llm_model = model or DEFAULT_LOCAL_LLM_MODEL
             if llm_model == "default":
                 llm_model = DEFAULT_LOCAL_LLM_MODEL
-            return KodewavesLLMService(
+            return _mark_local_ollama_service(KodewavesLLMService(
                 base_url=ollama_host,
                 api_key="sovereign-local-cpu",
                 settings=OpenAILLMSettings(**_voice_completion_settings(llm_model, temperature)),
-            )
+                correlation_id=correlation_id,
+                usage_context=usage_context,
+            ))
 
         # Fallback to direct cloud LLM from environment credentials before local CPU
         openai_key = os.environ.get("OPENAI_API_KEY")
@@ -1538,11 +1551,13 @@ def create_llm_service_from_provider(
         ollama_host = os.environ.get("OLLAMA_ENDPOINT", "http://ollama:11434")
         if not ollama_host.endswith("/v1"):
             ollama_host = f"{ollama_host.rstrip('/')}/v1"
-        return KodewavesLLMService(
+        return _mark_local_ollama_service(KodewavesLLMService(
             base_url=ollama_host,
             api_key="sovereign-local-cpu",
             settings=OpenAILLMSettings(**_voice_completion_settings(model or DEFAULT_LOCAL_LLM_MODEL, temperature)),
-        )
+            correlation_id=correlation_id,
+            usage_context=usage_context,
+        ))
     elif provider in (ServiceProviders.ANTHROPIC.value, "anthropic"):
         from pipecat.services.anthropic.llm import AnthropicLLMService, AnthropicLLMSettings
         llm_model = model or "claude-haiku-4-5-20251001"
@@ -1567,13 +1582,15 @@ def create_llm_service_from_provider(
         if not base_url.rstrip("/").endswith("/v1"):
             base_url = f"{base_url.rstrip('/')}/v1"
         _validate_runtime_service_url(base_url, "base_url")
-        return KodewavesLLMService(
+        return _mark_local_ollama_service(KodewavesLLMService(
             base_url=base_url,
             api_key=api_key or "none",
             settings=OpenAILLMSettings(**_voice_completion_settings(
                 model if model and model != "default" else DEFAULT_LOCAL_LLM_MODEL, temperature,
             )),
-        )
+            correlation_id=correlation_id,
+            usage_context=usage_context,
+        ))
     elif provider == ServiceProviders.HUGGINGFACE.value:
         base_url = base_url or "https://router.huggingface.co/v1"
         _validate_runtime_service_url(base_url, "base_url")

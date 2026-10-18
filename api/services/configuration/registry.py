@@ -1536,6 +1536,7 @@ class RimeTTSConfiguration(BaseTTSConfiguration):
 
 SPEACHES_TTS_MODELS = [
     "indus-pocket-tts",
+    "indic-mio-tts",
 ]
 
 

@@ -78,6 +78,9 @@ umask 022
 # 2. Build only application images; leave existing infrastructure in place.
 echo -e "${BLUE}[2/6] Building and updating application containers...${NC}"
 docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS build api ui
+if [ "$ENABLE_LOCAL" = "true" ]; then
+    docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS build indic-mio-tts
+fi
 docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps api ui
 
 # The API entrypoint runs migrations before starting its services. Wait for
@@ -99,6 +102,7 @@ done
 # monitor checks Ollama's installed-model inventory and never downloads weights.
 if [ "$ENABLE_LOCAL" = "true" ]; then
     docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps ollama-warmup
+    docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps indic-mio-tts
 fi
 
 # No host-wide pruning, environment rewriting or unrelated service cleanup.

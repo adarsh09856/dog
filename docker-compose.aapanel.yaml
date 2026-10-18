@@ -157,6 +157,7 @@ services:
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
       INDIC_STT_ENDPOINT: "${INDIC_STT_ENDPOINT:-http://indic-stt:8000/v1}"
       INDUS_TTS_ENDPOINT: "${INDUS_TTS_ENDPOINT:-http://indus-tts:8000/v1}"
+      INDIC_MIO_TTS_ENDPOINT: "${INDIC_MIO_TTS_ENDPOINT:-http://indic-mio-tts:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
       KODEWAVES_DEFAULT_REGION: "${KODEWAVES_DEFAULT_REGION:-IN}"
       KODEWAVES_DEFAULT_TIMEZONE: "${KODEWAVES_DEFAULT_TIMEZONE:-Asia/Kolkata}"
@@ -364,6 +365,39 @@ services:
     networks:
       - kodewaves-network
 
+  # CPU LiteRT Indic-Mio TTS, with Indian-language and English voice support.
+  # This model buffers utterances, so keep it distinct from the streaming voice.
+  indic-mio-tts:
+    build:
+      context: ./api/local_models/indic_mio
+      dockerfile: Dockerfile
+    image: kodewaves-indic-mio-tts:v1.0.0
+    container_name: kodewaves_indic_mio_tts
+    restart: unless-stopped
+    profiles: ["local"]
+    environment:
+      HF_HOME: /models/huggingface
+      INDIC_MIO_MODEL_DIR: /models/indic-mio
+      OMP_NUM_THREADS: "2"
+      TFLITE_NUM_THREADS: "2"
+    volumes:
+      - kodewaves_indic_mio_tts_models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 900s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+        reservations:
+          memory: 2048M
+    networks:
+      - kodewaves-network
+
   whisper:
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     container_name: kodewaves_whisper
@@ -412,6 +446,7 @@ volumes:
   kodewaves_whisper_cache:
   kodewaves_indic_stt_models:
   kodewaves_indus_tts_models:
+  kodewaves_indic_mio_tts_models:
 
 networks:
   kodewaves-network:

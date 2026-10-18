@@ -198,6 +198,15 @@ class _BookingToolChoiceMixin:
                 messages = list(messages)
                 messages.insert(first_user, {"role": "system", "content": "/no_think"})
                 params["messages"] = messages
+            if getattr(self, "_kodewaves_local_ollama", False):
+                # Ollama's OpenAI-compatible API accepts its `think` extension
+                # via extra_body. Passing the supported field explicitly makes
+                # the runtime setting effective even if prompt hints are ignored.
+                extra_body = params.get("extra_body")
+                params["extra_body"] = {
+                    **(extra_body if isinstance(extra_body, dict) else {}),
+                    "think": False,
+                }
 
         from api.services.workflow.tools.booking import caller_confirmed_booking
 

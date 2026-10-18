@@ -50,6 +50,7 @@ export default function AdminSettingsPage() {
     enable_local_ai_engine: false,
     ollama_endpoint: "http://ollama:11434",
     whisper_endpoint: "http://whisper:8000/v1",
+    indic_mio_tts_endpoint: "http://indic-mio-tts:8000/v1",
     local_ai_max_concurrency: 2,
     smtp_host: "",
     smtp_port: 587,
@@ -454,6 +455,17 @@ export default function AdminSettingsPage() {
                   disabled={!settings.enable_local_ai_engine}
                 />
                 <p className="text-[10px] text-muted-foreground">Local Faster-Whisper CPU transcriber (CTranslate2 OpenAI /v1 format)</p>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Indic-Mio TTS Endpoint</Label>
+                <Input
+                  value={settings.indic_mio_tts_endpoint || ""}
+                  onChange={(e) => setSettings({ ...settings, indic_mio_tts_endpoint: e.target.value })}
+                  placeholder="http://indic-mio-tts:8000/v1"
+                  disabled={!settings.enable_local_ai_engine}
+                />
+                <p className="text-[10px] text-muted-foreground">CPU LiteRT voice service for 22 scheduled Indian languages and English; audio is buffered per utterance</p>
               </div>
 
               <div className="space-y-1">

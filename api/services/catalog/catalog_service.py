@@ -1031,6 +1031,35 @@ class CatalogService:
             except Exception:
                 pass
 
+            # Indic-Mio is served by its own CPU LiteRT sidecar. Read its live
+            # inventory so a model is selectable only after its bundle loads.
+            indic_mio_url = local_tts_api_base(local_ai_setting, "indic-mio-tts")
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
+                    async with session.get(f"{indic_mio_url}/models") as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            for installed_model in data.get("data", []):
+                                if (
+                                    isinstance(installed_model, dict)
+                                    and installed_model.get("task") == "text-to-speech"
+                                    and installed_model.get("id") == "indic-mio-tts"
+                                    and installed_model.get("installed") is True
+                                ):
+                                    local_tts.append({
+                                        "value": installed_model["id"],
+                                        "label": installed_model.get(
+                                            "name",
+                                            "Indic-Mio 0.6B — 22 Indian languages + English (CPU)",
+                                        ),
+                                        "provider": "speaches",
+                                        "languages": installed_model.get("languages", []),
+                                        "voices": installed_model.get("voices", []),
+                                        "streaming": installed_model.get("streaming", False),
+                                    })
+            except Exception:
+                pass
+
         # Prepend 'auto' item ONLY if cloud models exist
         if cloud_llm:
             cloud_llm.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": True})
