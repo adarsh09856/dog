@@ -193,7 +193,7 @@ services:
       MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       KODEWAVES_SECRET_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
-      PIPER_ENDPOINT: "${PIPER_ENDPOINT:-http://piper:5000}"
+      INDUS_TTS_ENDPOINT: "${INDUS_TTS_ENDPOINT:-http://indus-tts:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-false}"
       KODEWAVES_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
       DOGRAH_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-${DOGRAH_DEVOPS_SECRET:-}}"
@@ -272,15 +272,16 @@ services:
       - app-network
       - traefik
 
-  piper:
+  indus-tts:
     build:
       context: ../..
-      dockerfile: deploy/piper/Dockerfile
-    image: kodewaves-piper:latest
-    container_name: piper
+      dockerfile: api/local_models/indus_tts/Dockerfile
+    image: kodewaves-indus-tts:v1.0.0
+    container_name: kodewaves_indus_tts
     restart: unless-stopped
+    profiles: ["local"]
     volumes:
-      - piper-data:/data
+      - indus-tts-models:/models
     networks:
       - app-network
 
@@ -289,7 +290,7 @@ volumes:
   redis_data:
   minio-data:
     driver: local
-  piper-data:
+  indus-tts-models:
     driver: local
 
 networks:

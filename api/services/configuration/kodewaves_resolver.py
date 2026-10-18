@@ -600,14 +600,17 @@ async def apply_kodewaves_sovereign_resolution(
                 metadata.tts = resolved
                 is_using_master_keys = True
             elif engine_enabled and has_local_access:
-                default_voice = get_default_piper_voice_for_language("en")
+                from api.services.catalog.local_inventory import local_tts_api_base
+
+                default_voice = "Inaya"
+                local_tts_url = local_tts_api_base(local_engine, "indus-pocket-tts")
                 effective.tts = SpeachesTTSConfiguration(
                     api_key="local-cpu-token",
-                    model="piper",
+                    model="indus-pocket-tts",
                     voice=default_voice,
-                    base_url=piper_endpoint,
+                    base_url=local_tts_url,
                 )
-                metadata.tts = ResolvedLayerInfo(provider="piper", model="piper", voice=default_voice, source="local")
+                metadata.tts = ResolvedLayerInfo(provider="speaches", model="indus-pocket-tts", voice=default_voice, source="local")
             else:
                 raise HTTPException(
                     status_code=400,
@@ -636,7 +639,7 @@ async def apply_kodewaves_sovereign_resolution(
                         status_code=403,
                         detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
-                selected_model = model if model not in (None, "", "default") else "piper"
+                selected_model = model if model not in (None, "", "default") else "indus-pocket-tts"
                 voice_to_use = current_voice if current_voice and current_voice != "default" else None
                 if selected_model != "piper" and not selected_model.startswith("piper/"):
                     from api.services.catalog.local_inventory import (
@@ -719,15 +722,18 @@ async def apply_kodewaves_sovereign_resolution(
                         metadata.tts = resolved
                         is_using_master_keys = True
                     elif engine_enabled and has_local_access:
-                        voice_to_use = current_voice if current_voice and current_voice != "default" else get_default_piper_voice_for_language(tts_lang)
+                        from api.services.catalog.local_inventory import local_tts_api_base
+
+                        voice_to_use = current_voice if current_voice and current_voice != "default" else "Inaya"
+                        local_tts_url = local_tts_api_base(local_engine, "indus-pocket-tts")
                         effective.tts = SpeachesTTSConfiguration(
                             api_key="local-cpu-token",
-                            model="piper",
+                            model="indus-pocket-tts",
                             voice=voice_to_use,
                             speed=getattr(effective.tts, "speed", 1.0),
-                            base_url=piper_endpoint,
+                            base_url=local_tts_url,
                         )
-                        metadata.tts = ResolvedLayerInfo(provider="piper", model="piper", voice=voice_to_use, source="local")
+                        metadata.tts = ResolvedLayerInfo(provider="speaches", model="indus-pocket-tts", voice=voice_to_use, source="local")
                     else:
                         raise HTTPException(
                             status_code=400,

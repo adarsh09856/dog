@@ -379,25 +379,25 @@ export default function MasterKeysAndModelsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
-                {/* Piper TTS */}
+                {/* Self-hosted Indian CPU TTS */}
                 <div className="p-4 rounded-lg border border-border/70 bg-card space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm flex items-center gap-1.5">
                       <Sparkles className="h-4 w-4 text-emerald-500" />
-                      Piper Neural TTS (OHF-Voice)
+                      Indus Pocket TTS (CPU)
                     </span>
                     <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
                       Local TTS
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Local speech synthesis uses installed voices. Check the voice language and measured response time in Settings before assigning it to an agent.
+                    Local Indian English and Hindi/Hinglish speech synthesis. The voice and supported language choices come from the installed model inventory.
                   </p>
                   <p className="text-xs text-muted-foreground">{catalog?.local_tts_models.length ?? 0} available local speech models</p>
                   <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
-                    <span className="font-mono text-muted-foreground">Default: hi_IN-priyamvada-medium</span>
+                    <span className="font-mono text-muted-foreground">Voice: Inaya · hi-IN, en-IN</span>
                     <Button variant="outline" size="sm" asChild className="h-7 text-xs">
-                      <a href="/admin/settings">Manage Voices</a>
+                      <a href="/model-configurations">Configure Voice</a>
                     </Button>
                   </div>
                 </div>

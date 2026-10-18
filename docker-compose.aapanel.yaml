@@ -152,9 +152,8 @@ services:
       TURN_HOST: "${PUBLIC_HOST:-your-domain.com}"
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
 
-      # Local CPU AI Engine (Ollama + Piper TTS + Faster-Whisper STT)
+      # Local CPU AI Engine (Ollama + Indus TTS + Faster-Whisper STT)
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
-      PIPER_ENDPOINT: "${PIPER_ENDPOINT:-http://piper:5000}"
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
       INDIC_STT_ENDPOINT: "${INDIC_STT_ENDPOINT:-http://indic-stt:8000/v1}"
       INDUS_TTS_ENDPOINT: "${INDUS_TTS_ENDPOINT:-http://indus-tts:8000/v1}"
@@ -284,34 +283,6 @@ services:
     networks:
       - kodewaves-network
 
-  # Piper Neural TTS HTTP Server (OHF-Voice/piper1-gpl)
-  piper:
-    build:
-      context: .
-      dockerfile: deploy/piper/Dockerfile
-    image: kodewaves-piper:v1.0.0
-    container_name: kodewaves_piper
-    restart: unless-stopped
-    profiles: ["local"]
-    ports:
-      - "127.0.0.1:${PIPER_PORT:-8766}:5000"
-    volumes:
-      - kodewaves_piper_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/voices"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          cpus: "1.5"
-          memory: 1536M
-        reservations:
-          memory: 768M
-    networks:
-      - kodewaves-network
-
   # Fast CPU-native Indian Hindi/Hinglish conversational TTS (Inaya voice).
   indus-tts:
     build:
@@ -320,7 +291,7 @@ services:
     image: kodewaves-indus-tts:v1.0.0
     container_name: kodewaves_indus_tts
     restart: unless-stopped
-    profiles: ["experimental"]
+    profiles: ["local"]
     environment:
       HF_HOME: /models/huggingface
       INDUS_MODEL_DIR: /models/indus-pocket-tts
@@ -417,7 +388,6 @@ volumes:
   kodewaves_redis_data:
   kodewaves_minio_data:
   kodewaves_ollama_data:
-  kodewaves_piper_data:
   kodewaves_whisper_cache:
   kodewaves_indic_stt_models:
   kodewaves_indus_tts_models:

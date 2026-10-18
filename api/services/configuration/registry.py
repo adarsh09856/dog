@@ -663,7 +663,7 @@ SPEACHES_LLM_MODELS = [
     "qwen2.5:1.5b",
     "phi4-mini",
     "llama3.2:1b",
-    "qwen3:1.7b",
+    "qwen3.5:2b",
     "llama3:8b",
     "mistral:7b",
     "deepseek-r1",
@@ -1535,11 +1535,7 @@ class RimeTTSConfiguration(BaseTTSConfiguration):
 
 
 SPEACHES_TTS_MODELS = [
-    "piper",
-    "speaches-ai/Kokoro-82M-v1.0-ONNX",
-    "piper/hi_IN-priyamvada-medium",
-    "piper/hi_IN-pratham-medium",
-    "piper/en_US-lessac-medium",
+    "indus-pocket-tts",
 ]
 
 
@@ -1553,23 +1549,18 @@ class SpeachesTTSConfiguration(BaseTTSConfiguration):
         json_schema_extra={"allow_custom_input": True},
     )
     model: str = Field(
-        default="piper",
-        description="Model name as served by your TTS endpoint (e.g. piper).",
-        json_schema_extra={
-            "examples": SPEACHES_TTS_MODELS,
-            "allow_custom_input": True,
-        },
+        default="indus-pocket-tts",
+        description="Installed local CPU TTS model selected from the active local speech inventory.",
+        json_schema_extra={"examples": SPEACHES_TTS_MODELS, "allow_custom_input": True},
     )
     voice: str = Field(
-        default="hi_IN-priyamvada-medium",
-        json_schema_extra={"allow_custom_input": True, "model_options": {
-            "speaches-ai/Kokoro-82M-v1.0-ONNX": ["hf_alpha", "af_heart"],
-        }},
+        default="Inaya",
+        json_schema_extra={"allow_custom_input": True},
         description="Voice ID supported by the selected installed local TTS model.",
     )
     base_url: str = Field(
-        default="http://piper:5000/synthesize",
-        description="Piper HTTP TTS endpoint (default: http://piper:5000/synthesize).",
+        default="http://indus-tts:8000/v1/audio/speech",
+        description="OpenAI-compatible endpoint for the installed local CPU TTS model.",
     )
 
     speed: float = Field(
