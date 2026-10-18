@@ -20,138 +20,42 @@ export default function PricingPage() {
   const [currency, setCurrency] = useState<"INR" | "USD">("INR");
   const [plans, setPlans] = useState<SaaSPlan[]>([]);
   const [packages, setPackages] = useState<CreditPackage[]>([]);
+  const [plansState, setPlansState] = useState<"loading" | "ready" | "error">("loading");
+  const [packagesState, setPackagesState] = useState<"loading" | "ready" | "error">("loading");
+  const [reloadKey, setReloadKey] = useState(0);
   const [calculatorMinutes, setCalculatorMinutes] = useState(2500);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
+    let active = true;
     async function loadData() {
-      try {
-        const [plansData, pkgsData] = await Promise.allSettled([
-          publicApi.getPublicPlans(),
-          publicApi.getPublicCreditPackages(),
-        ]);
-        if (plansData.status === "fulfilled" && plansData.value?.length) {
-          setPlans(plansData.value);
-        }
-        if (pkgsData.status === "fulfilled" && pkgsData.value?.length) {
-          setPackages(pkgsData.value);
-        }
-      } catch (err) {
-        console.warn("Could not fetch dynamic plans, using sovereign defaults", err);
+      const [plansData, packagesData] = await Promise.allSettled([
+        publicApi.getPublicPlans(),
+        publicApi.getPublicCreditPackages(),
+      ]);
+      if (!active) return;
+
+      if (plansData.status === "fulfilled") {
+        setPlans(plansData.value.filter((plan) => plan.is_active));
+        setPlansState("ready");
+      } else {
+        setPlans([]);
+        setPlansState("error");
+      }
+      if (packagesData.status === "fulfilled") {
+        setPackages(packagesData.value.filter((pkg) => pkg.is_active));
+        setPackagesState("ready");
+      } else {
+        setPackages([]);
+        setPackagesState("error");
       }
     }
-    loadData();
-  }, []);
+    void loadData();
+    return () => { active = false; };
+  }, [reloadKey]);
 
-  // Default plans if API hasn't loaded or is offline
-  const defaultPlans: SaaSPlan[] = [
-    {
-      id: 1,
-      name: "Starter",
-      code: "starter",
-      description: "Ideal for testing voice workflows, prototypes, and low-volume inbound inquiries.",
-      monthly_price_inr: 1499,
-      monthly_price_usd: 19,
-      included_minutes: 100,
-      overage_rate_per_minute: 1.2,
-      max_concurrent_calls: 2,
-      allow_user_byok: true,
-      features: [
-        "100 Included Voice Minutes",
-        "2 Concurrent Channels",
-        "All 20+ Model Providers",
-        "WebRTC Web Widget",
-        "Standard SIP / Telephony",
-        "Visual Node Workflow Builder",
-        "Basic Call Analytics",
-      ],
-      is_active: true,
-      is_public: true,
-    },
-    {
-      id: 2,
-      name: "Professional",
-      code: "pro",
-      description: "For growing teams running outbound campaigns and customer service automation.",
-      monthly_price_inr: 4999,
-      monthly_price_usd: 59,
-      included_minutes: 500,
-      overage_rate_per_minute: 0.95,
-      max_concurrent_calls: 8,
-      allow_user_byok: true,
-      features: [
-        "500 Included Voice Minutes",
-        "8 Concurrent Channels",
-        "Navana Bodhi 10 Indic Languages",
-        "Streaming Gemini Live Integration",
-        "Twilio & Exotel Native SIP",
-        "Outbound CSV Call Campaigns",
-        "System 1 Jev Decision Guardrail",
-        "Priority Support",
-      ],
-      is_active: true,
-      is_public: true,
-    },
-    {
-      id: 3,
-      name: "Scale / Business",
-      code: "scale",
-      description: "High concurrency voice agents with dedicated infrastructure and enterprise uptime.",
-      monthly_price_inr: 14999,
-      monthly_price_usd: 179,
-      included_minutes: 2000,
-      overage_rate_per_minute: 0.75,
-      max_concurrent_calls: 25,
-      allow_user_byok: true,
-      features: [
-        "2,000 Included Voice Minutes",
-        "25 Concurrent Channels",
-        "Lowest ₹0.55/min Internal Route",
-        "Custom Voice Cloning Support",
-        "Direct CRM & Webhook Sync",
-        "Real-Time Human Transfer",
-        "Advanced Answering Machine Detection",
-        "Dedicated Account Engineer",
-      ],
-      is_active: true,
-      is_public: true,
-    },
-    {
-      id: 4,
-      name: "Sovereign Enterprise",
-      code: "enterprise",
-      description: "Zero third-party cloud bills. 100% On-Premise / Private VPS deployment.",
-      monthly_price_inr: 34999,
-      monthly_price_usd: 429,
-      included_minutes: 10000,
-      overage_rate_per_minute: 0.55,
-      max_concurrent_calls: 100,
-      allow_user_byok: true,
-      features: [
-        "10,000 Included Voice Minutes",
-        "100+ Concurrent Channels",
-        "Self-hosted AI Engine (Ollama + Whisper)",
-        "Zero External Data Transmission (HIPAA/GDPR)",
-        "Full White-Label Branding & Domain",
-        "Custom Telecom Interconnects",
-        "99.99% Guaranteed SLA",
-        "24/7 Phone & Slack Support",
-      ],
-      is_active: true,
-      is_public: true,
-    },
-  ];
-
-  const displayPlans = plans.length > 0 ? plans : defaultPlans;
-
-  const defaultPackages: CreditPackage[] = [
-    { id: 1, name: "Starter Pack", minutes: 250, price_inr: 299, price_usd: 4, bonus_minutes: 25, is_popular: false, is_active: true },
-    { id: 2, name: "Growth Pack", minutes: 1000, price_inr: 999, price_usd: 12, bonus_minutes: 150, is_popular: true, is_active: true },
-    { id: 3, name: "Pro Pack", minutes: 5000, price_inr: 4499, price_usd: 55, bonus_minutes: 1000, is_popular: false, is_active: true },
-    { id: 4, name: "High Volume", minutes: 20000, price_inr: 15999, price_usd: 199, bonus_minutes: 5000, is_popular: false, is_active: true },
-  ];
-
-  const displayPackages = packages.length > 0 ? packages : defaultPackages;
+  const displayPlans = plans;
+  const displayPackages = packages;
 
   // Cost comparison math:
   // Typical Cloud Stack (Twilio $0.015/m + Deepgram $0.007/m + GPT-4o $0.04/m + ElevenLabs $0.08/m) = ~$0.14/m (~₹12.00/min)
@@ -295,7 +199,22 @@ export default function PricingPage() {
 
         {/* Pricing Cards Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {displayPlans.map((plan, idx) => {
+          {plansState === "loading" ? (
+            <p className="md:col-span-2 lg:col-span-4 text-center text-sm text-stone-400" role="status">
+              Loading current plans…
+            </p>
+          ) : plansState === "error" ? (
+            <div className="md:col-span-2 lg:col-span-4 flex flex-col items-center gap-3 text-center" role="alert">
+              <p className="text-sm text-red-300">Plans could not be loaded. Prices are hidden until they can be verified.</p>
+              <Button type="button" variant="outline" onClick={() => setReloadKey((key) => key + 1)}>
+                Retry
+              </Button>
+            </div>
+          ) : displayPlans.length === 0 ? (
+            <p className="md:col-span-2 lg:col-span-4 text-center text-sm text-stone-400">
+              No active plans are available right now.
+            </p>
+          ) : displayPlans.map((plan, idx) => {
             const isPopular = plan.code === "pro" || idx === 1;
             const rawPrice = currency === "INR" ? plan.monthly_price_inr : plan.monthly_price_usd;
             const price = billingCycle === "annual" ? Math.round(rawPrice * 0.8) : rawPrice;
@@ -383,7 +302,22 @@ export default function PricingPage() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {displayPackages.map((pkg) => {
+            {packagesState === "loading" ? (
+              <p className="sm:col-span-2 lg:col-span-4 text-center text-sm text-stone-400" role="status">
+                Loading current minute packages…
+              </p>
+            ) : packagesState === "error" ? (
+              <div className="sm:col-span-2 lg:col-span-4 flex flex-col items-center gap-3 text-center" role="alert">
+                <p className="text-sm text-red-300">Minute packages could not be loaded. Prices are hidden until they can be verified.</p>
+                <Button type="button" variant="outline" onClick={() => setReloadKey((key) => key + 1)}>
+                  Retry
+                </Button>
+              </div>
+            ) : displayPackages.length === 0 ? (
+              <p className="sm:col-span-2 lg:col-span-4 text-center text-sm text-stone-400">
+                No active minute packages are available right now.
+              </p>
+            ) : displayPackages.map((pkg) => {
               const price = currency === "INR" ? pkg.price_inr : pkg.price_usd;
               const sym = currency === "INR" ? "₹" : "$";
               const totalMins = pkg.minutes + (pkg.bonus_minutes || 0);
