@@ -17,8 +17,10 @@ from pipecat.frames.frames import ErrorFrame, InterimTranscriptionFrame, Transcr
 class BoundedSpeachesSTTService(SpeachesSTTService):
     """Keep a stalled local STT request from holding a voice turn for minutes."""
 
+    recognition_timeout_seconds = 45.0
+
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=45.0))
+        kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=self.recognition_timeout_seconds))
         super().__init__(*args, **kwargs)
         # The SDK otherwise retries timeouts, multiplying the per-request wait.
         self._client.max_retries = 0
@@ -85,11 +87,11 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                     language=latest.language,
                 ))
             else:
-                await self.push_frame(replace(latest, text=text))
+                await self.push_frame(replace(latest, text=text, finalized=True))
                 pending_text.clear()
                 latest = None
         if latest is not None:
-            await self.push_frame(replace(latest, text=" ".join(pending_text)))
+            await self.push_frame(replace(latest, text=" ".join(pending_text), finalized=True))
 
     async def _transcribe(self, audio: bytes):
         """Drop Whisper's punctuation-only silence hallucinations before turn routing.

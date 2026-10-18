@@ -181,12 +181,19 @@ def _create_user_mute_strategies(engine, answer_supervisor):
 
 
 def _resolve_user_turn_stop_timeout(
-    run_configs: dict, *, uses_external_turns: bool
+    run_configs: dict, *, uses_external_turns: bool,
+    recognition_timeout_seconds: float | None = None,
 ) -> float:
     if "user_turn_stop_timeout" in run_configs:
         return float(run_configs["user_turn_stop_timeout"])
     if uses_external_turns:
         return EXTERNAL_TURN_USER_STOP_TIMEOUT
+    if recognition_timeout_seconds is not None:
+        # CPU transcription can outlive the generic five-second safety net.
+        # Do not close an empty turn and launch an idle reminder while its
+        # bounded recognition request is still in flight. A final transcript
+        # still completes the turn through the normal stop strategy at once.
+        return max(DEFAULT_USER_TURN_STOP_TIMEOUT, recognition_timeout_seconds + 1.0)
     return DEFAULT_USER_TURN_STOP_TIMEOUT
 
 
@@ -1046,6 +1053,7 @@ async def _run_pipeline_impl(
     user_turn_stop_timeout = _resolve_user_turn_stop_timeout(
         run_configs,
         uses_external_turns=uses_external_turns,
+        recognition_timeout_seconds=getattr(stt, "recognition_timeout_seconds", None),
     )
 
     user_params = LLMUserAggregatorParams(
