@@ -96,9 +96,18 @@ const languageLabel = (code?: string | null) =>
     code ? LANGUAGE_DISPLAY_NAMES[code] || code.toUpperCase() : "";
 const genderLabel = (gender?: string | null) => (gender ? capitalize(gender) : "");
 
+function voiceLanguageTrait(voice: VoiceInfo): string {
+    const languages = [...new Set((voice.languages ?? []).filter(Boolean))];
+    if (languages.length === 1) return languageLabel(languages[0]);
+    if (languages.length === 2) return languages.map(languageLabel).join(", ");
+    if (languages.length > 2) return `${languages.length} supported languages`;
+    if (voice.language?.toLowerCase() === "multi") return "Multilingual";
+    return languageLabel(voice.language);
+}
+
 /** Build the "Accent · Gender · Language" trait line shown under a voice name. */
 function voiceTraits(voice: VoiceInfo): string {
-    return [accentLabel(voice.accent), genderLabel(voice.gender), languageLabel(voice.language)]
+    return [accentLabel(voice.accent), genderLabel(voice.gender), voiceLanguageTrait(voice)]
         .filter(Boolean)
         .join(" · ");
 }
