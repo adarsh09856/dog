@@ -47,10 +47,49 @@ else
     echo -e "${BLUE}[1/6] Deploying from local workspace directory...${NC}"
 fi
 
-# Check ENABLE_LOCAL_AI_ENGINE configuration
-ENABLE_LOCAL="${ENABLE_LOCAL_AI_ENGINE:-}"
-if [ -z "$ENABLE_LOCAL" ] && [ -f ".env" ]; then
-    ENABLE_LOCAL="$(grep '^ENABLE_LOCAL_AI_ENGINE=' .env 2>/dev/null | cut -d '=' -f2- | tr -d '\"' || true)"
+read_boolean_setting() {
+    local setting_name="$1"
+    local setting_value="${!setting_name:-}"
+    local config_file
+
+    if [ -z "$setting_value" ]; then
+        for config_file in .env api/.env; do
+            if [ -f "$config_file" ]; then
+                setting_value="$(grep -m 1 "^[[:space:]]*${setting_name}[[:space:]]*=" "$config_file" 2>/dev/null | cut -d '=' -f2- | sed 's/[[:space:]]*#.*$//' | xargs || true)"
+                [ -n "$setting_value" ] && break
+            fi
+        done
+    fi
+
+    printf '%s' "$setting_value" | tr '[:upper:]' '[:lower:]'
+}
+
+# Read both supported env locations so the deploy profile matches the app config.
+ENABLE_LOCAL="$(read_boolean_setting ENABLE_LOCAL_AI_ENGINE)"
+
+# Indic-Mio needs substantially more headroom than the other CPU services.
+# Keep it opt-in so it cannot OOM a small production VPS during synthesis.
+ENABLE_INDIC_MIO="$(read_boolean_setting ENABLE_INDIC_MIO_TTS)"
+
+INDIC_MIO_PROFILE_FLAGS=""
+if [ "$ENABLE_INDIC_MIO" = "true" ]; then
+    if [ "$ENABLE_LOCAL" != "true" ]; then
+        echo -e "${RED}Indic-Mio requires ENABLE_LOCAL_AI_ENGINE=true.${NC}" >&2
+        exit 1
+    fi
+    AVAILABLE_MEMORY_KB="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || true)"
+    # The test VPS globally OOM-killed this process near 9.6 GiB RSS while
+    # the API, Ollama, Whisper and the OS were resident. Require 20 GiB free
+    # before allowing the opt-in service to start, preserving host headroom.
+    MIN_INDIC_MIO_MEMORY_KB=20971520
+    if [ -z "$AVAILABLE_MEMORY_KB" ] || [ "$AVAILABLE_MEMORY_KB" -lt "$MIN_INDIC_MIO_MEMORY_KB" ]; then
+        echo -e "${RED}Indic-Mio was not started: it needs at least 20 GiB host MemAvailable for safe CPU inference; current MemAvailable is ${AVAILABLE_MEMORY_KB:-unknown} KiB.${NC}" >&2
+        exit 1
+    fi
+    INDIC_MIO_PROFILE_FLAGS="--profile indic-mio"
+    echo -e "${BLUE}Indic-Mio opt-in enabled; host memory headroom check passed.${NC}"
+else
+    echo -e "${YELLOW}Indic-Mio TTS is disabled; set ENABLE_INDIC_MIO_TTS=true only on a high-memory host.${NC}"
 fi
 
 PROFILE_FLAGS=""
@@ -79,7 +118,9 @@ umask 022
 echo -e "${BLUE}[2/6] Building and updating application containers...${NC}"
 docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS build api ui
 if [ "$ENABLE_LOCAL" = "true" ]; then
-    docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS build indic-mio-tts
+    if [ "$ENABLE_INDIC_MIO" = "true" ]; then
+        docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS $INDIC_MIO_PROFILE_FLAGS build indic-mio-tts
+    fi
 fi
 docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps api ui
 
@@ -102,7 +143,9 @@ done
 # monitor checks Ollama's installed-model inventory and never downloads weights.
 if [ "$ENABLE_LOCAL" = "true" ]; then
     docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps ollama-warmup
-    docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps indic-mio-tts
+    if [ "$ENABLE_INDIC_MIO" = "true" ]; then
+        docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS $INDIC_MIO_PROFILE_FLAGS up -d --no-deps indic-mio-tts
+    fi
 fi
 
 # No host-wide pruning, environment rewriting or unrelated service cleanup.

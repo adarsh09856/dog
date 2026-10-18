@@ -469,8 +469,8 @@ services:
       dockerfile: Dockerfile
     image: kodewaves-indic-mio-tts:v1.0.0
     container_name: kodewaves_indic_mio_tts
-    restart: unless-stopped
-    profiles: ["local"]
+    restart: "no"
+    profiles: ["indic-mio"]
     environment:
       HF_HOME: /models/huggingface
       INDIC_MIO_MODEL_DIR: /models/indic-mio
@@ -488,7 +488,7 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: 8192M
+          memory: 12288M
         reservations:
           memory: 2048M
     networks:
