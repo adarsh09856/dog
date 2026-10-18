@@ -12,5 +12,6 @@ export async function configuredTemplateLanguage(): Promise<string | null> {
     const explicit = [tts?.language, stt?.language].find(value => value && !automatic.has(value.toLowerCase()));
     const voiceCode = tts?.voice?.match(/^([a-z]{2,3})[-_][A-Z]{2}[-_]/)?.[1];
     const code = (explicit || voiceCode)?.toLowerCase().replace('_', '-').split('-')[0];
+    if (code === 'en') return 'en';
     return code && INDIAN_TEMPLATE_LANGUAGES.some(language => language.code === code) ? code : null;
 }
