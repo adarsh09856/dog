@@ -9,6 +9,7 @@ import os
 import re
 import wave
 from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ MODEL: Any = None
 VOICE: Any = None
 _stream_speech: Any = None
 SYNTHESIS_LOCK = asyncio.Lock()
+SYNTHESIS_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="local-tts")
 
 
 def _prepare_speech_text(text: str) -> str:
@@ -116,23 +118,33 @@ async def speech(request: SpeechRequest):
         # concurrent calls do not multiply latency or RAM use on small hosts.
         async with SYNTHESIS_LOCK:
             generator = iter(_stream_speech(MODEL, VOICE, _prepare_speech_text(request.input)))
-            while True:
-                def take_next():
-                    try:
-                        return False, next(generator)
-                    except StopIteration:
-                        return True, None
+            def take_next():
+                try:
+                    return False, next(generator)
+                except StopIteration:
+                    return True, None
 
-                finished, chunk = await asyncio.to_thread(take_next)
-                if finished:
-                    break
-                samples = chunk.detach().cpu().numpy().astype(np.float32, copy=False)
-                pcm = (np.clip(samples, -1.0, 1.0) * 32767.0).astype("<i2", copy=False)
-                if pcm.size:
-                    yield pcm.tobytes()
+            loop = asyncio.get_running_loop()
+            try:
+                while True:
+                    # Cancelling an await does not stop its worker thread.
+                    # Serialize inference and cleanup on the same worker.
+                    finished, chunk = await loop.run_in_executor(SYNTHESIS_WORKER, take_next)
+                    if finished:
+                        break
+                    samples = chunk.detach().cpu().numpy().astype(np.float32, copy=False)
+                    pcm = (np.clip(samples, -1.0, 1.0) * 32767.0).astype("<i2", copy=False)
+                    if pcm.size:
+                        yield pcm.tobytes()
+            finally:
+                close = getattr(generator, "close", None)
+                if close:
+                    await asyncio.shield(loop.run_in_executor(SYNTHESIS_WORKER, close))
 
     if request.response_format == "wav":
         pcm = b"".join([chunk async for chunk in audio_chunks()])
+        if not pcm:
+            raise HTTPException(status_code=502, detail="Local TTS returned no audio")
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as output:
             output.setnchannels(1)
@@ -140,4 +152,18 @@ async def speech(request: SpeechRequest):
             output.setframerate(24_000)
             output.writeframes(pcm)
         return StreamingResponse(io.BytesIO(buffer.getvalue()), media_type="audio/wav")
-    return StreamingResponse(audio_chunks(), media_type="audio/pcm")
+    chunks = audio_chunks()
+    try:
+        first = await anext(chunks)
+    except StopAsyncIteration:
+        raise HTTPException(status_code=502, detail="Local TTS returned no audio")
+
+    async def stream():
+        try:
+            yield first
+            async for chunk in chunks:
+                yield chunk
+        finally:
+            await chunks.aclose()
+
+    return StreamingResponse(stream(), media_type="audio/pcm")
