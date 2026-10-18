@@ -569,6 +569,21 @@ export function AIModelConfigurationV2Editor({
         return list;
     }, [kodewaves.stt_engine_type, catalogManifest]);
 
+    useEffect(() => {
+        if (kodewaves.stt_engine_type !== "local_cpu"
+            || kodewaves.stt_model !== "indicconformer-ctc-int8"
+            || kodewaves.language !== MULTILINGUAL_LANGUAGE_CODE) return;
+        const autoModel = catalogManifest?.local_stt_models?.find(
+            (model) => /whisper-small(?:$|[.-])/i.test(model.value),
+        );
+        if (autoModel) {
+            setKodewaves((current) => current.stt_model === "indicconformer-ctc-int8"
+                && current.language === MULTILINGUAL_LANGUAGE_CODE
+                ? { ...current, stt_model: autoModel.value }
+                : current);
+        }
+    }, [catalogManifest, kodewaves.stt_engine_type, kodewaves.stt_model, kodewaves.language]);
+
     const setRecognitionLanguage = (language: string) => {
         const autoDetectModels = catalogManifest?.local_stt_models?.filter(
             (model) => /whisper/i.test(model.value) && !/whisper-(tiny|base)(?:$|[.-])/i.test(model.value),

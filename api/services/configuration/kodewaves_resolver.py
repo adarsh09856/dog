@@ -516,6 +516,20 @@ async def apply_kodewaves_sovereign_resolution(
                         detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
                 model_to_use = model if model and model != "default" else "Systran/faster-whisper-small"
+                if model_to_use == "indicconformer-ctc-int8" and norm_lang == "multi":
+                    # A saved auto-detect selection cannot run through the
+                    # single-language Indic endpoint. Resolve the requested
+                    # auto capability to the installed multilingual engine.
+                    from api.services.catalog.local_inventory import get_local_stt_models
+
+                    try:
+                        auto_models = await get_local_stt_models(whisper_v1_url)
+                    except (aiohttp.ClientError, TimeoutError):
+                        raise HTTPException(status_code=503, detail="Multilingual STT engine is unavailable")
+                    auto_model = "Systran/faster-whisper-small"
+                    if auto_model not in auto_models:
+                        raise HTTPException(status_code=503, detail="No installed multilingual STT model is available for auto detection")
+                    model_to_use = auto_model
                 if model_to_use == "indicconformer-ctc-int8":
                     from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
                     from api.services.catalog.local_inventory import get_local_stt_models
