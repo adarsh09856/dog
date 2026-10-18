@@ -94,6 +94,13 @@ for attempt in $(seq 1 60); do
     fi
     sleep 5
 done
+
+# Keep the selected local LLM resident after Docker or VPS restarts. The small
+# monitor checks Ollama's installed-model inventory and never downloads weights.
+if [ "$ENABLE_LOCAL" = "true" ]; then
+    docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps ollama-warmup
+fi
+
 # No host-wide pruning, environment rewriting or unrelated service cleanup.
 if command -v python3 >/dev/null 2>&1; then
     python3 scripts/prune_ui_build_cache.py --apply --max-gb "${KODEWAVES_UI_BUILD_CACHE_GB:-8}" ||

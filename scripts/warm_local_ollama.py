@@ -1,0 +1,71 @@
+"""Keep configured local Ollama models loaded after startup or eviction.
+
+This sidecar uses only the Ollama API and Python's standard library. It never
+downloads a model; an administrator must install each model first.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+import urllib.request
+
+
+BASE_URL = os.getenv("OLLAMA_ENDPOINT", "http://ollama:11434").rstrip("/")
+MODELS = tuple(
+    name.strip()
+    for name in os.getenv("OLLAMA_WARM_MODELS", "qwen3.5:2b").split(",")
+    if name.strip()
+)
+INTERVAL_SECONDS = max(5, int(os.getenv("OLLAMA_WARM_INTERVAL_SECONDS", "30")))
+
+
+def _request(path: str, payload: dict | None = None) -> dict:
+    body = json.dumps(payload).encode() if payload is not None else None
+    request = urllib.request.Request(
+        f"{BASE_URL}{path}",
+        data=body,
+        headers={"Content-Type": "application/json"} if body is not None else {},
+    )
+    with urllib.request.urlopen(request, timeout=120 if body is not None else 5) as response:
+        return json.load(response)
+
+
+def _model_names(path: str, collection: str) -> set[str]:
+    return {
+        str(item.get("name") or item.get("model"))
+        for item in _request(path).get(collection, [])
+        if item.get("name") or item.get("model")
+    }
+
+
+def keep_models_warm() -> None:
+    last_status: dict[str, str] = {}
+    while True:
+        try:
+            installed = _model_names("/api/tags", "models")
+            loaded = _model_names("/api/ps", "models")
+            for model in MODELS:
+                status = "missing" if model not in installed else "loaded"
+                if model in installed and model not in loaded:
+                    _request(
+                        "/api/generate",
+                        {"model": model, "prompt": "", "stream": False, "keep_alive": -1},
+                    )
+                    status = "warmed"
+                if last_status.get(model) != status:
+                    print(f"Ollama model {model}: {status}", flush=True)
+                    last_status[model] = status
+        except (OSError, ValueError, KeyError) as exc:
+            status = f"unavailable ({type(exc).__name__})"
+            if last_status.get("server") != status:
+                print(f"Ollama server: {status}", flush=True)
+                last_status["server"] = status
+        else:
+            last_status.pop("server", None)
+        time.sleep(INTERVAL_SECONDS)
+
+
+if __name__ == "__main__":
+    keep_models_warm()
