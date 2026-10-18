@@ -50,7 +50,7 @@ export default function AdminSettingsPage() {
     enable_local_ai_engine: false,
     ollama_endpoint: "http://ollama:11434",
     whisper_endpoint: "http://whisper:8000/v1",
-    indic_mio_tts_endpoint: "http://indic-mio-tts:8000/v1",
+    indus_tts_endpoint: "http://indus-tts:8000/v1",
     local_ai_max_concurrency: 2,
     smtp_host: "",
     smtp_port: 587,
@@ -458,14 +458,14 @@ export default function AdminSettingsPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">Indic-Mio TTS Endpoint</Label>
+                <Label className="text-xs">Indus Pocket TTS Endpoint</Label>
                 <Input
-                  value={settings.indic_mio_tts_endpoint || ""}
-                  onChange={(e) => setSettings({ ...settings, indic_mio_tts_endpoint: e.target.value })}
-                  placeholder="http://indic-mio-tts:8000/v1"
+                  value={settings.indus_tts_endpoint || ""}
+                  onChange={(e) => setSettings({ ...settings, indus_tts_endpoint: e.target.value })}
+                  placeholder="http://indus-tts:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">CPU LiteRT voice service for 22 scheduled Indian languages and English; audio is buffered per utterance</p>
+                <p className="text-[10px] text-muted-foreground">Local CPU voice service. The installed Inaya voice supports Hindi and Indian English; only installed languages are advertised.</p>
               </div>
 
               <div className="space-y-1">

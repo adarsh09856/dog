@@ -236,7 +236,7 @@ export interface PlatformSettings {
   ollama_endpoint?: string;
   piper_endpoint?: string;
   whisper_endpoint?: string;
-  indic_mio_tts_endpoint?: string;
+  indus_tts_endpoint?: string;
   local_ai_max_concurrency?: number;
   smtp_host?: string;
   smtp_port?: number;
