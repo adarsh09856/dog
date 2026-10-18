@@ -798,6 +798,8 @@ export interface CatalogModelOption {
   value: string;
   label: string;
   provider?: string;
+  /** Languages advertised by the installed engine, when it reports them. */
+  languages?: string[];
 }
 
 export interface AvailableCatalogResponse {

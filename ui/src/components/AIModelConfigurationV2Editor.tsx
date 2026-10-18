@@ -1283,6 +1283,11 @@ export function AIModelConfigurationV2Editor({
                                             Selected voice model &quot;{kodewaves.tts_model}&quot; is no longer active in the catalog.
                                         </div>
                                     )}
+                                    {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model && effectiveTtsModels.find((model) => model.value === kodewaves.tts_model)?.languages?.length ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            This installed voice model reports support for: {effectiveTtsModels.find((model) => model.value === kodewaves.tts_model)!.languages!.map((language) => LANGUAGE_DISPLAY_NAMES[language] || language).join(", ")}.
+                                        </p>
+                                    ) : null}
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">

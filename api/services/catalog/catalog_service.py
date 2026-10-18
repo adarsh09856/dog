@@ -1000,6 +1000,9 @@ class CatalogService:
                                         "value": model_id,
                                         "label": model_id.split("/")[-1] + " (Local CPU)",
                                         "provider": "speaches",
+                                        # Keep the installed engine's real support
+                                        # boundary visible to model configuration.
+                                        "languages": installed_model.get("languages", []),
                                     })
             except Exception:
                 pass
@@ -1023,6 +1026,7 @@ class CatalogService:
                                         "value": installed_model["id"],
                                         "label": installed_model.get("name") or "Indus Pocket TTS — Hindi/Hinglish (CPU)",
                                         "provider": "speaches",
+                                        "languages": installed_model.get("languages", []),
                                     })
             except Exception:
                 pass
