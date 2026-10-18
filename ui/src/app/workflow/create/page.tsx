@@ -50,6 +50,7 @@ import {
 import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
 import { detailFromError } from '@/lib/apiError';
+import { configuredTemplateLanguage } from '@/lib/templateLanguage';
 import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
 import { apiFetch } from '@/lib/kodewavesApi';
 import { type AvailableCatalogResponse,catalogApi } from '@/lib/kodewavesApi';
@@ -200,7 +201,9 @@ export default function CreateWorkflowPage() {
         });
     }, [searchQuery, selectedCategory]);
 
-    const handleOpenPreview = (tpl: AgentTemplate) => {
+    const handleOpenPreview = async (tpl: AgentTemplate) => {
+        const language = await configuredTemplateLanguage().catch(() => null);
+        if (language) setTemplateLanguage(language);
         setPreviewTemplate(tpl);
         setCustomAgentName(tpl.name);
         setCustomCompanyName('');

@@ -44,6 +44,7 @@ import {
 import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
 import { detailFromError } from '@/lib/apiError';
+import { configuredTemplateLanguage } from '@/lib/templateLanguage';
 import logger from '@/lib/logger';
 
 interface TemplateSelectorModalProps {
@@ -177,7 +178,9 @@ export function TemplateSelectorModal({
         });
     }, [searchQuery, selectedCategory]);
 
-    const handleSelectTemplate = (template: AgentTemplate) => {
+    const handleSelectTemplate = async (template: AgentTemplate) => {
+        const language = await configuredTemplateLanguage().catch(() => null);
+        if (language) setTemplateLanguage(language);
         setSelectedTemplate(template);
         setCustomAgentName(template.name);
         setCustomCompanyName('');
