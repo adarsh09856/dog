@@ -11,6 +11,12 @@ export function detailFromError(err: unknown, fallback = "Request failed"): stri
     if (typeof err === "string") return err;
     const e = err as { detail?: unknown };
     if (typeof e?.detail === "string") return e.detail;
+    // Workflow validation returns {detail: {is_valid: false, errors: [...]}}.
+    // Handle it like FastAPI validation arrays so the editor shows the reason.
+    if (e?.detail && typeof e.detail === "object" && !Array.isArray(e.detail)) {
+        const errors = (e.detail as { errors?: unknown }).errors;
+        if (Array.isArray(errors)) return detailFromError({ detail: errors }, fallback);
+    }
     if (Array.isArray(e?.detail) && e.detail.length > 0) {
         const messages = e.detail
             .map((item) => {
