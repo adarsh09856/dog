@@ -39,7 +39,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TFLITE_NUM_THREADS=2
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libstdc++6 libgomp1 ca-certificates \
+    && apt-get install -y --no-install-recommends libstdc++6 libgomp1 libutf8proc3 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
