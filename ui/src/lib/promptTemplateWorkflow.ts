@@ -37,19 +37,15 @@ export function promptTemplateWorkflow(template: {
         name: 'Start call', prompt, greeting_type: 'text', greeting,
         is_start: true, allow_interrupt: true, add_global_prompt: false,
       } },
-      { id: '2', type: 'agentNode', position: { x: 175, y: 300 }, data: {
-        name: 'Assist caller', prompt, allow_interrupt: true, add_global_prompt: false,
-      } },
-      { id: '3', type: 'endCall', position: { x: 175, y: 540 }, data: {
+      { id: '2', type: 'endCall', position: { x: 175, y: 300 }, data: {
         name: 'Closing', prompt: 'Thank the caller briefly in the conversation language and end the call. Do not claim unfinished actions succeeded.',
         is_end: true, allow_interrupt: true, add_global_prompt: false,
       } },
     ],
     edges: [
-      { id: 'template-assist', source: '1', target: '2', data: {
-        label: 'assist_caller', condition: 'The caller has replied to the greeting and described what they need.',
-      } },
-      { id: 'template-finish', source: '2', target: '3', data: {
+      // The start node owns this prompt for the whole conversation. An extra
+      // identical agent node would require a routing completion before replying.
+      { id: 'template-finish', source: '1', target: '2', data: {
         label: 'finish_call', condition: 'The caller explicitly says they are finished or wants to end the call. Requested actions must have returned their actual results.',
       } },
     ],
