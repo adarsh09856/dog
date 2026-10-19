@@ -53,9 +53,43 @@ def _load_model() -> None:
     _stream_speech = module.stream
 
 
+def _warm_model() -> None:
+    """Run one short Hindi/English turn before the service reports ready.
+
+    The first generation initializes model/runtime state and can be much slower
+    than subsequent streamed requests. Pay that one-time cost during startup so
+    a caller does not hear it as a delayed greeting.
+    """
+    if MODEL is None or VOICE is None or _stream_speech is None:
+        raise RuntimeError("Indus TTS cannot warm up before the model is loaded")
+    generator = iter(
+        _stream_speech(
+            MODEL,
+            VOICE,
+            _prepare_speech_text("नमस्ते, hello."),
+        )
+    )
+    has_audio = False
+    try:
+        for chunk in generator:
+            samples = chunk.detach().cpu().numpy()
+            if samples.size:
+                has_audio = True
+        if not has_audio:
+            raise RuntimeError("Indus TTS warm-up returned no audio")
+    finally:
+        close = getattr(generator, "close", None)
+        if close:
+            close()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await asyncio.to_thread(_load_model)
+    await asyncio.get_running_loop().run_in_executor(
+        SYNTHESIS_WORKER,
+        _warm_model,
+    )
     yield
 
 
