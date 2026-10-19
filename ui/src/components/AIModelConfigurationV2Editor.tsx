@@ -594,7 +594,7 @@ export function AIModelConfigurationV2Editor({
             && kodewaves.stt_engine_type === "local_cpu"
             && kodewaves.stt_model === "indicconformer-ctc-int8") {
             if (!autoDetectModel) {
-                setError("No installed multilingual STT model is available for automatic language detection.");
+                setError("Select an installed Indian language. The self-hosted IndicConformer model does not detect language automatically.");
                 return;
             }
             setKodewaves({ ...kodewaves, language, stt_model: autoDetectModel.value });
@@ -1150,7 +1150,7 @@ export function AIModelConfigurationV2Editor({
                                         }
                                         onValueChange={(stt_model) => {
                                             if (stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
-                                                setError("IndicConformer requires a selected installed language. For auto detection, use multilingual Whisper.");
+                                                setError("Select an installed Indian language. Whisper has been removed from new self-hosted model choices, and IndicConformer needs a language selection.");
                                                 return;
                                             }
                                             setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" || stt_model === "none" ? undefined : stt_model });
@@ -1164,7 +1164,7 @@ export function AIModelConfigurationV2Editor({
                                             {effectiveSttModels.length === 0 ? (
                                                 <SelectItem key="none" value="none" disabled>
                                                     {kodewaves.stt_engine_type === "local_cpu"
-                                                        ? "Local Speaches Whisper STT unavailable"
+                                                        ? "Local IndicConformer STT unavailable"
                                                         : "No active transcriber keys (Add Deepgram / Sarvam in Admin > Models)"}
                                                 </SelectItem>
                                             ) : (

@@ -918,33 +918,8 @@ class CatalogService:
             except Exception:
                 pass
 
-            # Probe Local STT (Faster-Whisper on Speaches CPU)
-            whisper_url = local_ai_setting.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-            whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_url))
-            try:
-                probe_url = whisper_url.rstrip("/") if whisper_url.endswith("/models") else f"{whisper_url.rstrip('/')}/models"
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
-                    async with session.get(probe_url) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            local_stt = [
-                                {"value": model["id"], "label": model.get("name") or model["id"], "provider": "whisper"}
-                                for model in data.get("data", data.get("models", []))
-                                if (isinstance(model, dict) and model.get("id")
-                                    and model.get("installed", True)
-                                    and model.get("task") == "automatic-speech-recognition")
-                            ]
-                            # Keep previously saved small checkpoints usable while
-                            # omitting tiny/base from new selections when a stronger
-                            # multilingual checkpoint is actually installed.
-                            if any("faster-whisper-small" in item["value"].casefold() for item in local_stt):
-                                local_stt = [
-                                    item for item in local_stt
-                                    if not item["value"].casefold().endswith(("faster-whisper-tiny", "faster-whisper-base"))
-                                ]
-            except Exception:
-                local_stt = []
-
+            # Do not offer Faster-Whisper for new self-hosted selections. Keep
+            # its runtime adapter for existing saved agents until they migrate.
             # Advertise the CPU Indic recognizer only when its weights and
             # selected language checkpoints are present in the running sidecar.
             indic_stt_url = local_ai_setting.get("indic_stt_endpoint") or os.environ.get(
@@ -985,9 +960,13 @@ class CatalogService:
                 local_tts = []
 
             # Show only TTS models actually installed on the local Speaches server.
+            speaches_url = local_ai_setting.get("whisper_endpoint") or os.environ.get(
+                "WHISPER_ENDPOINT", "http://whisper:8000/v1"
+            )
+            speaches_url = whisper_api_base(normalize_local_ai_endpoint(speaches_url))
             try:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
-                    async with session.get(f"{whisper_url.rstrip('/')}/models") as resp:
+                    async with session.get(f"{speaches_url.rstrip('/')}/models") as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             for installed_model in data.get("data", []):
