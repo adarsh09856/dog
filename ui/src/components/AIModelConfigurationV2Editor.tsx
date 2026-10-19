@@ -569,36 +569,11 @@ export function AIModelConfigurationV2Editor({
         return list;
     }, [kodewaves.stt_engine_type, catalogManifest]);
 
-    useEffect(() => {
-        if (kodewaves.stt_engine_type !== "local_cpu"
-            || kodewaves.stt_model !== "indicconformer-ctc-int8"
-            || kodewaves.language !== MULTILINGUAL_LANGUAGE_CODE) return;
-        const autoModel = catalogManifest?.local_stt_models?.find(
-            (model) => /whisper-small(?:$|[.-])/i.test(model.value),
-        );
-        if (autoModel) {
-            setKodewaves((current) => current.stt_model === "indicconformer-ctc-int8"
-                && current.language === MULTILINGUAL_LANGUAGE_CODE
-                ? { ...current, stt_model: autoModel.value }
-                : current);
-        }
-    }, [catalogManifest, kodewaves.stt_engine_type, kodewaves.stt_model, kodewaves.language]);
-
     const setRecognitionLanguage = (language: string) => {
-        const autoDetectModels = catalogManifest?.local_stt_models?.filter(
-            (model) => /whisper/i.test(model.value) && !/whisper-(tiny|base)(?:$|[.-])/i.test(model.value),
-        ) || [];
-        const autoDetectModel = autoDetectModels.find((model) => /whisper-small(?:$|[.-])/i.test(model.value))
-            || autoDetectModels[0];
         if (language === MULTILINGUAL_LANGUAGE_CODE
             && kodewaves.stt_engine_type === "local_cpu"
             && kodewaves.stt_model === "indicconformer-ctc-int8") {
-            if (!autoDetectModel) {
-                setError("Select an installed Indian language. The self-hosted IndicConformer model does not detect language automatically.");
-                return;
-            }
-            setKodewaves({ ...kodewaves, language, stt_model: autoDetectModel.value });
-            setError(null);
+            setError("Self-hosted IndicConformer needs one selected Indian language. Choose a language, or switch STT to cloud for automatic detection.");
             return;
         }
         setKodewaves({ ...kodewaves, language });
@@ -685,7 +660,7 @@ export function AIModelConfigurationV2Editor({
             if (!catalogManifest || catalogError) throw new Error("Refresh the model catalog before saving.");
             if (!isRt) {
                 if (kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
-                    throw new Error("IndicConformer needs a specific Indian language. Select one, or choose multilingual Whisper for automatic language detection.");
+                    throw new Error("Self-hosted IndicConformer needs a specific Indian language. Select one, or switch STT to cloud for automatic language detection.");
                 }
                 if (!kodewaves.voice.trim()) throw new Error("Select a voice for the selected TTS model before saving.");
                 for (const [label, selected, models] of [
@@ -1125,8 +1100,7 @@ export function AIModelConfigurationV2Editor({
                                                         stt_engine_type: "local_cpu",
                                                         stt_model: kodewaves.stt_engine_type === "local_cpu"
                                                             ? kodewaves.stt_model
-                                                            : (catalogManifest?.local_stt_models?.find((model) => /whisper-small(?:$|[.-])/i.test(model.value))
-                                                                || catalogManifest?.local_stt_models?.[0])?.value,
+                                                            : catalogManifest?.local_stt_models?.[0]?.value,
                                                     });
                                                 }}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
@@ -1184,7 +1158,7 @@ export function AIModelConfigurationV2Editor({
                                     )}
                                     {kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
                                         <p className="text-xs text-amber-600 dark:text-amber-300">
-                                            Choose a specific Indian language for IndicConformer, or select multilingual Whisper for automatic detection.
+                                            Choose a specific Indian language for IndicConformer. Cloud STT supports automatic language detection.
                                         </p>
                                     )}
                                 </div>
