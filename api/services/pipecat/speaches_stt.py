@@ -26,6 +26,17 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         self._client.max_retries = 0
         self.latest_detected_language: str | None = None
         self.latest_detected_text: str | None = None
+        self._recognizing_segment = False
+
+    @property
+    def recognition_pending(self) -> bool:
+        """Include queued speech, not only an accepted aggregator turn."""
+        queue = getattr(self, "_segment_queue", None)
+        return bool(
+            self._recognizing_segment
+            or getattr(self, "_user_speaking", False)
+            or (queue is not None and not queue.empty())
+        )
 
     async def _segment_task_handler(self):
         """Drain slow CPU recognition without answering an unfinished backlog.
@@ -54,6 +65,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                     break
                 audio = combined
             try:
+                self._recognizing_segment = True
                 async for frame in self.run_stt(audio):
                     if frame is None:
                         continue
@@ -73,6 +85,8 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 pending_text.clear()
                 latest = None
                 await self.push_error(f"{self}: transcription failed: {exc}", exception=exc)
+            finally:
+                self._recognizing_segment = False
 
             if latest is None:
                 continue

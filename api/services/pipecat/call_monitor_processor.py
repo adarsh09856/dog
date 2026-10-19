@@ -93,6 +93,7 @@ class CallMonitorProcessor(FrameProcessor):
         self._response_during_user_turn = False
         self._bot_speaking = False
         self.user_aggregator = None
+        self.recognition_pending: Callable[[], bool] = lambda: False
         self._playbacks: set[str] = set()
         self._active = False
         self._suspended = False
@@ -253,6 +254,15 @@ class CallMonitorProcessor(FrameProcessor):
 
     def _idle_expired(self, revision: int) -> None:
         if revision != self._revision:
+            return
+        if self._idle_eligible() and self.recognition_pending():
+            # Local recognition can outlast the silence window. Keep the same
+            # decision pending until STT drains, rather than injecting a model
+            # reminder while the caller's utterance is still being decoded.
+            # Accepted speech, shutdown and suspension invalidate this revision.
+            self._deadline = asyncio.get_running_loop().call_later(
+                0.25, self._idle_expired, revision
+            )
             return
         self._cancel_deadline()
         if not self._idle_eligible():

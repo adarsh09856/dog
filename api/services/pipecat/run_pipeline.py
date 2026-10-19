@@ -1099,6 +1099,10 @@ async def _run_pipeline_impl(
 
     # One call monitor owns user-idle, response and duration limits in both shapes.
     call_monitor_processor = engine.call_monitor
+    if stt is not None:
+        call_monitor_processor.recognition_pending = lambda: bool(
+            getattr(stt, "recognition_pending", False)
+        )
     call_monitor_processor.max_call_duration_seconds = max_call_duration_seconds
     call_monitor_processor.bind_user(
         user_context_aggregator, idle_timeout=max_user_idle_timeout
