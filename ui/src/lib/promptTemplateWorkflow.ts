@@ -19,7 +19,8 @@ export function promptTemplateWorkflow(template: {
       + 'is not connected, explain the limitation and offer to collect details '
       + 'for staff. Do not invent prices, availability, eligibility, inventory, '
       + 'or shipment status. Never claim an action is underway or complete '
-      + 'without its result.'
+      + 'without its result. Use details the caller has already provided, '
+      + 'including IDs and contact information; never ask for the same detail again.'
     ) : '');
   const greeting = (template.first_message || '')
     .replace(/this is\s+\{\{\s*company_name\s*\}\}\s+clinic/gi, "You've reached the clinic")
