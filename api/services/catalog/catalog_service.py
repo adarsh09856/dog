@@ -18,7 +18,7 @@ from loguru import logger
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import AIModelCatalogModel, VoiceCatalogModel
 from api.services.catalog.normalize import normalize_provider_name, tts_runtime_provider, google_model_layer
-from api.services.catalog.local_inventory import piper_voice_inventory, whisper_api_base, local_tts_api_base
+from api.services.catalog.local_inventory import whisper_api_base, local_tts_api_base
 from api.services.catalog.gemini_voices import discover_indian_voices
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.registry import GEMINI_TTS_VOICES
@@ -150,10 +150,6 @@ CURATED_PROVIDER_VOICES: Dict[str, List[Dict[str, Any]]] = {
         {"voice_id": "hi-IN-MadhurNeural", "name": "Madhur (Hindi Neural Male)", "gender": "male", "languages": ["hi-IN"]},
         {"voice_id": "en-US-JennyNeural", "name": "Jenny (US English Neural Female)", "gender": "female", "languages": ["en-US"]},
         {"voice_id": "en-US-GuyNeural", "name": "Guy (US English Neural Male)", "gender": "male", "languages": ["en-US"]},
-    ],
-    "piper": [
-        {"voice_id": "hi_IN-dhiru-medium", "name": "Dhiru (Hindi ONNX CPU)", "gender": "male", "languages": ["hi-IN"]},
-        {"voice_id": "en_US-lessac-medium", "name": "Lessac (English ONNX CPU)", "gender": "female", "languages": ["en-US"]},
     ],
 }
 
@@ -945,20 +941,6 @@ class CatalogService:
             except (aiohttp.ClientError, TimeoutError):
                 pass
 
-            # Probe Local TTS (Piper ONNX)
-            piper_url = local_ai_setting.get("piper_endpoint") or os.environ.get("PIPER_ENDPOINT", "http://piper:5000")
-            piper_url = normalize_local_ai_endpoint(piper_url).rstrip("/").removesuffix("/synthesize")
-            try:
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
-                    async with session.get(f"{piper_url.rstrip('/')}/voices") as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            voices = piper_voice_inventory(data)
-                            if voices:
-                                local_tts = [{"value": "piper", "label": "Piper TTS (Local)", "provider": "piper"}]
-            except Exception:
-                local_tts = []
-
             # Show only TTS models actually installed on the local Speaches server.
             speaches_url = local_ai_setting.get("whisper_endpoint") or os.environ.get(
                 "WHISPER_ENDPOINT", "http://whisper:8000/v1"
@@ -975,6 +957,8 @@ class CatalogService:
                                         and installed_model.get("installed") is not False
                                         and installed_model.get("id")):
                                     model_id = installed_model["id"]
+                                    if "kokoro" in model_id.casefold():
+                                        continue
                                     local_tts.append({
                                         "value": model_id,
                                         "label": model_id.split("/")[-1] + " (Local CPU)",

@@ -476,24 +476,6 @@ export const adminApi = {
     apiFetch<{ success: boolean; message: string }>(`/admin/settings/piper/voices/${encodeURIComponent(voiceId)}`, {
       method: 'DELETE',
     }),
-  getWhisperModels: () =>
-    apiFetch<{ models: Array<{ id: string; name: string; size: string; installed: boolean }>; endpoint: string; status: string }>(
-      '/admin/settings/whisper/models'
-    ),
-  downloadWhisperModel: (model: string) =>
-    apiFetch<{ success: boolean; model: string; message: string }>('/admin/settings/whisper/download', {
-      method: 'POST',
-      body: JSON.stringify({ model }),
-    }),
-  deleteWhisperModel: (modelId: string) =>
-    apiFetch<{ success: boolean; message: string }>(`/admin/settings/whisper/models/${encodeURIComponent(modelId)}`, {
-      method: 'DELETE',
-    }),
-  testWhisper: (language: string, audioBase64: string, model: string) =>
-    apiFetch<{ success: boolean; transcript?: string; latency_ms: number; error?: string; language: string }>('/admin/settings/whisper/test', {
-      method: 'POST',
-      body: JSON.stringify({ language, audio_base64: audioBase64, model }),
-    }),
   getIndicSttModels: () =>
     apiFetch<{ model: string; languages: string[]; status: string; detail?: string }>('/admin/settings/indic-stt/models'),
   testIndicStt: (language: string, audioBase64: string) =>

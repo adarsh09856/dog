@@ -372,9 +372,6 @@ async def apply_kodewaves_sovereign_resolution(
     piper_base = normalize_local_ai_endpoint(piper_raw).rstrip("/")
     piper_endpoint = f"{piper_base}/synthesize" if not piper_base.endswith("/synthesize") else piper_base
 
-    whisper_raw = local_engine.get("whisper_endpoint", "http://whisper:8000/v1")
-    whisper_base = normalize_local_ai_endpoint(whisper_raw).rstrip("/")
-    whisper_v1_url = f"{whisper_base}/v1" if not whisper_base.endswith("/v1") else whisper_base
     indic_stt_raw = local_engine.get(
         "indic_stt_endpoint",
         os.environ.get("INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"),
@@ -476,16 +473,10 @@ async def apply_kodewaves_sovereign_resolution(
                 metadata.stt = resolved
                 is_using_master_keys = True
             elif engine_enabled and has_local_access:
-                # Compatibility for workflows without saved STT configuration.
-                # Newly configured self-hosted agents use IndicConformer.
-                model_to_use = "Systran/faster-whisper-small"
-                effective.stt = SpeachesSTTConfiguration(
-                    api_key="local-cpu-token",
-                    model=model_to_use,
-                    language="multi",
-                    base_url=whisper_v1_url,
+                raise HTTPException(
+                    status_code=400,
+                    detail="Choose an installed self-hosted STT model and language in Models. Local Whisper has been removed; IndicConformer needs one explicit language.",
                 )
-                metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language="multi")
             else:
                 raise HTTPException(
                     status_code=400,
@@ -507,14 +498,17 @@ async def apply_kodewaves_sovereign_resolution(
             if hasattr(effective.stt, "language"):
                 effective.stt.language = norm_lang
 
-            # Local Whisper STT
+            # Self-hosted STT: route legacy Faster-Whisper selections to the
+            # supported Indic engine only when an explicit language is saved.
             if provider_name in ("whisper", "speaches", "local_cpu") or user_key in ("sovereign-local-cpu", "local-cpu-token"):
                 if not engine_enabled or not has_local_access:
                     raise HTTPException(
                         status_code=403,
                         detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
-                model_to_use = model if model and model != "default" else "Systran/faster-whisper-small"
+                model_to_use = model if model and model != "default" else "indicconformer-ctc-int8"
+                if str(model_to_use).casefold().startswith(("systran/faster-whisper", "faster-whisper", "faster-distil-whisper")):
+                    model_to_use = "indicconformer-ctc-int8"
                 if model_to_use == "indicconformer-ctc-int8" and norm_lang == "multi":
                     require_explicit_indic_stt_language(model_to_use, norm_lang)
                 if model_to_use == "indicconformer-ctc-int8":
@@ -536,10 +530,10 @@ async def apply_kodewaves_sovereign_resolution(
                     api_key="local-cpu-token",
                     model=model_to_use,
                     language=norm_lang,
-                    base_url=indic_stt_v1_url if model_to_use == "indicconformer-ctc-int8" else whisper_v1_url,
+                    base_url=indic_stt_v1_url,
                 )
                 metadata.stt = ResolvedLayerInfo(
-                    provider="indicconformer" if model_to_use == "indicconformer-ctc-int8" else "whisper",
+                    provider="indicconformer",
                     model=model_to_use,
                     source="local",
                     language=norm_lang,
@@ -557,14 +551,10 @@ async def apply_kodewaves_sovereign_resolution(
                         metadata.stt = resolved
                         is_using_master_keys = True
                     elif engine_enabled and has_local_access:
-                        model_to_use = model if model and model != "default" else "Systran/faster-whisper-small"
-                        effective.stt = SpeachesSTTConfiguration(
-                            api_key="local-cpu-token",
-                            model=model_to_use,
-                            language=norm_lang,
-                            base_url=whisper_v1_url,
+                        raise HTTPException(
+                            status_code=400,
+                            detail="No active STT key is configured. Select an installed self-hosted IndicConformer model and explicit language in Models.",
                         )
-                        metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language=norm_lang)
                     else:
                         raise HTTPException(
                             status_code=400,

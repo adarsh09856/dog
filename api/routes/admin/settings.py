@@ -558,34 +558,6 @@ async def delete_piper_voice(voice_id: str, _user=Depends(get_superuser)):
         raise HTTPException(status_code=502, detail="Piper service unavailable during deletion")
 
 
-@router.get("/whisper/models")
-async def get_whisper_models(_user=Depends(get_superuser)):
-    """Query the local Faster-Whisper STT instance for available models and online status."""
-    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    whisper_raw = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-    whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_raw))
-    import aiohttp
-    KNOWN_MODELS = [
-        {"id": "Systran/faster-whisper-tiny", "name": "Faster-Whisper Tiny (Ultra-fast CPU)", "size": "~75MB download", "installed": False},
-        {"id": "Systran/faster-whisper-base", "name": "Faster-Whisper Base (Multilingual)", "size": "~140MB download", "installed": False},
-        {"id": "Systran/faster-whisper-small", "name": "Faster-Whisper Small (Higher Accuracy)", "size": "~460MB download", "installed": False},
-    ]
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=4)) as session:
-            probe_url = whisper_url.rstrip("/") if whisper_url.endswith("/models") else f"{whisper_url.rstrip('/')}/models"
-            async with session.get(probe_url) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    models_list = data.get("data", [])
-                    installed_ids = {m.get("id") for m in models_list if m.get("installed", True)}
-                    for m in KNOWN_MODELS:
-                        m["installed"] = m["id"] in installed_ids
-                    return {"models": KNOWN_MODELS, "endpoint": whisper_url, "status": "online"}
-                return {"models": KNOWN_MODELS, "endpoint": whisper_url, "status": f"HTTP {resp.status}"}
-    except Exception:
-        return {"models": KNOWN_MODELS, "endpoint": whisper_url, "status": "offline"}
-
-
 async def _get_indic_stt_inventory(endpoint: str) -> dict[str, Any]:
     """Read the live IndicConformer inventory used to constrain admin tests."""
     import aiohttp
@@ -668,65 +640,6 @@ async def test_indic_stt(payload: Optional[Dict[str, Any]] = None, _user=Depends
         raise
     except Exception as exc:
         raise HTTPException(status_code=502, detail="IndicConformer speech test failed") from exc
-
-
-@router.post("/whisper/download")
-async def download_whisper_model(payload: Dict[str, Any], _user=Depends(get_superuser)):
-    """Instruct local Speaches / Faster-Whisper to download/preload a model."""
-    model = payload.get("model") or "Systran/faster-whisper-base"
-    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    whisper_raw = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-    whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_raw))
-    import aiohttp
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=180)) as session:
-            async with session.post(f"{whisper_url}/models/{model}") as resp:
-                if resp.status in (200, 201):
-                    await catalog_service.notify_changed()
-                    return {"success": True, "model": model, "message": f"Model {model} is now ready on host"}
-                raise HTTPException(status_code=502, detail=f"Whisper download failed (HTTP {resp.status})")
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=502, detail="Whisper service unavailable during download")
-
-
-@router.delete("/whisper/models/{model_id:path}")
-async def delete_whisper_model(model_id: str, _user=Depends(get_superuser)):
-    """Unload or delete a model from Speaches."""
-    local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-    whisper_raw = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-    whisper_url = whisper_api_base(normalize_local_ai_endpoint(whisper_raw))
-    import aiohttp
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
-            async with session.delete(f"{whisper_url.rstrip('/')}/models/{model_id}") as resp:
-                if resp.status not in (200, 204):
-                    raise HTTPException(status_code=502, detail=f"Whisper unload failed (HTTP {resp.status})")
-                await catalog_service.notify_changed()
-                return {"success": True, "message": f"Model {model_id} unloaded."}
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=502, detail="Whisper service unavailable during unload")
-
-
-@router.post("/whisper/test")
-async def test_whisper_stt(payload: Optional[Dict[str, Any]] = None, _user=Depends(get_superuser)):
-    """Test the selected local recognizer using a bounded real audio upload."""
-    from api.services.catalog.speech_diagnostics import decode_test_audio, transcribe_test_audio
-
-    payload = payload or {}
-    try:
-        audio = decode_test_audio(payload.get("audio_base64"))
-        language = payload.get("language") or "auto"
-        model = payload.get("model") or "Systran/faster-whisper-small"
-        local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
-        endpoint = local_ai.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
-        endpoint = whisper_api_base(normalize_local_ai_endpoint(endpoint))
-        return await transcribe_test_audio(endpoint, audio, model, language)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{key}")

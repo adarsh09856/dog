@@ -2152,14 +2152,11 @@ class SpeechmaticsSTTConfiguration(BaseSTTConfiguration):
     )
 
 
-SPEACHES_STT_MODELS = [
-    "Systran/faster-whisper-tiny",
-    "Systran/faster-whisper-base",
-    "Systran/faster-whisper-small",
-    "Systran/faster-distil-whisper-small.en",
-    "Systran/faster-whisper-large-v3",
+SPEACHES_STT_MODELS = ["indicconformer-ctc-int8"]
+SPEACHES_STT_LANGUAGES = [
+    "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
+    "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 ]
-SPEACHES_STT_LANGUAGES = ["en", "hi", "ar", "nl", "fr", "de", "it", "pt", "es"]
 
 
 @register_stt
@@ -2167,16 +2164,16 @@ class SpeachesSTTConfiguration(BaseSTTConfiguration):
     model_config = SPEACHES_PROVIDER_MODEL_CONFIG
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
     model: str = Field(
-        default="Systran/faster-whisper-small",
-        description="Multilingual Whisper model identifier; small is the local CPU accuracy/latency default.",
+        default="indicconformer-ctc-int8",
+        description="Self-hosted Indian-language recognizer. Select one installed language; automatic detection is not supported.",
         json_schema_extra={
             "examples": SPEACHES_STT_MODELS,
             "allow_custom_input": True,
         },
     )
     language: str = Field(
-        default="en",
-        description="ISO 639-1 language code.",
+        default="hi",
+        description="Select one installed Indian language. IndicConformer does not provide automatic language detection.",
         json_schema_extra={
             "examples": SPEACHES_STT_LANGUAGES,
             "allow_custom_input": True,

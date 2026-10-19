@@ -557,20 +557,20 @@ def create_stt_service(
         stt_api_key = getattr(user_config.stt, "api_key", None)
 
         # Local CPU STT. Use the resolved IndicConformer endpoint and language
-        # when selected; retain the legacy Whisper path for saved workflows.
+        # when selected. Never silently route local speech through Whisper.
         if stt_api_key in ("sovereign-local-cpu", "local-cpu-token"):
-            stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-small"
+            stt_model = getattr(user_config.stt, "model", None) or "indicconformer-ctc-int8"
             indic_model = stt_model == "indicconformer-ctc-int8"
+            if not indic_model:
+                raise ValueError("Self-hosted Whisper STT has been removed. Select IndicConformer and an installed language.")
             endpoint = getattr(user_config.stt, "base_url", None) or os.environ.get(
-                "INDIC_STT_ENDPOINT" if indic_model else "WHISPER_ENDPOINT",
-                "http://indic-stt:8000/v1" if indic_model else "http://whisper:8000/v1",
+                "INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"
             )
             endpoint = endpoint.rstrip("/")
             stt_v1 = endpoint if endpoint.endswith("/v1") else f"{endpoint}/v1"
-            stt_language = (
-                str(language or "multi").lower().replace("_", "-").split("-", 1)[0]
-                if indic_model else None
-            )
+            stt_language = str(language or "multi").lower().replace("_", "-").split("-", 1)[0]
+            if stt_language in ("multi", "auto", "default", "unknown"):
+                raise ValueError("IndicConformer needs one explicit installed language; automatic detection is not supported.")
             return SpeachesSTTService(
                 base_url=stt_v1,
                 api_key="local-cpu-token",
@@ -651,19 +651,24 @@ def create_stt_service(
         )
     elif user_config.stt.provider in (ServiceProviders.SPEACHES.value, "speaches", "whisper"):
         lang_str = getattr(user_config.stt, "language", None)
-        stt_model = user_config.stt.model or "Systran/faster-whisper-small"
+        stt_model = user_config.stt.model
+        if not stt_model or str(stt_model).casefold().startswith(("systran/faster-whisper", "faster-whisper", "faster-distil-whisper")) or user_config.stt.provider == "whisper":
+            raise ValueError("Self-hosted Whisper STT has been removed. Select IndicConformer or another active STT provider.")
         local_cpu = getattr(user_config.stt, "api_key", None) in (
             "local-cpu-token", "sovereign-local-cpu"
         )
-        # The selected assistant language is a hint, not a constraint on what
-        # callers can say. Local Whisper must detect each utterance so a Hindi
-        # agent can understand English and Hinglish follow-ups. IndicConformer
-        # is language-specific and still needs the explicit selection.
+        # IndicConformer needs one explicitly selected language. The other
+        # compatible STT providers may keep their own language-detection rules.
         lang_obj = (
             None if local_cpu and stt_model != "indicconformer-ctc-int8"
             else _resolve_speaches_language(lang_str)
         )
-        base_url = getattr(user_config.stt, "base_url", None) or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+        default_endpoint = (
+            os.environ.get("INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1")
+            if stt_model == "indicconformer-ctc-int8"
+            else os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+        )
+        base_url = getattr(user_config.stt, "base_url", None) or default_endpoint
         _validate_runtime_service_url(base_url, "base_url")
         return SpeachesSTTService(
             base_url=base_url,

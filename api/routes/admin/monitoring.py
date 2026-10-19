@@ -513,7 +513,8 @@ async def get_process_health(_user=Depends(get_superuser)):
         except Exception as e:
             services["piper"] = ProcessHealthItem(name="Piper TTS", status="offline", details={"error": str(e)})
 
-        # Whisper STT
+        # The Speaches endpoint is retained for local TTS compatibility. Local
+        # self-hosted STT is served separately by IndicConformer.
         whisper_url = local_settings.get("whisper_endpoint") or os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1")
         try:
             t0 = time.monotonic()
@@ -522,11 +523,11 @@ async def get_process_health(_user=Depends(get_superuser)):
                 async with session.get(probe_url) as resp:
                     lat = round((time.monotonic() - t0) * 1000, 1)
                     if resp.status == 200:
-                        services["whisper"] = ProcessHealthItem(name="Faster-Whisper STT", status="healthy", latency_ms=lat)
+                        services["speaches_tts"] = ProcessHealthItem(name="Speaches TTS", status="healthy", latency_ms=lat)
                     else:
-                        services["whisper"] = ProcessHealthItem(name="Faster-Whisper STT", status="offline")
+                        services["speaches_tts"] = ProcessHealthItem(name="Speaches TTS", status="offline")
         except Exception as e:
-            services["whisper"] = ProcessHealthItem(name="Faster-Whisper STT", status="offline", details={"error": str(e)})
+            services["speaches_tts"] = ProcessHealthItem(name="Speaches TTS", status="offline", details={"error": str(e)})
     else:
         services["local_ai"] = ProcessHealthItem(name="Local AI Engine", status="disabled")
 

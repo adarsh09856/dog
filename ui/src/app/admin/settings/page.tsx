@@ -400,14 +400,14 @@ export default function AdminSettingsPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">Optional Speaches-Compatible Speech Endpoint</Label>
+                <Label className="text-xs">Speaches TTS Endpoint (Compatibility)</Label>
                 <Input
                   value={settings.whisper_endpoint || ""}
                   onChange={(e) => setSettings({ ...settings, whisper_endpoint: e.target.value })}
                   placeholder="http://whisper:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">OpenAI-compatible local endpoint for installed Speaches models. Self-hosted IndicConformer STT uses its own endpoint below.</p>
+                <p className="text-[10px] text-muted-foreground">Used for installed local TTS models. Self-hosted STT uses the IndicConformer endpoint below.</p>
               </div>
 
               <div className="space-y-1">
