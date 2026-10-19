@@ -32,7 +32,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { adminApi, PlatformSettings } from "@/lib/kodewavesApi";
-import LocalSttTest from "./LocalSttTest";
 import IndicSttTest from "./IndicSttTest";
 
 const POPULAR_OLLAMA_MODELS = [
@@ -76,14 +75,6 @@ export default function AdminSettingsPage() {
   const [pullStatusMessage, setPullStatusMessage] = useState<string | null>(null);
   const [ollamaEndpointStatus, setOllamaEndpointStatus] = useState<string>("");
 
-  // Whisper STT Manager state
-  const [whisperModels, setWhisperModels] = useState<any[]>([]);
-  const [loadingWhisperModels, setLoadingWhisperModels] = useState(false);
-  const [downloadWhisperName, setDownloadWhisperName] = useState("Systran/faster-whisper-small");
-  const [isDownloadingWhisper, setIsDownloadingWhisper] = useState(false);
-  const [whisperDownloadStatus, setWhisperDownloadStatus] = useState<string | null>(null);
-  const [whisperEndpointStatus, setWhisperEndpointStatus] = useState<string>("");
-
   // Ollama test state
   const [testingOllamaModel, setTestingOllamaModel] = useState<string | null>(null);
   const [ollamaTestResult, setOllamaTestResult] = useState<any | null>(null);
@@ -121,44 +112,6 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const fetchWhisperModels = async () => {
-    setLoadingWhisperModels(true);
-    try {
-      const res = await adminApi.getWhisperModels();
-      setWhisperModels(res.models || []);
-      setWhisperEndpointStatus(res.status || "online");
-    } catch {
-      setWhisperEndpointStatus("offline");
-    } finally {
-      setLoadingWhisperModels(false);
-    }
-  };
-
-  const handleDownloadWhisper = async () => {
-    if (!downloadWhisperName) return;
-    setIsDownloadingWhisper(true);
-    setWhisperDownloadStatus(`Downloading Whisper model ${downloadWhisperName}...`);
-    try {
-      const res = await adminApi.downloadWhisperModel(downloadWhisperName);
-      setWhisperDownloadStatus(res.message || `Model ${downloadWhisperName} ready`);
-      await fetchWhisperModels();
-    } catch (err: any) {
-      setWhisperDownloadStatus(`Status: ${err.message || "Initiated"}`);
-    } finally {
-      setIsDownloadingWhisper(false);
-    }
-  };
-
-  const handleDeleteWhisper = async (modelId: string) => {
-    if (!confirm(`Are you sure you want to unload ${modelId}?`)) return;
-    try {
-      await adminApi.deleteWhisperModel(modelId);
-      await fetchWhisperModels();
-    } catch (err: any) {
-      alert(`Failed to unload model: ${err.message}`);
-    }
-  };
-
   const handleTestOllama = async (modelName: string) => {
     setTestingOllamaModel(modelName);
     setOllamaTestResult(null);
@@ -175,7 +128,6 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchOllamaModels();
-    fetchWhisperModels();
   }, []);
 
   const handleSave = async () => {
@@ -448,14 +400,14 @@ export default function AdminSettingsPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">Whisper STT Endpoint</Label>
+                <Label className="text-xs">Optional Speaches-Compatible Speech Endpoint</Label>
                 <Input
                   value={settings.whisper_endpoint || ""}
                   onChange={(e) => setSettings({ ...settings, whisper_endpoint: e.target.value })}
                   placeholder="http://whisper:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">Local Faster-Whisper CPU transcriber (CTranslate2 OpenAI /v1 format)</p>
+                <p className="text-[10px] text-muted-foreground">OpenAI-compatible local endpoint for installed Speaches models. Self-hosted IndicConformer STT uses its own endpoint below.</p>
               </div>
 
               <div className="space-y-1">
@@ -679,148 +631,21 @@ export default function AdminSettingsPage() {
             </Button>
           </CardContent>
         </Card>
-        {/* FASTER-WHISPER STT LOCAL MANAGER */}
+        {/* LOCAL INDIAN STT */}
         <Card className="border-border/60 md:col-span-2">
           <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Mic className="h-5 w-5 text-sky-500" />
-                  Faster-Whisper STT Manager (Local Speech-to-Text Suite)
-                </CardTitle>
-                <CardDescription>
-                  Host CTranslate2 CPU Faster-Whisper (Speaches) STT directly on your VPS with zero cloud API fees.
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant={whisperEndpointStatus === "online" ? "default" : "destructive"}
-                  className="text-xs"
-                >
-                  {whisperEndpointStatus === "online" ? "● Whisper Online" : `Whisper ${whisperEndpointStatus}`}
-                </Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={fetchWhisperModels}
-                  disabled={loadingWhisperModels}
-                  className="h-8 gap-1.5 text-xs"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${loadingWhisperModels ? "animate-spin" : ""}`} />
-                  Refresh
-                </Button>
-              </div>
-            </div>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Mic className="h-5 w-5 text-sky-500" />
+              Self-hosted Indian speech recognition
+            </CardTitle>
+            <CardDescription>
+              Test the installed CPU IndicConformer languages against real WAV audio. The selected language is used for recognition; this local model does not auto-detect languages.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Download Model Form */}
-            <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-3">
-              <div className="text-xs font-semibold flex items-center gap-2">
-                <Download className="h-4 w-4 text-primary" />
-                Download / Preload Faster-Whisper Model
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Select Model Tier</Label>
-                  <Select value={downloadWhisperName} onValueChange={setDownloadWhisperName}>
-                    <SelectTrigger className="w-full h-9 text-xs">
-                      <SelectValue placeholder="Choose Whisper Model" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Systran/faster-whisper-tiny">
-                        Faster-Whisper Tiny (~75MB RAM - Fast CPU)
-                      </SelectItem>
-                      <SelectItem value="Systran/faster-whisper-base">
-                        Faster-Whisper Base (~140MB RAM - Recommended Multilingual)
-                      </SelectItem>
-                      <SelectItem value="Systran/faster-whisper-small">
-                        Faster-Whisper Small (~460MB RAM - High Accuracy)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-end">
-                  <Button
-                    onClick={handleDownloadWhisper}
-                    disabled={isDownloadingWhisper}
-                    className="w-full h-9 text-xs gap-2"
-                  >
-                    {isDownloadingWhisper ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Downloading Model...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-3.5 w-3.5" />
-                        Download Model to Host
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {whisperDownloadStatus && (
-                <div className="text-xs text-primary font-medium p-2.5 rounded-lg bg-primary/10 border border-primary/20">
-                  {whisperDownloadStatus}
-                </div>
-              )}
-            </div>
-
-            <LocalSttTest models={whisperModels.filter(model => model.installed).map(model => ({id: model.id, name: model.name}))} />
+          <CardContent>
             <IndicSttTest />
-
-            {/* Installed Models List */}
-            <div className="space-y-2">
-              <div className="text-xs font-semibold flex items-center gap-2">
-                <HardDrive className="h-4 w-4 text-muted-foreground" />
-                Available & Installed Whisper Models ({whisperModels.length})
-              </div>
-
-              <div className="border rounded-xl divide-y overflow-hidden text-xs">
-                {whisperModels.map((m: any, idx: number) => (
-                  <div
-                    key={m.id || idx}
-                    className="p-3 flex items-center justify-between hover:bg-muted/30 transition-colors"
-                  >
-                    <div className="space-y-0.5">
-                      <div className="font-semibold text-foreground flex items-center gap-2">
-                        {m.name || m.id}
-                        {m.installed ? (
-                          <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
-                            Installed
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-[10px]">
-                            Available
-                          </Badge>
-                        )}
-                        <Badge variant="outline" className="text-[10px]">
-                          {m.size}
-                        </Badge>
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        Model ID: {m.id}
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteWhisper(m.id)}
-                      className="text-destructive hover:bg-destructive/10 h-8 px-2.5 text-xs gap-1"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Unload
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
           </CardContent>
         </Card>
-
         {/* SMTP EMAIL SETTINGS */}
         <Card className="border-border/60 md:col-span-2">
           <CardHeader>

@@ -66,7 +66,7 @@ export default function IndicSttTest() {
       <span className="text-xs text-muted-foreground" role="status">{status}</span>
     </div>
     <p className="text-xs text-muted-foreground">
-      IndicConformer uses one selected language per test. Use Faster-Whisper above for automatic detection and mixed-language audio.
+      IndicConformer uses the language you select for each test. Automatic language detection is not available in this local model.
     </p>
     <div className="space-y-1">
       <Label htmlFor="indic-stt-language">Recognition language</Label>

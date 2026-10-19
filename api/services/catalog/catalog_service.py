@@ -939,7 +939,7 @@ class CatalogService:
                                     local_stt.append({
                                         "value": installed_model["id"],
                                         "label": "IndicConformer CTC INT8 (installed languages)",
-                                        "provider": "whisper",
+                                        "provider": "indicconformer",
                                         "languages": installed_model.get("languages", []),
                                     })
             except (aiohttp.ClientError, TimeoutError):

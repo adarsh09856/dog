@@ -556,25 +556,28 @@ def create_stt_service(
         language = getattr(user_config.stt, "language", None) or "multi"
         stt_api_key = getattr(user_config.stt, "api_key", None)
 
-        # Local CPU Whisper STT
+        # Local CPU STT. Use the resolved IndicConformer endpoint and language
+        # when selected; retain the legacy Whisper path for saved workflows.
         if stt_api_key in ("sovereign-local-cpu", "local-cpu-token"):
-            whisper_url = os.environ.get("WHISPER_ENDPOINT", "http://whisper:8000/v1").rstrip("/")
-            whisper_v1 = whisper_url if whisper_url.endswith("/v1") else f"{whisper_url}/v1"
             stt_model = getattr(user_config.stt, "model", None) or "Systran/faster-whisper-small"
+            indic_model = stt_model == "indicconformer-ctc-int8"
+            endpoint = getattr(user_config.stt, "base_url", None) or os.environ.get(
+                "INDIC_STT_ENDPOINT" if indic_model else "WHISPER_ENDPOINT",
+                "http://indic-stt:8000/v1" if indic_model else "http://whisper:8000/v1",
+            )
+            endpoint = endpoint.rstrip("/")
+            stt_v1 = endpoint if endpoint.endswith("/v1") else f"{endpoint}/v1"
+            stt_language = (
+                str(language or "multi").lower().replace("_", "-").split("-", 1)[0]
+                if indic_model else None
+            )
             return SpeachesSTTService(
-                base_url=whisper_v1,
+                base_url=stt_v1,
                 api_key="local-cpu-token",
                 settings=SpeachesSTTSettings(
                     model=stt_model,
-                    # The organization language selects the assistant voice and
-                    # gives the recognizer a transcript hint. Do not force that
-                    # language on every caller turn: Hindi agents must still
-                    # understand English/Hinglish, and the local Whisper model
-                    # can detect the spoken language for each utterance.
-                    language=None,
+                    language=stt_language,
                     prompt=_speaches_transcription_prompt(language, keyterms),
-                    # A fixed zero temperature avoids Whisper's expensive
-                    # compression-ratio fallback ladder on noisy phone silence.
                     temperature=0.0,
                 ),
                 sample_rate=audio_config.transport_in_sample_rate,

@@ -476,9 +476,8 @@ async def apply_kodewaves_sovereign_resolution(
                 metadata.stt = resolved
                 is_using_master_keys = True
             elif engine_enabled and has_local_access:
-                # Match the warm, multilingual CPU model in the local stack.
-                # Tiny defaults to English in several older configurations and
-                # is noticeably less reliable on Hindi/Hinglish code switching.
+                # Compatibility for workflows without saved STT configuration.
+                # Newly configured self-hosted agents use IndicConformer.
                 model_to_use = "Systran/faster-whisper-small"
                 effective.stt = SpeachesSTTConfiguration(
                     api_key="local-cpu-token",
@@ -531,7 +530,7 @@ async def apply_kodewaves_sovereign_resolution(
                     manifest = installed_models.get(model_to_use) or {}
                     supported_languages = {str(code).casefold().split("-", 1)[0] for code in manifest.get("languages", [])}
                     if selected_language not in supported_languages:
-                        raise HTTPException(status_code=400, detail=f"Indic STT language '{selected_language}' is not installed")
+                        raise HTTPException(status_code=400, detail=f"Self-hosted IndicConformer does not have language '{selected_language}' installed")
                     norm_lang = selected_language
                 effective.stt = SpeachesSTTConfiguration(
                     api_key="local-cpu-token",
@@ -539,7 +538,12 @@ async def apply_kodewaves_sovereign_resolution(
                     language=norm_lang,
                     base_url=indic_stt_v1_url if model_to_use == "indicconformer-ctc-int8" else whisper_v1_url,
                 )
-                metadata.stt = ResolvedLayerInfo(provider="whisper", model=model_to_use, source="local", language=norm_lang)
+                metadata.stt = ResolvedLayerInfo(
+                    provider="indicconformer" if model_to_use == "indicconformer-ctc-int8" else "whisper",
+                    model=model_to_use,
+                    source="local",
+                    language=norm_lang,
+                )
 
             # BYOK User Key
             elif user_key and user_key not in ("sovereign-managed", "default") and allow_byok:
