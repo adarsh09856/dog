@@ -65,6 +65,19 @@ class GreetingController:
         elif (
             not self._playback.greeting_pending and self._normal_strategies is not None
         ):
+            # A short reply can finish while the two-word greeting guard is
+            # active. Its transcript is retained, but restoring the normal
+            # strategy alone never opens a turn for that completed speech.
+            # Release it before replacing the guard so its event handlers are
+            # still registered. Do not interrupt an already-finished greeting.
+            if user.aggregation_string() and not controller.has_active_user_turn:
+                strategy = controller.user_turn_strategies.start[0]
+                await strategy.trigger_user_turn_started(enable_interruptions=False)
+                if self._speech_start is None:
+                    await controller.force_user_turn_stop()
+                else:
+                    for stop_strategy in controller.user_turn_strategies.stop:
+                        await stop_strategy.process_frame(self._speech_start)
             normal = self._normal_strategies
             self._normal_strategies = None
             await controller.update_strategies(normal)
