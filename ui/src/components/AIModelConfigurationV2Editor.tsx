@@ -1288,7 +1288,7 @@ export function AIModelConfigurationV2Editor({
                                     />}
                                     {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "indic-vits-rasa-13" && (
                                         <p className="text-xs text-muted-foreground">
-                                            This voice sets the preferred gender for demos. Live speech switches to a matching installed regional voice when the reply script identifies one. This model supports 13 language groups; shared scripts and languages without a matching speaker do not auto-switch.
+                                            The demo voice does not restrict the spoken language. During calls, speech switches automatically between installed voices using the reply text and language context. Gender is preserved where matching speakers are available. Indian English has one speaker whose gender is not documented. Shared scripts need language context; unsupported languages are not translated.
                                         </p>
                                     )}
                                 </div>

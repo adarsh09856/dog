@@ -646,14 +646,12 @@ async def apply_kodewaves_sovereign_resolution(
                             status_code=400,
                             detail="Select a local TTS voice or a spoken language before starting the call",
                         )
-                    # The VITS selection is a preferred speaker for demos; live
-                    # speech chooses a matching installed speaker from the text.
-                    # STT language does not constrain which speaker can be saved.
-                    supported_voices = (
-                        local_model_voice_ids(installed_model)
-                        if selected_model == "indic-vits-rasa-13"
-                        else local_model_voice_ids_for_language(installed_model, tts_lang)
-                    )
+                    is_auto_lang = str(tts_lang).strip().casefold() in {"auto", "multi", "multilingual", "default"}
+                    if is_auto_lang:
+                        supported_voices = local_model_voice_ids(installed_model)
+                    else:
+                        supported_voices = local_model_voice_ids_for_language(installed_model, tts_lang)
+
                     if not supported_voices:
                         raise HTTPException(
                             status_code=400,
@@ -663,10 +661,25 @@ async def apply_kodewaves_sovereign_resolution(
                                 "model that supports this language."
                             ),
                         )
-                    if not voice_to_use and supported_voices:
+                    # Unified VITS uses the saved speaker as a gender/style
+                    # preference. Runtime text and language context select the
+                    # matching installed language; recognition must not cap
+                    # which preferred speaker the user can save.
+                    selection_voices = (
+                        local_model_voice_ids(installed_model)
+                        if selected_model == "indic-vits-rasa-13"
+                        else supported_voices
+                    )
+                    if voice_to_use and voice_to_use not in selection_voices:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Voice '{voice_to_use}' is not supported for language '{tts_lang}'. "
+                                f"Supported voices for this language: {', '.join(sorted(supported_voices))}"
+                            ),
+                        )
+                    if not voice_to_use:
                         voice_to_use = sorted(supported_voices)[0]
-                    if voice_to_use not in supported_voices:
-                        raise HTTPException(status_code=400, detail="Select a voice supported by the selected installed local TTS model")
                     local_tts_url = inventory_url
                 elif selected_model == "piper" or selected_model.startswith("piper/"):
                     voice_to_use = voice_to_use or get_default_piper_voice_for_language(tts_lang)

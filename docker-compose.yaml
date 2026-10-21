@@ -459,7 +459,7 @@ services:
       resources:
         limits:
           cpus: "${INDIC_VITS_CPU_LIMIT:-2.0}"
-          memory: 1024M
+          memory: "${INDIC_VITS_MEMORY_LIMIT:-1536M}"
     networks:
       - app-network
 

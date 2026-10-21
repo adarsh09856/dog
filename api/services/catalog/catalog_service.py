@@ -1007,7 +1007,7 @@ class CatalogService:
                 if regional_model and regional_model.get("installed") is True:
                     local_tts.append({
                         "value": regional_model["id"],
-                        "label": regional_model.get("name") or "AI4Bharat VITS Rasa — 13 Indian languages (CPU)",
+                        "label": regional_model.get("name") or "Kodewaves Regional + Hindi + Indian English (CPU)",
                         "provider": "speaches",
                         "languages": regional_model.get("languages", []),
                         "voices": regional_model.get("voices", []),

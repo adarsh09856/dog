@@ -15,12 +15,17 @@ from pipecat.services.tts_service import TextAggregationMode
 class SpeachesLiveTTSService(SpeachesTTSService):
     """Keep a synthesis context open while the CPU provider is working."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, *, speech_language: str | None = None, **kwargs):
         kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=45.0))
         super().__init__(**kwargs)
+        self._speech_language = speech_language
+        if speech_language and self._settings.model == "indic-vits-rasa-13":
+            self._client = self._client.with_options(default_headers={
+                "X-Kodewaves-Speech-Language": speech_language,
+            })
         if self._text_aggregation_mode == TextAggregationMode.SENTENCE:
             # Keep short adjacent sentences in one synthesis stream. Each
-            # independent Indus CPU request adds a perceptible pause and can
+            # independent CPU request adds a perceptible pause and can
             # sound like a clipped turn; its response still streams PCM as it
             # synthesizes, so batching avoids request gaps without buffering
             # the complete audio before playback.
@@ -28,9 +33,9 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             # avoid repeated CPU synthesis gaps within a spoken reply.
             self._text_aggregator = LocalSpeechAggregator(
                 min_characters=48,
-                first_chunk_characters=24,
-                first_clause_characters=14,
-                first_phrase_characters=18,
+                first_chunk_characters=20,
+                first_clause_characters=8,
+                first_phrase_characters=14,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
@@ -69,10 +74,13 @@ class SpeachesCachingTTSService(SpeachesLiveTTSService):
             "speed": self._settings.speed,
             "instructions": self._settings.instructions,
         }
+        if self._settings.model == "indic-vits-rasa-13":
+            payload["language"] = self._speech_language
         request = SynthesisRequest.from_payload(
             organization_id=self._organization_id,
             provider="speaches",
-            adapter_version=1,
+            # Unified voice routing must not reuse former Rasa-only audio.
+            adapter_version=3 if self._settings.model == "indic-vits-rasa-13" else 1,
             endpoint=self._cache_endpoint,
             credential=self._client.api_key,
             payload=payload,

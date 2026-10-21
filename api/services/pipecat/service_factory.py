@@ -1061,6 +1061,7 @@ def create_tts_service(
                 api_key="local",
                 base_url=speaches_url.rstrip("/"),
                 sample_rate=24000,
+                speech_language=getattr(user_config.tts, "language", None),
                 settings=SpeachesTTSSettings(
                     model=selected_model,
                     voice=user_config.tts.voice,
