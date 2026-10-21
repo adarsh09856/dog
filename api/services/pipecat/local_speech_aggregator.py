@@ -21,6 +21,7 @@ class LocalSpeechAggregator(BaseTextAggregator):
         self, min_characters: int = 48, first_chunk_characters: int | None = None,
         first_clause_characters: int | None = None,
         first_phrase_characters: int | None = None,
+        streaming_phrase_characters: int | None = None,
     ):
         super().__init__()
         self._sentences = SimpleTextAggregator()
@@ -30,6 +31,7 @@ class LocalSpeechAggregator(BaseTextAggregator):
         self._emitted = False
         self._first_clause_characters = first_clause_characters
         self._first_phrase_characters = first_phrase_characters
+        self._streaming_phrase_characters = streaming_phrase_characters
 
     @property
     def text(self) -> Aggregation:
@@ -97,6 +99,29 @@ class LocalSpeechAggregator(BaseTextAggregator):
                     yield Aggregation(text=first, type=AggregationType.SENTENCE)
                     async for part in self.aggregate(tail):
                         yield part
+
+        # The first-phrase release above starts speech early. Once it has
+        # started, local HTTP TTS can prefetch further word-boundary phrases
+        # while the current audio is playing. Without this branch every later
+        # phrase waits for a full sentence terminator, which is the source of
+        # audible gaps on slow CPU LLMs.
+        if self._emitted and self._streaming_phrase_characters:
+            buffered = self._sentences.text.text
+            if text and text[-1].isspace():
+                buffered += " "
+            combined = self._join(self._pending, buffered)
+            minimum = self._streaming_phrase_characters
+            if len(combined) > minimum:
+                boundary = re.search(r"\s", combined[minimum:minimum + 17])
+                if boundary:
+                    split_at = minimum + boundary.start()
+                    first, tail = combined[:split_at], combined[split_at:]
+                    await self._sentences.reset()
+                    # Retain the unspoken suffix locally. Re-feeding it into
+                    # SimpleTextAggregator discards its leading separator on
+                    # some incremental Indic tokens, which joins words.
+                    self._pending = tail.strip()
+                    yield Aggregation(text=first, type=AggregationType.SENTENCE)
 
     async def flush(self) -> Aggregation | None:
         tail = await self._sentences.flush()
