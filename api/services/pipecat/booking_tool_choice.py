@@ -2,7 +2,7 @@
 
 import re
 from loguru import logger
-from openai import AsyncOpenAI, DefaultAsyncHttpxClient
+from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
 from pipecat.frames.frames import LLMFullResponseEndFrame, LLMFullResponseStartFrame
 
 from pipecat.services.kodewaves.llm import KodewavesLLMService
@@ -113,6 +113,11 @@ def booking_tool_choice(params: dict) -> dict | None:
 
 
 class _BookingToolChoiceMixin:
+    async def _push_llm_text(self, text: str):
+        if text and text.strip():
+            self._completion_has_text = True
+        await super()._push_llm_text(text)
+
     def create_client(
         self,
         api_key=None,
@@ -171,7 +176,37 @@ class _BookingToolChoiceMixin:
                     tool_call_id=f"confirmed_booking_{uuid4().hex}", arguments=arguments,
                 )])
                 return
-        await super()._process_context(context)
+        self._completion_has_text = False
+        try:
+            await super()._process_context(context)
+        except (APIError, TimeoutError):
+            # Keep the original error observable upstream, but give a caller
+            # whose answer never started a normal transcript/TTS recovery.
+            # Never append this to a partial answer or retry an external action.
+            if not self._completion_has_text:
+                await self._push_llm_text(self._completion_recovery_text(messages))
+            raise
+
+    def _completion_recovery_text(self, messages):
+        source = getattr(self, "_caller_language_source", None)
+        settings = getattr(source, "_settings", None)
+        language = getattr(source, "latest_detected_language", None) or getattr(settings, "language", None)
+        language = getattr(language, "value", language)
+        language = str(language or "").lower().replace("_", "-").split("-", 1)[0]
+        recovery = {
+            "hi": "माफ़ कीजिए, जवाब देने में समस्या हुई। कृपया फिर से कोशिश करें।",
+            "kn": "ಕ್ಷಮಿಸಿ, ಉತ್ತರ ನೀಡಲು ಸಮಸ್ಯೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+            "ta": "மன்னிக்கவும், பதிலளிப்பதில் சிக்கல் ஏற்பட்டது. மீண்டும் முயற்சிக்கவும்.",
+            "te": "క్షమించండి, సమాధానం ఇవ్వడంలో సమస్య వచ్చింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+            "ml": "ക്ഷമിക്കണം, മറുപടി നൽകുന്നതിൽ പ്രശ്നമുണ്ടായി. ദയവായി വീണ്ടും ശ്രമിക്കുക.",
+            "mr": "क्षमस्व, उत्तर देताना समस्या आली. कृपया पुन्हा प्रयत्न करा.",
+            "en": "Sorry, I had trouble responding. Please try again.",
+        }
+        if language in recovery:
+            return recovery[language]
+        # Do not infer one of the several Devanagari languages from its script.
+        # English fallback is available in the unified local speech engine.
+        return recovery["en"]
 
     def build_chat_completion_params(self, params_from_context):
         params = super().build_chat_completion_params(params_from_context)
