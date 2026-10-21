@@ -185,7 +185,7 @@ class TestTransitionFunctionMutesUser:
                 new_callable=AsyncMock,
                 return_value={"user_intent": "end call"},
             ):
-                await run_engine_test_pipeline(task, engine, transport)
+                await run_engine_test_pipeline(task, engine, transport, caller_message="Goodbye, please end the call.")
 
         assert len(captured_states) == 1, (
             f"Expected the transition function to be invoked exactly once, "
@@ -242,7 +242,7 @@ class TestTransitionFunctionMutesUser:
                 new_callable=AsyncMock,
                 return_value={"user_intent": "end call"},
             ):
-                await run_engine_test_pipeline(task, engine, transport)
+                await run_engine_test_pipeline(task, engine, transport, caller_message="Goodbye, please end the call.")
 
         assert function_call_mute_strategy._function_call_in_progress == set(), (
             "FunctionCallUserMuteStrategy should have cleared its in-progress "

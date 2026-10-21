@@ -151,7 +151,7 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
 
 export default function CreateWorkflowPage() {
     const router = useRouter();
-    const { user, getAccessToken } = useAuth();
+    const { user, getAccessToken, loading: authLoading } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [previewTemplate, setPreviewTemplate] = useState<AgentTemplate | null>(null);
@@ -173,11 +173,15 @@ export default function CreateWorkflowPage() {
     const [catalogLoading, setCatalogLoading] = useState(true);
 
     useEffect(() => {
+        if (authLoading || !user) return;
+        let active = true;
+        setCatalogLoading(true);
         catalogApi.getAvailableCatalog()
-            .then((data) => setCatalog(data))
+            .then((data) => { if (active) setCatalog(data); })
             .catch((err) => console.warn('[CreateWorkflow] Failed to fetch catalog:', err))
-            .finally(() => setCatalogLoading(false));
-    }, []);
+            .finally(() => { if (active) setCatalogLoading(false); });
+        return () => { active = false; };
+    }, [authLoading, user]);
 
     const isCatalogEmpty = useMemo(() => {
         if (catalogLoading || !catalog) return false;
@@ -215,6 +219,10 @@ export default function CreateWorkflowPage() {
         setIsCreating(true);
         try {
             const accessToken = await getAccessToken();
+            if (!accessToken) {
+                toast.error('Your session has expired. Please sign in again.');
+                return;
+            }
             const finalAgentName = customAgentName.trim() || previewTemplate.name;
             const finalCompanyName = customCompanyName.trim() || 'our company';
 
@@ -255,6 +263,10 @@ export default function CreateWorkflowPage() {
 
         try {
             const accessToken = await getAccessToken();
+            if (!accessToken) {
+                toast.error('Your session has expired. Please sign in again.');
+                return;
+            }
             const name = `Agent-${getRandomId()}`;
             const response = await createWorkflowApiV1WorkflowCreateDefinitionPost({
                 body: {
@@ -269,6 +281,8 @@ export default function CreateWorkflowPage() {
             if (response.data?.id) {
                 toast.success('Blank canvas agent created!');
                 router.push(`/workflow/${response.data.id}`);
+            } else {
+                toast.error(detailFromError(response.error, 'Failed to create agent. Please try again.'));
             }
         } catch (err) {
             logger.error(`Error creating blank workflow: ${err}`);
@@ -279,7 +293,8 @@ export default function CreateWorkflowPage() {
     };
 
     const handleCreateCustom = async () => {
-        if (!customBuilderName.trim() || isCreating) {
+        if (!user || isCreating) return;
+        if (!customBuilderName.trim()) {
             toast.error('Please enter an agent name.');
             return;
         }
@@ -287,6 +302,10 @@ export default function CreateWorkflowPage() {
         setIsCreating(true);
         try {
             const accessToken = await getAccessToken();
+            if (!accessToken) {
+                toast.error('Your session has expired. Please sign in again.');
+                return;
+            }
             const description = customBuilderDescription.trim() || customBuilderName.trim();
             const definition = await apiFetch<{ workflow_definition: Record<string, unknown>; model_provider: string; model_name: string }>(
                 '/workflow/generate/definition',
@@ -316,7 +335,7 @@ export default function CreateWorkflowPage() {
                 toast.success(`Agent created with ${definition.model_provider}/${definition.model_name}.`);
                 router.push(`/workflow/${response.data.id}?onboarding=web_call`);
             } else {
-                throw new Error('The workflow was generated but the server did not return a created agent.');
+                throw new Error(detailFromError(response.error, 'The workflow was generated but the server did not return a created agent.'));
             }
         } catch (err) {
             logger.error(`Error generating custom workflow: ${err}`);

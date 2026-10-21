@@ -582,17 +582,10 @@ async def apply_kodewaves_sovereign_resolution(
                 metadata.tts = resolved
                 is_using_master_keys = True
             elif engine_enabled and has_local_access:
-                from api.services.catalog.local_inventory import local_tts_api_base
-
-                default_voice = "Inaya"
-                local_tts_url = local_tts_api_base(local_engine, "indus-pocket-tts")
-                effective.tts = SpeachesTTSConfiguration(
-                    api_key="local-cpu-token",
-                    model="indus-pocket-tts",
-                    voice=default_voice,
-                    base_url=local_tts_url,
+                raise HTTPException(
+                    status_code=400,
+                    detail="No active TTS key is configured. Select an installed self-hosted TTS model and voice in Models.",
                 )
-                metadata.tts = ResolvedLayerInfo(provider="speaches", model="indus-pocket-tts", voice=default_voice, source="local")
             else:
                 raise HTTPException(
                     status_code=400,
@@ -621,16 +614,20 @@ async def apply_kodewaves_sovereign_resolution(
                         status_code=403,
                         detail="Local AI Engine access is restricted or disabled. Please contact your administrator.",
                     )
-                selected_model = model if model not in (None, "", "default") else "indus-pocket-tts"
+                if model in (None, "", "default"):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Select an installed self-hosted TTS model and voice in Models.",
+                    )
+                selected_model = model
                 voice_to_use = current_voice if current_voice and current_voice != "default" else None
                 if selected_model != "piper" and not selected_model.startswith("piper/"):
                     from api.services.catalog.local_inventory import (
                         get_local_tts_models,
                         local_tts_api_base,
+                        local_model_voice_ids,
                         local_model_voice_ids_for_language,
                     )
-                    import aiohttp
-
                     inventory_url = local_tts_api_base(local_engine, selected_model)
                     try:
                         installed_models = await get_local_tts_models(inventory_url)
@@ -644,8 +641,13 @@ async def apply_kodewaves_sovereign_resolution(
                             status_code=400,
                             detail="Select a local TTS voice or a spoken language before starting the call",
                         )
-                    supported_voices = local_model_voice_ids_for_language(
-                        installed_model, tts_lang
+                    # The VITS selection is a preferred speaker for demos; live
+                    # speech chooses a matching installed speaker from the text.
+                    # STT language does not constrain which speaker can be saved.
+                    supported_voices = (
+                        local_model_voice_ids(installed_model)
+                        if selected_model == "indic-vits-rasa-13"
+                        else local_model_voice_ids_for_language(installed_model, tts_lang)
                     )
                     if not supported_voices:
                         raise HTTPException(
@@ -704,18 +706,10 @@ async def apply_kodewaves_sovereign_resolution(
                         metadata.tts = resolved
                         is_using_master_keys = True
                     elif engine_enabled and has_local_access:
-                        from api.services.catalog.local_inventory import local_tts_api_base
-
-                        voice_to_use = current_voice if current_voice and current_voice != "default" else "Inaya"
-                        local_tts_url = local_tts_api_base(local_engine, "indus-pocket-tts")
-                        effective.tts = SpeachesTTSConfiguration(
-                            api_key="local-cpu-token",
-                            model="indus-pocket-tts",
-                            voice=voice_to_use,
-                            speed=getattr(effective.tts, "speed", 1.0),
-                            base_url=local_tts_url,
+                        raise HTTPException(
+                            status_code=400,
+                            detail="No active TTS key is configured. Select an installed self-hosted TTS model and voice in Models.",
                         )
-                        metadata.tts = ResolvedLayerInfo(provider="speaches", model="indus-pocket-tts", voice=voice_to_use, source="local")
                     else:
                         raise HTTPException(
                             status_code=400,

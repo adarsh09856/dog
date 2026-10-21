@@ -270,6 +270,16 @@ def test_standard_stt_keeps_default_stop_timeout():
     )
 
 
+def test_bounded_cpu_stt_cannot_be_cut_off_before_its_recognition_deadline():
+    from api.services.pipecat.speaches_stt import BoundedSpeachesSTTService
+
+    timeout = _resolve_user_turn_stop_timeout(
+        {}, uses_external_turns=False,
+        recognition_timeout_seconds=BoundedSpeachesSTTService.recognition_timeout_seconds,
+    )
+    assert timeout > BoundedSpeachesSTTService.recognition_timeout_seconds
+
+
 def test_workflow_config_can_override_user_turn_stop_timeout():
     assert (
         _resolve_user_turn_stop_timeout(

@@ -22,6 +22,7 @@ async def run_engine_test_pipeline(
     transport: Any,
     *,
     on_ready: ReadyCallback | None = None,
+    caller_message: str | None = None,
     timeout: float | None = 10.0,
 ) -> None:
     """Run an engine pipeline after the same readiness signals used in production.
@@ -46,6 +47,8 @@ async def run_engine_test_pipeline(
             return
 
         await engine.set_node(engine.active_agent.workflow.start_node_id)
+        if caller_message is not None:
+            engine.context.add_message({"role": "user", "content": caller_message})
         await engine.active_agent.llm.queue_frame(LLMContextFrame(engine.context))
 
     async def maybe_trigger_test() -> None:

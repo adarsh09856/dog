@@ -158,6 +158,9 @@ services:
       INDIC_STT_ENDPOINT: "${INDIC_STT_ENDPOINT:-http://indic-stt:8000/v1}"
       INDUS_TTS_ENDPOINT: "${INDUS_TTS_ENDPOINT:-http://indus-tts:8000/v1}"
       INDIC_MIO_TTS_ENDPOINT: "${INDIC_MIO_TTS_ENDPOINT:-http://indic-mio-tts:8000/v1}"
+      INDIC_PARLER_TTS_ENDPOINT: "${INDIC_PARLER_TTS_ENDPOINT:-http://indic-parler-tts:8000/v1}"
+      INDIC_VITS_TTS_ENDPOINT: "${INDIC_VITS_TTS_ENDPOINT:-http://indic-vits-tts:8000/v1}"
+      DHVAANI_TTS_ENDPOINT: "${DHVAANI_TTS_ENDPOINT:-http://dhvaani-tts:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
       KODEWAVES_DEFAULT_REGION: "${KODEWAVES_DEFAULT_REGION:-IN}"
       KODEWAVES_DEFAULT_TIMEZONE: "${KODEWAVES_DEFAULT_TIMEZONE:-Asia/Kolkata}"
@@ -268,6 +271,8 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:--1}
       - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
       - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_QUEUE=${OLLAMA_MAX_QUEUE:-2}
+      - LLAMA_ARG_SWA_FULL=${OLLAMA_SWA_FULL:-0}
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 15s
@@ -277,7 +282,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "3.0"
+          cpus: "${OLLAMA_CPU_LIMIT:-3.0}"
           memory: 4096M
         reservations:
           memory: 2048M
@@ -365,6 +370,92 @@ services:
     networks:
       - kodewaves-network
 
+  # Small regional CPU voice model: 13 documented languages and 20 speakers.
+  indic-vits-tts:
+    build:
+      context: ./api/local_models/indic_vits
+    image: kodewaves-indic-vits-tts:v1.0.0
+    container_name: kodewaves_indic_vits_tts
+    restart: unless-stopped
+    profiles: ["local"]
+    environment:
+      INDIC_VITS_THREADS: "${INDIC_VITS_THREADS:-2}"
+      HF_HOME: /models/huggingface
+    volumes:
+      - kodewaves_indic_vits_tts_models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
+    deploy:
+      resources:
+        limits:
+          cpus: "${INDIC_VITS_CPU_LIMIT:-2.0}"
+          memory: 1024M
+    networks:
+      - kodewaves-network
+
+  # Gated local DhVaani checkpoint. Start only after authorized weights and
+  # licensed voice references are available; no hosted inference is used.
+  dhvaani-tts:
+    build:
+      context: ./api/local_models/dhvaani
+    image: kodewaves-dhvaani-tts:v0.5.0
+    container_name: kodewaves_dhvaani_tts
+    restart: unless-stopped
+    profiles: ["dhvaani"]
+    environment:
+      HF_TOKEN: "${HF_TOKEN:-}"
+      DHVAANI_THREADS: "${DHVAANI_THREADS:-2}"
+      DHVAANI_NUM_STEPS: "${DHVAANI_NUM_STEPS:-16}"
+      DHVAANI_MODEL_REVISION: "${DHVAANI_MODEL_REVISION:-main}"
+      HF_HOME: /models/huggingface
+    volumes:
+      - kodewaves_dhvaani_tts_models:/models
+      - ./api/local_models/dhvaani/voices:/voices:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "${DHVAANI_CPU_LIMIT:-2.0}"
+          memory: 3072M
+    networks:
+      - kodewaves-network
+
+  # Evaluation profile: provision approved weights and tokenizer before starting.
+  indic-parler-tts:
+    build:
+      context: ./api/local_models/indic_parler
+      dockerfile: Dockerfile
+    image: kodewaves-indic-parler-tts:v1.0.0
+    container_name: kodewaves_indic_parler_tts
+    restart: "no"
+    profiles: ["indic-parler"]
+    environment:
+      INDIC_PARLER_THREADS: "2"
+    volumes:
+      - ${INDIC_PARLER_MODELS_DIR:-./models/indic-parler}:/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+    networks:
+      - kodewaves-network
+
   # CPU LiteRT Indic-Mio TTS, with Indian-language and English voice support.
   # This model buffers utterances, so keep it distinct from the streaming voice.
   indic-mio-tts:
@@ -392,9 +483,9 @@ services:
       resources:
         limits:
           cpus: "2.0"
-          memory: 12288M
+          memory: 4096M
         reservations:
-          memory: 2048M
+          memory: 1024M
     networks:
       - kodewaves-network
 
@@ -447,9 +538,12 @@ volumes:
   kodewaves_indic_stt_models:
   kodewaves_indus_tts_models:
   kodewaves_indic_mio_tts_models:
+  kodewaves_indic_vits_tts_models:
+  kodewaves_dhvaani_tts_models:
 
 networks:
   kodewaves-network:
+    name: ${KODEWAVES_NETWORK_NAME:-kodewaves-network}
     driver: bridge
 
 

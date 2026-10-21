@@ -211,6 +211,42 @@ async def test_resolver_local_cpu_resolution():
         assert info["tts"]["source"] == "local"
 
 
+@pytest.mark.asyncio
+async def test_implicit_local_stt_fallback_uses_multilingual_warm_model():
+    """The no-provider fallback must recognize Hindi/Hinglish and match preload."""
+    org_config = OrganizationAIModelConfigurationV2(
+        mode="kodewaves",
+        kodewaves=KodewavesManagedAIModelConfiguration(
+            llm_engine_type="local_cpu",
+            tts_engine_type="local_cpu",
+            llm_model="qwen2.5:0.5b",
+            tts_model="piper",
+            voice="hi_IN-priyamvada-medium",
+        ),
+    )
+    effective = compile_ai_model_configuration_v2(org_config)
+    effective.stt = None
+
+    async def fake_get_setting(key):
+        if key == "local_ai":
+            return {"enable_local_ai_engine": True, "local_ai_access_policy": "public"}
+        return None
+
+    with (
+        patch("api.services.configuration.kodewaves_resolver.db_client.get_organization_by_id", new_callable=AsyncMock, return_value=None),
+        patch("api.db.kodewaves_client.kodewaves_db_client.get_or_create_wallet", new_callable=AsyncMock, return_value=None),
+        patch("api.db.kodewaves_client.kodewaves_db_client.get_org_ai_policy", new_callable=AsyncMock, return_value=None),
+        patch("api.db.kodewaves_client.kodewaves_db_client.get_setting", side_effect=fake_get_setting),
+        patch("api.db.kodewaves_client.kodewaves_db_client.list_models", new_callable=AsyncMock, return_value=[]),
+        patch("api.db.kodewaves_client.kodewaves_db_client.list_master_credentials", new_callable=AsyncMock, return_value=[]),
+    ):
+        resolved = await apply_kodewaves_sovereign_resolution(effective, organization_id=4)
+
+    assert resolved.stt.model == "Systran/faster-whisper-small"
+    assert resolved.stt.language == "multi"
+    assert resolved.resolution_info["stt"]["language"] == "multi"
+
+
 def test_gemini_llm_api_key_without_service_account():
     """Verify Gemini LLM initializes directly with API key and does not require service account JSON."""
     service = create_llm_service_from_provider(

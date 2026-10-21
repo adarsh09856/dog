@@ -102,6 +102,7 @@ describe("OrganizationPreferencesSection disposition mapping", () => {
     expect(mocks.savePreferences).toHaveBeenCalledWith({
       body: {
         test_phone_number: null,
+        region: "IN",
         timezone: "UTC",
         external_pbx_integrations_enabled: false,
         disposition_mapping_enabled: true,

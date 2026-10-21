@@ -311,6 +311,7 @@ async def db_session(async_session: AsyncSession):
     compatibility with existing tests that call db_session.get_or_create_user_by_provider_id(), etc.
     """
     from api.db import db_client
+    from api.db.kodewaves_client import kodewaves_db_client
 
     def test_session_maker():
         return _TestSessionContext(async_session)
@@ -318,15 +319,18 @@ async def db_session(async_session: AsyncSession):
     # Store originals
     original_engine = db_client.engine
     original_async_session = db_client.async_session
+    original_sovereign_session = kodewaves_db_client.async_session
 
     # Patch the db_client to use our test session
     db_client.async_session = test_session_maker
+    kodewaves_db_client.async_session = test_session_maker
 
     yield db_client
 
     # Restore originals
     db_client.engine = original_engine
     db_client.async_session = original_async_session
+    kodewaves_db_client.async_session = original_sovereign_session
 
 
 @pytest.fixture

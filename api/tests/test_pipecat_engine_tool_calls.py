@@ -77,7 +77,11 @@ async def run_pipeline_with_tool_calls(
     )
 
     # Create LLM context
-    context = LLMContext()
+    # Transition tests invoke an end-call tool, so model the caller's explicit
+    # authorization rather than relying on an assistant-only greeting context.
+    context = LLMContext(messages=[
+        {"role": "user", "content": "Goodbye, please end the call."}
+    ])
 
     # Add assistant context aggregator
     assistant_params = LLMAssistantAggregatorParams()
@@ -117,7 +121,7 @@ async def run_pipeline_with_tool_calls(
         new_callable=AsyncMock,
         return_value=1,
     ):
-        await run_engine_test_pipeline(task, engine, mock_transport)
+        await run_engine_test_pipeline(task, engine, mock_transport, caller_message="Goodbye, please end the call.")
 
     return llm, context
 
@@ -169,7 +173,8 @@ class TestPipecatEngineToolCalls:
         )
 
         # Assert that the context was updated with END_CALL_SYSTEM_PROMPT
-        assert llm._settings.system_instruction == END_CALL_SYSTEM_PROMPT
+        assert llm._settings.system_instruction.startswith(END_CALL_SYSTEM_PROMPT + "\n\n")
+        assert "Spoken persona rule:" in llm._settings.system_instruction
         assert llm._functions["end_call"].is_node_transition is True
 
     @pytest.mark.asyncio
@@ -217,7 +222,8 @@ class TestPipecatEngineToolCalls:
         )
 
         # Assert that the context was updated with END_CALL_SYSTEM_PROMPT
-        assert llm._settings.system_instruction == END_CALL_SYSTEM_PROMPT
+        assert llm._settings.system_instruction.startswith(END_CALL_SYSTEM_PROMPT + "\n\n")
+        assert "Spoken persona rule:" in llm._settings.system_instruction
 
     @pytest.mark.asyncio
     async def test_parallel_builtin_and_transition_calls_through_engine_with_text(
@@ -265,7 +271,8 @@ class TestPipecatEngineToolCalls:
         )
 
         # Assert that the context was updated with END_CALL_SYSTEM_PROMPT
-        assert llm._settings.system_instruction == END_CALL_SYSTEM_PROMPT
+        assert llm._settings.system_instruction.startswith(END_CALL_SYSTEM_PROMPT + "\n\n")
+        assert "Spoken persona rule:" in llm._settings.system_instruction
 
     @pytest.mark.asyncio
     async def test_single_transition_call_through_engine(
@@ -299,4 +306,5 @@ class TestPipecatEngineToolCalls:
         )
 
         # Assert that the context was updated with END_CALL_SYSTEM_PROMPT
-        assert llm._settings.system_instruction == END_CALL_SYSTEM_PROMPT
+        assert llm._settings.system_instruction.startswith(END_CALL_SYSTEM_PROMPT + "\n\n")
+        assert "Spoken persona rule:" in llm._settings.system_instruction

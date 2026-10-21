@@ -16,7 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,29 +70,42 @@ export default function WidgetsPage() {
   const [embedCodeOpen, setEmbedCodeOpen] = useState(false);
   const [currentSnippet, setCurrentSnippet] = useState("");
   const [copied, setCopied] = useState(false);
+  const listRequest = useRef(0);
+  const embedRequest = useRef(0);
 
   const fetchWidgets = async () => {
     if (authLoading || !user) return;
+    const request = ++listRequest.current;
     setLoadError(null);
     setLoading(true);
     try {
       const [data, agentResponse] = await Promise.all([
         widgetsApi.getWidgets(), getWorkflowsApiV1WorkflowFetchGet({ query: { status: "active" } }),
       ]);
+      if (request !== listRequest.current) return;
       if (agentResponse.error) throw new Error(detailFromError(agentResponse.error, "Unable to load agents."));
       setWidgets(data);
       setAgents(agentResponse.data || []);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
+      if (request === listRequest.current) setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load widgets:", err);
     } finally {
-      setLoading(false);
+      if (request === listRequest.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (authLoading || !user) return;
-    fetchWidgets();
+    setWidgets([]);
+    setAgents([]);
+    setModalOpen(false);
+    setEditingWidget(null);
+    setEmbedCodeOpen(false);
+    setCurrentSnippet("");
+    if (!authLoading && user) void fetchWidgets();
+    return () => {
+      listRequest.current += 1;
+      embedRequest.current += 1;
+    };
   }, [authLoading, user]);
 
   const handleSaveWidget = async () => {
@@ -141,16 +154,18 @@ export default function WidgetsPage() {
   };
 
   const showEmbedCode = async (w: WebsiteWidget) => {
+    const request = ++embedRequest.current;
     try {
       // Saving provisions a token for widgets created before token integration.
       const result = w.embed_code || w.embed_snippet ? w : await widgetsApi.updateWidget(w.id, {});
+      if (request !== embedRequest.current) return;
       const snippet = result.embed_code || result.embed_snippet;
       if (!snippet) throw new Error("Unable to generate embed code. Save this widget and retry.");
       setCurrentSnippet(snippet);
       setCopied(false);
       setEmbedCodeOpen(true);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Unable to load embed code.");
+      if (request === embedRequest.current) setLoadError(err instanceof Error ? err.message : "Unable to load embed code.");
     }
   };
 

@@ -49,7 +49,8 @@ async def get_local_tts_models(api_base: str) -> dict[str, dict]:
         return cached[1]
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
         async with session.get(f"{endpoint}/models") as response:
-            response.raise_for_status()
+            if response.status != 200:
+                response.raise_for_status()
             models = local_tts_inventory(await response.json())
     _tts_model_cache[endpoint] = (time.monotonic(), models)
     return models
@@ -101,6 +102,18 @@ def local_tts_api_base(settings: dict, model: str) -> str:
     elif model == "indic-mio-tts":
         endpoint = settings.get("indic_mio_tts_endpoint") or os.environ.get(
             "INDIC_MIO_TTS_ENDPOINT", "http://indic-mio-tts:8000/v1"
+        )
+    elif model == "indic-parler-tts":
+        endpoint = settings.get("indic_parler_tts_endpoint") or os.environ.get(
+            "INDIC_PARLER_TTS_ENDPOINT", "http://indic-parler-tts:8000/v1"
+        )
+    elif model == "indic-vits-rasa-13":
+        endpoint = settings.get("indic_vits_tts_endpoint") or os.environ.get(
+            "INDIC_VITS_TTS_ENDPOINT", "http://indic-vits-tts:8000/v1"
+        )
+    elif model == "dhvaani-0.5":
+        endpoint = settings.get("dhvaani_tts_endpoint") or os.environ.get(
+            "DHVAANI_TTS_ENDPOINT", "http://dhvaani-tts:8000/v1"
         )
     else:
         endpoint = settings.get("whisper_endpoint") or os.environ.get(

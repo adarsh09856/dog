@@ -227,7 +227,9 @@ async def test_edge_speech_policy_preserves_node_transition(
     engine.set_node.assert_awaited_once_with(
         "agent", origin_visit_id=engine.active_agent.visit_id
     )
-    assert result.await_args.args == ({"status": "done"},)
+    assert result.await_args.args[0]["status"] == "done"
+    assert result.await_args.args[0]["action"] == "workflow_node_transition"
+    assert "does not create a booking" in result.await_args.args[0]["message"]
     engine.speech_playback.cancel_all()
 
 

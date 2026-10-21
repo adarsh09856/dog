@@ -41,3 +41,8 @@ kodewaves-plugins/
 
 # Claude local config
 .claude/
+
+# Local test outputs and reports
+reports/
+dump.rdb
+/run-*

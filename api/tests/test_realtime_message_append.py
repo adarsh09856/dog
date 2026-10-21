@@ -51,7 +51,7 @@ async def test_user_idle_handler_uses_realtime_append_path():
     assert frame.run_llm is True
     assert frame.messages == [
         {
-            "role": "user",
-            "content": "The user has been quiet. Politely and briefly ask if they're still there in the language that the user has been speaking so far.",
+            "role": "system",
+            "content": "The user has been quiet. Continue the existing conversation naturally: do not greet or introduce yourself again. Ask one short check-in question in the language the caller used most recently.",
         }
     ]

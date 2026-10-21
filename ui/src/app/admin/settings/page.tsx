@@ -35,7 +35,7 @@ import { adminApi, PlatformSettings } from "@/lib/kodewavesApi";
 import IndicSttTest from "./IndicSttTest";
 
 const POPULAR_OLLAMA_MODELS = [
-  { value: "qwen3.5:2b", label: "Qwen 3.5 2B (installed local default)" },
+  { value: "qwen3.5:2b", label: "Qwen 3.5 2B (installed on this server)" },
 ];
 
 
@@ -148,7 +148,7 @@ export default function AdminSettingsPage() {
     const targetModel = customPullModel.trim() || pullModelName;
     if (!targetModel) return;
     setIsPulling(true);
-    setPullStatusMessage(`Downloading ${targetModel} into local Ollama... (this may take 1-3 minutes)`);
+    setPullStatusMessage(`Downloading ${targetModel} to the self-hosted server... (this may take 1-3 minutes)`);
     try {
       await adminApi.pullOllamaModel(targetModel);
       setPullStatusMessage(`Successfully downloaded ${targetModel}!`);
@@ -162,7 +162,7 @@ export default function AdminSettingsPage() {
   };
 
   const handleDeleteModel = async (modelName: string) => {
-    if (!confirm(`Are you sure you want to delete ${modelName} from local Ollama?`)) return;
+    if (!confirm(`Delete ${modelName} from the self-hosted server Ollama model store?`)) return;
     try {
       await adminApi.deleteOllamaModel(modelName);
       await fetchOllamaModels();
@@ -202,7 +202,7 @@ export default function AdminSettingsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Platform Settings & Sovereignty</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            White-label Kodewaves, configure sovereign SMTP credentials, manage local Ollama models, and set payment gateways.
+            White-label Kodewaves, configure sovereign SMTP credentials, manage self-hosted server Ollama models, and set payment gateways.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -334,10 +334,10 @@ export default function AdminSettingsPage() {
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
                   <Cpu className="h-5 w-5 text-indigo-500" />
-                  Local AI Engine (Self-Hosted CPU Stack)
+                  Self-Hosted AI Engine (CPU Stack)
                 </CardTitle>
                 <CardDescription>
-                  Host ultra-lightweight LLM and TTS directly on your VPS (Ollama CPU + Indus Pocket TTS) with zero third-party cloud bills.
+                  Runs inference on the server hosting this Kodewaves deployment (for example, your VPS), not on each user computer. Current services: Ollama CPU and Indus Pocket TTS.
                 </CardDescription>
               </div>
               <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">
@@ -353,7 +353,7 @@ export default function AdminSettingsPage() {
                   Enable Sovereign Self-hosted AI Engine
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Allows opted-in tenants to run local inference. Access must be granted per-user in User Management to prevent VPS overload.
+                  Allows opted-in tenants to use inference on the Kodewaves server. Access can be granted per user in User Management to control server load.
                 </div>
               </div>
               <Switch
@@ -366,7 +366,7 @@ export default function AdminSettingsPage() {
               <div className="p-4 rounded-xl border border-indigo-500/30 bg-indigo-500/5 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
-                    <div className="text-xs font-semibold text-foreground">Local AI Access Policy</div>
+                    <div className="text-xs font-semibold text-foreground">Self-Hosted Server Access Policy</div>
                     <div className="text-[11px] text-muted-foreground mt-0.5">
                       Choose whether all users get access automatically or only specific users assigned in User Management.
                     </div>
@@ -396,7 +396,7 @@ export default function AdminSettingsPage() {
                   placeholder="http://ollama:11434"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">Internal Docker URL for installed local Ollama models</p>
+                <p className="text-[10px] text-muted-foreground">Internal Docker address for the server Ollama container; models use server CPU, RAM, and disk.</p>
               </div>
 
               <div className="space-y-1">
@@ -418,7 +418,7 @@ export default function AdminSettingsPage() {
                   placeholder="http://indus-tts:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">Local CPU voice service. The installed Inaya voice supports Hindi and Indian English; only installed languages are advertised.</p>
+                <p className="text-[10px] text-muted-foreground">CPU voice service running on the Kodewaves server. The installed Inaya voice supports Hindi and Indian English; only installed languages are advertised.</p>
               </div>
 
               <div className="space-y-1">
@@ -444,10 +444,10 @@ export default function AdminSettingsPage() {
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
                   <Server className="h-5 w-5 text-indigo-500" />
-                  Ollama Model Manager (CPU LLM Suite)
+                  Server Ollama Model Manager (CPU LLM Suite)
                 </CardTitle>
                 <CardDescription>
-                  Download, manage, and inspect installed LLMs directly on your host Ollama container.
+                  Download, manage, and inspect LLMs in the server Ollama container. Downloads consume server storage and inference uses server CPU and RAM.
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -543,7 +543,7 @@ export default function AdminSettingsPage() {
                 <div className="p-6 text-center rounded-xl border border-dashed text-xs text-muted-foreground">
                   {loadingModels
                     ? "Checking Ollama models..."
-                    : "No Ollama models installed yet. Pull 'qwen2.5:0.5b' or 'qwen2.5:1.5b' above to enable local AI!"}
+                    : "No Ollama models are installed on this server yet. Choose a recommended model above to download one."}
                 </div>
               ) : (
                 <div className="border rounded-xl divide-y overflow-hidden text-xs">

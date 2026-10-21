@@ -20,6 +20,7 @@ import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
 import { getRandomId } from '@/lib/utils';
 import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
+import { detailFromError } from '@/lib/apiError';
 
 export function CreateWorkflowButton() {
     const router = useRouter();
@@ -37,6 +38,10 @@ export function CreateWorkflowButton() {
 
         try {
             const accessToken = await getAccessToken();
+            if (!accessToken) {
+                toast.error('Your session has expired. Please sign in again.');
+                return;
+            }
             const name = `Agent-${getRandomId()}`;
             const response = await createWorkflowApiV1WorkflowCreateDefinitionPost({
                 body: {
@@ -50,6 +55,8 @@ export function CreateWorkflowButton() {
 
             if (response.data?.id) {
                 router.push(`/workflow/${response.data.id}`);
+            } else {
+                toast.error(detailFromError(response.error, 'Failed to create agent. Please try again.'));
             }
         } catch (err) {
             logger.error(`Error creating blank workflow: ${err}`);

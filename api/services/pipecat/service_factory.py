@@ -1347,9 +1347,11 @@ def _voice_completion_settings(model: str, temperature: float | None = None) -> 
     if model.casefold().startswith(("qwen2.5:", "qwen3:", "qwen3.5:")):
         values["max_tokens"] = 192
     if model.casefold().startswith(("qwen3:", "qwen3.5:")):
-        # Keep local voice responses grounded and predictable; a low
-        # temperature also avoids long exploratory answers on small CPU models.
-        values["temperature"] = 0.1 if temperature is None else temperature
+        # Keep local voice responses grounded and predictable; calibrated
+        # temperature and penalty avoid repetition collapse on Indic vocabularies.
+        values["temperature"] = 0.2 if temperature is None else temperature
+        values["frequency_penalty"] = 0.5
+        values["presence_penalty"] = 0.3
         values["extra"] = {"reasoning_effort": "none"}
     return values
 

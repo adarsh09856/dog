@@ -728,7 +728,7 @@ async def test_two_idle_windows_remind_then_disconnect(response):
         EndTaskReason.USER_IDLE_MAX_DURATION_EXCEEDED.value
     )
     assert any(
-        "ask if they're still there" in m.get("content", "")
+        "Ask one short check-in question" in m.get("content", "")
         for m in response.context.messages
     )
 

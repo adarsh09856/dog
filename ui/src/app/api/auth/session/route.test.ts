@@ -8,7 +8,7 @@ vi.mock('next/headers', () => ({
   cookies: vi.fn(async () => cookieStore),
 }));
 
-import { OSS_TOKEN_COOKIE, OSS_USER_COOKIE } from '@/lib/auth/cookies';
+import { OSS_TOKEN_COOKIE, OSS_USER_COOKIE, LEGACY_OSS_TOKEN_COOKIE, LEGACY_OSS_USER_COOKIE } from '@/lib/auth/cookies';
 
 import { POST } from './route';
 
@@ -36,14 +36,16 @@ describe('POST /api/auth/session', () => {
     vi.unstubAllEnvs();
   });
 
-  it('stores both session cookies with shared attributes', async () => {
+  it('stores current and legacy session cookies with shared attributes', async () => {
     const response = await POST(makeRequest('https://app.kodewaves.com/api/auth/session'));
 
     expect(response.status).toBe(200);
-    expect(cookieStore.set).toHaveBeenCalledTimes(2);
+    expect(cookieStore.set).toHaveBeenCalledTimes(4);
 
     const [tokenName, tokenValue, tokenOptions] = cookieStore.set.mock.calls[0];
     const [userName, userValue] = cookieStore.set.mock.calls[1];
+    expect(cookieStore.set.mock.calls[2]).toEqual([LEGACY_OSS_TOKEN_COOKIE, tokenValue, tokenOptions]);
+    expect(cookieStore.set.mock.calls[3]).toEqual([LEGACY_OSS_USER_COOKIE, userValue, tokenOptions]);
     expect(tokenName).toBe(OSS_TOKEN_COOKIE);
     expect(tokenValue).toBe('tok-1');
     expect(userName).toBe(OSS_USER_COOKIE);
