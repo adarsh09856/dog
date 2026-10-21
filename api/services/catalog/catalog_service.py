@@ -997,30 +997,6 @@ class CatalogService:
             except Exception:
                 pass
 
-            # Model and voice metadata come from the running local TTS engine;
-            # do not advertise the Indian voice if its service is unavailable.
-            indus_tts_url = local_tts_api_base(local_ai_setting, "indus-pocket-tts")
-            try:
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
-                    async with session.get(f"{indus_tts_url}/models") as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            for installed_model in data.get("data", []):
-                                if (
-                                    isinstance(installed_model, dict)
-                                    and installed_model.get("task") == "text-to-speech"
-                                    and installed_model.get("id")
-                                    and installed_model.get("installed", True)
-                                ):
-                                    local_tts.append({
-                                        "value": installed_model["id"],
-                                        "label": installed_model.get("name") or "Indus Pocket TTS — Hindi/Hinglish (CPU)",
-                                        "provider": "speaches",
-                                        "languages": installed_model.get("languages", []),
-                                    })
-            except Exception:
-                pass
-
             # Regional VITS voices are selectable only after their CPU sidecar
             # is ready. Keep its 13-language boundary and speaker metadata.
             try:

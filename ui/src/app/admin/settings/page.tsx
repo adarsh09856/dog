@@ -50,7 +50,7 @@ export default function AdminSettingsPage() {
     enable_local_ai_engine: false,
     ollama_endpoint: "http://ollama:11434",
     whisper_endpoint: "http://whisper:8000/v1",
-    indus_tts_endpoint: "http://indus-tts:8000/v1",
+    indic_vits_tts_endpoint: "http://indic-vits-tts:8000/v1",
     local_ai_max_concurrency: 2,
     smtp_host: "",
     smtp_port: 587,
@@ -411,14 +411,14 @@ export default function AdminSettingsPage() {
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs">Indus Pocket TTS Endpoint</Label>
+                <Label className="text-xs">Regional VITS TTS Endpoint</Label>
                 <Input
-                  value={settings.indus_tts_endpoint || ""}
-                  onChange={(e) => setSettings({ ...settings, indus_tts_endpoint: e.target.value })}
-                  placeholder="http://indus-tts:8000/v1"
+                  value={settings.indic_vits_tts_endpoint || ""}
+                  onChange={(e) => setSettings({ ...settings, indic_vits_tts_endpoint: e.target.value })}
+                  placeholder="http://indic-vits-tts:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">CPU voice service running on the Kodewaves server. The installed Inaya voice supports Hindi and Indian English; only installed languages are advertised.</p>
+                <p className="text-[10px] text-muted-foreground">CPU voice service for its 13 installed regional languages. Hindi and English are not available in this model.</p>
               </div>
 
               <div className="space-y-1">

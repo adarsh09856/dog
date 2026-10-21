@@ -502,7 +502,6 @@ export function AIModelConfigurationV2Editor({
 
     const allowCustomVoice = kodewavesDefaults.allow_custom_input ?? false;
     const kodewavesSpeedRange = kodewavesDefaults.speed_range ?? { min: 0.5, max: 2.0, step: 0.1 };
-    const fixedLocalVoicePace = kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "indus-pocket-tts";
     const [catalogManifest, setCatalogManifest] = useState<AvailableCatalogResponse | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -577,6 +576,7 @@ export function AIModelConfigurationV2Editor({
             return;
         }
         setKodewaves({ ...kodewaves, language });
+        setError(null);
     };
 
     const effectiveTtsModels = useMemo(() => {
@@ -644,7 +644,7 @@ export function AIModelConfigurationV2Editor({
         setIsSavingKodewaves(true);
         setError(null);
         try {
-            const effectiveVoiceSpeed = fixedLocalVoicePace ? 1 : kodewaves.speed;
+            const effectiveVoiceSpeed = kodewaves.speed;
             if (
                 !Number.isFinite(effectiveVoiceSpeed)
                 || effectiveVoiceSpeed < kodewavesSpeedRange.min
@@ -1233,8 +1233,9 @@ export function AIModelConfigurationV2Editor({
                                                 ...kodewaves,
                                                 tts_model: nextModel,
                                                 voice: nextVoice,
-                                                speed: kodewaves.tts_engine_type === "local_cpu" && nextModel === "indus-pocket-tts" ? 1 : kodewaves.speed,
+                                                speed: kodewaves.speed,
                                             });
+                                            setError(null);
                                         }}
                                     >
                                         <SelectTrigger className="w-full">
@@ -1326,8 +1327,7 @@ export function AIModelConfigurationV2Editor({
                                         min={kodewavesSpeedRange.min}
                                         max={kodewavesSpeedRange.max}
                                         step={kodewavesSpeedRange.step ?? 0.1}
-                                        value={fixedLocalVoicePace ? 1 : kodewaves.speed}
-                                        disabled={fixedLocalVoicePace}
+                                        value={kodewaves.speed}
                                         onChange={(event) => {
                                             const speed = event.currentTarget.valueAsNumber;
                                             setKodewaves({
@@ -1336,9 +1336,6 @@ export function AIModelConfigurationV2Editor({
                                             });
                                         }}
                                     />
-                                    {fixedLocalVoicePace && (
-                                        <p className="text-xs text-muted-foreground">This local voice has a fixed speaking pace.</p>
-                                    )}
                                 </div>
 
                                 {kodewaves.llm_engine_type === "local_cpu" && kodewaves.stt_engine_type === "local_cpu" && kodewaves.tts_engine_type === "local_cpu" ? (

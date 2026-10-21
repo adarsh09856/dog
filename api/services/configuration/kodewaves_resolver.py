@@ -621,6 +621,11 @@ async def apply_kodewaves_sovereign_resolution(
                     )
                 selected_model = model
                 voice_to_use = current_voice if current_voice and current_voice != "default" else None
+                if selected_model == "indus-pocket-tts":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Indus TTS was removed. Select the installed regional VITS model and one of its voices in Models.",
+                    )
                 if selected_model != "piper" and not selected_model.startswith("piper/"):
                     from api.services.catalog.local_inventory import (
                         get_local_tts_models,

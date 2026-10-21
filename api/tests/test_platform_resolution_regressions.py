@@ -56,7 +56,7 @@ async def test_missing_tts_selection_does_not_silently_choose_indus(dependencies
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("model,voice", [("indus-pocket-tts", "Inaya"), ("indic-parler-tts", "Divya")])
+@pytest.mark.parametrize("model,voice", [("indic-vits-rasa-13", "KAN_F"), ("indic-parler-tts", "Divya")])
 async def test_explicit_installed_tts_selection_is_preserved(dependencies, monkeypatch, model, voice):
     from api.services.catalog import local_inventory
     monkeypatch.setattr(local_inventory, "get_local_tts_models", AsyncMock(return_value={

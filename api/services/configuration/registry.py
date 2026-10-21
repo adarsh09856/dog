@@ -1535,7 +1535,7 @@ class RimeTTSConfiguration(BaseTTSConfiguration):
 
 
 SPEACHES_TTS_MODELS = [
-    "indus-pocket-tts",
+    "indic-vits-rasa-13",
 ]
 
 
@@ -1549,17 +1549,17 @@ class SpeachesTTSConfiguration(BaseTTSConfiguration):
         json_schema_extra={"allow_custom_input": True},
     )
     model: str = Field(
-        default="indus-pocket-tts",
+        default="indic-vits-rasa-13",
         description="Installed local CPU TTS model selected from the active local speech inventory.",
         json_schema_extra={"examples": SPEACHES_TTS_MODELS, "allow_custom_input": True},
     )
     voice: str = Field(
-        default="Inaya",
+        default="KAN_F",
         json_schema_extra={"allow_custom_input": True},
         description="Voice ID supported by the selected installed local TTS model.",
     )
     base_url: str = Field(
-        default="http://indus-tts:8000/v1/audio/speech",
+        default="http://indic-vits-tts:8000/v1/audio/speech",
         description="OpenAI-compatible endpoint for the installed local CPU TTS model.",
     )
 

@@ -130,14 +130,6 @@ async def test_local_tts_catalog_preserves_installed_language_support(monkeypatc
                 return {"models": []}
             if self.url.endswith("/voices"):
                 return {"voices": []}
-            if self.url.startswith("http://indus-tts:"):
-                return {"data": [{
-                    "id": "indus-pocket-tts",
-                    "name": "Hindi/Hinglish CPU voice",
-                    "task": "text-to-speech",
-                    "installed": True,
-                    "languages": ["hi-IN", "en-IN"],
-                }]}
             return {"data": []}
 
     class Session:
@@ -159,6 +151,15 @@ async def test_local_tts_catalog_preserves_installed_language_support(monkeypatc
     }
     catalog_module = importlib.import_module("api.services.catalog.catalog_service")
     monkeypatch.setattr(catalog_module.aiohttp, "ClientSession", Session)
+    monkeypatch.setattr(catalog_module, "get_local_tts_models", AsyncMock(return_value={
+        "indic-vits-rasa-13": {
+            "id": "indic-vits-rasa-13",
+            "name": "Regional VITS",
+            "installed": True,
+            "languages": ["kn-IN", "ta-IN"],
+            "voices": [{"id": "KAN_F", "languages": ["kn-IN"]}],
+        },
+    }))
     monkeypatch.setattr(
         "api.db.kodewaves_client.kodewaves_db_client.list_master_credentials",
         AsyncMock(return_value=[]),
@@ -175,12 +176,11 @@ async def test_local_tts_catalog_preserves_installed_language_support(monkeypatc
         "api.db.kodewaves_client.kodewaves_db_client.get_setting",
         AsyncMock(side_effect=lambda key: local_settings if key == "local_ai" else {}),
     )
-    monkeypatch.setenv("INDUS_TTS_ENDPOINT", "http://indus-tts:8000/v1")
-
     manifest = await catalog_service.get_available_catalog(organization_id=983621, user_has_local_ai=True)
 
-    model = next(item for item in manifest["local_tts_models"] if item["value"] == "indus-pocket-tts")
-    assert model["languages"] == ["hi-IN", "en-IN"]
+    model = next(item for item in manifest["local_tts_models"] if item["value"] == "indic-vits-rasa-13")
+    assert model["languages"] == ["kn-IN", "ta-IN"]
+    assert all(item["value"] != "indus-pocket-tts" for item in manifest["local_tts_models"])
     catalog_service.invalidate_cache()
 
 
