@@ -29,14 +29,13 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             # sound like a clipped turn; its response still streams PCM as it
             # synthesizes, so batching avoids request gaps without buffering
             # the complete audio before playback.
-            # Give the first phrase enough speech to cover slow CPU token
-            # generation. A 14-character fragment left nearly three seconds
-            # of dead air before the next synthesis request in WebRTC.
+            # Start the first phrase promptly, then batch later phrases to
+            # avoid repeated CPU synthesis gaps within a spoken reply.
             self._text_aggregator = LocalSpeechAggregator(
                 min_characters=48,
                 first_chunk_characters=20,
-                first_clause_characters=30,
-                first_phrase_characters=30,
+                first_clause_characters=8,
+                first_phrase_characters=14,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
