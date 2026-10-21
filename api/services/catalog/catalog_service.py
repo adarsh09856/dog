@@ -18,7 +18,7 @@ from loguru import logger
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import AIModelCatalogModel, VoiceCatalogModel
 from api.services.catalog.normalize import normalize_provider_name, tts_runtime_provider, google_model_layer
-from api.services.catalog.local_inventory import whisper_api_base, local_tts_api_base
+from api.services.catalog.local_inventory import get_local_tts_models, whisper_api_base, local_tts_api_base
 from api.services.catalog.gemini_voices import discover_indian_voices
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.registry import GEMINI_TTS_VOICES
@@ -970,28 +970,23 @@ class CatalogService:
             except Exception:
                 pass
 
-            # Model and voice metadata come from the running local TTS engine;
-            # do not advertise the Indian voice if its service is unavailable.
-            indus_tts_url = local_tts_api_base(local_ai_setting, "indus-pocket-tts")
+            # Regional VITS voices are selectable only after their CPU sidecar
+            # is ready. Keep its 13-language boundary and speaker metadata.
             try:
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
-                    async with session.get(f"{indus_tts_url}/models") as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            for installed_model in data.get("data", []):
-                                if (
-                                    isinstance(installed_model, dict)
-                                    and installed_model.get("task") == "text-to-speech"
-                                    and installed_model.get("id")
-                                    and installed_model.get("installed", True)
-                                ):
-                                    local_tts.append({
-                                        "value": installed_model["id"],
-                                        "label": installed_model.get("name") or "Indus Pocket TTS — Hindi/Hinglish (CPU)",
-                                        "provider": "speaches",
-                                        "languages": installed_model.get("languages", []),
-                                    })
-            except Exception:
+                regional_models = await get_local_tts_models(
+                    local_tts_api_base(local_ai_setting, "indic-vits-rasa-13")
+                )
+                regional_model = regional_models.get("indic-vits-rasa-13")
+                if regional_model and regional_model.get("installed") is True:
+                    local_tts.append({
+                        "value": regional_model["id"],
+                        "label": regional_model.get("name") or "Kodewaves Regional + Hindi + Indian English (CPU)",
+                        "provider": "speaches",
+                        "languages": regional_model.get("languages", []),
+                        "voices": regional_model.get("voices", []),
+                        "streaming": regional_model.get("streaming", False),
+                    })
+            except (aiohttp.ClientError, TimeoutError):
                 pass
 
             # Indic-Mio is served by its own CPU LiteRT sidecar. Read its live

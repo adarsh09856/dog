@@ -49,11 +49,19 @@ def keep_models_warm() -> None:
             for model in MODELS:
                 status = "missing" if model not in installed else "loaded"
                 if model in installed and model not in loaded:
-                    _request(
-                        "/api/generate",
-                        {"model": model, "prompt": "", "stream": False, "keep_alive": -1},
-                    )
-                    status = "warmed"
+                    if loaded:
+                        # Warming is a startup aid, not permission to evict a
+                        # user-selected resident model on a memory-limited host.
+                        # In particular, do not repeatedly fight an active call
+                        # when OLLAMA_MAX_LOADED_MODELS is one.
+                        status = "deferred"
+                    else:
+                        _request(
+                            "/api/generate",
+                            {"model": model, "prompt": "", "stream": False, "keep_alive": -1},
+                        )
+                        loaded.add(model)
+                        status = "warmed"
                 if last_status.get(model) != status:
                     print(f"Ollama model {model}: {status}", flush=True)
                     last_status[model] = status

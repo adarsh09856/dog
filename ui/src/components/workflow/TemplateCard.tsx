@@ -3,11 +3,13 @@
 import { Copy } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 import { duplicateWorkflowTemplateApiV1WorkflowTemplatesDuplicatePost } from '@/client/sdk.gen';
 import { Button } from "@/components/ui/button";
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
+import { detailFromError } from '@/lib/apiError';
 
 interface DuplicateWorkflowTemplateProps {
     id: number;
@@ -22,6 +24,7 @@ export function DuplicateWorkflowTemplate({ id, title, description, serverAccess
     const { user, getAccessToken } = useAuth();
 
     const handleDuplicate = async () => {
+        if (isLoading) return;
         setIsLoading(true);
         try {
             // Use server-provided token if available, otherwise try to get from client auth
@@ -30,6 +33,7 @@ export function DuplicateWorkflowTemplate({ id, title, description, serverAccess
             if (!accessToken) {
                 if (!user) {
                     logger.error('User not authenticated and no server token provided');
+                    toast.error('Please sign in to create an agent.');
                     return;
                 }
                 accessToken = await getAccessToken();
@@ -37,6 +41,7 @@ export function DuplicateWorkflowTemplate({ id, title, description, serverAccess
 
             if (!accessToken) {
                 logger.error('No access token available');
+                toast.error('Your session has expired. Please sign in again.');
                 return;
             }
 
@@ -50,13 +55,16 @@ export function DuplicateWorkflowTemplate({ id, title, description, serverAccess
                 },
             });
 
-            if (response.data) {
+            if (response.data?.id) {
                 logger.info('Workflow created successfully from template');
                 // Redirect to the new workflow
                 router.push(`/workflow/${response.data.id}`);
+            } else {
+                toast.error(detailFromError(response.error, 'Failed to create agent from template. Please try again.'));
             }
         } catch (error) {
             logger.error(`Error creating workflow from template: ${error}`);
+            toast.error('Failed to create agent from template. Please try again.');
         } finally {
             setIsLoading(false);
         }

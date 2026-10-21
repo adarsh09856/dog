@@ -50,6 +50,22 @@ def _message_text(message: dict) -> str:
     return ""
 
 
+def _without_hidden_transition_guidance(content: str, hidden: set[str]) -> str:
+    """Filter only generated routing paragraphs, never caller or role text."""
+    paragraphs = []
+    for paragraph in content.split("\n\n"):
+        if paragraph.startswith("Workflow step routing:"):
+            lines = paragraph.splitlines()
+            routes = [line for line in lines[1:] if not any(
+                line.startswith(f"- {name}:") for name in hidden
+            )]
+            if not routes:
+                continue
+            paragraph = "\n".join([lines[0], *routes])
+        paragraphs.append(paragraph)
+    return "\n\n".join(paragraphs)
+
+
 def caller_explicitly_ends(messages: list[dict] | None) -> bool:
     """Only treat a clear caller farewell as permission to end a live call."""
     if not isinstance(messages, list):
@@ -159,6 +175,10 @@ class _BookingToolChoiceMixin:
 
     def build_chat_completion_params(self, params_from_context):
         params = super().build_chat_completion_params(params_from_context)
+        initial_tool_names = {
+            tool.get("function", {}).get("name")
+            for tool in params.get("tools", []) or [] if isinstance(tool, dict)
+        }
         # Routing and greeting guards below rewrite messages for this request.
         # The adapter can share message dictionaries with the conversation;
         # never remove routes or insert runtime guidance into that history.
@@ -169,10 +189,9 @@ class _BookingToolChoiceMixin:
             ]
         model = str(getattr(self._settings, "model", "") or "").casefold()
         messages = params.get("messages")
-        if model.startswith(("qwen3:", "qwen3.5:")) and isinstance(messages, list):
-            # Qwen's /no_think control is honored by local Ollama models where
-            # OpenAI-compatible reasoning_effort metadata may be ignored. Keep
-            # it on every custom workflow node, not only generated templates.
+        if model.startswith("qwen3:") and isinstance(messages, list):
+            # Qwen3 supports a prompt-level switch. Qwen3.5 does not: control
+            # its reasoning through the serving API without changing prompts.
             found_system_prompt = False
             for index in range(len(messages) - 1, -1, -1):
                 message = messages[index]
@@ -198,14 +217,15 @@ class _BookingToolChoiceMixin:
                 messages = list(messages)
                 messages.insert(first_user, {"role": "system", "content": "/no_think"})
                 params["messages"] = messages
+        if model.startswith(("qwen3:", "qwen3.5:")) and isinstance(messages, list):
+            # Suppress deep reasoning in local voice pipelines to prevent token starvation
+            params["reasoning_effort"] = "none"
             if getattr(self, "_kodewaves_local_ollama", False):
-                # Ollama's OpenAI-compatible API accepts its `think` extension
-                # via extra_body. Passing the supported field explicitly makes
-                # the runtime setting effective even if prompt hints are ignored.
                 extra_body = params.get("extra_body")
                 params["extra_body"] = {
                     **(extra_body if isinstance(extra_body, dict) else {}),
                     "think": False,
+                    "reasoning_effort": "none",
                 }
 
         from api.services.workflow.tools.booking import caller_confirmed_booking
@@ -337,6 +357,18 @@ class _BookingToolChoiceMixin:
         ):
             params.pop("tools", None)
             params.pop("tool_choice", None)
+        available_tool_names = {
+            tool.get("function", {}).get("name")
+            for tool in params.get("tools", []) or [] if isinstance(tool, dict)
+        }
+        hidden = initial_tool_names - available_tool_names
+        if hidden and isinstance(params.get("messages"), list):
+            params["messages"] = [
+                {**message, "content": _without_hidden_transition_guidance(message["content"], hidden)}
+                if isinstance(message, dict) and message.get("role") == "system"
+                and isinstance(message.get("content"), str) else message
+                for message in params["messages"]
+            ]
         # Preserve each recognized utterance's request-only language hint on
         # later turns. Removing old hints changes the prompt prefix and forces
         # CPU inference to reprocess conversation history unnecessarily.

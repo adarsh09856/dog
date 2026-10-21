@@ -8,29 +8,20 @@ from api.db.kodewaves_client import kodewaves_db_client
 def voice_persona_instruction(gender: str | None) -> str:
     gender = str(gender or "").strip().lower()
     if gender == "male":
-        grammar = (
-            "Use masculine first-person grammar where the language marks it "
-            "(Hindi examples: मैं आपकी मदद कर सकता हूँ; मैं जाँच करूँगा). "
-            "For Hindi self-reference, never use feminine forms such as "
-            "सकती हूँ, करूँगी, or रही हूँ."
-        )
+        grammar = "Use masculine first-person grammar where the language marks it."
     elif gender == "female":
-        grammar = (
-            "Use feminine first-person grammar where the language marks it "
-            "(Hindi examples: मैं आपकी मदद कर सकती हूँ; मैं जाँच करूँगी). "
-            "For Hindi self-reference, never use masculine forms such as "
-            "सकता हूँ, करूँगा, or रहा हूँ."
-        )
+        grammar = "Use feminine first-person grammar where the language marks it."
     else:
         grammar = (
             "The selected voice has no verified gender metadata. Use natural "
-            "gender-neutral self-references (Hindi example: मैं मदद के लिए यहाँ हूँ). "
+            "gender-neutral self-references. "
             "Do not infer the assistant's gender from its name."
         )
     return (
         "Spoken persona rule: " + grammar + " Apply this to the assistant's own "
         "speech in every selected language, overriding conflicting earlier "
-        "self-reference examples. Do not infer or change the caller's gender."
+        "self-reference examples. Keep the caller's language; voice gender does "
+        "not select a language. Do not infer or change the caller's gender."
     )
 
 
@@ -55,6 +46,18 @@ async def selected_voice_persona_instruction(user_config) -> str:
     ):
         return voice_persona_instruction("female")
     try:
+        if provider == "speaches" and model == "indic-vits-rasa-13":
+            from api.services.catalog.local_inventory import get_local_tts_models
+
+            endpoint = str(getattr(tts, "base_url", "") or "").rstrip("/").removesuffix("/audio/speech")
+            inventory = await get_local_tts_models(endpoint)
+            voices = inventory.get(model, {}).get("voices", [])
+            genders = {
+                str(item["gender"]).strip().lower()
+                for item in voices if isinstance(item, dict)
+                and item.get("id") == voice and item.get("gender")
+            }
+            return voice_persona_instruction(next(iter(genders)) if len(genders) == 1 else None)
         rows = await kodewaves_db_client.list_voices(provider=provider, tts_model=model)
         genders = {
             str(row.gender).strip().lower()

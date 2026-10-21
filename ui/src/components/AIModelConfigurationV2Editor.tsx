@@ -502,7 +502,6 @@ export function AIModelConfigurationV2Editor({
 
     const allowCustomVoice = kodewavesDefaults.allow_custom_input ?? false;
     const kodewavesSpeedRange = kodewavesDefaults.speed_range ?? { min: 0.5, max: 2.0, step: 0.1 };
-    const fixedLocalVoicePace = kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "indus-pocket-tts";
     const [catalogManifest, setCatalogManifest] = useState<AvailableCatalogResponse | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -577,6 +576,7 @@ export function AIModelConfigurationV2Editor({
             return;
         }
         setKodewaves({ ...kodewaves, language });
+        setError(null);
     };
 
     const effectiveTtsModels = useMemo(() => {
@@ -644,7 +644,7 @@ export function AIModelConfigurationV2Editor({
         setIsSavingKodewaves(true);
         setError(null);
         try {
-            const effectiveVoiceSpeed = fixedLocalVoicePace ? 1 : kodewaves.speed;
+            const effectiveVoiceSpeed = kodewaves.speed;
             if (
                 !Number.isFinite(effectiveVoiceSpeed)
                 || effectiveVoiceSpeed < kodewavesSpeedRange.min
@@ -678,12 +678,17 @@ export function AIModelConfigurationV2Editor({
                         query: {
                             model: kodewaves.tts_model || undefined,
                             q: kodewaves.voice,
-                            language: kodewaves.language === MULTILINGUAL_LANGUAGE_CODE ? undefined : kodewaves.language,
+                            // A local VITS voice is a preferred demo voice. Recognition
+                            // language belongs to STT and must not filter this list.
+                            language: kodewaves.tts_model === "indic-vits-rasa-13" || kodewaves.language === MULTILINGUAL_LANGUAGE_CODE
+                                ? undefined : kodewaves.language,
                         },
                     });
                     if (voices.error) throw new Error(detailFromError(voices.error, "Unable to verify selected voice."));
                     if (!voices.data?.voices.some(voice => voice.voice_id === kodewaves.voice)) {
-                        throw new Error("Select an available voice for the selected TTS model and language.");
+                        throw new Error(kodewaves.tts_model === "indic-vits-rasa-13"
+                            ? "Select an installed voice for this TTS model. Recognition language is configured separately."
+                            : "Select an available voice for the selected TTS model and language.");
                     }
                 }
             }
@@ -1228,8 +1233,9 @@ export function AIModelConfigurationV2Editor({
                                                 ...kodewaves,
                                                 tts_model: nextModel,
                                                 voice: nextVoice,
-                                                speed: kodewaves.tts_engine_type === "local_cpu" && nextModel === "indus-pocket-tts" ? 1 : kodewaves.speed,
+                                                speed: kodewaves.speed,
                                             });
+                                            setError(null);
                                         }}
                                     >
                                         <SelectTrigger className="w-full">
@@ -1265,18 +1271,26 @@ export function AIModelConfigurationV2Editor({
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">
-                                    <Label>Voice</Label>
+                                    <Label>{kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "indic-vits-rasa-13" ? "Preferred voice and demo" : "Voice"}</Label>
                                     {effectiveTtsProvider === "all" ? (
                                         <p className="text-sm text-muted-foreground">Select a TTS model to choose its voices.</p>
                                     ) : <VoiceSelectorModal
                                         provider={effectiveTtsProvider}
                                         model={kodewaves.tts_model === "auto" ? undefined : kodewaves.tts_model}
                                         source={kodewaves.tts_engine_type === "local_cpu" ? "local" : "cloud"}
-                                        outputLanguage={kodewaves.language}
+                                        outputLanguage={kodewaves.tts_engine_type === "local_cpu" ? undefined : kodewaves.language}
                                         value={kodewaves.voice}
-                                        onChange={(voice) => setKodewaves({ ...kodewaves, voice })}
+                                        onChange={(voice) => setKodewaves({
+                                            ...kodewaves,
+                                            voice,
+                                        })}
                                         allowManualInput={allowCustomVoice}
                                     />}
+                                    {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "indic-vits-rasa-13" && (
+                                        <p className="text-xs text-muted-foreground">
+                                            The demo voice does not restrict the spoken language. During calls, speech switches automatically between installed voices using the reply text and language context. Gender is preserved where matching speakers are available. Indian English has one speaker whose gender is not documented. Shared scripts need language context; unsupported languages are not translated.
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">
@@ -1295,7 +1309,7 @@ export function AIModelConfigurationV2Editor({
                                     </Select>
                                     {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
                                         <p className="text-xs text-muted-foreground">
-                                            Speech recognition auto-detects only languages supported by the selected STT model. Voice output uses the selected voice and its supported language.
+                                            Speech recognition auto-detects only languages supported by the selected STT model. Regional VITS can switch between installed voices for unambiguous reply scripts; other voice models use the selected voice.
                                         </p>
                                     )}
                                     {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "piper" && /^([a-z]{2,3})[-_][A-Z]{2}[-_]/.test(kodewaves.voice) && (
@@ -1313,8 +1327,7 @@ export function AIModelConfigurationV2Editor({
                                         min={kodewavesSpeedRange.min}
                                         max={kodewavesSpeedRange.max}
                                         step={kodewavesSpeedRange.step ?? 0.1}
-                                        value={fixedLocalVoicePace ? 1 : kodewaves.speed}
-                                        disabled={fixedLocalVoicePace}
+                                        value={kodewaves.speed}
                                         onChange={(event) => {
                                             const speed = event.currentTarget.valueAsNumber;
                                             setKodewaves({
@@ -1323,9 +1336,6 @@ export function AIModelConfigurationV2Editor({
                                             });
                                         }}
                                     />
-                                    {fixedLocalVoicePace && (
-                                        <p className="text-xs text-muted-foreground">This local voice has a fixed speaking pace.</p>
-                                    )}
                                 </div>
 
                                 {kodewaves.llm_engine_type === "local_cpu" && kodewaves.stt_engine_type === "local_cpu" && kodewaves.tts_engine_type === "local_cpu" ? (
@@ -1339,7 +1349,7 @@ export function AIModelConfigurationV2Editor({
                                                 </span>
                                             </div>
                                             <p className="text-muted-foreground leading-relaxed">
-                                                All three selected layers run on local engines. Voice quality and response time depend on the installed models and available server resources. Match the spoken language to the selected voice.
+                                                All three selected layers run on local engines. Voice quality and response time depend on installed models and server resources. Regional VITS switches among matching installed voices for unambiguous scripts; other models use the selected voice.
                                             </p>
                                         </div>
                                     </div>

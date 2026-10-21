@@ -102,6 +102,10 @@ def local_tts_api_base(settings: dict, model: str) -> str:
         endpoint = settings.get("indic_mio_tts_endpoint") or os.environ.get(
             "INDIC_MIO_TTS_ENDPOINT", "http://indic-mio-tts:8000/v1"
         )
+    elif model == "indic-vits-rasa-13":
+        endpoint = settings.get("indic_vits_tts_endpoint") or os.environ.get(
+            "INDIC_VITS_TTS_ENDPOINT", "http://indic-vits-tts:8000/v1"
+        )
     else:
         endpoint = settings.get("whisper_endpoint") or os.environ.get(
             "WHISPER_ENDPOINT", "http://whisper:8000/v1"

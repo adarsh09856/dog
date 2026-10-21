@@ -860,24 +860,24 @@ class PipecatEngine:
             await self._register_knowledge_base_function(
                 node.document_uuids, agent=agent
             )
-        prompt = compose_system_prompt_for_node(
-            node=node,
-            workflow=agent.workflow,
-            format_prompt=self._format_prompt,
-            has_recordings=self._has_recordings,
-        )
-        system_prompt = prompt.text
+        speech_instructions = []
         if not agent.is_realtime:
             language_instruction = speech_language_instruction(
                 resolve_agent_speech_language(agent.user_config)
             )
             if language_instruction:
-                system_prompt = "\n\n".join(
-                    part for part in (system_prompt, language_instruction) if part
-                )
-            system_prompt = "\n\n".join((
-                system_prompt, await selected_voice_persona_instruction(agent.user_config)
-            ))
+                speech_instructions.append(language_instruction)
+            speech_instructions.append(
+                await selected_voice_persona_instruction(agent.user_config)
+            )
+        prompt = compose_system_prompt_for_node(
+            node=node,
+            workflow=agent.workflow,
+            format_prompt=self._format_prompt,
+            has_recordings=self._has_recordings,
+            speech_instructions="\n\n".join(speech_instructions),
+        )
+        system_prompt = prompt.text
         functions = await compose_functions_for_node(
             node=node, custom_tool_manager=manager
         )

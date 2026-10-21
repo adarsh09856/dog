@@ -27,7 +27,7 @@ class PlatformSettingsResponse(BaseModel):
     ollama_endpoint: Optional[str] = "http://ollama:11434"
     piper_endpoint: Optional[str] = "http://piper:5000"
     whisper_endpoint: Optional[str] = "http://whisper:8000/v1"
-    indus_tts_endpoint: Optional[str] = "http://indus-tts:8000/v1"
+    indic_vits_tts_endpoint: Optional[str] = "http://indic-vits-tts:8000/v1"
     local_ai_max_concurrency: Optional[int] = 2
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = 587
@@ -97,8 +97,8 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
         ollama_endpoint=local_ai.get("ollama_endpoint", local_ai.get("ollama_url", "http://ollama:11434")),
         piper_endpoint=local_ai.get("piper_endpoint", local_ai.get("piper_url", "http://piper:5000")),
         whisper_endpoint=local_ai.get("whisper_endpoint", "http://whisper:8000/v1"),
-        indus_tts_endpoint=local_ai.get(
-            "indus_tts_endpoint", "http://indus-tts:8000/v1"
+        indic_vits_tts_endpoint=local_ai.get(
+            "indic_vits_tts_endpoint", "http://indic-vits-tts:8000/v1"
         ),
         local_ai_max_concurrency=local_ai.get("local_ai_max_concurrency", 2),
         smtp_host=smtp.get("smtp_host"),
@@ -164,8 +164,8 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
             "ollama_endpoint": payload.get("ollama_endpoint", "http://ollama:11434"),
             "piper_endpoint": payload.get("piper_endpoint", "http://piper:5000"),
             "whisper_endpoint": payload.get("whisper_endpoint", "http://whisper:8000/v1"),
-            "indus_tts_endpoint": payload.get(
-                "indus_tts_endpoint", "http://indus-tts:8000/v1"
+            "indic_vits_tts_endpoint": payload.get(
+                "indic_vits_tts_endpoint", "http://indic-vits-tts:8000/v1"
             ),
             "local_ai_max_concurrency": int(payload.get("local_ai_max_concurrency", 2)),
         }

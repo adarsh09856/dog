@@ -5,6 +5,7 @@ import { getTurnCredentialsApiV1TurnCredentialsGet, validateUserConfigurationsAp
 import { TurnCredentialsResponse } from "@/client/types.gen";
 import { WorkflowValidationError } from "@/components/flow/types";
 import type { ConversationNodeTransitionItem, RealtimeFeedbackMessage as FeedbackMessage } from "@/components/workflow/conversation";
+import { activeBotMessageIndex } from "@/components/workflow/conversation/activeBotMessage";
 import { isLlmTtfb } from "@/components/workflow/conversation/adapters/fromRealtimeFeedback";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { resolveBrowserBackendUrl } from '@/lib/apiClient';
@@ -56,6 +57,8 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
     const [workflowConfigError, setWorkflowConfigError] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
     const [feedbackMessages, setFeedbackMessages] = useState<FeedbackMessage[]>([]);
+    const previewTextRef = useRef('');
+    const spokenTextRef = useRef('');
     const initialContext = initialContextVariables || {};
     const { config: appConfig, loading: appConfigLoading, refresh: refreshAppConfig } = useAppConfig();
 
@@ -429,6 +432,11 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                         case 'rtf-user-transcription': {
                             const transcription = message.payload;
+                            // A preview may include words that were never played when
+                            // the caller interrupts. Keep only audio-confirmed text.
+                            const confirmedBotText = spokenTextRef.current;
+                            previewTextRef.current = '';
+                            spokenTextRef.current = '';
 
                             // Show one-time warning if user speaks while muted on a no-interrupt node
                             // Skip during initial bot greeting (muted by MuteUntilFirstBotComplete strategy)
@@ -449,17 +457,18 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                             setFeedbackMessages(prev => {
                                 // Step 1: Finalize the last bot message (user started speaking)
+                                const activeBotIndex = activeBotMessageIndex(prev);
                                 const messagesWithBotFinalized = prev.map((msg, idx) => {
-                                    const isLastMessage = idx === prev.length - 1;
                                     const isUnfinalizedBotMessage = msg.type === 'bot-text' && !msg.final;
-                                    return isLastMessage && isUnfinalizedBotMessage
-                                        ? { ...msg, final: true }
+                                    return idx === activeBotIndex && isUnfinalizedBotMessage
+                                        ? { ...msg, text: confirmedBotText, final: true }
                                         : msg;
                                 });
 
                                 // Step 2: Remove any previous interim transcription
                                 const messagesWithoutInterim = messagesWithBotFinalized.filter(
-                                    msg => !(msg.type === 'user-transcription' && !msg.final)
+                                    msg => !(msg.type === 'user-transcription' && !msg.final) &&
+                                        !(msg.type === 'bot-text' && msg.final && !msg.text.trim())
                                 );
 
                                 // Step 3: Add new transcription (interim or final)
@@ -474,22 +483,48 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             break;
                         }
 
-                        case 'rtf-bot-text': {
-                            // TTS text comes as sentences/phrases, concatenate with space
+                        case 'rtf-bot-text-preview': {
+                            const token = message.payload.text;
+                            if (typeof token !== 'string' || !token) break;
+                            previewTextRef.current += token;
+                            const visibleText = previewTextRef.current;
                             setFeedbackMessages(prev => {
-                                const last = prev[prev.length - 1];
-                                if (last && last.type === 'bot-text' && !last.final) {
-                                    // Append to existing bot message
-                                    return [
-                                        ...prev.slice(0, -1),
-                                        { ...last, text: last.text + ' ' + message.payload.text }
-                                    ];
+                                const index = activeBotMessageIndex(prev);
+                                if (index >= 0) {
+                                    const updated = [...prev];
+                                    updated[index] = { ...updated[index], text: visibleText };
+                                    return updated;
+                                }
+                                return [...prev, {
+                                    id: `bot-${Date.now()}`,
+                                    type: 'bot-text',
+                                    text: visibleText,
+                                    final: false,
+                                    timestamp: new Date().toISOString(),
+                                }];
+                            });
+                            break;
+                        }
+
+                        case 'rtf-bot-text': {
+                            // Confirm speech without duplicating its earlier preview.
+                            spokenTextRef.current = [spokenTextRef.current, message.payload.text]
+                                .filter(Boolean).join(' ').trim();
+                            const confirmed = spokenTextRef.current;
+                            const preview = previewTextRef.current.trim();
+                            const visibleText = preview.startsWith(confirmed) ? preview : confirmed;
+                            setFeedbackMessages(prev => {
+                                const index = activeBotMessageIndex(prev);
+                                if (index >= 0) {
+                                    const updated = [...prev];
+                                    updated[index] = { ...updated[index], text: visibleText };
+                                    return updated;
                                 }
                                 // Start new bot message
                                 return [...prev, {
                                     id: `bot-${Date.now()}`,
                                     type: 'bot-text',
-                                    text: message.payload.text,
+                                    text: visibleText,
                                     final: false,
                                     timestamp: new Date().toISOString(),
                                 }];
@@ -601,10 +636,13 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                         case 'rtf-pipeline-error': {
                             const { error, fatal, processor: errorProcessor } = message.payload;
+                            const confirmedBeforeError = spokenTextRef.current;
+                            previewTextRef.current = '';
+                            spokenTextRef.current = '';
                             setFeedbackMessages(prev => [
                                 ...prev.map(msg => msg.type === 'bot-text' && !msg.final
-                                    ? { ...msg, final: true }
-                                    : msg),
+                                    ? { ...msg, text: confirmedBeforeError, final: true }
+                                    : msg).filter(msg => msg.type !== 'bot-text' || !!msg.text.trim()),
                                 {
                                     id: `error-${Date.now()}`,
                                     type: 'pipeline-error',
@@ -626,16 +664,22 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 firstBotSpeechCompletedRef.current = true;
                             }
                             // Finalize the last bot message so "speaking..." indicator is removed
+                            const completedSpokenText = spokenTextRef.current;
                             setFeedbackMessages(prev => {
-                                const lastIdx = prev.length - 1;
-                                const last = prev[lastIdx];
-                                if (last && last.type === 'bot-text' && !last.final) {
+                                const lastIdx = activeBotMessageIndex(prev);
+                                if (lastIdx >= 0) {
                                     const updated = [...prev];
-                                    updated[lastIdx] = { ...last, final: true };
+                                    if (!completedSpokenText) {
+                                        updated.splice(lastIdx, 1);
+                                        return updated;
+                                    }
+                                    updated[lastIdx] = { ...updated[lastIdx], text: completedSpokenText, final: true };
                                     return updated;
                                 }
                                 return prev;
                             });
+                            previewTextRef.current = '';
+                            spokenTextRef.current = '';
                             break;
 
                         case 'rtf-user-mute-started':

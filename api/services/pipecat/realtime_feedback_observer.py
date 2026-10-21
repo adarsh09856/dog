@@ -59,6 +59,7 @@ from pipecat.frames.frames import (
     FunctionCallResultFrame,
     InterimTranscriptionFrame,
     InterruptionFrame,
+    LLMTextFrame,
     MetricsFrame,
     StopFrame,
     TranscriptionFrame,
@@ -111,6 +112,7 @@ class RealtimeFeedbackObserver(BaseObserver):
         self._selected_visit = selected_visit
         self._call_event_recorder = call_event_recorder
         self._frames_seen: set[int] = set()
+        self._preview_frames_seen: set[int] = set()
 
     async def log_speech(self, text: str):
         """Persist speech that is intentionally excluded from assistant context."""
@@ -125,6 +127,32 @@ class RealtimeFeedbackObserver(BaseObserver):
         frame = data.frame
         frame_direction = data.direction
         source = data.source
+
+        # A local TTS service receives LLM tokens well before it has enough
+        # text to synthesize. Send these as a disposable UI preview. Persisted
+        # transcripts still come from audio-timed TTSTextFrame events below.
+        # Observe the input to TTS, after recording routing and text filters,
+        # rather than the raw LLM output (which can include route markers).
+        if (
+            frame_direction == FrameDirection.DOWNSTREAM
+            and isinstance(frame, LLMTextFrame)
+            and not frame.skip_tts
+            and frame.id not in self._preview_frames_seen
+            and (
+                self._selected_visit is None
+                or not isinstance(getattr(source, "pipeline_worker", None), AgentWorker)
+                or source.pipeline_worker.name == self._selected_visit()
+            )
+        ):
+            from api.services.pipecat.speaches_tts import SpeachesLiveTTSService
+
+            if isinstance(data.destination, SpeachesLiveTTSService):
+                self._preview_frames_seen.add(frame.id)
+                if frame.text:
+                    await self._send_ws({
+                        "type": "rtf-bot-text-preview",
+                        "payload": {"text": frame.text},
+                    })
 
         # Skip already processed frames (frames can be observed multiple times).
         # ErrorFrames are accepted in either direction — push_error() emits them

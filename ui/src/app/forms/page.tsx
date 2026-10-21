@@ -14,7 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,25 +64,36 @@ export default function FormsPage() {
   const [submissions, setSubmissions] = useState<Array<{ id: number | string; data: Record<string, any>; created_at: string }>>([]);
   const [loadingSubs, setLoadingSubs] = useState(false);
   const [submissionsError, setSubmissionsError] = useState<string | null>(null);
+  const formsRequest = useRef(0);
+  const submissionsRequest = useRef(0);
 
   const fetchForms = async () => {
     if (authLoading || !user) return;
+    const request = ++formsRequest.current;
     setLoadError(null);
     setLoading(true);
     try {
       const data = await formsApi.getForms();
-      setForms(data);
+      if (request === formsRequest.current) setForms(data);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
+      if (request === formsRequest.current) setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
       console.error("Failed to load forms:", err);
     } finally {
-      setLoading(false);
+      if (request === formsRequest.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (authLoading || !user) return;
-    fetchForms();
+    setForms([]);
+    setSubmissions([]);
+    setSubmissionsOpen(false);
+    setModalOpen(false);
+    setEditingForm(null);
+    if (!authLoading && user) void fetchForms();
+    return () => {
+      formsRequest.current += 1;
+      submissionsRequest.current += 1;
+    };
   }, [authLoading, user]);
 
   const handleSaveForm = async () => {
@@ -118,6 +129,7 @@ export default function FormsPage() {
   };
 
   const handleViewSubmissions = async (form: DynamicForm) => {
+    const request = ++submissionsRequest.current;
     setSelectedFormTitle(form.title);
     setSubmissionsOpen(true);
     setLoadingSubs(true);
@@ -125,12 +137,12 @@ export default function FormsPage() {
     setSubmissions([]);
     try {
       const data = await formsApi.getSubmissions(form.id);
-      setSubmissions(data);
+      if (request === submissionsRequest.current) setSubmissions(data);
     } catch (err) {
       console.error("Failed to load submissions:", err);
-      setSubmissionsError(err instanceof Error ? err.message : "Unable to load form submissions.");
+      if (request === submissionsRequest.current) setSubmissionsError(err instanceof Error ? err.message : "Unable to load form submissions.");
     } finally {
-      setLoadingSubs(false);
+      if (request === submissionsRequest.current) setLoadingSubs(false);
     }
   };
 
@@ -434,7 +446,13 @@ export default function FormsPage() {
       </Dialog>
 
       {/* SUBMISSIONS VIEWER DIALOG */}
-      <Dialog open={submissionsOpen} onOpenChange={setSubmissionsOpen}>
+      <Dialog open={submissionsOpen} onOpenChange={(open) => {
+        setSubmissionsOpen(open);
+        if (!open) {
+          submissionsRequest.current += 1;
+          setSubmissions([]);
+        }
+      }}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Submissions: {selectedFormTitle}</DialogTitle>

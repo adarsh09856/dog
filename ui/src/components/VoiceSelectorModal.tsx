@@ -77,7 +77,7 @@ function resolveTargetProvider(prov: string, filter?: string): string {
 interface VoiceSelectorModalProps {
     provider: string;
     value: string;
-    onChange: (voiceId: string) => void;
+    onChange: (voiceId: string, voice?: VoiceInfo) => void;
     /** Optional model passed through to the voice catalog query. */
     model?: string;
     source?: "cloud" | "local";
@@ -418,7 +418,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                 setError("Choose an available voice for the selected model and language.");
                 return;
             }
-            onChange(pendingVoiceId);
+            onChange(pendingVoiceId, chosen);
             setSelectedVoiceInfo(chosen);
         }
         setIsOpen(false);

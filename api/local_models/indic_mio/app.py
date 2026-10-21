@@ -6,6 +6,7 @@ import asyncio
 import ctypes
 import io
 import os
+import threading
 import wave
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -13,7 +14,7 @@ from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from huggingface_hub import snapshot_download
 from pydantic import BaseModel, Field
 
@@ -150,6 +151,42 @@ def _synthesize(text: str) -> bytes:
     return pcm16.tobytes()
 
 
+async def stream_pcm(request: SpeechRequest):
+    """Forward native PCM callbacks before the complete utterance is ready."""
+    if MODEL is None or HANDLE is None:
+        raise RuntimeError("Indic-Mio is not loaded")
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+    stopped = threading.Event()
+
+    def produce():
+        @ChunkCallback
+        def forward(samples, length, _is_final, _context):
+            if not stopped.is_set() and length:
+                pcm = (np.clip(np.ctypeslib.as_array(samples, shape=(length,)), -1.0, 1.0)
+                       * 32767.0).astype("<i2").tobytes()
+                loop.call_soon_threadsafe(queue.put_nowait, pcm)
+
+        code = MODEL.sc_indic_mio_synthesize(HANDLE, request.input.encode("utf-8"), forward, None)
+        if code != 0:
+            detail = MODEL.sc_indic_mio_last_error(HANDLE).decode("utf-8", errors="replace")
+            raise RuntimeError(detail or "Indic-Mio synthesis failed")
+
+    async with SYNTHESIS_LOCK:
+        future = loop.run_in_executor(SYNTHESIS_WORKER, produce)
+        future.add_done_callback(lambda _: queue.put_nowait(None))
+        try:
+            while (chunk := await queue.get()) is not None:
+                yield chunk
+            await asyncio.shield(future)
+        finally:
+            stopped.set()
+            # The native handle is shared. Do not let another request start
+            # until a disconnected request has stopped using it.
+            if not future.done():
+                await asyncio.shield(future)
+
+
 @app.post("/v1/audio/speech")
 async def speech(request: SpeechRequest):
     if request.model != MODEL_ID:
@@ -162,6 +199,8 @@ async def speech(request: SpeechRequest):
         raise HTTPException(status_code=503, detail="Indic-Mio is loading its local model bundle")
     if len(request.input.split()) > MAX_TEXT_TOKENS:
         raise HTTPException(status_code=400, detail=f"Split this utterance into shorter sentences (maximum {MAX_TEXT_TOKENS} text tokens)")
+    if request.response_format == "pcm" and request.speed == 1.0:
+        return StreamingResponse(stream_pcm(request), media_type="audio/pcm")
     async with SYNTHESIS_LOCK:
         try:
             pcm = await asyncio.get_running_loop().run_in_executor(SYNTHESIS_WORKER, _synthesize, request.input)
