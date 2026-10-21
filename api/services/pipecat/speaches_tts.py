@@ -54,6 +54,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 first_chunk_characters=20,
                 first_clause_characters=20,
                 first_phrase_characters=20,
+                streaming_phrase_characters=24,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
