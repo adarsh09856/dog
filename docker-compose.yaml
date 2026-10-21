@@ -262,7 +262,6 @@ services:
       MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
-      INDUS_TTS_ENDPOINT: "${INDUS_TTS_ENDPOINT:-http://indus-tts:8000/v1}"
       INDIC_MIO_TTS_ENDPOINT: "${INDIC_MIO_TTS_ENDPOINT:-http://indic-mio-tts:8000/v1}"
       INDIC_PARLER_TTS_ENDPOINT: "${INDIC_PARLER_TTS_ENDPOINT:-http://indic-parler-tts:8000/v1}"
       INDIC_VITS_TTS_ENDPOINT: "${INDIC_VITS_TTS_ENDPOINT:-http://indic-vits-tts:8000/v1}"
@@ -437,39 +436,6 @@ services:
     networks:
       - app-network
 
-  # Local CPU TTS for Indian Hindi/Hinglish and Indian English.
-  indus-tts:
-    build:
-      context: ./api/local_models/indus_tts
-      dockerfile: Dockerfile
-    image: kodewaves-indus-tts:v1.0.0
-    container_name: kodewaves_indus_tts
-    restart: unless-stopped
-    profiles: ["local"]
-    environment:
-      HF_HOME: /models/huggingface
-      INDUS_MODEL_DIR: /models/indus-pocket-tts
-      OMP_NUM_THREADS: "1"
-      MKL_NUM_THREADS: "1"
-      OPENBLAS_NUM_THREADS: "1"
-    volumes:
-      - indus_tts_models:/models
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
-      interval: 15s
-      timeout: 5s
-      retries: 4
-      start_period: 120s
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 2048M
-        reservations:
-          memory: 768M
-    networks:
-      - app-network
-
   # Small regional CPU voice model: 13 documented languages and 20 speakers.
   indic-vits-tts:
     build:
@@ -597,8 +563,6 @@ volumes:
   coturn-generated:
     driver: local
   ollama_data:
-    driver: local
-  indus_tts_models:
     driver: local
   indic_mio_tts_models:
     driver: local
