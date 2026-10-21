@@ -29,13 +29,16 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             # sound like a clipped turn; its response still streams PCM as it
             # synthesizes, so batching avoids request gaps without buffering
             # the complete audio before playback.
-            # Start the first phrase promptly, then batch later phrases to
-            # avoid repeated CPU synthesis gaps within a spoken reply.
+            # Do not start CPU synthesis with a tiny two-or-three-word
+            # fragment. It often finishes before the LLM produces enough text
+            # for the next request, creating several seconds of dead air. A
+            # 20-character first phrase is enough audible material to overlap
+            # normal local generation without waiting for a full sentence.
             self._text_aggregator = LocalSpeechAggregator(
                 min_characters=48,
                 first_chunk_characters=20,
-                first_clause_characters=8,
-                first_phrase_characters=14,
+                first_clause_characters=20,
+                first_phrase_characters=20,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
