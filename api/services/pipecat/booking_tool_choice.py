@@ -15,6 +15,11 @@ _OPENING_GREETING = re.compile(
     r"^\s*(?:नमस्ते|नमस्कार|सुप्रभात|शुभ संध्या|namaste|hello|hi|good morning|good afternoon|good evening)",
     re.IGNORECASE,
 )
+_OPENING_WORDS = (
+    "नमस्ते", "नमस्कार", "सुप्रभात", "शुभ संध्या", "namaste", "hello",
+    "hi", "good morning", "good afternoon", "good evening",
+)
+_GREETING_SEPARATORS = " \t\r\n!,.:;?।॥،؛"
 _END_CALL_TOOLS = frozenset(
     {"finish_call", "end_call", "close_conversation", "hang_up"}
 )
@@ -114,6 +119,31 @@ def booking_tool_choice(params: dict) -> dict | None:
 
 class _BookingToolChoiceMixin:
     async def _push_llm_text(self, text: str):
+        if getattr(self, "_strip_repeated_greeting", False) and not getattr(
+            self, "_opening_text_decided", False
+        ):
+            self._opening_text_buffer = getattr(self, "_opening_text_buffer", "") + text
+            buffered = self._opening_text_buffer
+            candidate = buffered.lstrip().casefold()
+            if any(word.startswith(candidate) for word in _OPENING_WORDS):
+                return  # Wait only while a streamed token could be a greeting.
+            for word in _OPENING_WORDS:
+                if candidate.startswith(word) and (
+                    len(candidate) == len(word) or candidate[len(word)] in _GREETING_SEPARATORS
+                ):
+                    # The greeting has already played. Keep the rest of this
+                    # chunk intact so transcript, TTS and recording agree.
+                    text = buffered.lstrip()[len(word):].lstrip(_GREETING_SEPARATORS)
+                    self._opening_text_buffer = ""
+                    self._opening_text_decided = bool(text)
+                    self._greeting_suppressed = True
+                    if not text:
+                        return
+                    break
+            else:
+                text = buffered
+                self._opening_text_buffer = ""
+                self._opening_text_decided = True
         if text and text.strip():
             self._completion_has_text = True
         await super()._push_llm_text(text)
@@ -145,6 +175,10 @@ class _BookingToolChoiceMixin:
         from pipecat.services.llm_service import FunctionCallFromLLM
 
         messages = context.get_messages()
+        self._strip_repeated_greeting = False
+        self._opening_text_decided = False
+        self._opening_text_buffer = ""
+        self._greeting_suppressed = False
         tools = getattr(context.tools, "standard_tools", [])
         from api.services.workflow.confirmed_booking import first_booking_question
 
@@ -179,6 +213,16 @@ class _BookingToolChoiceMixin:
         self._completion_has_text = False
         try:
             await super()._process_context(context)
+            if self._opening_text_buffer:
+                # A completion ending mid-word should not disappear.
+                remainder, self._opening_text_buffer = self._opening_text_buffer, ""
+                if remainder.strip().casefold() in _OPENING_WORDS:
+                    self._greeting_suppressed = True
+                else:
+                    await super()._push_llm_text(remainder)
+                    self._completion_has_text = bool(remainder.strip())
+            if self._greeting_suppressed and not self._completion_has_text:
+                await self._push_llm_text(self._completion_recovery_text(messages))
         except (APIError, TimeoutError):
             # Keep the original error observable upstream, but give a caller
             # whose answer never started a normal transcript/TTS recovery.
@@ -337,6 +381,7 @@ class _BookingToolChoiceMixin:
                 and opening is not None
                 and _OPENING_GREETING.search(_message_text(opening))
             ):
+                self._strip_repeated_greeting = model.startswith(("qwen2.5:", "qwen3:", "qwen3.5:"))
                 messages = [message for message in messages if message is not opening]
                 opening_note = {
                     "role": "system",
