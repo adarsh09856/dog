@@ -572,7 +572,7 @@ export function AIModelConfigurationV2Editor({
         if (language === MULTILINGUAL_LANGUAGE_CODE
             && kodewaves.stt_engine_type === "local_cpu"
             && kodewaves.stt_model === "indicconformer-ctc-int8") {
-            setError("Self-hosted IndicConformer needs one selected Indian language. Choose a language, or switch STT to cloud for automatic detection.");
+            setError("Self-hosted STT needs one selected installed language. Choose a language, or switch STT to cloud for automatic detection.");
             return;
         }
         setKodewaves({ ...kodewaves, language });
@@ -660,7 +660,7 @@ export function AIModelConfigurationV2Editor({
             if (!catalogManifest || catalogError) throw new Error("Refresh the model catalog before saving.");
             if (!isRt) {
                 if (kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
-                    throw new Error("Self-hosted IndicConformer needs a specific Indian language. Select one, or switch STT to cloud for automatic language detection.");
+                    throw new Error("Self-hosted STT needs a specific installed language. Select one, or switch STT to cloud for automatic language detection.");
                 }
                 if (!kodewaves.voice.trim()) throw new Error("Select a voice for the selected TTS model before saving.");
                 for (const [label, selected, models] of [
@@ -1129,7 +1129,7 @@ export function AIModelConfigurationV2Editor({
                                         }
                                         onValueChange={(stt_model) => {
                                             if (stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
-                                                setError("Select an installed Indian language. Whisper has been removed from new self-hosted model choices, and IndicConformer needs a language selection.");
+                                                setError("Select an installed self-hosted STT language. Automatic recognition is unavailable for this model.");
                                                 return;
                                             }
                                             setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" || stt_model === "none" ? undefined : stt_model });
@@ -1163,7 +1163,7 @@ export function AIModelConfigurationV2Editor({
                                     )}
                                     {kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
                                         <p className="text-xs text-amber-600 dark:text-amber-300">
-                                            Choose a specific Indian language for IndicConformer. Cloud STT supports automatic language detection.
+                                            Choose a specific installed language for self-hosted STT. Cloud STT supports automatic language detection.
                                         </p>
                                     )}
                                 </div>

@@ -308,7 +308,7 @@ def require_explicit_indic_stt_language(model: str, language: str | None) -> Non
     if code in ("auto", "multi", "unknown", "default"):
         raise HTTPException(
             status_code=400,
-            detail="IndicConformer requires an explicit installed Indian language; automatic language detection is not available for this model",
+            detail="Self-hosted STT requires an explicit installed language; automatic language detection is not available for this model",
         )
 
 
