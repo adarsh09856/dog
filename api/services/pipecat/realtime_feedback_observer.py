@@ -21,6 +21,7 @@ node changes.
 """
 
 import json
+import time
 from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 from loguru import logger
@@ -59,10 +60,12 @@ from pipecat.frames.frames import (
     FunctionCallResultFrame,
     InterimTranscriptionFrame,
     InterruptionFrame,
+    LLMFullResponseStartFrame,
     LLMTextFrame,
     MetricsFrame,
     StopFrame,
     TranscriptionFrame,
+    TTSAudioRawFrame,
     TTSSpeakFrame,
     TTSTextFrame,
     UserMuteStartedFrame,
@@ -113,6 +116,8 @@ class RealtimeFeedbackObserver(BaseObserver):
         self._call_event_recorder = call_event_recorder
         self._frames_seen: set[int] = set()
         self._preview_frames_seen: set[int] = set()
+        self._stage_text_seen = False
+        self._stage_audio_seen = False
 
     async def log_speech(self, text: str):
         """Persist speech that is intentionally excluded from assistant context."""
@@ -191,6 +196,27 @@ class RealtimeFeedbackObserver(BaseObserver):
             return
 
         self._frames_seen.add(frame.id)
+
+        # Keep basic stage evidence in the normal run log even when the
+        # organization has no optional external diagnostics destination.
+        stage = None
+        if isinstance(frame, TranscriptionFrame) and frame.text.strip():
+            stage = "stt_final"
+            self._stage_text_seen = False
+            self._stage_audio_seen = False
+        elif isinstance(frame, LLMFullResponseStartFrame):
+            self._stage_text_seen = False
+        elif isinstance(frame, LLMTextFrame) and frame.text.strip() and not self._stage_text_seen:
+            self._stage_text_seen = True
+            stage = "llm_first_text"
+        elif isinstance(frame, TTSAudioRawFrame) and frame.audio and not self._stage_audio_seen:
+            self._stage_audio_seen = True
+            stage = "tts_first_audio"
+        if stage:
+            await self._append_to_buffer({
+                "type": "rtf-speech-stage",
+                "payload": {"stage": stage, "monotonic_seconds": time.monotonic()},
+            })
 
         logger.trace(f"{self} Received Frame: {frame} Direction: {frame_direction}")
 
