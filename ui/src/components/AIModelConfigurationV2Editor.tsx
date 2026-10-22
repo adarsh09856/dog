@@ -1287,14 +1287,20 @@ export function AIModelConfigurationV2Editor({
                                         allowManualInput={allowCustomVoice}
                                     />}
                                     {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "indic-vits-rasa-13" && (
-                                        <p className="text-xs text-muted-foreground">
-                                            The demo voice does not restrict the spoken language. During calls, speech switches automatically between installed voices using the reply text and language context. Gender is preserved where matching speakers are available. Indian English has one speaker whose gender is not documented. Shared scripts need language context; unsupported languages are not translated.
-                                        </p>
+                                        <div className="space-y-1 rounded-md border p-3">
+                                            <p className="text-sm font-medium">TTS language: Automatic — enabled</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Replies use matching installed voices automatically. The preferred voice sets the demo and preferred speaker gender; it does not lock the reply language. Shared scripts use the call language context. Unsupported languages and unavailable matching voices cannot be synthesized.
+                                            </p>
+                                        </div>
                                     )}
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Recognition language (STT)</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        This controls how your speech is transcribed. It is separate from automatic TTS voice routing above.
+                                    </p>
                                     <Select value={kodewaves.language} onValueChange={setRecognitionLanguage}>
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Select language" />
