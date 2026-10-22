@@ -201,6 +201,10 @@ def voice_for_text(text: str, preferred_voice: str, context_language: str | None
             target_lang = clean_ctx
         elif pref_lang in DEVANAGARI_LANGUAGES:
             target_lang = pref_lang
+        elif INDUS_READY and pref_lang == "en":
+            # One bilingual Indus voice can speak a Hindi greeting even when
+            # the preceding caller turn was recognized as English.
+            target_lang = "hi"
         else:
             raise ValueError("Select the spoken language for this Devanagari text")
 
