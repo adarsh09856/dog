@@ -2,19 +2,19 @@
 
 import asyncio
 import os
+from collections.abc import AsyncGenerator
 from contextlib import aclosing, suppress
 from dataclasses import dataclass
-from typing import AsyncGenerator
 
 from openai import BadRequestError, DefaultAsyncHttpxClient
+
 from api.services.configuration.language_normalizer import normalize_language_code
+from api.services.pipecat.local_speech_aggregator import LocalSpeechAggregator
 from api.services.pipecat.tts_cache.models import SynthesisRequest
 from api.services.pipecat.tts_cache.synthesis import cached_synthesis
-from pipecat.frames.frames import ErrorFrame
-from pipecat.frames.frames import Frame, InterruptionFrame, TTSAudioRawFrame
+from pipecat.frames.frames import ErrorFrame, Frame, InterruptionFrame, TTSAudioRawFrame
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.speaches.tts import SpeachesTTSService
-from api.services.pipecat.local_speech_aggregator import LocalSpeechAggregator
 from pipecat.services.tts_service import TextAggregationMode
 from pipecat.utils.tracing.service_decorators import traced_tts
 
