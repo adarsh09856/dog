@@ -63,6 +63,17 @@ def booking_phone_question(messages: list, contact: dict, state: dict) -> str | 
     state['processed_user'] = key
     pending = state.get('pending_phone')
     hindi = bool(re.search(r'[\u0900-\u097f]', text))
+    # An explicit replacement answers the pending number question directly.
+    # Do not leave the old number pending for a later, unrelated "yes".
+    replacement = re.search(r'(?<!\w)\+?\d[\d ().-]{6,}\d(?!\w)', text)
+    if pending and replacement:
+        phone = replacement.group().strip()
+        is_date = re.fullmatch(r'(?:\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d{1,2}[-.]\d{1,2}[-.]\d{4})', phone)
+        if not is_date and known_contact({'phone': phone}).get('customer_phone'):
+            state['approved_phone'] = phone
+            state.pop('pending_phone', None)
+            state.pop('declined_phone', None)
+            return None
     if pending:
         if re.fullmatch(r'(?:yes|yeah|okay|ok|sure|haan|han|ji|हाँ|हां|जी|ठीक है)[.!।\s]*', text, re.IGNORECASE):
             state['approved_phone'] = pending
