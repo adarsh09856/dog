@@ -44,7 +44,10 @@ def caller_confirmed_booking(messages: list) -> bool:
     if caller_index is None:
         return False
     text = dialogue[caller_index].get("content")
-    if not isinstance(text, str) or re.search(r"\b(don't|do not|cancel|not|no|never|nahi|nahin|mat)\b|नहीं|मत\s", text, re.I):
+    if not isinstance(text, str) or re.search(
+        r"\b(don['’]t|do not|cancel(?:led|lation)?|not|no|never|nahi|nahin|mat)\b"
+        r"|नहीं|मत\s|रद्द|कैंसल|कॅन्सल", text, re.I,
+    ):
         return False
     recent = " ".join(str(m.get("content", "")) for m in dialogue[max(0, caller_index - 4):caller_index + 1])
     if not re.search(r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", recent, re.I):
