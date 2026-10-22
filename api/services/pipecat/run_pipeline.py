@@ -785,6 +785,8 @@ async def _run_pipeline_impl(
         # request, without adding diagnostic text to transcript history.
         if llm is not None and stt is not None:
             llm._caller_language_source = stt
+        if tts is not None and stt is not None:
+            tts._caller_language_source = stt
         inference_llm = None
 
     # Variable and disposition extraction may share this out-of-band LLM. A
@@ -1267,6 +1269,7 @@ async def _run_pipeline_impl(
             on_agent_error=engine.handle_agent_error,
             use_draft=bool(workflow_run.extra.get("use_draft")),
             observers=[feedback_observer],
+            caller_language_source=stt,
         )
         engine.set_agent_factory(agent_factory)
         # The agent this call starts on. Its services were resolved above from

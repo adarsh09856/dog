@@ -78,6 +78,7 @@ class AgentRuntimeFactory:
         on_agent_error: Callable[[AgentRuntime, Any], Any] | None = None,
         use_draft: bool = False,
         observers: list[BaseObserver] | None = None,
+        caller_language_source=None,
     ):
         self._on_agent_error = on_agent_error
         self._use_draft = use_draft
@@ -90,6 +91,7 @@ class AgentRuntimeFactory:
         self._has_recordings = has_recordings
         self._mps_correlation_id = mps_correlation_id
         self._observers = observers
+        self._caller_language_source = caller_language_source
 
     @property
     def organization_id(self) -> int:
@@ -176,6 +178,10 @@ class AgentRuntimeFactory:
             organization_id=self._organization_id,
             tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
         )
+        if self._caller_language_source is not None:
+            for service in (llm, tts):
+                if service is not None:
+                    service._caller_language_source = self._caller_language_source
         # Same client policy as the run setup: the conversation LLM also
         # serves out-of-band inference, and extraction gets a separately
         # tagged client only where the run would have created one, so a
