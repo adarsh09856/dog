@@ -67,11 +67,10 @@ RASA_SPEAKERS: dict[str, tuple[int, str, str, str]] = {
     "TEL_F": (19, "te", "Telugu", "female"),
 }
 
-# Native Hindi and Urdu voices. English is served by Melo's EN_INDIA speaker.
+# Legacy Hindi voices are loaded only when the bilingual Indus engine is absent.
 PIPER_SPEAKERS: dict[str, tuple[str, str, str, str, str]] = {
     "HIN_M": ("hi", "Hindi", "male", "vits-piper-hi_IN-pratham-medium", "hi_IN-pratham-medium.onnx"),
     "HIN_F": ("hi", "Hindi", "female", "vits-piper-hi_IN-priyamvada-medium", "hi_IN-priyamvada-medium.onnx"),
-    "URD_M": ("ur", "Urdu", "male", "vits-piper-ur_PK-fasih-medium", "ur_PK-fasih-medium.onnx"),
 }
 
 # Static catalog definition
@@ -92,7 +91,6 @@ SCRIPT_TO_LANGUAGE = (
     (0x0C00, 0x0C7F, "te"),   # Telugu -> Telugu
     (0x0C80, 0x0CFF, "kn"),   # Kannada -> Kannada
     (0x0D00, 0x0D7F, "ml"),   # Malayalam -> Malayalam
-    (0x0600, 0x06FF, "ur"),   # Perso-Arabic -> Urdu
 )
 
 DEVANAGARI_LANGUAGES = {"hi", "mr", "ne", "sa", "mai", "brx", "doi"}
@@ -114,7 +112,6 @@ PREVIEWS = {
     "sa": "नमस्कारः, भवते किम् साहाय्यम् अपेक्षितम्",
     "ta": "வணக்கம், உங்களுக்கு என்ன உதவி வேண்டும்",
     "te": "నమస్కారం, మీకు ఏ సహాయం కావాలి",
-    "ur": "السلام علیکم، بتائیے، آپ کو کس مدد کی ضرورت ہے",
 }
 
 RASA_MODEL: sherpa_onnx.OfflineTts | None = None
@@ -188,7 +185,7 @@ def voice_for_text(text: str, preferred_voice: str, context_language: str | None
     dominant = max(counts, key=counts.get)
 
     target_lang = None
-    if dominant in ("pa", "ta", "te", "kn", "ml", "ur", "en"):
+    if dominant in ("pa", "ta", "te", "kn", "ml", "en"):
         target_lang = dominant
     elif dominant == "bn_as":
         clean_ctx = (context_language or "").lower().replace("_", "-").split("-", 1)[0]
@@ -425,7 +422,7 @@ def _load() -> None:
     RASA_MODEL = sherpa_onnx.OfflineTts(config)
 
     for voice_id, (_, _, _, folder, onnx_file) in PIPER_SPEAKERS.items():
-        if INDUS_ENDPOINT and voice_id == "HIN_F":
+        if INDUS_ENDPOINT:
             continue
         model_path = PIPER_DIR / folder / onnx_file
         tokens_path = PIPER_DIR / folder / "tokens.txt"
@@ -504,9 +501,8 @@ async def health():
 async def models():
     active_speakers = get_active_speakers()
     active_languages = sorted({
-        f"{speaker[1]}-IN" for speaker in active_speakers.values() if speaker[1] not in ("en", "ur")
-    } | ({"en-IN"} if any(s[1] == "en" for s in active_speakers.values()) else set())
-      | ({"ur-IN", "ur-PK"} if any(s[1] == "ur" for s in active_speakers.values()) else set()))
+        f"{speaker[1]}-IN" for speaker in active_speakers.values() if speaker[1] != "en"
+    } | ({"en-IN"} if any(s[1] == "en" for s in active_speakers.values()) else set()))
 
     return {"object": "list", "data": [{
         "id": MODEL_ID,
@@ -522,14 +518,14 @@ async def models():
             "Indus Inaya is female; no male Indian English voice is installed" if INDUS_READY else
             "One Indian-English speaker; gender not documented by upstream"
         )},
-        "attribution": "AI4Bharat VITS Rasa, CC BY 4.0; Piper VITS and MeloTTS, MIT License; Indus Pocket TTS when configured",
+        "attribution": "AI4Bharat VITS Rasa, CC BY 4.0; Indus Pocket TTS when configured; Piper VITS and MeloTTS, MIT License when used as fallback",
         "voices": [{
             "id": voice,
             "name": f"{name} — {gender.title()}" if gender != "unspecified" else name,
             "gender": gender,
-            "accent": "Indian English" if lang == "en" else ("Urdu" if lang == "ur" else f"Indian {name}"),
+            "accent": "Indian English" if lang == "en" else f"Indian {name}",
             "languages": (["hi-IN", "en-IN"] if INDUS_READY and voice in {"HIN_F", "ENG_IN"}
-                          else ["en-IN"] if lang == "en" else ([f"{lang}-IN"] + (["ur-PK"] if lang == "ur" else []))),
+                          else ["en-IN"] if lang == "en" else [f"{lang}-IN"]),
             "engine": "indus-pocket-tts" if INDUS_READY and voice in {"HIN_F", "ENG_IN"} else (
                 "melo" if voice == "ENG_IN" else "piper" if voice in PIPER_SPEAKERS else "rasa"),
             "speaker": "Inaya" if INDUS_READY and voice in {"HIN_F", "ENG_IN"} else voice,
