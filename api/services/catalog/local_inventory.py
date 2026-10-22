@@ -49,7 +49,8 @@ async def get_local_tts_models(api_base: str) -> dict[str, dict]:
         return cached[1]
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
         async with session.get(f"{endpoint}/models") as response:
-            response.raise_for_status()
+            if response.status != 200:
+                response.raise_for_status()
             models = local_tts_inventory(await response.json())
     _tts_model_cache[endpoint] = (time.monotonic(), models)
     return models
@@ -102,9 +103,17 @@ def local_tts_api_base(settings: dict, model: str) -> str:
         endpoint = settings.get("indic_mio_tts_endpoint") or os.environ.get(
             "INDIC_MIO_TTS_ENDPOINT", "http://indic-mio-tts:8000/v1"
         )
+    elif model == "indic-parler-tts":
+        endpoint = settings.get("indic_parler_tts_endpoint") or os.environ.get(
+            "INDIC_PARLER_TTS_ENDPOINT", "http://indic-parler-tts:8000/v1"
+        )
     elif model == "indic-vits-rasa-13":
         endpoint = settings.get("indic_vits_tts_endpoint") or os.environ.get(
             "INDIC_VITS_TTS_ENDPOINT", "http://indic-vits-tts:8000/v1"
+        )
+    elif model == "dhvaani-0.5":
+        endpoint = settings.get("dhvaani_tts_endpoint") or os.environ.get(
+            "DHVAANI_TTS_ENDPOINT", "http://dhvaani-tts:8000/v1"
         )
     else:
         endpoint = settings.get("whisper_endpoint") or os.environ.get(
@@ -201,6 +210,25 @@ def _is_hinglish(language: str) -> bool:
     return language.strip().replace("_", "-").casefold() in {
         "hinglish", "hi-en", "en-hi",
     }
+
+
+def validate_local_tts_speed(model: dict, voice_id: str, speed: float) -> None:
+    """Validate every voice reachable by automatic routing before a call starts."""
+    if speed == 1.0:
+        return
+    voices = model.get("voices") or []
+    if not isinstance(voices, list):
+        return
+    automatic_routing = bool(model.get("automatic_voice_routing"))
+    for voice in voices:
+        if not isinstance(voice, dict) or voice.get("installed") is False:
+            continue
+        selected = (voice.get("id") or voice.get("voice_id") or voice.get("name")) == voice_id
+        if (automatic_routing or selected) and voice.get("speed_adjustable") is False:
+            raise ValueError(
+                "This speech configuration includes a fixed-speed voice. "
+                "Set voice speed to 1.0 before saving or starting a call."
+            )
 
 
 def local_model_voice_catalog(model: dict) -> list[dict]:
