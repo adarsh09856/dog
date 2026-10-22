@@ -934,7 +934,11 @@ class CatalogService:
                                         and installed_model.get("id")):
                                     local_stt.append({
                                         "value": installed_model["id"],
-                                        "label": "IndicConformer CTC INT8 (installed languages)",
+                                        "label": (
+                                            "IndicConformer CTC INT8 + Moonshine English (installed languages)"
+                                            if "en-IN" in installed_model.get("languages", [])
+                                            else "IndicConformer CTC INT8 (installed languages)"
+                                        ),
                                         "provider": "indicconformer",
                                         "languages": installed_model.get("languages", []),
                                     })

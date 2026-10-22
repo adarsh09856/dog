@@ -2154,7 +2154,7 @@ class SpeechmaticsSTTConfiguration(BaseSTTConfiguration):
 
 SPEACHES_STT_MODELS = ["indicconformer-ctc-int8"]
 SPEACHES_STT_LANGUAGES = [
-    "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
+    "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
     "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 ]
 
@@ -2165,7 +2165,7 @@ class SpeachesSTTConfiguration(BaseSTTConfiguration):
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
     model: str = Field(
         default="indicconformer-ctc-int8",
-        description="Self-hosted Indian-language recognizer. Select one installed language; automatic detection is not supported.",
+        description="Self-hosted Indian-language and English recognizers. Select one installed language; automatic detection is not supported.",
         json_schema_extra={
             "examples": SPEACHES_STT_MODELS,
             "allow_custom_input": True,
@@ -2173,7 +2173,7 @@ class SpeachesSTTConfiguration(BaseSTTConfiguration):
     )
     language: str = Field(
         default="hi",
-        description="Select one installed Indian language. IndicConformer does not provide automatic language detection.",
+        description="Select one installed language. IndicConformer handles Indian languages and Moonshine handles English; automatic detection is unavailable.",
         json_schema_extra={
             "examples": SPEACHES_STT_LANGUAGES,
             "allow_custom_input": True,

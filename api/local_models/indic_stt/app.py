@@ -1,8 +1,8 @@
-"""CPU IndicConformer CTC service with an OpenAI-compatible transcription API.
+"""CPU IndicConformer and English Moonshine STT with an OpenAI-compatible API.
 
-Models are downloaded at installation/startup, never during a call. Only loaded
+Models are downloaded at installation/startup, never during a call. Only installed
 languages appear in /v1/models. The caller must select a language explicitly;
-mixed-language automatic recognition stays on the existing multilingual STT.
+this service does not identify the language or decode mixed-language speech.
 """
 
 from __future__ import annotations
@@ -22,11 +22,18 @@ from huggingface_hub import hf_hub_download
 
 REPOSITORY = "parismitaglobalsolutions/indicconformer-sherpa-onnx"
 REVISION = "9721eb71eea141fae0982cfcdb9dd2e3d4953c4a"
+ENGLISH_REPOSITORY = "csukuangfj/sherpa-onnx-moonshine-tiny-en-int8"
+ENGLISH_REVISION = "bf2b762c076d8ea61e2af0b3851c9564fb77552e"
+ENGLISH_FILES = (
+    "preprocess.onnx", "encode.int8.onnx", "uncached_decode.int8.onnx",
+    "cached_decode.int8.onnx", "tokens.txt", "LICENSE",
+)
 MODEL_ID = "indicconformer-ctc-int8"
-LANGUAGES = frozenset({
+INDIC_LANGUAGES = frozenset({
     "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
     "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 })
+LANGUAGES = INDIC_LANGUAGES | {"en"}
 MODEL_DIR = Path(os.environ.get("INDIC_STT_MODEL_DIR", "/models/indicconformer"))
 PRELOAD = os.environ.get("INDIC_STT_LANGUAGES", "hi").strip().lower()
 THREADS = max(1, int(os.environ.get("INDIC_STT_THREADS", "2")))
@@ -38,23 +45,36 @@ _max_resident_models = max(1, int(os.environ.get("INDIC_STT_RESIDENT_MODELS", "2
 
 
 def _installed_languages() -> list[str]:
-    return sorted(
-        lang for lang in LANGUAGES
+    installed = {
+        lang for lang in INDIC_LANGUAGES
         if (MODEL_DIR / lang / "model.int8.onnx").is_file()
         and (MODEL_DIR / "tokens.txt").is_file()
-    )
+    }
+    if all((MODEL_DIR / "en" / filename).is_file() for filename in ENGLISH_FILES):
+        installed.add("en")
+    return sorted(installed)
 
 
 def _download_models(languages: set[str]) -> None:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    hf_hub_download(repo_id=REPOSITORY, revision=REVISION, filename="tokens.txt", local_dir=MODEL_DIR)
-    for lang in sorted(languages):
-        hf_hub_download(
-            repo_id=REPOSITORY,
-            revision=REVISION,
-            filename=f"{lang}/model.int8.onnx",
-            local_dir=MODEL_DIR,
-        )
+    indic_languages = languages & INDIC_LANGUAGES
+    if indic_languages:
+        hf_hub_download(repo_id=REPOSITORY, revision=REVISION, filename="tokens.txt", local_dir=MODEL_DIR)
+        for lang in sorted(indic_languages):
+            hf_hub_download(
+                repo_id=REPOSITORY,
+                revision=REVISION,
+                filename=f"{lang}/model.int8.onnx",
+                local_dir=MODEL_DIR,
+            )
+    if "en" in languages and not all((MODEL_DIR / "en" / name).is_file() for name in ENGLISH_FILES):
+        for filename in ENGLISH_FILES:
+            hf_hub_download(
+                repo_id=ENGLISH_REPOSITORY,
+                revision=ENGLISH_REVISION,
+                filename=filename,
+                local_dir=MODEL_DIR / "en",
+            )
 
 
 def _load(lang: str) -> sherpa_onnx.OfflineRecognizer:
@@ -62,12 +82,23 @@ def _load(lang: str) -> sherpa_onnx.OfflineRecognizer:
     if recognizer is not None:
         _loaded.move_to_end(lang)
         return recognizer
-    recognizer = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(
-        model=str(MODEL_DIR / lang / "model.int8.onnx"),
-        tokens=str(MODEL_DIR / "tokens.txt"),
-        num_threads=THREADS,
-        decoding_method="greedy_search",
-    )
+    if lang == "en":
+        english = MODEL_DIR / "en"
+        recognizer = sherpa_onnx.OfflineRecognizer.from_moonshine(
+            preprocessor=str(english / "preprocess.onnx"),
+            encoder=str(english / "encode.int8.onnx"),
+            uncached_decoder=str(english / "uncached_decode.int8.onnx"),
+            cached_decoder=str(english / "cached_decode.int8.onnx"),
+            tokens=str(english / "tokens.txt"),
+            num_threads=THREADS,
+        )
+    else:
+        recognizer = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(
+            model=str(MODEL_DIR / lang / "model.int8.onnx"),
+            tokens=str(MODEL_DIR / "tokens.txt"),
+            num_threads=THREADS,
+            decoding_method="greedy_search",
+        )
     # Keep the previous recognizer if a new model fails to load. The inference
     # lock serializes decoding; a brief extra model during this swap fits the
     # bounded STT container, while only two remain resident afterward.
@@ -85,6 +116,9 @@ async def startup() -> None:
     await asyncio.to_thread(_download_models, languages)
     # A small CPU host must not keep 22 recognizers resident simultaneously.
     await asyncio.to_thread(_load, "hi" if "hi" in languages else sorted(languages)[0])
+    if "en" in languages and _max_resident_models > 1:
+        # Keep both main caller languages ready without first-call model loading.
+        await asyncio.to_thread(_load, "en")
 
 
 @app.get("/health")
