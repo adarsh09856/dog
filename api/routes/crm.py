@@ -79,6 +79,8 @@ class ContactImportItem(BaseModel):
     company: Optional[str] = None
     stage_id: Optional[str] = None
     tags: List[str] = []
+    custom_fields: Dict[str, Any] = Field(default_factory=dict)
+    notes: Optional[str] = None
 
 
 class ContactImportRequest(BaseModel):
@@ -324,31 +326,14 @@ async def import_contacts_csv(req: ContactImportRequest, user: UserModel = Depen
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization required")
 
-    created = 0
-    async with kodewaves_db_client.get_session() as session:
-        for item in req.contacts:
-            if not item.phone:
-                continue
-            stage_uuid = None
-            if item.stage_id:
-                try:
-                    stage_uuid = uuid.UUID(item.stage_id)
-                except ValueError:
-                    pass
-
-            contact = ContactModel(
-                organization_id=org_id,
-                first_name=item.first_name,
-                last_name=item.last_name,
-                phone=item.phone,
-                email=item.email,
-                company=item.company,
-                stage_id=stage_uuid,
-                tags=item.tags or [],
-            )
-            session.add(contact)
-            created += 1
-        await session.commit()
+    try:
+        created = await kodewaves_db_client.import_contacts(
+            org_id, [item.model_dump(exclude_unset=True) for item in req.contacts]
+        )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid stage ID")
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
     return {"message": f"Successfully imported {created} contact(s)", "count": created}
 
