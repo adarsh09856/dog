@@ -136,6 +136,7 @@ def default_text_chat_checkpoint() -> dict[str, Any]:
         "messages": [],
         "gathered_context": {},
         "tool_state": {},
+        "contact_conversation_state": {},
     }
 
 
@@ -149,6 +150,10 @@ def normalize_text_chat_checkpoint(
     normalized["messages"] = list(normalized.get("messages") or [])
     normalized["gathered_context"] = dict(normalized.get("gathered_context") or {})
     normalized["tool_state"] = dict(normalized.get("tool_state") or {})
+    contact_state = dict(normalized.get("contact_conversation_state") or {})
+    if isinstance(contact_state.get("processed_user"), list):
+        contact_state["processed_user"] = tuple(contact_state["processed_user"])
+    normalized["contact_conversation_state"] = contact_state
     return normalized
 
 
@@ -699,6 +704,7 @@ async def execute_text_chat_pending_turn(
     # generating a confirmation without another model request.
     engine.active_agent.user_config = user_config
     engine._gathered_context = dict(base_checkpoint["gathered_context"])
+    engine._contact_conversation_state = dict(base_checkpoint["contact_conversation_state"])
     capture_processor = _TextChatCaptureProcessor(response_window, context, engine)
     node_transition_events = capture_processor.events
 
@@ -921,6 +927,7 @@ async def execute_text_chat_pending_turn(
         "messages": encoded_messages,
         "gathered_context": encoded_gathered_context,
         "tool_state": encoded_tool_state,
+        "contact_conversation_state": jsonable_encoder(engine._contact_conversation_state),
     }
 
     trace_url = get_trace_url(trace_id, org_id=workflow.organization_id)
