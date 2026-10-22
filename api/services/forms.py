@@ -73,7 +73,16 @@ async def submit_answers(
     if not form.is_active:
         raise ValueError("This form is disabled")
     fields = form.fields_schema or []
-    answers = validate_answers(fields, data)
+    supplied = dict(data)
+    if contact_uuid is not None:
+        known = await form_db.get_contact_for_prefill(organization_id, contact_uuid)
+        if known is None:
+            raise LookupError("Contact not found")
+        for field in fields:
+            key = field.get("name") or field.get("id") or field.get("label")
+            if key and key not in supplied and key in known:
+                supplied[key] = known[key]
+    answers = validate_answers(fields, supplied)
     return await form_db.create_submission(
         organization_id,
         form_uuid,
