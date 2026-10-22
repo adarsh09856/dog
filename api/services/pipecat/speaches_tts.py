@@ -160,6 +160,13 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                     return
                 if frame:
                     await speech.frames.put(frame)
+        except Exception as exc:  # noqa: BLE001 - forward task failures through the pipeline error channel
+            if generation == self._prefetch_generation:
+                await speech.frames.put(ErrorFrame(
+                    error="Local speech synthesis failed",
+                    processor=self,
+                    exception=exc,
+                ))
         finally:
             await speech.frames.put(None)
 
