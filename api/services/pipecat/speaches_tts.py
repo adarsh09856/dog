@@ -232,8 +232,9 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._prefetch_changed.set()
         dispatcher = self._prefetch_dispatcher
         if dispatcher:
-            with suppress(asyncio.CancelledError):
-                await dispatcher
+            # Cancellation here belongs to the frame-processing task (barge-in).
+            # Swallowing it prevents the framework from stopping the old turn.
+            await dispatcher
         # At this point every queued HTTP generator has finished and the base
         # class can safely close the shared audio context behind its PCM.
         self._is_yielding_frames_synchronously = True
