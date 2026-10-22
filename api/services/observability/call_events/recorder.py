@@ -40,6 +40,7 @@ from pipecat.frames.frames import (
     LLMTextFrame,
     OutputAudioRawFrame,
     TranscriptionFrame,
+    TTSAudioRawFrame,
     TTSStartedFrame,
     TTSStoppedFrame,
     UserSpeakingFrame,
@@ -128,6 +129,8 @@ class CallEventRecorder:
         self._final_chars = 0
         self._llm_open = False
         self._llm_text_chars = 0
+        self._llm_first_text_seen = False
+        self._tts_first_audio_seen = False
         self._llm_chars_since_turn = 0
         self._refusals_since_turn = 0
         self._tts_started_since_turn = False
@@ -199,7 +202,16 @@ class CallEventRecorder:
     async def on_push_frame(self, data: FramePushed):
         """Record the frames that say something about turn taking."""
         frame = data.frame
-        if self._call_ended or isinstance(frame, _IGNORED_FRAMES):
+        if self._call_ended:
+            return
+        # Observe only the first generated PCM chunk of a turn. Later audio
+        # retains the cheap fast path; payloads never enter diagnostic rows.
+        first_generated_audio = (
+            isinstance(frame, TTSAudioRawFrame)
+            and bool(frame.audio)
+            and not self._tts_first_audio_seen
+        )
+        if isinstance(frame, _IGNORED_FRAMES) and not first_generated_audio:
             return
         try:
             from api.services.pipecat.agent_bridge import AgentWorker
@@ -289,10 +301,21 @@ class CallEventRecorder:
         elif isinstance(frame, LLMFullResponseStartFrame):
             self._llm_open = True
             self._llm_text_chars = 0
+            self._llm_first_text_seen = False
         elif isinstance(frame, LLMTextFrame):
             chars = len(frame.text or "")
             self._llm_text_chars += chars
             self._llm_chars_since_turn += chars
+            if (frame.text or "").strip() and not self._llm_first_text_seen:
+                self._llm_first_text_seen = True
+                self._emit(ev.LLM_FIRST_TEXT, detail={"chars": chars})
+        elif isinstance(frame, TTSAudioRawFrame):
+            self._tts_first_audio_seen = True
+            self._emit(ev.TTS_FIRST_AUDIO, detail={
+                "sample_rate": frame.sample_rate,
+                "num_channels": frame.num_channels,
+                "bytes": len(frame.audio),
+            })
         elif isinstance(frame, LLMFullResponseEndFrame):
             self._llm_open = False
             if self._llm_text_chars == 0:
@@ -382,6 +405,8 @@ class CallEventRecorder:
         self._final_count = 0
         self._final_chars = 0
         self._llm_chars_since_turn = 0
+        self._llm_first_text_seen = False
+        self._tts_first_audio_seen = False
         self._refusals_since_turn = 0
         self._tts_started_since_turn = False
         self._bot_spoke_since_user_turn = False
