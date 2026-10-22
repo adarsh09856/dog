@@ -190,6 +190,25 @@ class _BookingToolChoiceMixin:
         self._greeting_suppressed = False
         tools = getattr(context.tools, "standard_tools", [])
         from api.services.workflow.contact_context import booking_contact_question
+        from api.services.workflow.direct_caller_reply import direct_caller_reply
+
+        latest_user_text = (
+            _message_text(messages[-1])
+            if messages and isinstance(messages[-1], dict)
+            and messages[-1].get("role") == "user" else ""
+        )
+        direct_reply = direct_caller_reply(
+            latest_user_text, has_lookup_tools=bool(tools)
+        )
+        if direct_reply:
+            state = getattr(self, "_contact_conversation_state", None)
+            if isinstance(state, dict):
+                state.pop("pending_phone", None)
+            await self.start_ttfb_metrics()
+            await self.push_frame(LLMFullResponseStartFrame())
+            await self._push_llm_text(direct_reply)
+            await self.push_frame(LLMFullResponseEndFrame())
+            return
 
         known = getattr(self, "_known_contact", {})
         contact_state = getattr(self, "_contact_conversation_state", None)
