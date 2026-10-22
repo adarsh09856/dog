@@ -136,6 +136,7 @@ def default_text_chat_checkpoint() -> dict[str, Any]:
         "messages": [],
         "gathered_context": {},
         "tool_state": {},
+        "contact_conversation_state": {},
     }
 
 
@@ -149,6 +150,10 @@ def normalize_text_chat_checkpoint(
     normalized["messages"] = list(normalized.get("messages") or [])
     normalized["gathered_context"] = dict(normalized.get("gathered_context") or {})
     normalized["tool_state"] = dict(normalized.get("tool_state") or {})
+    contact_state = dict(normalized.get("contact_conversation_state") or {})
+    if isinstance(contact_state.get("processed_user"), list):
+        contact_state["processed_user"] = tuple(contact_state["processed_user"])
+    normalized["contact_conversation_state"] = contact_state
     return normalized
 
 
@@ -699,6 +704,7 @@ async def execute_text_chat_pending_turn(
     # generating a confirmation without another model request.
     engine.active_agent.user_config = user_config
     engine._gathered_context = dict(base_checkpoint["gathered_context"])
+    engine._contact_conversation_state = dict(base_checkpoint["contact_conversation_state"])
     capture_processor = _TextChatCaptureProcessor(response_window, context, engine)
     node_transition_events = capture_processor.events
 
@@ -806,15 +812,18 @@ async def execute_text_chat_pending_turn(
 
         if pending_user_message is not None:
             context.add_message({"role": "user", "content": pending_user_message})
-            from api.services.workflow.confirmed_booking import first_booking_question
+            from api.services.workflow.contact_context import booking_contact_question, known_contact
 
             booking_arguments = confirmed_booking_arguments(pending_user_message)
-            fast_booking_question = first_booking_question(context.get_messages())
             active_tools = getattr(context.tools, "standard_tools", [])
             has_booking_tool = any(
                 getattr(tool, "name", None) == "book_appointment"
                 for tool in active_tools
             )
+            fast_booking_question = booking_contact_question(
+                context.get_messages(), known_contact(initial_context),
+                engine._contact_conversation_state,
+            ) if has_booking_tool else None
             if booking_arguments and has_booking_tool:
                 from api.services.workflow.tools.booking import execute_booking
 
@@ -921,6 +930,7 @@ async def execute_text_chat_pending_turn(
         "messages": encoded_messages,
         "gathered_context": encoded_gathered_context,
         "tool_state": encoded_tool_state,
+        "contact_conversation_state": jsonable_encoder(engine._contact_conversation_state),
     }
 
     trace_url = get_trace_url(trace_id, org_id=workflow.organization_id)

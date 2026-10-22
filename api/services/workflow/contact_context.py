@@ -93,3 +93,12 @@ def caller_supplied_phone(messages: list, phone: str) -> bool:
         for message in messages if isinstance(message, dict)
         and message.get('role') == 'user' and isinstance(message.get('content'), str)
     )
+
+
+def booking_contact_question(messages: list, contact: dict, state: dict) -> str | None:
+    """Use the same missing-detail questions for voice and text chat."""
+    from api.services.workflow.confirmed_booking import first_booking_question
+
+    return booking_phone_question(messages, contact, state) or first_booking_question(
+        messages, contact.get('customer_name')
+    )
