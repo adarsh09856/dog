@@ -4,7 +4,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
 from api.db.kodewaves_client import kodewaves_db_client
@@ -38,6 +38,7 @@ class ContactItem(BaseModel):
     tags: List[str]
     total_calls: int
     notes: Optional[str] = None
+    custom_fields: Dict[str, Any] = Field(default_factory=dict)
     created_at: str
 
 
@@ -144,6 +145,7 @@ async def list_contacts(user: UserModel = Depends(get_user)):
                 tags=c.tags or [],
                 total_calls=c.total_calls,
                 notes=(c.custom_fields or {}).get("notes"),
+                custom_fields=c.custom_fields or {},
                 created_at=c.created_at.isoformat() if c.created_at else "",
             )
             for c in contacts
