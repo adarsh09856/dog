@@ -118,6 +118,9 @@ services:
       KODEWAVES_SECRET_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY}"
       ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      # Carrier media sockets carry a per-run HMAC capability in their URL.
+      TELEPHONY_WS_TOKEN_SECRET: "${TELEPHONY_WS_TOKEN_SECRET:-}"
+      TELEPHONY_WS_TOKEN_ENFORCE: "${TELEPHONY_WS_TOKEN_ENFORCE:-false}"
 
       # Local Sovereign Storage
       ENABLE_AWS_S3: "false"
