@@ -55,6 +55,30 @@ def _message_text(message: dict) -> str:
     return ""
 
 
+_ROMAN_HINDI_WORDS = frozenset({
+    "aap", "aapka", "aapki", "apna", "apni", "batao", "bataiye", "hai",
+    "hain", "hume", "kal", "karna", "karni", "kya", "main", "mera",
+    "meri", "mujhe", "nahi", "nahin", "tha", "thi",
+})
+_ENGLISH_WORDS = frozenset({
+    "can", "could", "don't", "how", "i", "is", "my", "need", "please",
+    "should", "the", "want", "we", "what", "when", "where", "why", "would",
+    "you",
+})
+
+
+def _clearly_english_caller_text(text: str) -> bool:
+    """Avoid imposing English on Indic script or Romanized Hindi turns."""
+    if any(char.isalpha() and not char.isascii() for char in text):
+        return False
+    words = [word.casefold() for word in re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", text)]
+    return (
+        len(words) >= 3
+        and not any(word in _ROMAN_HINDI_WORDS for word in words)
+        and any(word in _ENGLISH_WORDS for word in words)
+    )
+
+
 def _without_hidden_transition_guidance(content: str, hidden: set[str]) -> str:
     """Filter only generated routing paragraphs, never caller or role text."""
     paragraphs = []
@@ -333,16 +357,19 @@ class _BookingToolChoiceMixin:
                 messages = list(messages)
                 messages.insert(first_user, {"role": "system", "content": "/no_think"})
                 params["messages"] = messages
-        if model.startswith(("qwen3:", "qwen3.5:")) and isinstance(messages, list):
+        if (
+            getattr(self, "_kodewaves_local_ollama", False)
+            and model.startswith(("qwen3:", "qwen3.5:"))
+            and isinstance(messages, list)
+        ):
             # Suppress deep reasoning in local voice pipelines to prevent token starvation
             params["reasoning_effort"] = "none"
-            if getattr(self, "_kodewaves_local_ollama", False):
-                extra_body = params.get("extra_body")
-                params["extra_body"] = {
-                    **(extra_body if isinstance(extra_body, dict) else {}),
-                    "think": False,
-                    "reasoning_effort": "none",
-                }
+            extra_body = params.get("extra_body")
+            params["extra_body"] = {
+                **(extra_body if isinstance(extra_body, dict) else {}),
+                "think": False,
+                "reasoning_effort": "none",
+            }
 
         from api.services.workflow.tools.booking import caller_confirmed_booking
 
@@ -434,6 +461,31 @@ class _BookingToolChoiceMixin:
                 )
                 messages.insert(insert_at, opening_note)
                 params["messages"] = messages
+        if (
+            getattr(self, "_kodewaves_local_ollama", False)
+            and model.startswith(("qwen3:", "qwen3.5:"))
+            and isinstance(messages, list)
+        ):
+            latest_user_index = next((
+                index for index in range(len(messages) - 1, -1, -1)
+                if isinstance(messages[index], dict) and messages[index].get("role") == "user"
+            ), None)
+            if latest_user_index is not None and _clearly_english_caller_text(
+                _message_text(messages[latest_user_index])
+            ):
+                # The saved workflow may contain a Hindi-first persona. Keep
+                # it intact, but make the current caller's English switch
+                # explicit for this inference request only. A separate system
+                # turn preserves the earlier reusable prompt prefix.
+                messages.insert(latest_user_index, {
+                    "role": "system",
+                    "content": (
+                        "The latest caller utterance is in English. Reply to this turn "
+                        "in natural English only; do not switch to Hindi or transliterate. "
+                        "Follow the workflow tools, factual limits, and caller consent "
+                        "rules. Keep the spoken answer concise."
+                    ),
+                })
         if isinstance(messages, list) and messages:
             latest_user = next((message for message in reversed(messages) if isinstance(message, dict) and message.get("role") == "user"), None)
             if latest_user and _CONFIRMATION.search(_message_text(latest_user)):
