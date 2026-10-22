@@ -47,15 +47,16 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             # for the next request, creating several seconds of dead air. A
             # 20-character first phrase is enough audible material to overlap
             # normal local generation without waiting for a full sentence.
-            # Following phrases use a small batch too: prefetching keeps their
-            # requests ready while the prior phrase plays, rather than making
-            # the caller wait for a 48-character sentence boundary.
+            # The first phrase starts promptly. Following phrases need enough
+            # words for natural prosody: 24-character CPU requests sounded like
+            # separate clipped sentences and repeatedly stopped between words.
+            # Prefetch still overlaps synthesis with the first phrase's audio.
             self._text_aggregator = LocalSpeechAggregator(
                 min_characters=24,
                 first_chunk_characters=20,
                 first_clause_characters=20,
                 first_phrase_characters=20,
-                streaming_phrase_characters=24,
+                streaming_phrase_characters=42,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
