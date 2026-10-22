@@ -534,6 +534,7 @@ export interface LeadStage {
 
 export interface Appointment {
   id: string | number;
+    contact_id?: string | null;
   title: string;
   customer_name?: string;
   customer_phone?: string;
