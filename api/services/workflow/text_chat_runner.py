@@ -812,15 +812,18 @@ async def execute_text_chat_pending_turn(
 
         if pending_user_message is not None:
             context.add_message({"role": "user", "content": pending_user_message})
-            from api.services.workflow.confirmed_booking import first_booking_question
+            from api.services.workflow.contact_context import booking_contact_question, known_contact
 
             booking_arguments = confirmed_booking_arguments(pending_user_message)
-            fast_booking_question = first_booking_question(context.get_messages())
             active_tools = getattr(context.tools, "standard_tools", [])
             has_booking_tool = any(
                 getattr(tool, "name", None) == "book_appointment"
                 for tool in active_tools
             )
+            fast_booking_question = booking_contact_question(
+                context.get_messages(), known_contact(initial_context),
+                engine._contact_conversation_state,
+            ) if has_booking_tool else None
             if booking_arguments and has_booking_tool:
                 from api.services.workflow.tools.booking import execute_booking
 

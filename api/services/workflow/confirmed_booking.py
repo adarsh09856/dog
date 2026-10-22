@@ -93,7 +93,8 @@ def confirmed_booking_arguments(message: str) -> dict | None:
     parse never authorizes a calendar write.
     """
     message = message.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
-    if not (_CONFIRM.search(message) and _SAVE.search(message)) or _NEGATE.search(message):
+    if (not (_CONFIRM.search(message) and _SAVE.search(message))
+            or _NEGATE.search(message) or _EXISTING_OR_DECLINED_BOOKING.search(message)):
         return None
     name = _NAME.search(message)
     phone = _PHONE.search(message)
