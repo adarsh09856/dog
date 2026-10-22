@@ -62,25 +62,27 @@ def _warm_model() -> None:
     """
     if MODEL is None or VOICE is None or _stream_speech is None:
         raise RuntimeError("Indus TTS cannot warm up before the model is loaded")
-    generator = iter(
-        _stream_speech(
-            MODEL,
-            VOICE,
-            _prepare_speech_text("नमस्ते, hello."),
-        )
-    )
-    has_audio = False
-    try:
-        for chunk in generator:
-            samples = chunk.detach().cpu().numpy()
-            if samples.size:
-                has_audio = True
-        if not has_audio:
-            raise RuntimeError("Indus TTS warm-up returned no audio")
-    finally:
-        close = getattr(generator, "close", None)
-        if close:
-            close()
+    # Exercise both text frontends before readiness. A tiny mixed greeting
+    # left the first full English request paying several seconds of lazy
+    # initialization even though health already reported ready.
+    for text in (
+        "Hello, how can I help you today?",
+        "नमस्ते, मैं आपकी कैसे मदद कर सकती हूँ?",
+        "ज़रूर, you can speak in Hindi or English.",
+    ):
+        generator = iter(_stream_speech(MODEL, VOICE, _prepare_speech_text(text)))
+        has_audio = False
+        try:
+            for chunk in generator:
+                samples = chunk.detach().cpu().numpy()
+                if samples.size:
+                    has_audio = True
+            if not has_audio:
+                raise RuntimeError("Indus TTS warm-up returned no audio")
+        finally:
+            close = getattr(generator, "close", None)
+            if close:
+                close()
 
 
 @asynccontextmanager

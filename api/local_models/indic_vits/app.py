@@ -4,11 +4,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import json
 import os
 import re
 import threading
 import unicodedata
 import wave
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -29,6 +31,8 @@ MODEL_REVISION = "b5afd4e991e3bdd6195528de650e2ed219d47506"
 MODEL_DIR = Path(os.environ.get("INDIC_VITS_MODEL_DIR", "/models/indic-vits-rasa-13"))
 PIPER_DIR = Path(os.environ.get("PIPER_MODEL_DIR", "/models/piper"))
 MELO_DIR = Path(os.environ.get("MELO_ENGLISH_MODEL_DIR", "/models/melo-english"))
+INDUS_ENDPOINT = os.environ.get("INDUS_TTS_ENDPOINT", "").rstrip("/")
+INDUS_READY = False
 MELO_REPO = "M5Stack/MeloTTS-English-axmodel"
 MELO_REVISION = "815731592c5c050da9505fa4b7f16aee74fb06a8"
 MELO_FILES = {
@@ -131,6 +135,9 @@ def get_active_speakers() -> dict[str, tuple[int | None, str, str, str]]:
             active[voice_id] = (None, spec[0], spec[1], spec[2])
     if MELO_MODEL is not None:
         active["ENG_IN"] = ALL_SPEAKER_SPECS["ENG_IN"]
+    if INDUS_READY:
+        active["HIN_F"] = (None, "hi", "Hindi — Inaya", "female")
+        active["ENG_IN"] = (None, "en", "Indian English — Inaya", "female")
     return active
 
 
@@ -237,7 +244,12 @@ def speech_segments(text: str, preferred_voice: str, context_language: str | Non
         )
         # Bound native inference memory for long punctuation-free replies.
         # Keep complete words; the callbacks still stream each bounded phrase.
-        if segments and segments[-1][0] == voice and len(segments[-1][1]) + len(part) <= 120:
+        same_voice = segments and (
+            segments[-1][0] == voice or (
+                INDUS_READY and {segments[-1][0], voice} <= {"HIN_F", "ENG_IN"}
+            )
+        )
+        if same_voice and len(segments[-1][1]) + len(part) <= 120:
             segments[-1] = (voice, segments[-1][1] + part)
         else:
             segments.append((voice, part))
@@ -265,8 +277,8 @@ def _resample(samples: np.ndarray | list[float], in_rate: int, out_rate: int) ->
 
 
 def _generate(text: str, voice: str, speed: float, callback=None, context_language: str | None = None) -> bytes:
-    text = unicodedata.normalize("NFC", text).strip().rstrip(".!?।॥ \n")
-    if not text:
+    text = unicodedata.normalize("NFC", text).strip()
+    if not text.rstrip(".!?।॥ \n"):
         raise ValueError("Speech text must contain words")
     segments = speech_segments(text, voice, context_language)
     cancelled = False
@@ -285,6 +297,37 @@ def _generate(text: str, voice: str, speed: float, callback=None, context_langua
 
 
 def _generate_one(text: str, effective_voice: str, speed: float, callback=None) -> bytes:
+    if INDUS_ENDPOINT and effective_voice in {"HIN_F", "ENG_IN"}:
+        if not INDUS_READY:
+            raise RuntimeError("The configured Inaya voice is not ready")
+        # Keep one bilingual synthesis request across Hindi/English words.
+        # PCM already has the gateway's mono 24 kHz format. Closing on a
+        # cancelled callback also closes the upstream generator promptly.
+        request = urllib.request.Request(
+            f"{INDUS_ENDPOINT}/audio/speech",
+            data=json.dumps({"model": "indus-pocket-tts", "voice": "Inaya",
+                             "input": text, "response_format": "pcm"}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        chunks = []
+        pending = b""
+        with urllib.request.urlopen(request, timeout=45) as response:
+            while block := response.read1(4096):
+                block = pending + block
+                size = len(block) - len(block) % 2
+                pending = block[size:]
+                if size:
+                    pcm = block[:size]
+                    chunks.append(pcm)
+                    if callback and callback(
+                        np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32767, 0.0
+                    ) == 0:
+                        break
+        if pending:
+            raise RuntimeError("Inaya returned an incomplete PCM sample")
+        if not chunks:
+            raise RuntimeError("Inaya returned no audio")
+        return b"".join(chunks)
     if effective_voice == "ENG_IN":
         if MELO_MODEL is None:
             raise RuntimeError("Indian English voice is loading")
@@ -313,6 +356,9 @@ def _generate_one(text: str, effective_voice: str, speed: float, callback=None) 
     else:
         if RASA_MODEL is None:
             raise RuntimeError("Regional voice model is loading")
+        # Keep the regional model's existing terminator normalization. Native
+        # Hindi/Urdu and Indian English need their punctuation for prosody.
+        text = text.rstrip(".!?।॥ \n")
         config = sherpa_onnx.GenerationConfig()
         config.sid = RASA_SPEAKERS[effective_voice][0]
         config.speed = speed
@@ -357,7 +403,16 @@ async def stream_pcm(request, context_language: str | None = None):
 
 
 def _load() -> None:
-    global RASA_MODEL, PIPER_MODELS, MELO_MODEL
+    global RASA_MODEL, PIPER_MODELS, MELO_MODEL, INDUS_READY
+    if INDUS_ENDPOINT:
+        with urllib.request.urlopen(f"{INDUS_ENDPOINT}/models", timeout=5) as response:
+            inventory = json.load(response)
+        INDUS_READY = any(
+            item.get("id") == "indus-pocket-tts" and item.get("installed")
+            for item in inventory.get("data", [])
+        )
+        if not INDUS_READY:
+            raise RuntimeError("Configured Indus service has no ready Inaya voice")
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     for filename in ("model.onnx", "tokens.txt"):
         if not (MODEL_DIR / filename).is_file():
@@ -370,6 +425,8 @@ def _load() -> None:
     RASA_MODEL = sherpa_onnx.OfflineTts(config)
 
     for voice_id, (_, _, _, folder, onnx_file) in PIPER_SPEAKERS.items():
+        if INDUS_ENDPOINT and voice_id == "HIN_F":
+            continue
         model_path = PIPER_DIR / folder / onnx_file
         tokens_path = PIPER_DIR / folder / "tokens.txt"
         data_dir = PIPER_DIR / folder / "espeak-ng-data"
@@ -387,6 +444,11 @@ def _load() -> None:
             )
             PIPER_MODELS[voice_id] = sherpa_onnx.OfflineTts(piper_cfg)
 
+    if INDUS_ENDPOINT:
+        # Indus owns Hindi female and Indian English. Avoid loading the
+        # superseded English model into RAM alongside it.
+        _generate(PREVIEWS["ta"], "TAM_F", 1.0)
+        return
     MELO_DIR.mkdir(parents=True, exist_ok=True)
     for filename, expected_hash in MELO_FILES.items():
         path = MELO_DIR / filename
@@ -434,7 +496,8 @@ async def health():
     if RASA_MODEL is None and not PIPER_MODELS:
         raise HTTPException(503, "Regional voice engine is loading")
     return {"status": "ok", "loaded_piper_voices": list(PIPER_MODELS.keys()),
-            "indian_english_loaded": MELO_MODEL is not None}
+            "indian_english_loaded": MELO_MODEL is not None,
+            "indus_bilingual_loaded": INDUS_READY}
 
 
 @app.get("/v1/models")
@@ -455,14 +518,22 @@ async def models():
         "sample_rate": SAMPLE_RATE,
         "languages": active_languages,
         "automatic_voice_routing": "reply-script-with-language-context",
-        "gender_limitations": {"ENG_IN": "One Indian-English speaker; gender not documented by upstream"},
-        "attribution": "AI4Bharat VITS Rasa, CC BY 4.0; Piper VITS and MeloTTS, MIT License",
+        "gender_limitations": {"ENG_IN": (
+            "Indus Inaya is female; no male Indian English voice is installed" if INDUS_READY else
+            "One Indian-English speaker; gender not documented by upstream"
+        )},
+        "attribution": "AI4Bharat VITS Rasa, CC BY 4.0; Piper VITS and MeloTTS, MIT License; Indus Pocket TTS when configured",
         "voices": [{
             "id": voice,
             "name": f"{name} — {gender.title()}" if gender != "unspecified" else name,
             "gender": gender,
             "accent": "Indian English" if lang == "en" else ("Urdu" if lang == "ur" else f"Indian {name}"),
-            "languages": ["en-IN"] if lang == "en" else ([f"{lang}-IN"] + (["ur-PK"] if lang == "ur" else [])),
+            "languages": (["hi-IN", "en-IN"] if INDUS_READY and voice in {"HIN_F", "ENG_IN"}
+                          else ["en-IN"] if lang == "en" else ([f"{lang}-IN"] + (["ur-PK"] if lang == "ur" else []))),
+            "engine": "indus-pocket-tts" if INDUS_READY and voice in {"HIN_F", "ENG_IN"} else (
+                "melo" if voice == "ENG_IN" else "piper" if voice in PIPER_SPEAKERS else "rasa"),
+            "speaker": "Inaya" if INDUS_READY and voice in {"HIN_F", "ENG_IN"} else voice,
+            "speed_adjustable": not (INDUS_READY and voice in {"HIN_F", "ENG_IN"}),
             "preview_text": PREVIEWS.get(lang, "")
         } for voice, (_sid, lang, name, gender) in active_speakers.items()],
     }]}
@@ -492,7 +563,9 @@ async def speech(
 
     context_language = request.language or (language_hint if isinstance(language_hint, str) else None)
     try:
-        speech_segments(clean_text, request.voice, context_language)
+        segments = speech_segments(clean_text, request.voice, context_language)
+        if INDUS_READY and request.speed != 1.0 and any(v in {"HIN_F", "ENG_IN"} for v, _ in segments):
+            raise ValueError("Indus Inaya supports fixed speed 1.0")
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
