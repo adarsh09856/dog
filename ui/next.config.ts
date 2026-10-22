@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverSourceMaps: true,
+    webpackBuildWorker: true,
   },
   async rewrites() {
     return [
