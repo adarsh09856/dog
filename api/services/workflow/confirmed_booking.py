@@ -46,6 +46,11 @@ _CALLER_NAME = re.compile(
     r"|मेरा नाम\s*[^,।\d]{2,50}",
     re.IGNORECASE,
 )
+_EXISTING_OR_DECLINED_BOOKING = re.compile(
+    r"\b(?:cancel(?:led|lation)?|reschedul\w*|don['’]t|do\s+not|not\s+now|"
+    r"never|stop|nahi|nahin|mat)\b|नहीं|मत\s|रद्द|कैंसल|कॅन्सल|पुनर्निर्धार",
+    re.IGNORECASE,
+)
 
 
 def first_booking_question(messages: list[dict]) -> str | None:
@@ -58,6 +63,8 @@ def first_booking_question(messages: list[dict]) -> str | None:
         return None
     content = user_messages[-1].get("content")
     caller_text = content if isinstance(content, str) else ""
+    if _EXISTING_OR_DECLINED_BOOKING.search(caller_text):
+        return None
     if any(
         isinstance(message.get("content"), str)
         and _CALLER_NAME.search(message["content"])
