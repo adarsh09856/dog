@@ -9,9 +9,10 @@ _HINDI_BOOKING_REFUSAL = re.compile(
     r"(?:है|करनी)?[.!।\s]*$",
 )
 _ENGLISH_BOOKING_REFUSAL = re.compile(
-    r"(?:wait[, ]+)?(?:i|we)\s+"
+    r"(?:(?:wait|no)[, ]+)?(?:i|we)\s+"
     r"(?:(?:do\s+not|don't|no\s+longer)\s+(?:want|need)\s+(?:to\s+)?"
     r"(?:book|schedule)(?:\s+(?:an?\s+)?appointment)?|"
+    r"(?:do\s+not|don't)\s+(?:book|schedule)(?:\s+(?:an?\s+)?appointment)?|"
     r"(?:do\s+not|don't)\s+(?:want|need)\s+(?:an?\s+)?appointment)"
     r"[.!?\s]*$",
     re.IGNORECASE,
