@@ -11,6 +11,7 @@ import asyncio
 import io
 import os
 import time
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +19,6 @@ import sherpa_onnx
 import soundfile as sf
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from huggingface_hub import hf_hub_download
-
 
 REPOSITORY = "parismitaglobalsolutions/indicconformer-sherpa-onnx"
 REVISION = "9721eb71eea141fae0982cfcdb9dd2e3d4953c4a"
@@ -32,8 +32,9 @@ PRELOAD = os.environ.get("INDIC_STT_LANGUAGES", "hi").strip().lower()
 THREADS = max(1, int(os.environ.get("INDIC_STT_THREADS", "2")))
 
 app = FastAPI(title="Kodewaves Indic CPU STT")
-_loaded: dict[str, sherpa_onnx.OfflineRecognizer] = {}
+_loaded: OrderedDict[str, sherpa_onnx.OfflineRecognizer] = OrderedDict()
 _inference_lock = asyncio.Lock()
+_max_resident_models = max(1, int(os.environ.get("INDIC_STT_RESIDENT_MODELS", "2")))
 
 
 def _installed_languages() -> list[str]:
@@ -59,6 +60,7 @@ def _download_models(languages: set[str]) -> None:
 def _load(lang: str) -> sherpa_onnx.OfflineRecognizer:
     recognizer = _loaded.get(lang)
     if recognizer is not None:
+        _loaded.move_to_end(lang)
         return recognizer
     recognizer = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(
         model=str(MODEL_DIR / lang / "model.int8.onnx"),
@@ -66,6 +68,11 @@ def _load(lang: str) -> sherpa_onnx.OfflineRecognizer:
         num_threads=THREADS,
         decoding_method="greedy_search",
     )
+    # Keep the previous recognizer if a new model fails to load. The inference
+    # lock serializes decoding; a brief extra model during this swap fits the
+    # bounded STT container, while only two remain resident afterward.
+    while len(_loaded) >= _max_resident_models:
+        _loaded.popitem(last=False)
     _loaded[lang] = recognizer
     return recognizer
 
@@ -125,8 +132,6 @@ async def transcribe(
         return {"text": "", "language": lang, "duration_ms": 0}
 
     def decode() -> str:
-        if lang not in _loaded:
-            _loaded.clear()
         recognizer = _load(lang)
         stream = recognizer.create_stream()
         stream.accept_waveform(sample_rate, waveform)
