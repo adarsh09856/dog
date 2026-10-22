@@ -118,6 +118,15 @@ def booking_tool_choice(params: dict) -> dict | None:
 
 
 class _BookingToolChoiceMixin:
+    async def _run_or_defer_function_calls(self, function_calls, *, text_generated):
+        # A tool-only completion is valid silence while its registered handler
+        # runs. Distinguish it from a successful but empty model response.
+        if function_calls:
+            self._completion_has_tool_calls = True
+        return await super()._run_or_defer_function_calls(
+            function_calls, text_generated=text_generated,
+        )
+
     async def _push_llm_text(self, text: str):
         if getattr(self, "_strip_repeated_greeting", False) and not getattr(
             self, "_opening_text_decided", False
@@ -211,6 +220,7 @@ class _BookingToolChoiceMixin:
                 )])
                 return
         self._completion_has_text = False
+        self._completion_has_tool_calls = False
         try:
             await super()._process_context(context)
             if self._opening_text_buffer:
@@ -221,7 +231,8 @@ class _BookingToolChoiceMixin:
                 else:
                     await super()._push_llm_text(remainder)
                     self._completion_has_text = bool(remainder.strip())
-            if self._greeting_suppressed and not self._completion_has_text:
+            if not self._completion_has_text and not self._completion_has_tool_calls:
+                logger.warning("LLM completion returned no spoken text or executable tools")
                 await self._push_llm_text(self._completion_recovery_text(messages))
         except (APIError, TimeoutError):
             # Keep the original error observable upstream, but give a caller
