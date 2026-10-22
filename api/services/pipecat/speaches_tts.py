@@ -118,15 +118,23 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         if self._settings.speed:
             params["speed"] = self._settings.speed
         try:
-            async with self._client.audio.speech.with_streaming_response.create(**params) as response:
-                if response.status_code != 200:
-                    yield ErrorFrame(error=f"Local speech returned HTTP {response.status_code}")
+            for attempt in range(2):
+                received_audio = False
+                async with self._client.audio.speech.with_streaming_response.create(**params) as response:
+                    if response.status_code != 200:
+                        yield ErrorFrame(error=f"Local speech returned HTTP {response.status_code}")
+                        return
+                    async for chunk in response.iter_bytes(self.chunk_size):
+                        if chunk:
+                            if not received_audio:
+                                await self.start_tts_usage_metrics(text)
+                                received_audio = True
+                            await self.stop_ttfb_metrics()
+                            yield TTSAudioRawFrame(chunk, self.sample_rate, 1, context_id=context_id)
+                if received_audio:
                     return
-                await self.start_tts_usage_metrics(text)
-                async for chunk in response.iter_bytes(self.chunk_size):
-                    if chunk:
-                        await self.stop_ttfb_metrics()
-                        yield TTSAudioRawFrame(chunk, self.sample_rate, 1, context_id=context_id)
+                if attempt:
+                    yield ErrorFrame(error="Local speech returned no audio after retry")
         except BadRequestError as exc:
             yield ErrorFrame(error=f"Local speech request was rejected: {exc}")
 
