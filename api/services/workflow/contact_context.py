@@ -68,7 +68,8 @@ def booking_phone_question(messages: list, contact: dict, state: dict) -> str | 
     replacement = re.search(r'(?<!\w)\+?\d[\d ().-]{6,}\d(?!\w)', text)
     if pending and replacement:
         phone = replacement.group().strip()
-        if known_contact({'phone': phone}).get('customer_phone'):
+        is_date = re.fullmatch(r'(?:\d{4}[-.]\d{1,2}[-.]\d{1,2}|\d{1,2}[-.]\d{1,2}[-.]\d{4})', phone)
+        if not is_date and known_contact({'phone': phone}).get('customer_phone'):
             state['approved_phone'] = phone
             state.pop('pending_phone', None)
             state.pop('declined_phone', None)
