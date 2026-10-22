@@ -632,6 +632,7 @@ async def apply_kodewaves_sovereign_resolution(
                         local_tts_api_base,
                         local_model_voice_ids,
                         local_model_voice_ids_for_language,
+                        validate_local_tts_speed,
                     )
                     inventory_url = local_tts_api_base(local_engine, selected_model)
                     try:
@@ -680,6 +681,12 @@ async def apply_kodewaves_sovereign_resolution(
                         )
                     if not voice_to_use:
                         voice_to_use = sorted(supported_voices)[0]
+                    try:
+                        validate_local_tts_speed(
+                            installed_model, voice_to_use, getattr(effective.tts, "speed", 1.0)
+                        )
+                    except ValueError as exc:
+                        raise HTTPException(status_code=400, detail=str(exc)) from exc
                     local_tts_url = inventory_url
                 elif selected_model == "piper" or selected_model.startswith("piper/"):
                     voice_to_use = voice_to_use or get_default_piper_voice_for_language(tts_lang)
