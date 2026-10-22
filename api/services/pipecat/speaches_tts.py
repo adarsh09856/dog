@@ -12,7 +12,7 @@ from api.services.configuration.language_normalizer import normalize_language_co
 from api.services.pipecat.local_speech_aggregator import LocalSpeechAggregator
 from api.services.pipecat.tts_cache.models import SynthesisRequest
 from api.services.pipecat.tts_cache.synthesis import cached_synthesis
-from pipecat.frames.frames import ErrorFrame, Frame, InterruptionFrame, TTSAudioRawFrame
+from pipecat.frames.frames import CancelFrame, ErrorFrame, Frame, InterruptionFrame, TTSAudioRawFrame
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.speaches.tts import SpeachesTTSService
 from pipecat.services.tts_service import TextAggregationMode
@@ -80,8 +80,12 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 await task
 
     async def cleanup(self):
-        await self._stop_turn_keepalive()
+        await self._cancel_prefetch()
         await super().cleanup()
+
+    async def cancel(self, frame: CancelFrame):
+        await self._cancel_prefetch()
+        await super().cancel(frame)
 
     def _resolve_speech_language(self):
         source = getattr(self, "_caller_language_source", None)
@@ -242,7 +246,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._speech_turn_open = False
         await self._stop_turn_keepalive()
 
-    async def _handle_interruption(self, frame: InterruptionFrame, direction: FrameDirection):
+    async def _cancel_prefetch(self):
+        """Stop request generators on disconnect as well as caller interruption."""
         await self._stop_turn_keepalive()
         self._prefetch_generation += 1
         tasks = [*self._prefetch_workers]
@@ -256,6 +261,9 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._prefetch_workers = set()
         self._prefetch_dispatcher = None
         self._speech_turn_open = False
+
+    async def _handle_interruption(self, frame: InterruptionFrame, direction: FrameDirection):
+        await self._cancel_prefetch()
         await super()._handle_interruption(frame, direction)
 
 
