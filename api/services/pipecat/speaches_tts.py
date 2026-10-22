@@ -70,6 +70,18 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._prefetch_changed = asyncio.Event()
         self._prefetch_closing = False
         self._prefetch_generation = 0
+        self._turn_keepalive: asyncio.Task | None = None
+
+    async def _stop_turn_keepalive(self):
+        task, self._turn_keepalive = self._turn_keepalive, None
+        if task:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+    async def cleanup(self):
+        await self._stop_turn_keepalive()
+        await super().cleanup()
 
     def _resolve_speech_language(self):
         source = getattr(self, "_caller_language_source", None)
@@ -138,6 +150,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 await keepalive
 
     async def on_turn_context_created(self, context_id: str):
+        await self._stop_turn_keepalive()
         self._turn_speech_language = self._resolve_speech_language()
         self._speech_turn_open = True
         self._prefetch_generation += 1
@@ -147,6 +160,14 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._prefetch_changed = asyncio.Event()
         self._prefetch_closing = False
         await super().on_turn_context_created(context_id)
+        async def keep_turn_open():
+            while True:
+                await asyncio.sleep(min(1.0, self._stop_frame_timeout_s / 2))
+                if self.audio_context_available(context_id):
+                    self._refresh_audio_context(context_id)
+        # LLM text may take longer than the audio-context timeout between
+        # phrases. Keep it alive until all prefetched synthesis has drained.
+        self._turn_keepalive = asyncio.create_task(keep_turn_open())
 
     async def _fetch_speech(
         self,
@@ -218,8 +239,10 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._is_yielding_frames_synchronously = True
         await super().on_turn_context_completed()
         self._speech_turn_open = False
+        await self._stop_turn_keepalive()
 
     async def _handle_interruption(self, frame: InterruptionFrame, direction: FrameDirection):
+        await self._stop_turn_keepalive()
         self._prefetch_generation += 1
         tasks = [*self._prefetch_workers]
         if self._prefetch_dispatcher:
