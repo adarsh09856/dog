@@ -146,7 +146,7 @@ def voice_for_text(text: str, preferred_voice: str, context_language: str | None
     2. Shared scripts (Devanagari, Bengali-Assamese) check preferred_voice and context_language:
        - Assamese preferred voice (ASM_F, ASM_M) is PRESERVED on Bengali-Assamese script.
        - Marathi context with KAN_M voice routes to Marathi (MAR_M), NOT Hindi.
-       - Hindi context with MAR_M voice routes to Hindi (HIN_M), NOT Marathi.
+       - Hindi context with MAR_M voice routes to the available Hindi voice.
     3. Respects speaker gender when switching voices within the target language.
     """
     active_speakers = get_active_speakers()
@@ -221,6 +221,10 @@ def voice_for_text(text: str, preferred_voice: str, context_language: str | None
     # either preference; the catalog explicitly reports this limitation.
     if not gender_matched:
         gender_matched = [v for v in candidates if active_speakers[v][3] == "unspecified"]
+    # Indus is the only Hindi/Indian-English engine in a bilingual deployment.
+    # A regional male preference must not make those languages unspeakable.
+    if not gender_matched and INDUS_READY and target_lang in {"hi", "en"}:
+        gender_matched = [v for v in candidates if v in {"HIN_F", "ENG_IN"}]
     if not gender_matched:
         raise ValueError(f"No loaded {pref_gender} voice supports language '{target_lang}'")
     return gender_matched[0]
