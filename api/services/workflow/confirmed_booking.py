@@ -53,13 +53,15 @@ _EXISTING_OR_DECLINED_BOOKING = re.compile(
 )
 
 
-def first_booking_question(messages: list[dict]) -> str | None:
+def first_booking_question(messages: list[dict], known_name: str | None = None) -> str | None:
     """Return one fast, language-matched name question for a first booking turn."""
     user_messages = [
         message for message in messages
         if isinstance(message, dict) and message.get("role") == "user"
     ]
     if not user_messages:
+        return None
+    if known_name:
         return None
     content = user_messages[-1].get("content")
     caller_text = content if isinstance(content, str) else ""
@@ -78,6 +80,10 @@ def first_booking_question(messages: list[dict]) -> str | None:
     if re.search(r"\b(?:mujhe|mera|naam|karna|chahiye|haan)\b", caller_text, re.IGNORECASE):
         return "Bilkul. Appointment kis naam se book karun?"
     return "Sure. What name should I use for the appointment?"
+
+
+def new_booking_requested(text: str) -> bool:
+    return bool(_BOOKING_REQUEST.search(text) and not _EXISTING_OR_DECLINED_BOOKING.search(text))
 
 
 def confirmed_booking_arguments(message: str) -> dict | None:

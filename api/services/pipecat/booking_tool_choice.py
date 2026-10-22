@@ -190,8 +190,17 @@ class _BookingToolChoiceMixin:
         self._greeting_suppressed = False
         tools = getattr(context.tools, "standard_tools", [])
         from api.services.workflow.confirmed_booking import first_booking_question
+        from api.services.workflow.contact_context import booking_phone_question
 
-        fast_booking_question = first_booking_question(messages)
+        known = getattr(self, "_known_contact", {})
+        contact_state = getattr(self, "_contact_conversation_state", None)
+        has_booking_tool = any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
+        fast_booking_question = None
+        if has_booking_tool and contact_state is not None:
+            fast_booking_question = booking_phone_question(messages, known, contact_state)
+        fast_booking_question = fast_booking_question or first_booking_question(
+            messages, known.get("customer_name")
+        )
         if fast_booking_question and any(
             getattr(tool, "name", None) == "book_appointment" for tool in tools
         ):

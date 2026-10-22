@@ -7,6 +7,7 @@ during workflow execution.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -337,10 +338,29 @@ class CustomToolManager:
                 arguments = dict(params.arguments or {})
                 context = getattr(self._engine, "context", None)
                 messages = context.get_messages() if context is not None else []
+                from api.services.workflow.contact_context import (
+                    caller_supplied_phone,
+                    known_contact,
+                )
+
+                known = known_contact(getattr(self._engine, "_call_context_vars", {}))
+                state = getattr(self._engine, "_contact_conversation_state", {})
+                if not arguments.get("customer_name") and known.get("customer_name"):
+                    arguments["customer_name"] = known["customer_name"]
+                if not arguments.get("customer_phone") and state.get("approved_phone"):
+                    arguments["customer_phone"] = state["approved_phone"]
                 arguments["confirmed_by_caller"] = caller_confirmed_booking(
                     messages
                 )
-                if not caller_phone_matches_booking(arguments.get("customer_phone", ""), messages):
+                selected_phone = arguments.get("customer_phone", "")
+                uses_known_phone = bool(known.get("customer_phone")) and re.sub(
+                    r"\D", "", selected_phone
+                ) == re.sub(r"\D", "", known["customer_phone"])
+                if (uses_known_phone and state.get("approved_phone") != known["customer_phone"]
+                        and not caller_supplied_phone(messages, selected_phone)):
+                    result = {"status": "error", "booked": False,
+                              "error": "Ask whether to use the known contact number first. If declined, ask for another number. No booking was saved."}
+                elif not caller_phone_matches_booking(selected_phone, messages):
                     result = {"status": "error", "booked": False,
                               "error": "The phone number does not match the caller's supplied number. Confirm the phone number again; no booking was saved."}
                 else:

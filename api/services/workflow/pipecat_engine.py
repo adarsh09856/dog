@@ -835,6 +835,15 @@ class PipecatEngine:
         self, agent: AgentRuntime, node: Node, *, apply_settings=True
     ) -> None:
         """Prepare one runtime's prompt and tools without changing the call."""
+        from api.services.workflow.contact_context import (
+            contact_context_instruction,
+            known_contact,
+        )
+
+        agent.llm._known_contact = known_contact(self._call_context_vars)
+        if not hasattr(self, "_contact_conversation_state"):
+            self._contact_conversation_state = {}
+        agent.llm._contact_conversation_state = self._contact_conversation_state
         manager = (
             self._custom_tool_manager
             if agent is self.active_agent
@@ -861,6 +870,7 @@ class PipecatEngine:
                 node.document_uuids, agent=agent
             )
         speech_instructions = []
+        speech_instructions.append(contact_context_instruction(self._call_context_vars))
         if not agent.is_realtime:
             language_instruction = speech_language_instruction(
                 resolve_agent_speech_language(agent.user_config)
