@@ -71,7 +71,7 @@ from pipecat.frames.frames import (
     UserMuteStartedFrame,
     UserMuteStoppedFrame,
 )
-from pipecat.metrics.metrics import TTFBMetricsData
+from pipecat.metrics.metrics import TTFATMetricsData, TTFBMetricsData
 from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.transports.base_output import BaseOutputTransport
@@ -308,8 +308,26 @@ class RealtimeFeedbackObserver(BaseObserver):
         # measurement is worse than a missing one.
         elif isinstance(frame, MetricsFrame):
             for metric_data in frame.data:
-                if isinstance(metric_data, TTFBMetricsData):
+                if isinstance(metric_data, TTFATMetricsData):
+                    if ttfb_kind(metric_data.processor) == "llm":
+                        # Text LLMs may send a role/reasoning header before any
+                        # answer. The UI's "first token" must measure the answer,
+                        # while retaining first-byte timing for diagnostics.
+                        event = build_ttfb_metric_event(
+                            ttfb_seconds=metric_data.ttfat,
+                            processor=metric_data.processor,
+                            model=metric_data.model,
+                            kind="llm",
+                        )
+                        event["payload"].update(
+                            measurement="first_answer_token",
+                            first_byte_seconds=metric_data.ttfb,
+                        )
+                        await self._send_message(event)
+                elif isinstance(metric_data, TTFBMetricsData):
                     kind = ttfb_kind(metric_data.processor)
+                    if kind == "llm" and getattr(data.source, "reports_ttfat", False):
+                        continue
                     if kind:
                         await self._send_message(
                             build_ttfb_metric_event(
