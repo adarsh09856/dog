@@ -47,6 +47,17 @@ _ROMAN_HINDI_ORDER_STATUS = re.compile(
     re.IGNORECASE,
 )
 
+_HINDI_ORDER_ENQUIRY = re.compile(
+    r"(?:मुझे|हमको|हमें)\s+(?:एक\s+)?ऑर्डर\s+के\s+"
+    r"(?:बारे\s+में|संबंध\s+में|रेगार्डिंग)\s+बात\s+करनी\s+(?:है|थी)"
+    r"[.!?।\s]*$",
+)
+_ENGLISH_ORDER_ENQUIRY = re.compile(
+    r"(?:i|we)\s+(?:want|need|would\s+like)\s+to\s+(?:talk|speak)\s+"
+    r"(?:to\s+(?:you|someone)\s+)?about\s+(?:an?\s+|my\s+)?order[.!?\s]*$",
+    re.IGNORECASE,
+)
+
 
 def direct_caller_reply(text: str, *, has_lookup_tools: bool) -> str | None:
     """Skip inference only for exact refusal or unavailable live-order requests.
@@ -61,6 +72,10 @@ def direct_caller_reply(text: str, *, has_lookup_tools: bool) -> str | None:
     if _ROMAN_HINDI_BOOKING_REFUSAL.fullmatch(text):
         return "ठीक है, कोई बात नहीं।"
     if not has_lookup_tools:
+        if _HINDI_ORDER_ENQUIRY.fullmatch(text):
+            return "ज़रूर, ऑर्डर के बारे में क्या समस्या है?"
+        if _ENGLISH_ORDER_ENQUIRY.fullmatch(text):
+            return "Sure, what do you need help with on the order?"
         if _HINDI_ORDER_STATUS.fullmatch(text):
             return "माफ़ कीजिए, मुझे लाइव ऑर्डर की जानकारी नहीं दिखती। कृपया आधिकारिक सपोर्ट से संपर्क करें।"
         if _ENGLISH_ORDER_STATUS.fullmatch(text):
