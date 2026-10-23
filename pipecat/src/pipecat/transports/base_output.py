@@ -444,7 +444,10 @@ class BaseOutputTransport(FrameProcessor):
             self._audio_buffer_cls: type[OutputAudioRawFrame] = OutputAudioRawFrame
 
             # This will be used to resample incoming audio to the output sample rate.
-            self._resampler = create_stream_resampler()
+            # Synthesis/network pauses are not stream boundaries. Completion
+            # drains this filter and interruption resets it explicitly; an
+            # inactivity timeout would silently discard still-unplayed speech.
+            self._resampler = create_stream_resampler(clear_after_secs=None)
 
             # The user can provide a single mixer, to be used by the default
             # destination, or a destination/mixer mapping.
