@@ -35,7 +35,7 @@ import { adminApi, PlatformSettings } from "@/lib/kodewavesApi";
 import IndicSttTest from "./IndicSttTest";
 
 const POPULAR_OLLAMA_MODELS = [
-  { value: "qwen3.5:2b", label: "Qwen 3.5 2B (installed local default)" },
+  { value: "qwen3.5:2b", label: "Qwen 3.5 2B" },
 ];
 
 
@@ -337,7 +337,7 @@ export default function AdminSettingsPage() {
                   Local AI Engine (Self-Hosted CPU Stack)
                 </CardTitle>
                 <CardDescription>
-                  Host ultra-lightweight LLM and TTS directly on your VPS (Ollama CPU + Indus Pocket TTS) with zero third-party cloud bills.
+                  Runs speech recognition, response generation and speech synthesis on your Kodewaves server. Available models and voices are discovered from the configured services.
                 </CardDescription>
               </div>
               <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">
@@ -399,26 +399,27 @@ export default function AdminSettingsPage() {
                 <p className="text-[10px] text-muted-foreground">Internal Docker URL for installed local Ollama models</p>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs">Speaches TTS Endpoint (Compatibility)</Label>
+              <details className="space-y-1">
+                <summary className="cursor-pointer text-xs font-medium">Additional TTS server (advanced)</summary>
+                <Label className="text-xs">OpenAI-compatible TTS endpoint</Label>
                 <Input
                   value={settings.whisper_endpoint || ""}
                   onChange={(e) => setSettings({ ...settings, whisper_endpoint: e.target.value })}
-                  placeholder="http://whisper:8000/v1"
+                  placeholder="http://tts-service:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">Used for installed local TTS models. Self-hosted STT uses the IndicConformer endpoint below.</p>
-              </div>
+                <p className="text-[10px] text-muted-foreground">Optional additional speech server. This address does not install a model or configure speech recognition. Available models and voices come from the running server.</p>
+              </details>
 
               <div className="space-y-1">
-                <Label className="text-xs">Regional VITS TTS Endpoint</Label>
+                <Label className="text-xs">Combined Local TTS Endpoint</Label>
                 <Input
                   value={settings.indic_vits_tts_endpoint || ""}
                   onChange={(e) => setSettings({ ...settings, indic_vits_tts_endpoint: e.target.value })}
                   placeholder="http://indic-vits-tts:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">CPU voice service for its 13 installed regional languages. Hindi and English are not available in this model.</p>
+                <p className="text-[10px] text-muted-foreground">Shared endpoint for installed local voices. Supported languages and speakers are discovered from the running service and shown in model configuration.</p>
               </div>
 
               <div className="space-y-1">
