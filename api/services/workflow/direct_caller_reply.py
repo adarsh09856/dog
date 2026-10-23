@@ -24,9 +24,16 @@ _ROMAN_HINDI_BOOKING_REFUSAL = re.compile(
 )
 # Restrict optional references to one bounded identifier containing a digit.
 # This must not consume another intent, such as "and change its address".
-_ORDER_REFERENCE = r"(?:\s+(?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{1,40})?"
+_ORDER_REFERENCE_TOKEN = r"\s+(?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{1,40}"
+_ORDER_REFERENCE = r"(?:" + _ORDER_REFERENCE_TOKEN + r")?"
+# Hindi STT spells identifiers as words (123 -> एक सौ तेईस). A bounded
+# Devanagari reference also covers named items, but never another request.
+_HINDI_ORDER_REFERENCE = (
+    r"(?:" + _ORDER_REFERENCE_TOKEN
+    + r"|(?:\s+(?!(?:और|लेकिन|मगर|फिर|रद्द|बदलो|बदलना)(?:\s|$))[\u0900-\u097f]+){1,6})?"
+)
 _HINDI_ORDER_STATUS = re.compile(
-    r"(?:मेरे|मेरा)\s+ऑर्डर" + _ORDER_REFERENCE
+    r"(?:मेरे|मेरा)\s+ऑर्डर" + _HINDI_ORDER_REFERENCE
     + r"\s+(?:का\s+क्या\s+हुआ|(?:की\s+)?(?:स्थिति|स्टेटस)\s+क्या\s+है|कहाँ\s+है)\s*[?।!\s]*$",
 )
 _ENGLISH_ORDER_STATUS = re.compile(
