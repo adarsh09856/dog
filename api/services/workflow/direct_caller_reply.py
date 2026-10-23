@@ -73,7 +73,7 @@ def direct_caller_reply(text: str, *, has_lookup_tools: bool) -> str | None:
         return "ठीक है, कोई बात नहीं।"
     if not has_lookup_tools:
         if _HINDI_ORDER_ENQUIRY.fullmatch(text):
-            return "ज़रूर, ऑर्डर के बारे में क्या समस्या है?"
+            return "ऑर्डर के बारे में क्या समस्या है?"
         if _ENGLISH_ORDER_ENQUIRY.fullmatch(text):
             return "Sure, what do you need help with on the order?"
         if _HINDI_ORDER_STATUS.fullmatch(text):
