@@ -574,6 +574,9 @@ class BaseOutputTransport(FrameProcessor):
             Args:
                 _: The start interruption frame (unused).
             """
+            # A later completion must not drain the interrupted filter tail.
+            self._resampler.reset()
+            self._audio_buffer = bytearray()
             # Cancel tasks.
             await self._cancel_clock_task()
             await self._cancel_video_task()
@@ -673,6 +676,10 @@ class BaseOutputTransport(FrameProcessor):
             Args:
                 frame: The TTS stopped frame to queue.
             """
+            # Resampling filters can retain an entire short phrase even when
+            # the transport byte buffer is empty. Drain them before the stop
+            # marker so those samples cannot be lost or enter a later phrase.
+            self._audio_buffer.extend(await self._resampler.flush())
             await self._enqueue_flushed_audio_buffer()
             await self._audio_queue.put(frame)
 
@@ -734,6 +741,18 @@ class BaseOutputTransport(FrameProcessor):
             any other chunk, in order relative to whatever is queued after it
             (e.g. a TTSStoppedFrame).
             """
+            if not self._audio_buffer:
+                return
+
+            while len(self._audio_buffer) >= self._audio_chunk_size:
+                frame = self._audio_buffer_cls(
+                    bytes(self._audio_buffer[: self._audio_chunk_size]),
+                    sample_rate=self._sample_rate,
+                    num_channels=self._params.audio_out_channels,
+                )
+                frame.transport_destination = self._destination
+                del self._audio_buffer[: self._audio_chunk_size]
+                await self._audio_queue.put(frame)
             if not self._audio_buffer:
                 return
 

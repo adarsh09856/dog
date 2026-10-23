@@ -96,6 +96,18 @@ class SOXRStreamAudioResampler(BaseAudioResampler):
         assert self._soxr_stream is not None
         return self._soxr_stream
 
+    def reset(self) -> None:
+        """Discard filter history instead of playing interrupted samples."""
+        self._soxr_stream = None
+
+    async def flush(self) -> bytes:
+        """Drain filter history without dropping the final speech samples."""
+        stream, self._soxr_stream = self._soxr_stream, None
+        if stream is None:
+            return b""
+        output = stream.resample_chunk(np.empty(0, dtype=np.int16), last=True)
+        return output.astype(np.int16).tobytes()
+
     async def resample(self, audio: bytes, in_rate: int, out_rate: int) -> bytes:
         """Resample audio data using soxr.ResampleStream resampler library.
 
