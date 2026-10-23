@@ -194,7 +194,8 @@ async def create_payment_order(req: CreateOrderRequest, user: UserModel = Depend
                 raise HTTPException(status_code=404, detail="Credit package not found")
             item_title = package.name
             currency = package.currency or currency
-            amount_units = int(package.price_cents * 100) if package.price_cents < 10000 else package.price_cents
+            # Admin prices are already stored in minor units (paise/cents).
+            amount_units = package.price_cents
             minutes_to_credit = package.minutes + (package.bonus_minutes or 0)
             package_ref = str(package.id)
 
@@ -217,7 +218,7 @@ async def create_payment_order(req: CreateOrderRequest, user: UserModel = Depend
             item_title = f"{plan.name} Plan ({req.billing_cycle})"
             currency = plan.currency or currency
             base_cents = plan.annual_price_cents if req.billing_cycle == "annual" else plan.monthly_price_cents
-            amount_units = int(base_cents * 100) if base_cents < 10000 else base_cents
+            amount_units = base_cents
             minutes_to_credit = plan.included_monthly_minutes
             plan_ref = plan.code
         else:
