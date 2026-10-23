@@ -222,7 +222,13 @@ class _BookingToolChoiceMixin:
             and messages[-1].get("role") == "user" else ""
         )
         direct_reply = direct_caller_reply(
-            latest_user_text, has_lookup_tools=bool(tools)
+            latest_user_text,
+            # Ending a call cannot retrieve an order. Other tools remain
+            # eligible for workflow routing and live lookups.
+            has_lookup_tools=any(
+                getattr(tool, "name", None) not in _END_CALL_TOOLS
+                for tool in tools
+            ),
         )
         if direct_reply:
             state = getattr(self, "_contact_conversation_state", None)
