@@ -60,15 +60,20 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._client.max_retries = 0
         # The stock HTTP TTS path consumes each synthesis generator before it
         # accepts the next LLM phrase. On a CPU VITS server that creates a
-        # silent gap after every short phrase. Keep HTTP fetches concurrent,
-        # while a single ordered dispatcher still sends PCM to playback in the
-        # original text order.
+        # silent gap after every short phrase. Fetch in the background so the
+        # next phrase can synthesize while the current audio plays. Both request
+        # starts and PCM dispatch retain the original text order.
         self._prefetched_speech: list[_PrefetchedSpeech] = []
         self._prefetch_workers: set[asyncio.Task] = set()
         self._prefetch_dispatcher: asyncio.Task | None = None
         self._prefetch_changed = asyncio.Event()
         self._prefetch_closing = False
         self._prefetch_generation = 0
+        # The local CPU provider synthesizes one request at a time. Concurrent
+        # HTTP connection setup can let a later phrase acquire its queue first,
+        # delaying the opening audio while the dispatcher waits for text order.
+        # Keep synthesis ordered while playback proceeds independently.
+        self._prefetch_request_lock = asyncio.Lock()
         self._turn_keepalive: asyncio.Task | None = None
 
     async def _stop_turn_keepalive(self):
@@ -187,11 +192,14 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         generation: int,
     ):
         try:
-            async for frame in generator:
+            async with self._prefetch_request_lock:
                 if generation != self._prefetch_generation:
                     return
-                if frame:
-                    await speech.frames.put(frame)
+                async for frame in generator:
+                    if generation != self._prefetch_generation:
+                        return
+                    if frame:
+                        await speech.frames.put(frame)
         except Exception as exc:  # noqa: BLE001 - forward task failures through the pipeline error channel
             if generation == self._prefetch_generation:
                 await speech.frames.put(ErrorFrame(
