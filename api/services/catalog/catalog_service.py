@@ -988,8 +988,6 @@ class CatalogService:
                                         and installed_model.get("installed") is not False
                                         and installed_model.get("id")):
                                     model_id = installed_model["id"]
-                                    if "kokoro" in model_id.casefold():
-                                        continue
                                     local_tts.append({
                                         "value": model_id,
                                         "label": model_id.split("/")[-1] + " (Local CPU)",
@@ -997,6 +995,8 @@ class CatalogService:
                                         # Keep the installed engine's real support
                                         # boundary visible to model configuration.
                                         "languages": installed_model.get("languages", []),
+                                        "voices": installed_model.get("voices", []),
+                                        "streaming": installed_model.get("streaming", False),
                                     })
             except Exception:
                 pass
