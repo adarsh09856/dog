@@ -870,7 +870,6 @@ class PipecatEngine:
                 node.document_uuids, agent=agent
             )
         speech_instructions = []
-        speech_instructions.append(contact_context_instruction(self._call_context_vars))
         if not agent.is_realtime:
             language_instruction = speech_language_instruction(
                 resolve_agent_speech_language(agent.user_config)
@@ -880,6 +879,9 @@ class PipecatEngine:
             speech_instructions.append(
                 await selected_voice_persona_instruction(agent.user_config)
             )
+        # Keep caller-specific values after the stable language and voice rules
+        # so changing contacts does not invalidate that reusable model prefix.
+        speech_instructions.append(contact_context_instruction(self._call_context_vars))
         prompt = compose_system_prompt_for_node(
             node=node,
             workflow=agent.workflow,
