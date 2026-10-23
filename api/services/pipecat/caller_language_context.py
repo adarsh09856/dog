@@ -39,9 +39,8 @@ class CallerLanguageContext:
             key = (len(users) - 1, users[-1][1])
             if language and key not in self._hints:
                 self._hints[key] = (
-                    f"The caller just spoke {language}. Reply only in {language}; "
-                    "follow their latest language choice, use natural grammar, "
-                    "do not add a translation unless asked, and do not repeat the greeting."
+                    f"Reply only in {language}, using natural grammar. "
+                    "No translation unless asked; do not repeat the greeting."
                 )
 
         result = list(messages)
