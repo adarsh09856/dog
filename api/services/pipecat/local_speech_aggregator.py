@@ -26,6 +26,7 @@ class LocalSpeechAggregator(BaseTextAggregator):
         super().__init__()
         self._sentences = SimpleTextAggregator()
         self._pending = ""
+        self._phrase_tail = ""
         self._min_characters = min_characters
         self._first_chunk_characters = first_chunk_characters or min_characters
         self._emitted = False
@@ -36,7 +37,7 @@ class LocalSpeechAggregator(BaseTextAggregator):
     @property
     def text(self) -> Aggregation:
         return Aggregation(
-            text=self._join(self._pending, self._sentences.text.text),
+            text=self._join(self._pending, self._sentences.text.text + self._phrase_tail),
             type=AggregationType.SENTENCE,
         )
 
@@ -45,6 +46,11 @@ class LocalSpeechAggregator(BaseTextAggregator):
         return " ".join(part for part in (first.strip(), second.strip()) if part)
 
     async def aggregate(self, text: str):
+        # A phrase split can leave half of the next word in this token.
+        # Reattach it verbatim before sentence parsing, never as a completed
+        # sentence (whose join operation intentionally adds a separator).
+        text = self._phrase_tail + text
+        self._phrase_tail = ""
         async for sentence in self._sentences.aggregate(text):
             self._pending = self._join(self._pending, sentence.text)
             threshold = self._min_characters if self._emitted else self._first_chunk_characters
@@ -110,6 +116,8 @@ class LocalSpeechAggregator(BaseTextAggregator):
             if text and text[-1].isspace():
                 buffered += " "
             combined = self._join(self._pending, buffered)
+            if text and text[-1].isspace():
+                combined += " "
             minimum = self._streaming_phrase_characters
             if len(combined) > minimum:
                 boundary = re.search(r"\s", combined[minimum:minimum + 17])
@@ -117,21 +125,21 @@ class LocalSpeechAggregator(BaseTextAggregator):
                     split_at = minimum + boundary.start()
                     first, tail = combined[:split_at], combined[split_at:]
                     await self._sentences.reset()
-                    # Retain the unspoken suffix locally. Re-feeding it into
-                    # SimpleTextAggregator discards its leading separator on
-                    # some incremental Indic tokens, which joins words.
-                    self._pending = tail.strip()
+                    self._pending = ""
+                    self._phrase_tail = tail
                     yield Aggregation(text=first, type=AggregationType.SENTENCE)
 
     async def flush(self) -> Aggregation | None:
         tail = await self._sentences.flush()
-        text = self._join(self._pending, tail.text if tail else "")
+        text = self._join(self._pending, (tail.text if tail else "") + self._phrase_tail)
         self._pending = ""
+        self._phrase_tail = ""
         self._emitted = False
         return Aggregation(text=text, type=AggregationType.SENTENCE) if text else None
 
     async def reset(self):
         self._pending = ""
+        self._phrase_tail = ""
         self._emitted = False
         await self._sentences.reset()
 
