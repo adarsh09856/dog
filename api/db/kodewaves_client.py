@@ -587,14 +587,23 @@ class KodewavesDBClient(BaseDBClient):
         reference_id: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> OrganizationWalletModel:
+        if minutes <= 0:
+            raise ValueError("Minute credits must be positive")
         async with self.get_session() as session:
-            stmt = select(OrganizationWalletModel).where(OrganizationWalletModel.organization_id == organization_id)
+            # An upsert also serializes first-time wallet creation: a SELECT
+            # FOR UPDATE alone cannot lock a row that does not exist yet.
+            await session.execute(
+                insert(OrganizationWalletModel).values(
+                    organization_id=organization_id,
+                    credit_balance_minutes=0,
+                    bonus_minutes=0,
+                ).on_conflict_do_nothing(index_elements=["organization_id"])
+            )
+            stmt = select(OrganizationWalletModel).where(
+                OrganizationWalletModel.organization_id == organization_id
+            ).with_for_update()
             result = await session.execute(stmt)
             wallet = result.scalar_one_or_none()
-
-            if not wallet:
-                wallet = OrganizationWalletModel(organization_id=organization_id, credit_balance_minutes=0)
-                session.add(wallet)
 
             # Idempotency check: avoid double crediting same payment reference
             if reference_id:
