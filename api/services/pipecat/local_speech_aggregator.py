@@ -93,7 +93,7 @@ class LocalSpeechAggregator(BaseTextAggregator):
             minimum = self._first_phrase_characters
             # Release as soon as the *first* suitable space arrives. Waiting
             # for the entire lookahead window added avoidable generation time.
-            if len(buffered) > minimum:
+            if len(buffered) > minimum and not buffered.rstrip().endswith((".", "?", "!", "।", "॥")):
                 boundary = re.search(r"\s", buffered[minimum:minimum + 17])
                 if boundary:
                     split_at = minimum + boundary.start()
@@ -119,7 +119,7 @@ class LocalSpeechAggregator(BaseTextAggregator):
             if text and text[-1].isspace():
                 combined += " "
             minimum = self._streaming_phrase_characters
-            if len(combined) > minimum:
+            if len(combined) > minimum and not combined.rstrip().endswith((".", "?", "!", "।", "॥")):
                 boundary = re.search(r"\s", combined[minimum:minimum + 17])
                 if boundary:
                     split_at = minimum + boundary.start()
