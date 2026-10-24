@@ -11,6 +11,7 @@ from dataclasses import replace
 from openai import DefaultAsyncHttpxClient
 
 from pipecat.services.speaches.stt import SpeachesSTTService
+from pipecat.services.settings import STTSettings
 from pipecat.frames.frames import ErrorFrame, InterimTranscriptionFrame, TranscriptionFrame
 
 
@@ -27,6 +28,25 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         self.latest_detected_language: str | None = None
         self.latest_detected_text: str | None = None
         self._recognizing_segment = False
+
+    async def select_caller_language(self, language: str) -> bool:
+        """Switch this call's explicit decoder only when installed locally."""
+        if self._settings.model != "indicconformer-ctc-int8":
+            return False
+        code = {"English": "en", "Hindi": "hi"}.get(language)
+        if not code:
+            return False
+        inventory = await asyncio.wait_for(self._client.models.list(), timeout=2.0)
+        installed = {
+            str(value).lower().replace("_", "-").split("-", 1)[0]
+            for model in inventory.data
+            if model.id == self._settings.model
+            for value in (getattr(model, "languages", None) or [])
+        }
+        if code not in installed:
+            return False
+        await self._update_settings(STTSettings(language=code))
+        return True
 
     @property
     def recognition_pending(self) -> bool:

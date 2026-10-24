@@ -271,6 +271,15 @@ class _BookingToolChoiceMixin:
             if not hasattr(self, "_caller_language_context"):
                 self._caller_language_context = CallerLanguageContext()
             source = getattr(self, "_caller_language_source", None)
+            select_recognition = getattr(source, "select_caller_language", None)
+            if callable(select_recognition):
+                try:
+                    await select_recognition(requested_language)
+                except Exception:
+                    # The reply choice remains valid even when recognition
+                    # inventory is temporarily unavailable. Keep errors free
+                    # of endpoint credentials and caller text.
+                    logger.warning("Caller recognition-language switch unavailable")
             self._caller_language_context.choose_language(
                 requested_language, source, text=latest_user_text
             )
