@@ -85,7 +85,7 @@ def known_contact(context: dict | None) -> dict[str, str]:
 
 
 def remember_explicit_caller_name(messages: list, state: dict) -> str | None:
-    """Keep the most recently stated explicit caller name for this call."""
+    """Keep explicit names and simple answers to a name question call-scoped."""
     if not isinstance(messages, list) or not isinstance(state, dict):
         return None
     for message in messages:
@@ -104,6 +104,26 @@ def remember_explicit_caller_name(messages: list, state: dict) -> str | None:
             candidate = match.group(1).strip(" .,!?:;।")
             if _looks_like_name(candidate) and candidate.casefold() not in _NON_NAME_ANSWERS:
                 state["caller_name"] = candidate
+    latest_user_index = next((
+        index for index in range(len(messages) - 1, -1, -1)
+        if isinstance(messages[index], dict) and messages[index].get("role") == "user"
+    ), None)
+    if latest_user_index is not None:
+        latest_user_text = messages[latest_user_index].get("content")
+        previous_assistant = next((
+            message for message in reversed(messages[:latest_user_index])
+            if isinstance(message, dict) and message.get("role") == "assistant"
+        ), None)
+        assistant_prompt = previous_assistant.get("content") if previous_assistant else ""
+        if (
+            isinstance(latest_user_text, str)
+            and isinstance(assistant_prompt, str)
+            and _NAME_REQUEST.search(assistant_prompt)
+            and not re.search(r"\d", latest_user_text)
+        ):
+            answer = latest_user_text.strip(" .,!?:;।")
+            if _looks_like_name(answer) and answer.casefold() not in _NON_NAME_ANSWERS:
+                state["caller_name"] = answer
     if not state.get("caller_name"):
         return None
     latest = next((
