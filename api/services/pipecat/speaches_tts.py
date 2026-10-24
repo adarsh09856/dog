@@ -35,9 +35,10 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 first_chunk_characters=12,
                 first_clause_characters=36,
                 first_phrase_characters=None,
-                # Keep later CPU speech requests paced with the slow streaming LLM.
-                # Waiting for a complete sentence can leave seconds of silence between chunks.
-                streaming_phrase_characters=48,
+                # Each independent Inaya request restarts its prosody and adds
+                # end/start padding. Preserve natural sentence boundaries after
+                # the initial clause instead of splitting every 48 characters.
+                streaming_phrase_characters=None,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
