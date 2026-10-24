@@ -817,6 +817,7 @@ async def execute_text_chat_pending_turn(
                 caller_name_followup_reply,
                 caller_phone_fragment_reply,
                 known_contact,
+                remember_explicit_caller_name,
             )
             from api.services.workflow.direct_caller_reply import direct_caller_reply, has_live_lookup_tools
 
@@ -832,9 +833,12 @@ async def execute_text_chat_pending_turn(
             name_followup_reply = caller_name_followup_reply(
                 context.get_messages(), engine._contact_conversation_state
             )
+            known_name_reply = remember_explicit_caller_name(
+                context.get_messages(), engine._contact_conversation_state
+            )
             phone_fragment_reply = caller_phone_fragment_reply(
                 context.get_messages(), engine._contact_conversation_state
-            ) if not name_followup_reply else None
+            ) if not name_followup_reply and not known_name_reply else None
             fast_booking_question = booking_contact_question(
                 context.get_messages(), known_contact(initial_context),
                 engine._contact_conversation_state,
@@ -843,6 +847,9 @@ async def execute_text_chat_pending_turn(
                 engine._contact_conversation_state.pop("pending_phone", None)
                 response_window.outputs.append(direct_reply)
                 context.add_message({"role": "assistant", "content": direct_reply})
+            elif known_name_reply:
+                response_window.outputs.append(known_name_reply)
+                context.add_message({"role": "assistant", "content": known_name_reply})
             elif name_followup_reply:
                 response_window.outputs.append(name_followup_reply)
                 context.add_message({"role": "assistant", "content": name_followup_reply})

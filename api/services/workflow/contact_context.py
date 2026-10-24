@@ -13,8 +13,13 @@ _PHONE_REQUEST = re.compile(
     re.IGNORECASE,
 )
 _EXPLICIT_NAME_ANSWER = re.compile(
-    r"^(?:my\s+name\s+is|i\s+am|i'm|this\s+is|mera\s+naam)\s+(.+?)"
+    r"^(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is|mera\s+naam)\s+(.+?)"
     r"(?:\s+(?:hai|है|हूँ))?[.!?।\s]*$",
+    re.IGNORECASE,
+)
+_EXPLICIT_NAME_PREFIX = re.compile(
+    r"^(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is)\s+(.+?)"
+    r"(?=\s+(?:and\s+(?:i|we)\b|but\b|i\s+(?:need|want|would|am)\b|my\s+(?:phone|number)\b)|[,.!?]|$)",
     re.IGNORECASE,
 )
 _HINDI_NAME_ANSWER = re.compile(
@@ -22,6 +27,11 @@ _HINDI_NAME_ANSWER = re.compile(
 )
 _HINDI_NAME_PREFIX = re.compile(
     r"^(?:(?:अः|अह|अच्छा)\s*)?मेरा\s+नाम\s+(.+?)\s+है(?=$|[\s,।.!])"
+)
+_ASK_CALLER_NAME = re.compile(
+    r"(?:\bwhat(?:'s|\s+is)?\s+my\s+name\b|\bwhat\s+name\s+did\s+i\s+give\b|"
+    r"\bdo\s+you\s+remember\s+my\s+name\b|मेरा\s+नाम\s+क्या\s+(?:है|बताया)|"
+    r"मैंने\s+अपना\s+नाम\s+क्या\s+बताया)", re.IGNORECASE
 )
 _NON_NAME_ANSWERS = frozenset({
     "yes", "yeah", "yep", "no", "nope", "ok", "okay", "sure", "haan",
@@ -72,6 +82,41 @@ def known_contact(context: dict | None) -> dict[str, str]:
     if email:
         result['customer_email'] = email
     return result
+
+
+def remember_explicit_caller_name(messages: list, state: dict) -> str | None:
+    """Keep the most recently stated explicit caller name for this call."""
+    if not isinstance(messages, list) or not isinstance(state, dict):
+        return None
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        text = message.get("content")
+        if not isinstance(text, str):
+            continue
+        match = (
+            _HINDI_NAME_PREFIX.match(text.strip())
+            or _EXPLICIT_NAME_PREFIX.match(text.strip())
+            or _EXPLICIT_NAME_ANSWER.fullmatch(text.strip())
+            or _HINDI_NAME_ANSWER.fullmatch(text.strip())
+        )
+        if match:
+            candidate = match.group(1).strip(" .,!?:;।")
+            if _looks_like_name(candidate) and candidate.casefold() not in _NON_NAME_ANSWERS:
+                state["caller_name"] = candidate
+    if not state.get("caller_name"):
+        return None
+    latest = next((
+        message.get("content") for message in reversed(messages)
+        if isinstance(message, dict) and message.get("role") == "user"
+        and isinstance(message.get("content"), str)
+    ), "")
+    if not _ASK_CALLER_NAME.search(latest):
+        return None
+    name = state["caller_name"]
+    if state.get("reply_language") == "English" or not re.search(r"[\u0900-\u097f]", latest):
+        return f"You told me your name is {name}."
+    return f"आपने अपना नाम {name} बताया था।"
 
 
 def contact_context_instruction(context: dict | None) -> str:

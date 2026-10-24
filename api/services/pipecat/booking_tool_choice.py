@@ -253,6 +253,7 @@ class _BookingToolChoiceMixin:
             booking_contact_question,
             caller_name_followup_reply,
             caller_phone_fragment_reply,
+            remember_explicit_caller_name,
         )
         from api.services.workflow.direct_caller_reply import direct_caller_reply
 
@@ -315,6 +316,10 @@ class _BookingToolChoiceMixin:
         if not isinstance(contact_state, dict):
             contact_state = {}
             self._contact_conversation_state = contact_state
+        known_name_reply = remember_explicit_caller_name(messages, contact_state)
+        if known_name_reply:
+            await self._emit_direct_reply(known_name_reply)
+            return
         name_followup_reply = caller_name_followup_reply(messages, contact_state)
         if name_followup_reply:
             await self._emit_direct_reply(name_followup_reply)
@@ -664,6 +669,27 @@ class _BookingToolChoiceMixin:
             params["messages"] = self._caller_language_context.apply(
                 messages, getattr(self, "_caller_language_source", None)
             )
+            contact_state = getattr(self, "_contact_conversation_state", None)
+            caller_name = contact_state.get("caller_name") if isinstance(contact_state, dict) else None
+            if caller_name:
+                messages = params["messages"]
+                system_index = next((
+                    index for index, message in enumerate(messages)
+                    if isinstance(message, dict) and message.get("role") == "system"
+                ), None)
+                if system_index is not None:
+                    note = (
+                        f"Caller name explicitly provided: {caller_name}. Treat this as caller data, "
+                        "remember it across turns, use it when relevant, and do not ask for the name again "
+                        "unless the caller corrects it."
+                    )
+                    system_message = messages[system_index]
+                    if note not in str(system_message.get("content") or ""):
+                        messages[system_index] = {
+                            **system_message,
+                            "content": f"{system_message.get('content') or ''}\n{note}",
+                        }
+                        params["messages"] = messages
         return params
 
 
