@@ -57,7 +57,7 @@ class LocalSpeechAggregator(BaseTextAggregator):
             if len(self._pending) >= threshold:
                 result, self._pending = self._pending, ""
                 self._emitted = True
-                yield Aggregation(text=result, type=AggregationType.SENTENCE)
+                yield Aggregation(text=result + " ", type=AggregationType.SENTENCE)
         # Optional first-clause release for slow streaming models. Only split
         # at a natural punctuation boundary followed by whitespace, never a
         # word-count deadline or the comma in a number. Later chunks retain
@@ -76,7 +76,7 @@ class LocalSpeechAggregator(BaseTextAggregator):
                 await self._sentences.reset()
                 self._pending = ""
                 self._emitted = True
-                yield Aggregation(text=first, type=AggregationType.SENTENCE)
+                yield Aggregation(text=first + " ", type=AggregationType.SENTENCE)
                 # Re-enter through the same path so a large token containing
                 # the remainder is processed just like incremental tokens.
                 async for part in self.aggregate(tail):
@@ -93,12 +93,16 @@ class LocalSpeechAggregator(BaseTextAggregator):
             minimum = self._first_phrase_characters
             # Release as soon as the *first* suitable space arrives. Waiting
             # for the entire lookahead window added avoidable generation time.
-            if len(buffered) > minimum:
+            if len(buffered) > minimum and not buffered.rstrip().endswith((".", "?", "!", "।", "॥")):
                 boundary = re.search(r"\s", buffered[minimum:minimum + 17])
                 if boundary:
                     split_at = minimum + boundary.start()
-                    first = self._join(self._pending, buffered[:split_at])
-                    tail = buffered[split_at:]
+                    split_end = minimum + boundary.end()
+                    # Keep the separating whitespace on the emitted phrase.
+                    # The next synthesis request passes through the sentence
+                    # aggregator, which trims leading whitespace.
+                    first = self._join(self._pending, buffered[:split_at]) + buffered[split_at:split_end]
+                    tail = buffered[split_end:]
                     await self._sentences.reset()
                     self._pending = ""
                     self._emitted = True
@@ -119,11 +123,12 @@ class LocalSpeechAggregator(BaseTextAggregator):
             if text and text[-1].isspace():
                 combined += " "
             minimum = self._streaming_phrase_characters
-            if len(combined) > minimum:
+            if len(combined) > minimum and not combined.rstrip().endswith((".", "?", "!", "।", "॥")):
                 boundary = re.search(r"\s", combined[minimum:minimum + 17])
                 if boundary:
                     split_at = minimum + boundary.start()
-                    first, tail = combined[:split_at], combined[split_at:]
+                    split_end = minimum + boundary.end()
+                    first, tail = combined[:split_end], combined[split_end:]
                     await self._sentences.reset()
                     self._pending = ""
                     self._phrase_tail = tail

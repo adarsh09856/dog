@@ -246,6 +246,9 @@ class SmallWebRTCClient:
         self._audio_input_track: SmallWebRTCTrack | None = None
         self._video_input_track: SmallWebRTCTrack | None = None
         self._screen_video_track: SmallWebRTCTrack | None = None
+        self._audio_write_failure_count = 0
+        self._audio_write_failure_reason: str | None = None
+        self._last_audio_write_failure_log_at = 0.0
 
         self._params = None
         self._audio_in_channels = 0
@@ -466,9 +469,39 @@ class SmallWebRTCClient:
         Returns:
             True if the audio frame was written successfully, False otherwise.
         """
-        if self._can_send() and self._audio_output_track:
+        connected = self.is_connected
+        has_output_track = self._audio_output_track is not None
+        if connected and not self.is_closing and has_output_track:
             await self._audio_output_track.add_audio_bytes(frame.audio)
+            if self._audio_write_failure_count:
+                logger.info(
+                    "WebRTC audio output recovered after rejected frames: reason={} frames={}",
+                    self._audio_write_failure_reason,
+                    self._audio_write_failure_count,
+                )
+                self._audio_write_failure_count = 0
+                self._audio_write_failure_reason = None
+                self._last_audio_write_failure_log_at = 0.0
             return True
+
+        reason = (
+            "closing" if self.is_closing
+            else "not_connected" if not connected
+            else "output_track_missing"
+        )
+        self._audio_write_failure_count += 1
+        self._audio_write_failure_reason = reason
+        now = time.monotonic()
+        if now - self._last_audio_write_failure_log_at >= 1.0:
+            logger.warning(
+                "WebRTC audio output unavailable: reason={} connected={} closing={} output_track_present={} rejected_frames={}",
+                reason,
+                connected,
+                self.is_closing,
+                has_output_track,
+                self._audio_write_failure_count,
+            )
+            self._last_audio_write_failure_log_at = now
         return False
 
     async def write_video_frame(self, frame: OutputImageRawFrame) -> bool:

@@ -134,6 +134,18 @@ class CallEventRecorder:
         self._llm_chars_since_turn = 0
         self._refusals_since_turn = 0
         self._tts_started_since_turn = False
+        self._tts_contexts: dict[str, dict[str, Any]] = {}
+        # Observe PCM at the output-transport boundary as well as at TTS.
+        self._turn_output_audio = {
+            "started_at": None,
+            "first_frame_at": None,
+            "last_frame_at": None,
+            "frames": 0,
+            "bytes": 0,
+            "duration_ms": 0.0,
+            "max_gap_ms": 0.0,
+            "gaps_over_750ms": 0,
+        }
         self._bot_spoke_since_user_turn = False
         self._last_user_turn_stopped_at: float | None = None
         self._user_speech_seen = False
@@ -211,7 +223,20 @@ class CallEventRecorder:
             and bool(frame.audio)
             and not self._tts_first_audio_seen
         )
-        if isinstance(frame, _IGNORED_FRAMES) and not first_generated_audio:
+        active_segment_audio = (
+            isinstance(frame, TTSAudioRawFrame)
+            and str(getattr(frame, "context_id", None) or "") in self._tts_contexts
+        )
+        transport_output_audio = (
+            isinstance(frame, OutputAudioRawFrame)
+            and isinstance(data.source, BaseOutputTransport)
+        )
+        if (
+            isinstance(frame, _IGNORED_FRAMES)
+            and not first_generated_audio
+            and not active_segment_audio
+            and not transport_output_audio
+        ):
             return
         try:
             from api.services.pipecat.agent_bridge import AgentWorker
@@ -271,6 +296,31 @@ class CallEventRecorder:
         if self._seen(frame):
             return
 
+        if isinstance(frame, OutputAudioRawFrame) and isinstance(
+            data.source, BaseOutputTransport
+        ):
+            stats = self._turn_output_audio
+            now = time.monotonic()
+            if stats["started_at"] is None:
+                stats["started_at"] = now
+            if stats["first_frame_at"] is None:
+                stats["first_frame_at"] = now
+            if stats["last_frame_at"] is not None:
+                gap_ms = (now - stats["last_frame_at"]) * 1000.0
+                stats["max_gap_ms"] = max(stats["max_gap_ms"], gap_ms)
+                if gap_ms >= 750.0:
+                    stats["gaps_over_750ms"] += 1
+            stats["last_frame_at"] = now
+            audio = getattr(frame, "audio", b"") or b""
+            sample_rate = int(getattr(frame, "sample_rate", 0) or 0)
+            channels = int(getattr(frame, "num_channels", 1) or 1)
+            stats["frames"] += 1
+            stats["bytes"] += len(audio)
+            if sample_rate > 0 and channels > 0:
+                stats["duration_ms"] += (
+                    len(audio) / (sample_rate * channels * 2) * 1000.0
+                )
+
         if isinstance(frame, VADUserStartedSpeakingFrame):
             self._user_speech_seen = True
             self._emit(ev.USER_SPEAKING_START)
@@ -310,12 +360,33 @@ class CallEventRecorder:
                 self._llm_first_text_seen = True
                 self._emit(ev.LLM_FIRST_TEXT, detail={"chars": chars})
         elif isinstance(frame, TTSAudioRawFrame):
-            self._tts_first_audio_seen = True
-            self._emit(ev.TTS_FIRST_AUDIO, detail={
-                "sample_rate": frame.sample_rate,
-                "num_channels": frame.num_channels,
-                "bytes": len(frame.audio),
-            })
+            if not self._tts_first_audio_seen and bool(frame.audio):
+                self._tts_first_audio_seen = True
+                self._emit(ev.TTS_FIRST_AUDIO, detail={
+                    "sample_rate": frame.sample_rate,
+                    "num_channels": frame.num_channels,
+                    "bytes": len(frame.audio),
+                })
+            context_id = str(getattr(frame, "context_id", None) or "")
+            segment = self._tts_contexts.get(context_id)
+            if segment is not None and frame.audio:
+                now = time.monotonic()
+                if segment["first_audio_at"] is None:
+                    segment["first_audio_at"] = now
+                if segment["last_audio_at"] is not None:
+                    gap_ms = (now - segment["last_audio_at"]) * 1000.0
+                    segment["max_pcm_gap_ms"] = max(segment["max_pcm_gap_ms"], gap_ms)
+                    if gap_ms >= 750.0:
+                        segment["pcm_gaps_over_750ms"] += 1
+                segment["last_audio_at"] = now
+                sample_rate = int(getattr(frame, "sample_rate", 0) or 0)
+                channels = int(getattr(frame, "num_channels", 1) or 1)
+                segment["audio_frames"] += 1
+                segment["audio_bytes"] += len(frame.audio)
+                if sample_rate > 0 and channels > 0:
+                    segment["audio_duration_ms"] += (
+                        len(frame.audio) / (sample_rate * channels * 2) * 1000.0
+                    )
         elif isinstance(frame, LLMFullResponseEndFrame):
             self._llm_open = False
             if self._llm_text_chars == 0:
@@ -329,14 +400,66 @@ class CallEventRecorder:
             self._function_call_finished(frame, cancelled=True)
         elif isinstance(frame, TTSStartedFrame):
             self._tts_started_since_turn = True
-            self._emit(ev.TTS_STARTED)
+            context_id = str(getattr(frame, "context_id", None) or frame.id)
+            self._tts_contexts[context_id] = {
+                "started_at": time.monotonic(),
+                "first_audio_at": None,
+                "last_audio_at": None,
+                "audio_frames": 0,
+                "audio_bytes": 0,
+                "audio_duration_ms": 0.0,
+                "max_pcm_gap_ms": 0.0,
+                "pcm_gaps_over_750ms": 0,
+            }
+            self._emit(ev.TTS_STARTED, detail={"context_id": context_id})
         elif isinstance(frame, TTSStoppedFrame):
-            self._emit(ev.TTS_STOPPED)
+            context_id = str(getattr(frame, "context_id", None) or "")
+            segment = self._tts_contexts.pop(context_id, None)
+            detail = {"context_id": context_id} if context_id else {}
+            wall_ms = None
+            if segment is not None:
+                now = time.monotonic()
+                wall_ms = (now - segment["started_at"]) * 1000.0
+                first_audio_ms = (
+                    (segment["first_audio_at"] - segment["started_at"]) * 1000.0
+                    if segment["first_audio_at"] is not None
+                    else None
+                )
+                detail.update({
+                    "audio_frames": segment["audio_frames"],
+                    "audio_bytes": segment["audio_bytes"],
+                    "audio_duration_ms": _round_ms(segment["audio_duration_ms"]),
+                    "first_audio_ms": _round_ms(first_audio_ms),
+                    "synthesis_wall_ms": _round_ms(wall_ms),
+                    "max_pcm_gap_ms": _round_ms(segment["max_pcm_gap_ms"]),
+                    "pcm_gaps_over_750ms": segment["pcm_gaps_over_750ms"],
+                    "no_audio": segment["audio_frames"] == 0,
+                })
+            self._emit(ev.TTS_STOPPED, value_ms=wall_ms, detail=detail)
         elif isinstance(frame, BotStartedSpeakingFrame):
             self._bot_started_speaking()
         elif isinstance(frame, BotStoppedSpeakingFrame):
             self._first_bot_completed = True
-            self._emit(ev.BOT_SPEAKING_STOP)
+            stats = self._turn_output_audio
+            started_at = stats["started_at"]
+            first_frame_at = stats["first_frame_at"]
+            self._emit(
+                ev.BOT_SPEAKING_STOP,
+                detail={
+                    "output_audio": {
+                        "frames": stats["frames"],
+                        "bytes": stats["bytes"],
+                        "duration_ms": _round_ms(stats["duration_ms"]),
+                        "first_frame_ms": _round_ms(
+                            (first_frame_at - started_at) * 1000.0
+                            if first_frame_at is not None and started_at is not None
+                            else None
+                        ),
+                        "max_gap_ms": _round_ms(stats["max_gap_ms"]),
+                        "gaps_over_750ms": stats["gaps_over_750ms"],
+                    }
+                },
+            )
         elif isinstance(frame, InterruptionFrame):
             self._interruptions += 1
             self._emit(ev.INTERRUPTION)
@@ -417,6 +540,16 @@ class CallEventRecorder:
     def on_user_turn_stopped(self, strategy: Any, message: Any = None) -> None:
         """The turn was released to the LLM: arm the silence watchdog."""
         self._last_user_turn_stopped_at = time.monotonic()
+        self._turn_output_audio = {
+            "started_at": self._last_user_turn_stopped_at,
+            "first_frame_at": None,
+            "last_frame_at": None,
+            "frames": 0,
+            "bytes": 0,
+            "duration_ms": 0.0,
+            "max_gap_ms": 0.0,
+            "gaps_over_750ms": 0,
+        }
         self._emit(
             ev.USER_TURN_STOPPED,
             detail={
@@ -601,6 +734,7 @@ class CallEventRecorder:
                 "llm_empty_responses": self._llm_empty_responses,
                 "stop_timeouts": self._stop_timeouts,
                 "interruptions": self._interruptions,
+                "tts_contexts_open_at_end": len(self._tts_contexts),
                 "e2e_p50_ms": _p50(self._e2e_samples),
                 "e2e_max_ms": _max(self._e2e_samples),
                 "user_turn_p50_ms": _p50(self._user_turn_samples),

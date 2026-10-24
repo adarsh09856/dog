@@ -812,8 +812,12 @@ async def execute_text_chat_pending_turn(
 
         if pending_user_message is not None:
             context.add_message({"role": "user", "content": pending_user_message})
-            from api.services.workflow.contact_context import booking_contact_question, known_contact
-            from api.services.workflow.direct_caller_reply import direct_caller_reply
+            from api.services.workflow.contact_context import (
+                booking_contact_question,
+                caller_name_followup_reply,
+                known_contact,
+            )
+            from api.services.workflow.direct_caller_reply import direct_caller_reply, has_live_lookup_tools
 
             booking_arguments = confirmed_booking_arguments(pending_user_message)
             active_tools = getattr(context.tools, "standard_tools", [])
@@ -822,7 +826,10 @@ async def execute_text_chat_pending_turn(
                 for tool in active_tools
             )
             direct_reply = direct_caller_reply(
-                pending_user_message, has_lookup_tools=bool(active_tools)
+                pending_user_message, has_lookup_tools=has_live_lookup_tools(active_tools)
+            )
+            name_followup_reply = caller_name_followup_reply(
+                context.get_messages(), engine._contact_conversation_state
             )
             fast_booking_question = booking_contact_question(
                 context.get_messages(), known_contact(initial_context),
@@ -832,6 +839,9 @@ async def execute_text_chat_pending_turn(
                 engine._contact_conversation_state.pop("pending_phone", None)
                 response_window.outputs.append(direct_reply)
                 context.add_message({"role": "assistant", "content": direct_reply})
+            elif name_followup_reply:
+                response_window.outputs.append(name_followup_reply)
+                context.add_message({"role": "assistant", "content": name_followup_reply})
             elif booking_arguments and has_booking_tool:
                 from api.services.workflow.tools.booking import execute_booking
 

@@ -2,9 +2,7 @@
 
 import asyncio
 import os
-from collections.abc import AsyncGenerator
 from contextlib import aclosing, suppress
-from dataclasses import dataclass
 
 from openai import BadRequestError, DefaultAsyncHttpxClient
 
@@ -12,19 +10,11 @@ from api.services.configuration.language_normalizer import normalize_language_co
 from api.services.pipecat.local_speech_aggregator import LocalSpeechAggregator
 from api.services.pipecat.tts_cache.models import SynthesisRequest
 from api.services.pipecat.tts_cache.synthesis import cached_synthesis
-from pipecat.frames.frames import CancelFrame, ErrorFrame, Frame, InterruptionFrame, TTSAudioRawFrame
+from pipecat.frames.frames import CancelFrame, ErrorFrame, InterruptionFrame, TTSAudioRawFrame
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.speaches.tts import SpeachesTTSService
 from pipecat.services.tts_service import TextAggregationMode
 from pipecat.utils.tracing.service_decorators import traced_tts
-
-
-@dataclass
-class _PrefetchedSpeech:
-    """One ordered local-TTS request that can synthesize ahead of playback."""
-
-    context_id: str
-    frames: asyncio.Queue[Frame | None]
 
 
 class SpeachesLiveTTSService(SpeachesTTSService):
@@ -37,43 +27,24 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._speech_turn_open = False
         self._turn_speech_language = None
         if self._text_aggregation_mode == TextAggregationMode.SENTENCE:
-            # Keep short adjacent sentences in one synthesis stream. Each
-            # independent CPU request adds a perceptible pause and can
-            # sound like a clipped turn; its response still streams PCM as it
-            # synthesizes, so batching avoids request gaps without buffering
-            # the complete audio before playback.
-            # Do not start CPU synthesis with a tiny two-or-three-word
-            # fragment. It often finishes before the LLM produces enough text
-            # for the next request, creating several seconds of dead air. A
-            # 20-character first phrase is enough audible material to overlap
-            # normal local generation without waiting for a full sentence.
-            # Keep later phrases short enough to overlap synthesis with the
-            # first phrase's audio while the CPU LLM streams more text.
+            # Start on a completed short sentence rather than waiting for the
+            # full model answer. Larger fixed thresholds delay first audio;
+            # downstream PCM/history ordering is handled by the base service.
             self._text_aggregator = LocalSpeechAggregator(
                 min_characters=24,
-                first_chunk_characters=20,
-                first_clause_characters=20,
-                first_phrase_characters=20,
-                streaming_phrase_characters=24,
+                first_chunk_characters=12,
+                first_clause_characters=36,
+                first_phrase_characters=None,
+                # Keep later CPU speech requests paced with the slow streaming LLM.
+                # Waiting for a complete sentence can leave seconds of silence between chunks.
+                streaming_phrase_characters=48,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
-        # The stock HTTP TTS path consumes each synthesis generator before it
-        # accepts the next LLM phrase. On a CPU VITS server that creates a
-        # silent gap after every short phrase. Fetch in the background so the
-        # next phrase can synthesize while the current audio plays. Both request
-        # starts and PCM dispatch retain the original text order.
-        self._prefetched_speech: list[_PrefetchedSpeech] = []
-        self._prefetch_workers: set[asyncio.Task] = set()
-        self._prefetch_dispatcher: asyncio.Task | None = None
-        self._prefetch_changed = asyncio.Event()
-        self._prefetch_closing = False
-        self._prefetch_generation = 0
-        # The local CPU provider synthesizes one request at a time. Concurrent
-        # HTTP connection setup can let a later phrase acquire its queue first,
-        # delaying the opening audio while the dispatcher waits for text order.
-        # Keep synthesis ordered while playback proceeds independently.
-        self._prefetch_request_lock = asyncio.Lock()
+        # HTTP synthesis and downstream playback already run independently in
+        # Pipecat. Consume each generator before its TTSTextFrame is queued so
+        # history never treats not-yet-generated audio as spoken. The endpoint
+        # is single-worker, so background HTTP prefetch cannot parallelize it.
         self._turn_keepalive: asyncio.Task | None = None
 
     async def _stop_turn_keepalive(self):
@@ -84,11 +55,11 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 await task
 
     async def cleanup(self):
-        await self._cancel_prefetch()
+        await self._stop_turn_keepalive()
         await super().cleanup()
 
     async def cancel(self, frame: CancelFrame):
-        await self._cancel_prefetch()
+        await self._stop_turn_keepalive()
         await super().cancel(frame)
 
     def _resolve_speech_language(self):
@@ -169,12 +140,6 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         await self._stop_turn_keepalive()
         self._turn_speech_language = self._resolve_speech_language()
         self._speech_turn_open = True
-        self._prefetch_generation += 1
-        self._prefetched_speech = []
-        self._prefetch_workers = set()
-        self._prefetch_dispatcher = None
-        self._prefetch_changed = asyncio.Event()
-        self._prefetch_closing = False
         await super().on_turn_context_created(context_id)
         async def keep_turn_open():
             while True:
@@ -185,100 +150,16 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         # phrases. Keep it alive until all prefetched synthesis has drained.
         self._turn_keepalive = asyncio.create_task(keep_turn_open())
 
-    async def _fetch_speech(
-        self,
-        speech: _PrefetchedSpeech,
-        generator: AsyncGenerator[Frame | None, None],
-        generation: int,
-    ):
-        try:
-            async with self._prefetch_request_lock:
-                if generation != self._prefetch_generation:
-                    return
-                async for frame in generator:
-                    if generation != self._prefetch_generation:
-                        return
-                    if frame:
-                        await speech.frames.put(frame)
-        except Exception as exc:  # noqa: BLE001 - forward task failures through the pipeline error channel
-            if generation == self._prefetch_generation:
-                await speech.frames.put(ErrorFrame(
-                    error="Local speech synthesis failed",
-                    processor=self,
-                    exception=exc,
-                ))
-        finally:
-            await speech.frames.put(None)
-
-    async def _dispatch_prefetched_speech(self, generation: int):
-        index = 0
-        while generation == self._prefetch_generation:
-            if index >= len(self._prefetched_speech):
-                if self._prefetch_closing:
-                    return
-                await self._prefetch_changed.wait()
-                self._prefetch_changed.clear()
-                continue
-            speech = self._prefetched_speech[index]
-            index += 1
-            while generation == self._prefetch_generation:
-                frame = await speech.frames.get()
-                if frame is None:
-                    break
-                await self.append_to_audio_context(speech.context_id, frame)
-
-    async def tts_process_generator(
-        self, context_id: str, generator: AsyncGenerator[Frame | None, None]
-    ):
-        """Fetch following phrases while the earlier phrase is being played."""
-        generation = self._prefetch_generation
-        speech = _PrefetchedSpeech(context_id=context_id, frames=asyncio.Queue())
-        self._prefetched_speech.append(speech)
-        worker = asyncio.create_task(self._fetch_speech(speech, generator, generation))
-        self._prefetch_workers.add(worker)
-        worker.add_done_callback(self._prefetch_workers.discard)
-        if self._prefetch_dispatcher is None or self._prefetch_dispatcher.done():
-            self._prefetch_dispatcher = asyncio.create_task(
-                self._dispatch_prefetched_speech(generation)
-            )
-        self._prefetch_changed.set()
-        # The background dispatcher owns the HTTP generators. Do not mark the
-        # shared turn context synchronous until all generated PCM has arrived.
-        self._is_yielding_frames_synchronously = False
-
     async def on_turn_context_completed(self):
-        self._prefetch_closing = True
-        self._prefetch_changed.set()
-        dispatcher = self._prefetch_dispatcher
-        if dispatcher:
-            # Cancellation here belongs to the frame-processing task (barge-in).
-            # Swallowing it prevents the framework from stopping the old turn.
-            await dispatcher
-        # At this point every queued HTTP generator has finished and the base
-        # class can safely close the shared audio context behind its PCM.
-        self._is_yielding_frames_synchronously = True
-        await super().on_turn_context_completed()
-        self._speech_turn_open = False
-        await self._stop_turn_keepalive()
-
-    async def _cancel_prefetch(self):
-        """Stop request generators on disconnect as well as caller interruption."""
-        await self._stop_turn_keepalive()
-        self._prefetch_generation += 1
-        tasks = [*self._prefetch_workers]
-        if self._prefetch_dispatcher:
-            tasks.append(self._prefetch_dispatcher)
-        for task in tasks:
-            task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        self._prefetched_speech = []
-        self._prefetch_workers = set()
-        self._prefetch_dispatcher = None
-        self._speech_turn_open = False
+        try:
+            await super().on_turn_context_completed()
+        finally:
+            self._speech_turn_open = False
+            await self._stop_turn_keepalive()
 
     async def _handle_interruption(self, frame: InterruptionFrame, direction: FrameDirection):
-        await self._cancel_prefetch()
+        await self._stop_turn_keepalive()
+        self._speech_turn_open = False
         await super()._handle_interruption(frame, direction)
 
 

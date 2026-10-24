@@ -1239,6 +1239,8 @@ async def _run_pipeline_impl(
         ws_sender=ws_sender,
         logs_buffer=in_memory_logs_buffer,
         selected_visit=lambda: engine.selected_visit_id,
+        workflow_id=workflow_id,
+        workflow_run_id=workflow_run_id,
         call_event_recorder=call_events_session.recorder
         if call_events_session
         else None,

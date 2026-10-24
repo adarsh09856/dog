@@ -45,6 +45,7 @@ const HANDLED_SERVICE_ERROR_TYPES = new Set([
 // refusal, so the session is closed out as completed and the caller is left to
 // start a fresh run rather than being offered a retry that cannot succeed.
 const SPENT_RUN_ERROR_TYPES = new Set(['workflow_run_already_completed']);
+const DISCONNECTED_GRACE_MS = 5000;
 
 export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initialContextVariables, onNodeTransition }: UseWebSocketRTCProps) => {
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
@@ -88,6 +89,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
     const connectionActiveRef = useRef(connectionActive);
     const isCompletedRef = useRef(isCompleted);
     const gracefulDisconnectRef = useRef(false);
+    const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         onNodeTransitionRef.current = onNodeTransition;
@@ -181,6 +183,10 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
     }, []);
 
     const cleanupConnection = useCallback((options: CleanupConnectionOptions = {}) => {
+        if (disconnectTimerRef.current) {
+            clearTimeout(disconnectTimerRef.current);
+            disconnectTimerRef.current = null;
+        }
         const graceful = options.graceful ?? true;
         const status = options.status ?? (graceful ? 'idle' : 'failed');
 
@@ -276,6 +282,38 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
         const handlePeerStateChange = () => {
             logger.info(`Peer connection state changed: ${pc.connectionState}; ICE: ${pc.iceConnectionState}`);
 
+            if (pcRef.current !== pc) return;
+
+            if (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed') {
+                cleanupConnection({ graceful: false, status: 'failed' });
+                return;
+            }
+
+            if (pc.connectionState === 'closed' || pc.iceConnectionState === 'closed') {
+                cleanupConnection({ graceful: true, status: 'idle' });
+                return;
+            }
+
+            if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected') {
+                // ICE disconnection can recover without renegotiation. Closing
+                // immediately stops the microphone and clips the current reply.
+                if (!disconnectTimerRef.current) {
+                    disconnectTimerRef.current = setTimeout(() => {
+                        disconnectTimerRef.current = null;
+                        if (pcRef.current === pc &&
+                            (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected')) {
+                            cleanupConnection({ graceful: false, status: 'failed' });
+                        }
+                    }, DISCONNECTED_GRACE_MS);
+                }
+                return;
+            }
+
+            if (disconnectTimerRef.current) {
+                clearTimeout(disconnectTimerRef.current);
+                disconnectTimerRef.current = null;
+            }
+
             if (
                 pc.connectionState === 'connected' ||
                 pc.iceConnectionState === 'connected' ||
@@ -285,20 +323,6 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                 return;
             }
 
-            if (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed') {
-                cleanupConnection({ graceful: false, status: 'failed' });
-                return;
-            }
-
-            if (
-                pc.connectionState === 'closed' ||
-                pc.connectionState === 'disconnected' ||
-                pc.iceConnectionState === 'closed' ||
-                pc.iceConnectionState === 'disconnected'
-            ) {
-                logger.info('Peer connection ended - cleaning up connection');
-                cleanupConnection({ graceful: true, status: 'idle' });
-            }
         };
 
         pc.addEventListener('iceconnectionstatechange', handlePeerStateChange);
@@ -907,6 +931,10 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
     // Cleanup on unmount
     useEffect(() => {
         return () => {
+            if (disconnectTimerRef.current) {
+                clearTimeout(disconnectTimerRef.current);
+                disconnectTimerRef.current = null;
+            }
             stopLocalStream();
             if (wsRef.current) {
                 wsRef.current.close();

@@ -832,7 +832,7 @@ function GeneralSection({
                                     if (!isNaN(value) && value > 0) setMaxUserIdleTimeout(value);
                                 }}
                             />
-                            <p className="text-xs text-muted-foreground">Default: 10 seconds</p>
+                            <p className="text-xs text-muted-foreground">Default: 30 seconds</p>
                         </div>
                     </div>
                 </div>

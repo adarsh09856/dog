@@ -10,7 +10,7 @@ def voice_persona_instruction(gender: str | None) -> str:
     if gender == "male":
         grammar = "Use masculine first-person grammar where the language marks it."
     elif gender == "female":
-        grammar = "Use feminine first-person grammar where the language marks it."
+        grammar = "Use feminine first-person grammar where the language marks it. Hindi self-reference: मैं मदद कर सकती हूँ; मैं देख रही हूँ. Hinglish: main madad kar sakti hoon."
     else:
         grammar = (
             "The selected voice has no verified gender metadata. Use natural "

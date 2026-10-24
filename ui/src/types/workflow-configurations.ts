@@ -172,7 +172,7 @@ const FALLBACK_WORKFLOW_CONFIGURATIONS: WorkflowConfigurations = {
         volume: 0.3
     },
     max_call_duration: 300,
-    max_user_idle_timeout: 10,  // 10 seconds
+    max_user_idle_timeout: 30,  // 30 seconds
     smart_turn_stop_secs: 2,  // 2 seconds
     turn_start_strategy: 'default',  // Default to platform-chosen user turn start detection
     turn_start_min_words: DEFAULT_TURN_START_MIN_WORDS,

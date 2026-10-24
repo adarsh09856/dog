@@ -126,6 +126,8 @@ def register_event_handlers(
             and not ready_state["initial_response_triggered"]
         ):
             ready_state["initial_response_triggered"] = True
+            startup_started = asyncio.get_running_loop().time()
+            logger.info("[run {}] Startup: client and pipeline ready", workflow_run_id)
 
             if answer_supervisor is not None:
                 answer_supervisor.arm()
@@ -190,9 +192,19 @@ def register_event_handlers(
                 await engine.end_call_with_reason(EndTaskReason.PIPELINE_ERROR.value)
                 return
 
+            logger.info(
+                "[run {}] Startup: initial agent ready after {} ms",
+                workflow_run_id,
+                round((asyncio.get_running_loop().time() - startup_started) * 1000),
+            )
             # Set the start node now (after pre-call fetch data is merged)
             # so that render_template() has the complete _call_context_vars.
             await engine.set_node(engine.active_agent.workflow.start_node_id)
+            logger.info(
+                "[run {}] Startup: start node ready after {} ms",
+                workflow_run_id,
+                round((asyncio.get_running_loop().time() - startup_started) * 1000),
+            )
             if answer_supervisor is not None:
                 await engine.handle_answer_supervision()
                 return

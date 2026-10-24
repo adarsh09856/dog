@@ -20,8 +20,15 @@ _OPENING_WORDS = (
     "hi", "good morning", "good afternoon", "good evening",
 )
 _GREETING_SEPARATORS = " \t\r\n!,.:;?।॥،؛"
-_END_CALL_TOOLS = frozenset(
-    {"finish_call", "end_call", "close_conversation", "hang_up"}
+from api.services.workflow.direct_caller_reply import END_CALL_TOOL_NAMES as _END_CALL_TOOLS
+_LOCAL_CALLER_RESPONSE_GUARD = (
+    "Answer the latest caller message directly and address its specific request first. "
+    "Do not repeat the caller's words as the answer or repeat a previous assistant reply. "
+    "Do not ask a generic department or service question unless the caller asks to reach "
+    "a department or a configured transfer requires it. Never invent service names, "
+    "booking capability, or facts. If the workflow has no capability or information for "
+    "the request, say so briefly and ask one relevant follow-up. If the transcript is "
+    "unclear, ask what the caller meant instead of guessing."
 )
 _EXPLICIT_END_REQUEST = re.compile(
     r"\b(?:goodbye|bye(?:\s+bye)?|hang\s*up|end\s+(?:the\s+)?call|disconnect|"
@@ -207,13 +214,22 @@ class _BookingToolChoiceMixin:
         from api.services.workflow.confirmed_booking import confirmed_booking_arguments
         from pipecat.services.llm_service import FunctionCallFromLLM
 
+        # Speculative responses are held and may be discarded if speech resumes.
+        # Keep deterministic shortcuts out of this pass because some of them
+        # update conversation state before the speculation gate can confirm it.
+        if getattr(getattr(self, "_speculation_gate", None), "is_speculating", False):
+            return await super()._process_context(context)
+
         messages = context.get_messages()
         self._strip_repeated_greeting = False
         self._opening_text_decided = False
         self._opening_text_buffer = ""
         self._greeting_suppressed = False
         tools = getattr(context.tools, "standard_tools", [])
-        from api.services.workflow.contact_context import booking_contact_question
+        from api.services.workflow.contact_context import (
+            booking_contact_question,
+            caller_name_followup_reply,
+        )
         from api.services.workflow.direct_caller_reply import direct_caller_reply
 
         latest_user_text = (
@@ -237,6 +253,18 @@ class _BookingToolChoiceMixin:
             await self.start_ttfb_metrics()
             await self.push_frame(LLMFullResponseStartFrame())
             await self._push_llm_text(direct_reply)
+            await self.push_frame(LLMFullResponseEndFrame())
+            return
+
+        contact_state = getattr(self, "_contact_conversation_state", None)
+        if not isinstance(contact_state, dict):
+            contact_state = {}
+            self._contact_conversation_state = contact_state
+        name_followup_reply = caller_name_followup_reply(messages, contact_state)
+        if name_followup_reply:
+            await self.start_ttfb_metrics()
+            await self.push_frame(LLMFullResponseStartFrame())
+            await self._push_llm_text(name_followup_reply)
             await self.push_frame(LLMFullResponseEndFrame())
             return
 
@@ -375,6 +403,26 @@ class _BookingToolChoiceMixin:
                 **(extra_body if isinstance(extra_body, dict) else {}),
                 "think": False,
                 "reasoning_effort": "none",
+                # The OpenAI adapter strips max_tokens when it is set to its
+                # NOT_GIVEN sentinel, which is the default for these models.
+                # Ollama accepts its native generation cap in the options body.
+                "options": {
+                    **(
+                        extra_body.get("options", {})
+                        if isinstance(extra_body, dict)
+                        and isinstance(extra_body.get("options"), dict)
+                        else {}
+                    ),
+                    # A 48-token cap cut a short appointment reply mid-thought
+                    # on the production CPU model. Allow a complete sentence
+                    # while retaining a bounded voice response.
+                    "num_predict": 80,
+                    "num_ctx": 4096,
+                },
+                # Prevent multi-minute model reloads on the first caller turn.
+                # The OpenAI-compatible endpoint parses this as a Go duration;
+                # a bare "-1" is rejected there (native /api/chat accepts -1).
+                "keep_alive": "8760h",
             }
 
         from api.services.workflow.tools.booking import caller_confirmed_booking
@@ -471,27 +519,29 @@ class _BookingToolChoiceMixin:
             getattr(self, "_kodewaves_local_ollama", False)
             and model.startswith(("qwen3:", "qwen3.5:"))
             and isinstance(messages, list)
+            and any(
+                isinstance(message, dict) and message.get("role") == "user"
+                for message in messages
+            )
         ):
-            latest_user_index = next((
-                index for index in range(len(messages) - 1, -1, -1)
-                if isinstance(messages[index], dict) and messages[index].get("role") == "user"
-            ), None)
-            if latest_user_index is not None and _clearly_english_caller_text(
-                _message_text(messages[latest_user_index])
+            # Keep this guidance in a fixed system-prefix position. Inserting it
+            # before the newest user message on every turn breaks Ollama's shared
+            # prompt prefix and forces the CPU model to re-evaluate conversation history.
+            if not any(
+                isinstance(message, dict)
+                and message.get("role") == "system"
+                and message.get("content") == _LOCAL_CALLER_RESPONSE_GUARD
+                for message in messages
             ):
-                # The saved workflow may contain a Hindi-first persona. Keep
-                # it intact, but make the current caller's English switch
-                # explicit for this inference request only. A separate system
-                # turn preserves the earlier reusable prompt prefix.
-                messages.insert(latest_user_index, {
-                    "role": "system",
-                    "content": (
-                        "The latest caller utterance is in English. Reply to this turn "
-                        "in natural English only; do not switch to Hindi or transliterate. "
-                        "Follow the workflow tools, factual limits, and caller consent "
-                        "rules. Keep the spoken answer concise."
-                    ),
-                })
+                system_index = next((
+                    index for index, message in enumerate(messages)
+                    if isinstance(message, dict) and message.get("role") == "system"
+                ), None)
+                messages.insert(
+                    system_index + 1 if system_index is not None else 0,
+                    {"role": "system", "content": _LOCAL_CALLER_RESPONSE_GUARD},
+                )
+            params["messages"] = messages
         if isinstance(messages, list) and messages:
             latest_user = next((message for message in reversed(messages) if isinstance(message, dict) and message.get("role") == "user"), None)
             if latest_user and _CONFIRMATION.search(_message_text(latest_user)):
