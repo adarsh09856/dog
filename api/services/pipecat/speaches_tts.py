@@ -172,6 +172,8 @@ class SpeachesCachingTTSService(SpeachesLiveTTSService):
         self._cache_endpoint = str(self._client.base_url)
 
     async def run_tts(self, text: str, context_id: str):
+        combined_model = self._settings.model == "indic-vits-rasa-13"
+        indus_profile = combined_model and bool(os.environ.get("INDUS_COMBINED_ENDPOINT"))
         payload = {
             "input": text,
             "model": self._settings.model,
@@ -180,19 +182,19 @@ class SpeachesCachingTTSService(SpeachesLiveTTSService):
             "speed": self._settings.speed,
             "instructions": self._settings.instructions,
         }
-        if self._settings.model == "indic-vits-rasa-13":
+        if combined_model:
             payload["language"] = self._request_speech_language()
             # The combined endpoint keeps stable public voice IDs while its
             # backend changes. Do not replay former Piper/Melo audio as Inaya,
             # or Inaya audio after an operator rolls back to the regional route.
             payload["routing_profile"] = (
-                "indus-inaya-edge-v2" if os.environ.get("INDUS_COMBINED_ENDPOINT") else "regional-v4"
+                "indus-inaya-edge-v2" if indus_profile else "regional-v4"
             )
         request = SynthesisRequest.from_payload(
             organization_id=self._organization_id,
             provider="speaches",
             # Unified voice routing must not reuse former Rasa-only audio.
-            adapter_version=5 if self._settings.model == "indic-vits-rasa-13" else 1,
+            adapter_version=5 if indus_profile else 4 if combined_model else 1,
             endpoint=self._cache_endpoint,
             credential=self._client.api_key,
             payload=payload,
