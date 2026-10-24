@@ -3,7 +3,6 @@
 import re
 from loguru import logger
 from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
-from pipecat.frames.frames import LLMFullResponseEndFrame, LLMFullResponseStartFrame
 
 from pipecat.services.kodewaves.llm import KodewavesLLMService
 from pipecat.services.openai.llm import OpenAILLMService
@@ -149,6 +148,14 @@ def booking_tool_choice(params: dict) -> dict | None:
 
 
 class _BookingToolChoiceMixin:
+    async def _emit_direct_reply(self, text: str):
+        # OpenAI's process_frame owns the response start/end pair. Nested
+        # boundaries here leave aggregators waiting for an extra completion
+        # and can close a TTS context before the parent response finishes.
+        await self.start_ttfb_metrics()
+        await self.stop_ttfb_metrics()
+        await self._push_llm_text(text)
+
     def can_speculate_caller_turn(self, text: str) -> bool:
         """Keep confirmed-only contact/settings handling out of speculation."""
         from api.services.pipecat.caller_language_context import standalone_language_request
@@ -273,14 +280,11 @@ class _BookingToolChoiceMixin:
                 state = {}
                 self._contact_conversation_state = state
             state["reply_language"] = requested_language
-            await self.start_ttfb_metrics()
-            await self.push_frame(LLMFullResponseStartFrame())
-            await self._push_llm_text(
+            await self._emit_direct_reply(
                 "Yes, we can continue in English."
                 if requested_language == "English"
                 else "ज़रूर, हम हिंदी में बात कर सकते हैं।"
             )
-            await self.push_frame(LLMFullResponseEndFrame())
             return
         direct_reply = direct_caller_reply(
             latest_user_text,
@@ -295,10 +299,7 @@ class _BookingToolChoiceMixin:
             state = getattr(self, "_contact_conversation_state", None)
             if isinstance(state, dict):
                 state.pop("pending_phone", None)
-            await self.start_ttfb_metrics()
-            await self.push_frame(LLMFullResponseStartFrame())
-            await self._push_llm_text(direct_reply)
-            await self.push_frame(LLMFullResponseEndFrame())
+            await self._emit_direct_reply(direct_reply)
             return
 
         contact_state = getattr(self, "_contact_conversation_state", None)
@@ -307,17 +308,11 @@ class _BookingToolChoiceMixin:
             self._contact_conversation_state = contact_state
         name_followup_reply = caller_name_followup_reply(messages, contact_state)
         if name_followup_reply:
-            await self.start_ttfb_metrics()
-            await self.push_frame(LLMFullResponseStartFrame())
-            await self._push_llm_text(name_followup_reply)
-            await self.push_frame(LLMFullResponseEndFrame())
+            await self._emit_direct_reply(name_followup_reply)
             return
         phone_fragment_reply = caller_phone_fragment_reply(messages, contact_state)
         if phone_fragment_reply:
-            await self.start_ttfb_metrics()
-            await self.push_frame(LLMFullResponseStartFrame())
-            await self._push_llm_text(phone_fragment_reply)
-            await self.push_frame(LLMFullResponseEndFrame())
+            await self._emit_direct_reply(phone_fragment_reply)
             return
 
         known = getattr(self, "_known_contact", {})
@@ -337,10 +332,7 @@ class _BookingToolChoiceMixin:
             # question, and often repeat date/time details already supplied.
             # Send it through the normal transcript and TTS path without an
             # extra inference request.
-            await self.start_ttfb_metrics()
-            await self.push_frame(LLMFullResponseStartFrame())
-            await self._push_llm_text(fast_booking_question)
-            await self.push_frame(LLMFullResponseEndFrame())
+            await self._emit_direct_reply(fast_booking_question)
             return
         if (
             messages and isinstance(messages[-1], dict)
