@@ -22,6 +22,7 @@ node changes.
 
 import json
 import time
+import numpy as np
 from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 from loguru import logger
@@ -135,6 +136,9 @@ class RealtimeFeedbackObserver(BaseObserver):
         return {
             "started_at": None,
             "first_frame_at": None,
+            "first_speech_at": None,
+            "pending_silence_ms": 0.0,
+            "max_internal_silence_ms": 0.0,
             "last_frame_at": None,
             "frames": 0,
             "bytes": 0,
@@ -190,9 +194,23 @@ class RealtimeFeedbackObserver(BaseObserver):
             stats["frames"] = int(stats["frames"]) + 1
             stats["bytes"] = int(stats["bytes"]) + len(audio)
             if sample_rate > 0 and channels > 0:
-                stats["duration_ms"] = float(stats["duration_ms"]) + (
-                    len(audio) / (sample_rate * channels * 2) * 1000.0
-                )
+                duration_ms = len(audio) / (sample_rate * channels * 2) * 1000.0
+                stats["duration_ms"] = float(stats["duration_ms"]) + duration_ms
+                samples = np.frombuffer(audio[:len(audio) // 2 * 2], dtype="<i2")
+                speech = bool(samples.size) and float(
+                    np.sqrt(np.mean(samples.astype(np.float32) ** 2))
+                ) > 80.0
+                if speech:
+                    if stats["first_speech_at"] is None:
+                        stats["first_speech_at"] = now
+                    else:
+                        stats["max_internal_silence_ms"] = max(
+                            float(stats["max_internal_silence_ms"]),
+                            float(stats["pending_silence_ms"]),
+                        )
+                    stats["pending_silence_ms"] = 0.0
+                elif stats["first_speech_at"] is not None:
+                    stats["pending_silence_ms"] = float(stats["pending_silence_ms"]) + duration_ms
             return
 
         if isinstance(frame, TTSAudioRawFrame):
@@ -250,8 +268,9 @@ class RealtimeFeedbackObserver(BaseObserver):
             stats = self._output_audio_trace
             started_at = float(stats["started_at"] or now)
             first_frame_at = stats["first_frame_at"]
+            first_speech_at = stats["first_speech_at"]
             logger.info(
-                "voice_output_trace run={} workflow={} turn={} first_frame_ms={} wall_ms={} frames={} bytes={} audio_ms={} max_gap_ms={} gaps_over_750ms={}",
+                "voice_output_trace run={} workflow={} turn={} first_frame_ms={} wall_ms={} frames={} bytes={} audio_ms={} max_gap_ms={} gaps_over_750ms={} first_speech_frame_ms={} max_internal_silence_ms={}",
                 self._workflow_run_id,
                 self._workflow_id,
                 self._trace_turn,
@@ -263,6 +282,9 @@ class RealtimeFeedbackObserver(BaseObserver):
                 round(float(stats["duration_ms"]), 1),
                 round(float(stats["max_gap_ms"]), 1),
                 stats["gaps_over_750ms"],
+                round((float(first_speech_at) - started_at) * 1000.0, 1)
+                if first_speech_at is not None else None,
+                round(float(stats["max_internal_silence_ms"]), 1),
             )
 
     async def log_speech(self, text: str):
