@@ -815,6 +815,7 @@ async def execute_text_chat_pending_turn(
             from api.services.workflow.contact_context import (
                 booking_contact_question,
                 caller_name_followup_reply,
+                caller_phone_fragment_reply,
                 known_contact,
             )
             from api.services.workflow.direct_caller_reply import direct_caller_reply, has_live_lookup_tools
@@ -831,6 +832,9 @@ async def execute_text_chat_pending_turn(
             name_followup_reply = caller_name_followup_reply(
                 context.get_messages(), engine._contact_conversation_state
             )
+            phone_fragment_reply = caller_phone_fragment_reply(
+                context.get_messages(), engine._contact_conversation_state
+            ) if not name_followup_reply else None
             fast_booking_question = booking_contact_question(
                 context.get_messages(), known_contact(initial_context),
                 engine._contact_conversation_state,
@@ -842,6 +846,9 @@ async def execute_text_chat_pending_turn(
             elif name_followup_reply:
                 response_window.outputs.append(name_followup_reply)
                 context.add_message({"role": "assistant", "content": name_followup_reply})
+            elif phone_fragment_reply:
+                response_window.outputs.append(phone_fragment_reply)
+                context.add_message({"role": "assistant", "content": phone_fragment_reply})
             elif booking_arguments and has_booking_tool:
                 from api.services.workflow.tools.booking import execute_booking
 

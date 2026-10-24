@@ -5,6 +5,7 @@ reusable functions. Defines recording response mode markers and instructions.
 """
 
 from dataclasses import dataclass
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Callable, Optional
 from zoneinfo import ZoneInfo
@@ -131,12 +132,19 @@ def compose_system_prompt_for_node(
         [global_prompt, formatted_node_prompt]
         + [format_prompt(edge.condition) for edge in node.out_edges]
     ).casefold()
+    # Generic greetings and warnings about invented appointment identifiers do
+    # not need a live clock. A timestamp here otherwise invalidates the local
+    # model's reusable prompt prefix every minute, even for ordinary enquiries.
+    clock_scope = re.sub(r"\bappointment\s+ids?\b", "identifiers", prompt_scope)
+    clock_scope = re.sub(
+        r"\bhelp\s+(?:you|the caller)\s+today\b", "help you", clock_scope
+    )
     clock_context_terms = (
         "appointment", "reservation", "schedule an", "schedule a",
         "book an appointment", "book a time", "current date", "current time",
         "today", "tomorrow", "time slot", "date of",
     )
-    needs_runtime_clock = any(term in prompt_scope for term in clock_context_terms)
+    needs_runtime_clock = any(term in clock_scope for term in clock_context_terms)
     if needs_runtime_clock:
         india_now = datetime.now(ZoneInfo("Asia/Kolkata"))
         runtime_clock = (

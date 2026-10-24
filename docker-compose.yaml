@@ -262,9 +262,11 @@ services:
       MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
-      INDUS_TTS_ENDPOINT: "${INDUS_TTS_ENDPOINT:-http://indus-tts:8000/v1}"
       INDIC_MIO_TTS_ENDPOINT: "${INDIC_MIO_TTS_ENDPOINT:-http://indic-mio-tts:8000/v1}"
+      INDIC_PARLER_TTS_ENDPOINT: "${INDIC_PARLER_TTS_ENDPOINT:-http://indic-parler-tts:8000/v1}"
       INDIC_VITS_TTS_ENDPOINT: "${INDIC_VITS_TTS_ENDPOINT:-http://indic-vits-tts:8000/v1}"
+      INDUS_COMBINED_ENDPOINT: "${INDUS_COMBINED_ENDPOINT:-}"
+      DHVAANI_TTS_ENDPOINT: "${DHVAANI_TTS_ENDPOINT:-http://dhvaani-tts:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
       KODEWAVES_DEFAULT_REGION: "${KODEWAVES_DEFAULT_REGION:-IN}"
       KODEWAVES_DEFAULT_TIMEZONE: "${KODEWAVES_DEFAULT_TIMEZONE:-Asia/Kolkata}"
@@ -409,6 +411,9 @@ services:
           memory: 2048M
     networks:
       - app-network
+      # In aaPanel deployments, the API is created from the separate
+      # docker-compose.aapanel.yaml project/network. Join that same shared
+      # network so the API can resolve the local Ollama service.
       - kodewaves-shared
 
   ollama-warmup:
@@ -433,18 +438,17 @@ services:
     networks:
       - app-network
 
-  # Local CPU TTS for Indian Hindi/Hinglish and Indian English.
+  # Optional bilingual Inaya backend behind the combined speech endpoint.
   indus-tts:
     build:
       context: ./api/local_models/indus_tts
-      dockerfile: Dockerfile
     image: kodewaves-indus-tts:v1.0.0
     container_name: kodewaves_indus_tts
     restart: unless-stopped
-    profiles: ["local"]
+    profiles: ["indus"]
     environment:
-      HF_HOME: /models/huggingface
       INDUS_MODEL_DIR: /models/indus-pocket-tts
+      HF_HOME: /models/huggingface
       OMP_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
@@ -452,17 +456,15 @@ services:
       - indus_tts_models:/models
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
-      interval: 15s
+      interval: 20s
       timeout: 5s
-      retries: 4
-      start_period: 120s
+      retries: 3
+      start_period: 300s
     deploy:
       resources:
         limits:
           cpus: "1.0"
           memory: 2048M
-        reservations:
-          memory: 768M
     networks:
       - app-network
 
@@ -476,6 +478,7 @@ services:
     profiles: ["local"]
     environment:
       INDIC_VITS_THREADS: "${INDIC_VITS_THREADS:-2}"
+      INDUS_TTS_ENDPOINT: "${INDUS_COMBINED_ENDPOINT:-}"
       HF_HOME: /models/huggingface
     volumes:
       - indic_vits_tts_models:/models
@@ -489,7 +492,64 @@ services:
       resources:
         limits:
           cpus: "${INDIC_VITS_CPU_LIMIT:-2.0}"
-          memory: 1024M
+          memory: "${INDIC_VITS_MEMORY_LIMIT:-1536M}"
+    networks:
+      - app-network
+
+  dhvaani-tts:
+    build:
+      context: ./api/local_models/dhvaani
+    image: kodewaves-dhvaani-tts:v0.5.0
+    container_name: kodewaves_dhvaani_tts
+    restart: unless-stopped
+    profiles: ["dhvaani"]
+    environment:
+      HF_TOKEN: "${HF_TOKEN:-}"
+      DHVAANI_THREADS: "${DHVAANI_THREADS:-2}"
+      DHVAANI_NUM_STEPS: "${DHVAANI_NUM_STEPS:-16}"
+      DHVAANI_MODEL_REVISION: "${DHVAANI_MODEL_REVISION:-main}"
+      HF_HOME: /models/huggingface
+    volumes:
+      - dhvaani_tts_models:/models
+      - ./api/local_models/dhvaani/voices:/voices:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "${DHVAANI_CPU_LIMIT:-2.0}"
+          memory: 3072M
+    networks:
+      - app-network
+
+  # Evaluation profile: provision approved weights and tokenizer before starting.
+  indic-parler-tts:
+    build:
+      context: ./api/local_models/indic_parler
+      dockerfile: Dockerfile
+    image: kodewaves-indic-parler-tts:v1.0.0
+    container_name: kodewaves_indic_parler_tts
+    restart: "no"
+    profiles: ["indic-parler"]
+    environment:
+      INDIC_PARLER_THREADS: "2"
+    volumes:
+      - ${INDIC_PARLER_MODELS_DIR:-./models/indic-parler}:/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
     networks:
       - app-network
 
@@ -526,7 +586,6 @@ services:
     networks:
       - app-network
 
-
 volumes:
   postgres_data:
   redis_data:
@@ -538,11 +597,11 @@ volumes:
     driver: local
   ollama_data:
     driver: local
-  indus_tts_models:
-    driver: local
   indic_mio_tts_models:
     driver: local
   indic_vits_tts_models:
+  indus_tts_models:
+  dhvaani_tts_models:
     driver: local
 
 networks:

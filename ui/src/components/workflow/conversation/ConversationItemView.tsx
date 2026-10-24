@@ -21,6 +21,7 @@ export function ConversationItemView({ item, actions }: ConversationItemViewProp
                 role={item.role}
                 text={item.text}
                 final={item.final}
+                audioStatus={item.audioStatus}
                 tone={item.tone}
                 reasoningDurationMs={item.reasoningDurationMs}
                 responseLatencyMs={item.responseLatencyMs}

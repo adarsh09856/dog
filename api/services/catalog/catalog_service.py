@@ -18,7 +18,9 @@ from loguru import logger
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import AIModelCatalogModel, VoiceCatalogModel
 from api.services.catalog.normalize import normalize_provider_name, tts_runtime_provider, google_model_layer
-from api.services.catalog.local_inventory import get_local_tts_models, whisper_api_base, local_tts_api_base
+from api.services.catalog.local_inventory import (
+    get_local_tts_models, whisper_api_base, local_tts_api_base,
+)
 from api.services.catalog.gemini_voices import discover_indian_voices
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.registry import GEMINI_TTS_VOICES
@@ -945,6 +947,31 @@ class CatalogService:
             except (aiohttp.ClientError, TimeoutError):
                 pass
 
+            # Advertise DhVaani only when its local checkpoint and licensed
+            # reference voices are loaded and reported by the serving engine.
+            try:
+                dhvaani_url = local_tts_api_base(local_ai_setting, "dhvaani-0.5")
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
+                    async with session.get(f"{dhvaani_url}/models") as resp:
+                        if resp.status == 200:
+                            for dhvaani_model in (await resp.json()).get("data", []):
+                                if (
+                                    isinstance(dhvaani_model, dict)
+                                    and dhvaani_model.get("id") == "dhvaani-0.5"
+                                    and dhvaani_model.get("task") == "text-to-speech"
+                                    and dhvaani_model.get("installed") is True
+                                ):
+                                    local_tts.append({
+                                        "value": dhvaani_model["id"],
+                                        "label": dhvaani_model.get("name") or "DhVaani 0.5 — Indian languages + English",
+                                        "provider": "speaches",
+                                        "languages": dhvaani_model.get("languages", []),
+                                        "voices": dhvaani_model.get("voices", []),
+                                        "streaming": dhvaani_model.get("streaming", False),
+                                    })
+            except (aiohttp.ClientError, TimeoutError):
+                pass
+
             # Show only TTS models actually installed on the local Speaches server.
             speaches_url = local_ai_setting.get("whisper_endpoint") or os.environ.get(
                 "WHISPER_ENDPOINT", "http://whisper:8000/v1"
@@ -989,6 +1016,24 @@ class CatalogService:
                         "languages": regional_model.get("languages", []),
                         "voices": regional_model.get("voices", []),
                         "streaming": regional_model.get("streaming", False),
+                    })
+            except (aiohttp.ClientError, TimeoutError):
+                pass
+
+            # Only expose Parler after the offline checkpoint has loaded.
+            try:
+                parler_models = await get_local_tts_models(
+                    local_tts_api_base(local_ai_setting, "indic-parler-tts")
+                )
+                parler_model = parler_models.get("indic-parler-tts")
+                if parler_model and parler_model.get("installed") is True:
+                    local_tts.append({
+                        "value": parler_model["id"],
+                        "label": parler_model.get("name") or "Indic-Parler — Indian languages + English (CPU)",
+                        "provider": "speaches",
+                        "languages": parler_model.get("languages", []),
+                        "voices": parler_model.get("voices", []),
+                        "streaming": parler_model.get("streaming", False),
                     })
             except (aiohttp.ClientError, TimeoutError):
                 pass

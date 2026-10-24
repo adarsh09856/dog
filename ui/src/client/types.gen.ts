@@ -1926,6 +1926,16 @@ export type ContactImportItem = {
      * Tags
      */
     tags?: Array<string>;
+    /**
+     * Custom Fields
+     */
+    custom_fields?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Notes
+     */
+    notes?: string | null;
 };
 
 /**
@@ -1982,6 +1992,12 @@ export type ContactItem = {
      * Notes
      */
     notes?: string | null;
+    /**
+     * Custom Fields
+     */
+    custom_fields?: {
+        [key: string]: unknown;
+    };
     /**
      * Created At
      */
@@ -3735,6 +3751,10 @@ export type GenerateWorkflowRequest = {
      * Instructions
      */
     instructions?: string | null;
+    /**
+     * Language
+     */
+    language?: string | null;
 };
 
 /**
@@ -5466,11 +5486,11 @@ export type MonitoringStatsResponse = {
     /**
      * Total Revenue Inr
      */
-    total_revenue_inr: number | null;
+    total_revenue_inr?: number | null;
     /**
      * Gross Margin Percent
      */
-    gross_margin_percent: number | null;
+    gross_margin_percent?: number | null;
     /**
      * System Health
      */
@@ -5977,6 +5997,10 @@ export type OrganizationAiModelConfigurationResponse = {
      * Source
      */
     source: 'organization_v2' | 'legacy_user_v1' | 'empty';
+    /**
+     * Resolution Error
+     */
+    resolution_error?: string | null;
 };
 
 /**
@@ -6053,7 +6077,11 @@ export type OrganizationModelServicesContext = {
  * OrganizationPreferences
  */
 export type OrganizationPreferences = {
-    /** Deployment or workspace country region (ISO 3166-1 alpha-2). */
+    /**
+     * Region
+     *
+     * Deployment or workspace ISO 3166-1 alpha-2 country region.
+     */
     region?: string;
     /**
      * Omit to keep the destination unchanged; null removes it.
@@ -6089,9 +6117,13 @@ export type OrganizationPreferences = {
  * OrganizationPreferencesResponse
  */
 export type OrganizationPreferencesResponse = {
-    call_events: CallEventsSettings;
-    /** Deployment or workspace country region (ISO 3166-1 alpha-2). */
+    /**
+     * Region
+     *
+     * Deployment or workspace ISO 3166-1 alpha-2 country region.
+     */
     region?: string;
+    call_events: CallEventsSettings;
     /**
      * Test Phone Number
      */
@@ -6464,6 +6496,10 @@ export type PlatformSettingsResponse = {
      * Whisper Endpoint
      */
     whisper_endpoint?: string | null;
+    /**
+     * Indic Vits Tts Endpoint
+     */
+    indic_vits_tts_endpoint?: string | null;
     /**
      * Local Ai Max Concurrency
      */
@@ -7867,13 +7903,13 @@ export type SpeachesSttConfiguration = {
     /**
      * Model
      *
-     * Lightweight Whisper model identifier as served by your STT endpoint.
+     * Self-hosted Indian-language recognizer. Select one installed language; automatic detection is not supported.
      */
     model?: string;
     /**
      * Language
      *
-     * ISO 639-1 language code.
+     * Select one installed Indian language. IndicConformer does not provide automatic language detection.
      */
     language?: string;
     /**
@@ -7903,19 +7939,25 @@ export type SpeachesTtsConfiguration = {
     /**
      * Model
      *
-     * Model name as served by your TTS endpoint (e.g. piper).
+     * Installed local CPU TTS model selected from the active local speech inventory.
      */
     model?: string;
     /**
+     * Language
+     *
+     * Selected speech language; auto/multi follows the installed model's capabilities.
+     */
+    language?: string | null;
+    /**
      * Voice
      *
-     * Voice ID for the Piper ONNX engine (e.g. hi_IN-priyamvada-medium, hi_IN-pratham-medium, en_US-lessac-medium).
+     * Voice ID supported by the selected installed local TTS model.
      */
     voice?: string;
     /**
      * Base Url
      *
-     * Piper HTTP TTS endpoint (default: http://piper:5000/synthesize).
+     * OpenAI-compatible endpoint for the installed local CPU TTS model.
      */
     base_url?: string;
     /**
@@ -10328,7 +10370,7 @@ export type WidgetCreateRequest = {
     /**
      * Position
      */
-    position?: string;
+    position?: 'bottom-right' | 'bottom-left';
     /**
      * Avatar Url
      */
@@ -10549,7 +10591,7 @@ export type WorkflowConfigurationDefaults = {
     /**
      * Tts Cache Enabled
      *
-     * Reuse generated speech for repeated phrases. Supports MiniMax TTS.
+     * Reuse generated speech for repeated phrases. Supports MiniMax and Speaches/Kokoro TTS.
      */
     tts_cache_enabled?: boolean;
     /**
@@ -13576,7 +13618,7 @@ export type DeletePiperVoiceApiV1AdminSettingsPiperVoicesVoiceIdDeleteResponses 
     200: unknown;
 };
 
-export type GetWhisperModelsApiV1AdminSettingsWhisperModelsGetData = {
+export type GetIndicSttModelsApiV1AdminSettingsIndicSttModelsGetData = {
     body?: never;
     headers?: {
         /**
@@ -13590,10 +13632,10 @@ export type GetWhisperModelsApiV1AdminSettingsWhisperModelsGetData = {
     };
     path?: never;
     query?: never;
-    url: '/api/v1/admin/settings/whisper/models';
+    url: '/api/v1/admin/settings/indic-stt/models';
 };
 
-export type GetWhisperModelsApiV1AdminSettingsWhisperModelsGetErrors = {
+export type GetIndicSttModelsApiV1AdminSettingsIndicSttModelsGetErrors = {
     /**
      * Not found
      */
@@ -13604,100 +13646,16 @@ export type GetWhisperModelsApiV1AdminSettingsWhisperModelsGetErrors = {
     422: HttpValidationError;
 };
 
-export type GetWhisperModelsApiV1AdminSettingsWhisperModelsGetError = GetWhisperModelsApiV1AdminSettingsWhisperModelsGetErrors[keyof GetWhisperModelsApiV1AdminSettingsWhisperModelsGetErrors];
+export type GetIndicSttModelsApiV1AdminSettingsIndicSttModelsGetError = GetIndicSttModelsApiV1AdminSettingsIndicSttModelsGetErrors[keyof GetIndicSttModelsApiV1AdminSettingsIndicSttModelsGetErrors];
 
-export type GetWhisperModelsApiV1AdminSettingsWhisperModelsGetResponses = {
+export type GetIndicSttModelsApiV1AdminSettingsIndicSttModelsGetResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type DownloadWhisperModelApiV1AdminSettingsWhisperDownloadPostData = {
-    /**
-     * Payload
-     */
-    body: {
-        [key: string]: unknown;
-    };
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/admin/settings/whisper/download';
-};
-
-export type DownloadWhisperModelApiV1AdminSettingsWhisperDownloadPostErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DownloadWhisperModelApiV1AdminSettingsWhisperDownloadPostError = DownloadWhisperModelApiV1AdminSettingsWhisperDownloadPostErrors[keyof DownloadWhisperModelApiV1AdminSettingsWhisperDownloadPostErrors];
-
-export type DownloadWhisperModelApiV1AdminSettingsWhisperDownloadPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type DeleteWhisperModelApiV1AdminSettingsWhisperModelsModelIdDeleteData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path: {
-        /**
-         * Model Id
-         */
-        model_id: string;
-    };
-    query?: never;
-    url: '/api/v1/admin/settings/whisper/models/{model_id}';
-};
-
-export type DeleteWhisperModelApiV1AdminSettingsWhisperModelsModelIdDeleteErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DeleteWhisperModelApiV1AdminSettingsWhisperModelsModelIdDeleteError = DeleteWhisperModelApiV1AdminSettingsWhisperModelsModelIdDeleteErrors[keyof DeleteWhisperModelApiV1AdminSettingsWhisperModelsModelIdDeleteErrors];
-
-export type DeleteWhisperModelApiV1AdminSettingsWhisperModelsModelIdDeleteResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type TestWhisperSttApiV1AdminSettingsWhisperTestPostData = {
+export type TestIndicSttApiV1AdminSettingsIndicSttTestPostData = {
     /**
      * Payload
      */
@@ -13716,10 +13674,10 @@ export type TestWhisperSttApiV1AdminSettingsWhisperTestPostData = {
     };
     path?: never;
     query?: never;
-    url: '/api/v1/admin/settings/whisper/test';
+    url: '/api/v1/admin/settings/indic-stt/test';
 };
 
-export type TestWhisperSttApiV1AdminSettingsWhisperTestPostErrors = {
+export type TestIndicSttApiV1AdminSettingsIndicSttTestPostErrors = {
     /**
      * Not found
      */
@@ -13730,9 +13688,9 @@ export type TestWhisperSttApiV1AdminSettingsWhisperTestPostErrors = {
     422: HttpValidationError;
 };
 
-export type TestWhisperSttApiV1AdminSettingsWhisperTestPostError = TestWhisperSttApiV1AdminSettingsWhisperTestPostErrors[keyof TestWhisperSttApiV1AdminSettingsWhisperTestPostErrors];
+export type TestIndicSttApiV1AdminSettingsIndicSttTestPostError = TestIndicSttApiV1AdminSettingsIndicSttTestPostErrors[keyof TestIndicSttApiV1AdminSettingsIndicSttTestPostErrors];
 
-export type TestWhisperSttApiV1AdminSettingsWhisperTestPostResponses = {
+export type TestIndicSttApiV1AdminSettingsIndicSttTestPostResponses = {
     /**
      * Successful Response
      */
@@ -26446,7 +26404,7 @@ export type DeletePiperVoiceAdminSettingsPiperVoicesVoiceIdDeleteResponses = {
     200: unknown;
 };
 
-export type GetWhisperModelsAdminSettingsWhisperModelsGetData = {
+export type GetIndicSttModelsAdminSettingsIndicSttModelsGetData = {
     body?: never;
     headers?: {
         /**
@@ -26460,10 +26418,10 @@ export type GetWhisperModelsAdminSettingsWhisperModelsGetData = {
     };
     path?: never;
     query?: never;
-    url: '/admin/settings/whisper/models';
+    url: '/admin/settings/indic-stt/models';
 };
 
-export type GetWhisperModelsAdminSettingsWhisperModelsGetErrors = {
+export type GetIndicSttModelsAdminSettingsIndicSttModelsGetErrors = {
     /**
      * Not found
      */
@@ -26474,100 +26432,16 @@ export type GetWhisperModelsAdminSettingsWhisperModelsGetErrors = {
     422: HttpValidationError;
 };
 
-export type GetWhisperModelsAdminSettingsWhisperModelsGetError = GetWhisperModelsAdminSettingsWhisperModelsGetErrors[keyof GetWhisperModelsAdminSettingsWhisperModelsGetErrors];
+export type GetIndicSttModelsAdminSettingsIndicSttModelsGetError = GetIndicSttModelsAdminSettingsIndicSttModelsGetErrors[keyof GetIndicSttModelsAdminSettingsIndicSttModelsGetErrors];
 
-export type GetWhisperModelsAdminSettingsWhisperModelsGetResponses = {
+export type GetIndicSttModelsAdminSettingsIndicSttModelsGetResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type DownloadWhisperModelAdminSettingsWhisperDownloadPostData = {
-    /**
-     * Payload
-     */
-    body: {
-        [key: string]: unknown;
-    };
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/admin/settings/whisper/download';
-};
-
-export type DownloadWhisperModelAdminSettingsWhisperDownloadPostErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DownloadWhisperModelAdminSettingsWhisperDownloadPostError = DownloadWhisperModelAdminSettingsWhisperDownloadPostErrors[keyof DownloadWhisperModelAdminSettingsWhisperDownloadPostErrors];
-
-export type DownloadWhisperModelAdminSettingsWhisperDownloadPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type DeleteWhisperModelAdminSettingsWhisperModelsModelIdDeleteData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path: {
-        /**
-         * Model Id
-         */
-        model_id: string;
-    };
-    query?: never;
-    url: '/admin/settings/whisper/models/{model_id}';
-};
-
-export type DeleteWhisperModelAdminSettingsWhisperModelsModelIdDeleteErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DeleteWhisperModelAdminSettingsWhisperModelsModelIdDeleteError = DeleteWhisperModelAdminSettingsWhisperModelsModelIdDeleteErrors[keyof DeleteWhisperModelAdminSettingsWhisperModelsModelIdDeleteErrors];
-
-export type DeleteWhisperModelAdminSettingsWhisperModelsModelIdDeleteResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type TestWhisperSttAdminSettingsWhisperTestPostData = {
+export type TestIndicSttAdminSettingsIndicSttTestPostData = {
     /**
      * Payload
      */
@@ -26586,10 +26460,10 @@ export type TestWhisperSttAdminSettingsWhisperTestPostData = {
     };
     path?: never;
     query?: never;
-    url: '/admin/settings/whisper/test';
+    url: '/admin/settings/indic-stt/test';
 };
 
-export type TestWhisperSttAdminSettingsWhisperTestPostErrors = {
+export type TestIndicSttAdminSettingsIndicSttTestPostErrors = {
     /**
      * Not found
      */
@@ -26600,9 +26474,9 @@ export type TestWhisperSttAdminSettingsWhisperTestPostErrors = {
     422: HttpValidationError;
 };
 
-export type TestWhisperSttAdminSettingsWhisperTestPostError = TestWhisperSttAdminSettingsWhisperTestPostErrors[keyof TestWhisperSttAdminSettingsWhisperTestPostErrors];
+export type TestIndicSttAdminSettingsIndicSttTestPostError = TestIndicSttAdminSettingsIndicSttTestPostErrors[keyof TestIndicSttAdminSettingsIndicSttTestPostErrors];
 
-export type TestWhisperSttAdminSettingsWhisperTestPostResponses = {
+export type TestIndicSttAdminSettingsIndicSttTestPostResponses = {
     /**
      * Successful Response
      */
@@ -36968,7 +36842,7 @@ export type AutoscaleMetricHealthAutoscaleMetricGetResponses = {
 
 export type AutoscaleMetricHealthAutoscaleMetricGetResponse = AutoscaleMetricHealthAutoscaleMetricGetResponses[keyof AutoscaleMetricHealthAutoscaleMetricGetResponses];
 
-export type FallbackProxyToUiApiPathPutData = {
+export type FallbackProxyToUiApiPathGetData = {
     body?: never;
     path: {
         /**
@@ -36980,23 +36854,23 @@ export type FallbackProxyToUiApiPathPutData = {
     url: '/api/{path}';
 };
 
-export type FallbackProxyToUiApiPathPutErrors = {
+export type FallbackProxyToUiApiPathGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type FallbackProxyToUiApiPathPutError = FallbackProxyToUiApiPathPutErrors[keyof FallbackProxyToUiApiPathPutErrors];
+export type FallbackProxyToUiApiPathGetError = FallbackProxyToUiApiPathGetErrors[keyof FallbackProxyToUiApiPathGetErrors];
 
-export type FallbackProxyToUiApiPathPutResponses = {
+export type FallbackProxyToUiApiPathGetResponses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type FallbackProxyToUiApiPathPut2Data = {
+export type FallbackProxyToUiApiPathGet2Data = {
     body?: never;
     path: {
         /**
@@ -37008,23 +36882,23 @@ export type FallbackProxyToUiApiPathPut2Data = {
     url: '/api/{path}';
 };
 
-export type FallbackProxyToUiApiPathPut2Errors = {
+export type FallbackProxyToUiApiPathGet2Errors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type FallbackProxyToUiApiPathPut2Error = FallbackProxyToUiApiPathPut2Errors[keyof FallbackProxyToUiApiPathPut2Errors];
+export type FallbackProxyToUiApiPathGet2Error = FallbackProxyToUiApiPathGet2Errors[keyof FallbackProxyToUiApiPathGet2Errors];
 
-export type FallbackProxyToUiApiPathPut2Responses = {
+export type FallbackProxyToUiApiPathGet2Responses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type FallbackProxyToUiApiPathPut3Data = {
+export type FallbackProxyToUiApiPathGet3Data = {
     body?: never;
     path: {
         /**
@@ -37036,23 +36910,23 @@ export type FallbackProxyToUiApiPathPut3Data = {
     url: '/api/{path}';
 };
 
-export type FallbackProxyToUiApiPathPut3Errors = {
+export type FallbackProxyToUiApiPathGet3Errors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type FallbackProxyToUiApiPathPut3Error = FallbackProxyToUiApiPathPut3Errors[keyof FallbackProxyToUiApiPathPut3Errors];
+export type FallbackProxyToUiApiPathGet3Error = FallbackProxyToUiApiPathGet3Errors[keyof FallbackProxyToUiApiPathGet3Errors];
 
-export type FallbackProxyToUiApiPathPut3Responses = {
+export type FallbackProxyToUiApiPathGet3Responses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type FallbackProxyToUiApiPathPut4Data = {
+export type FallbackProxyToUiApiPathGet4Data = {
     body?: never;
     path: {
         /**
@@ -37064,23 +36938,23 @@ export type FallbackProxyToUiApiPathPut4Data = {
     url: '/api/{path}';
 };
 
-export type FallbackProxyToUiApiPathPut4Errors = {
+export type FallbackProxyToUiApiPathGet4Errors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type FallbackProxyToUiApiPathPut4Error = FallbackProxyToUiApiPathPut4Errors[keyof FallbackProxyToUiApiPathPut4Errors];
+export type FallbackProxyToUiApiPathGet4Error = FallbackProxyToUiApiPathGet4Errors[keyof FallbackProxyToUiApiPathGet4Errors];
 
-export type FallbackProxyToUiApiPathPut4Responses = {
+export type FallbackProxyToUiApiPathGet4Responses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type FallbackProxyToUiApiPathPut5Data = {
+export type FallbackProxyToUiApiPathGet5Data = {
     body?: never;
     path: {
         /**
@@ -37092,23 +36966,23 @@ export type FallbackProxyToUiApiPathPut5Data = {
     url: '/api/{path}';
 };
 
-export type FallbackProxyToUiApiPathPut5Errors = {
+export type FallbackProxyToUiApiPathGet5Errors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type FallbackProxyToUiApiPathPut5Error = FallbackProxyToUiApiPathPut5Errors[keyof FallbackProxyToUiApiPathPut5Errors];
+export type FallbackProxyToUiApiPathGet5Error = FallbackProxyToUiApiPathGet5Errors[keyof FallbackProxyToUiApiPathGet5Errors];
 
-export type FallbackProxyToUiApiPathPut5Responses = {
+export type FallbackProxyToUiApiPathGet5Responses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type FallbackProxyToUiApiPathPut6Data = {
+export type FallbackProxyToUiApiPathGet6Data = {
     body?: never;
     path: {
         /**
@@ -37120,23 +36994,23 @@ export type FallbackProxyToUiApiPathPut6Data = {
     url: '/api/{path}';
 };
 
-export type FallbackProxyToUiApiPathPut6Errors = {
+export type FallbackProxyToUiApiPathGet6Errors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type FallbackProxyToUiApiPathPut6Error = FallbackProxyToUiApiPathPut6Errors[keyof FallbackProxyToUiApiPathPut6Errors];
+export type FallbackProxyToUiApiPathGet6Error = FallbackProxyToUiApiPathGet6Errors[keyof FallbackProxyToUiApiPathGet6Errors];
 
-export type FallbackProxyToUiApiPathPut6Responses = {
+export type FallbackProxyToUiApiPathGet6Responses = {
     /**
      * Successful Response
      */
     200: unknown;
 };
 
-export type FallbackProxyToUiApiPathPut7Data = {
+export type FallbackProxyToUiApiPathGet7Data = {
     body?: never;
     path: {
         /**
@@ -37148,16 +37022,16 @@ export type FallbackProxyToUiApiPathPut7Data = {
     url: '/api/{path}';
 };
 
-export type FallbackProxyToUiApiPathPut7Errors = {
+export type FallbackProxyToUiApiPathGet7Errors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type FallbackProxyToUiApiPathPut7Error = FallbackProxyToUiApiPathPut7Errors[keyof FallbackProxyToUiApiPathPut7Errors];
+export type FallbackProxyToUiApiPathGet7Error = FallbackProxyToUiApiPathGet7Errors[keyof FallbackProxyToUiApiPathGet7Errors];
 
-export type FallbackProxyToUiApiPathPut7Responses = {
+export type FallbackProxyToUiApiPathGet7Responses = {
     /**
      * Successful Response
      */

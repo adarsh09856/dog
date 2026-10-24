@@ -10,7 +10,7 @@ export function promptTemplateWorkflow(template: {
     .replace(/for\s+\{\{\s*company_name\s*\}\}\s+clinic/gi, 'at the clinic')
     .replace(/\{\{\s*company_name\s*\}\}/gi, 'the organization you represent')
     .replace(/Help callers track their shipments, report delivery issues, and reschedule deliveries\./gi,
-      'Collect shipment IDs and delivery concerns. You have no live tracking or rescheduling access unless a matching tool is connected.')
+      'Help callers with delivery questions and policies. You have no live tracking or rescheduling access unless a matching tool is connected.')
     .replace(/Always ask for the order ID or tracking number first\./gi,
       'Ask for an order ID or tracking number only when a connected tool needs it or the caller chooses to include it in this conversation. Without a live tracking tool, say you cannot see the current shipment status. Without a connected storage or handoff tool, never claim to record, save, or pass details to staff; direct the caller to the seller\'s official support channel.')
     + (template.is_featured ? (

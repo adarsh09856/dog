@@ -20,10 +20,43 @@ _HINDI_SWITCH = re.compile(
     r"(?:बात|बोल|जवाब|उत्तर).{0,24}हिंदी\s+में)",
     re.IGNORECASE,
 )
+_STANDALONE_ENGLISH_REQUEST = re.compile(
+    r"\s*(?:(?:अः|अह|uh|um|please|कृपया)\s+)?(?:"
+    r"(?:can|could|would)\s+you\s+(?:please\s+)?(?:speak|talk|reply|answer|continue)"
+    r"(?:\s+to\s+me)?\s+(?:in\s+)?english|"
+    r"(?:कन|कैन)\s*यू\s*(?:टॉक|टाक|ताार्क|स्पीक)\s+(?:इन\s+)?इंग्लिश|"
+    r"(?:क्या\s+)?(?:तुम|आप)\s+(?:इंग्लिश|अंग्रेज़ी|अंग्रेजी)\s+में\s+"
+    r"(?:(?:बात|प)\s+)?(?:कर\s+सकत[ेी]\s+(?:हो|हैं)|बोल\s+सकत[ेी]\s+(?:हो|हैं))|"
+    r"(?:अब\s+)?(?:इंग्लिश|अंग्रेज़ी|अंग्रेजी)\s+में\s+(?:बोलिए|बोलो|बताइए|जवाब\s+दें)|"
+    r"(?:switch|continue|reply|answer|speak|talk)\s+(?:in|to)\s+english|english\s+please"
+    r")(?:\s+please)?[.?!।\s]*",
+    re.IGNORECASE,
+)
+_STANDALONE_HINDI_REQUEST = re.compile(
+    r"\s*(?:(?:please|कृपया|अब)\s+)?(?:"
+    r"(?:can|could|would)\s+you\s+(?:please\s+)?(?:speak|talk|reply|answer|continue)"
+    r"(?:\s+to\s+me)?\s+(?:in\s+)?hindi|"
+    r"(?:switch|continue|reply|answer|speak|talk)\s+(?:in|to)\s+hindi|hindi\s+please|"
+    r"हिंदी\s+में\s+(?:बोलिए|बोलो|बताइए|जवाब\s+दें|बात\s+करो)"
+    r")[.?!।\s]*",
+    re.IGNORECASE,
+)
+
+
+def standalone_language_request(text: str) -> str | None:
+    """A reply-language setting request with no other task to drop."""
+    if _STANDALONE_ENGLISH_REQUEST.fullmatch(text):
+        return "English"
+    if _STANDALONE_HINDI_REQUEST.fullmatch(text):
+        return "Hindi"
+    return None
 
 
 def _requested_language(text: str) -> str | None:
     """Recognize an explicit reply-language request, even in another language."""
+    standalone = standalone_language_request(text)
+    if standalone:
+        return standalone
     english = _ENGLISH_SWITCH.search(text)
     hindi = _HINDI_SWITCH.search(text)
     if english and hindi:
@@ -40,6 +73,15 @@ class CallerLanguageContext:
         self._hints: dict[tuple[int, str], str] = {}
         self._explicit_preference: str | None = None
         self._explicit_source_language: str | None = None
+
+    def choose_language(self, language: str, source=None, *, text: str = "") -> None:
+        detected = getattr(source, "latest_detected_language", None)
+        code = str(detected or "").lower().replace("_", "-").split("-", 1)[0]
+        spoken = SPEECH_LANGUAGE_NAMES.get(code)
+        if not spoken:
+            spoken = "Hindi" if re.search(r"[\u0900-\u097f]", text) else "English"
+        self._explicit_preference = language
+        self._explicit_source_language = spoken
 
     def apply(self, messages: list, source) -> list:
         """Keep earlier utterances identical as a caller changes language.

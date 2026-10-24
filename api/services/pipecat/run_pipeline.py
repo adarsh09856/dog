@@ -233,7 +233,7 @@ def _create_non_realtime_user_turn_start_strategies(
 
 
 def _create_non_realtime_user_turn_stop_strategies(
-    run_configs: dict, *, uses_external_turns: bool
+    run_configs: dict, *, uses_external_turns: bool, phone_pending=None
 ):
     """Return user turn stop strategies for non-realtime pipelines."""
 
@@ -252,6 +252,10 @@ def _create_non_realtime_user_turn_stop_strategies(
             )
         ]
 
+    if phone_pending is not None:
+        from api.services.pipecat.contact_turn_stop import ContactAwareTurnStopStrategy
+
+        return [ContactAwareTurnStopStrategy(phone_pending=phone_pending)]
     return [SpeechTimeoutUserTurnStopStrategy()]
 
 
@@ -1046,6 +1050,9 @@ async def _run_pipeline_impl(
         user_turn_stop_strategies = _create_non_realtime_user_turn_stop_strategies(
             run_configs,
             uses_external_turns=uses_external_turns,
+            phone_pending=lambda: bool(
+                getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+            ),
         )
         user_turn_strategies = UserTurnStrategies(
             start=user_turn_start_strategies,

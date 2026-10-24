@@ -5,7 +5,7 @@ import { getTurnCredentialsApiV1TurnCredentialsGet, validateUserConfigurationsAp
 import { TurnCredentialsResponse } from "@/client/types.gen";
 import { WorkflowValidationError } from "@/components/flow/types";
 import type { ConversationNodeTransitionItem, RealtimeFeedbackMessage as FeedbackMessage } from "@/components/workflow/conversation";
-import { activeBotMessageIndex } from "@/components/workflow/conversation/activeBotMessage";
+import { activeBotMessageIndex, finalizeActiveBotMessage } from "@/components/workflow/conversation/activeBotMessage";
 import { isLlmTtfb } from "@/components/workflow/conversation/adapters/fromRealtimeFeedback";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { resolveBrowserBackendUrl } from '@/lib/apiClient';
@@ -197,6 +197,10 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
         setConnectionActive(false);
         setIsCompleted(graceful);
         setConnectionStatus(status);
+        const confirmedBeforeClose = spokenTextRef.current;
+        setFeedbackMessages(prev => finalizeActiveBotMessage(prev, confirmedBeforeClose));
+        previewTextRef.current = '';
+        spokenTextRef.current = '';
 
         if (options.closeWebSocket !== false) {
             const ws = wsRef.current;
@@ -456,8 +460,8 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                         case 'rtf-user-transcription': {
                             const transcription = message.payload;
-                            // A preview may include words that were never played when
-                            // the caller interrupts. Keep only audio-confirmed text.
+                            // Retain generated text when interrupted; mark any portion
+                            // without audio confirmation instead of erasing history.
                             const confirmedBotText = spokenTextRef.current;
                             previewTextRef.current = '';
                             spokenTextRef.current = '';
@@ -481,18 +485,11 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                             setFeedbackMessages(prev => {
                                 // Step 1: Finalize the last bot message (user started speaking)
-                                const activeBotIndex = activeBotMessageIndex(prev);
-                                const messagesWithBotFinalized = prev.map((msg, idx) => {
-                                    const isUnfinalizedBotMessage = msg.type === 'bot-text' && !msg.final;
-                                    return idx === activeBotIndex && isUnfinalizedBotMessage
-                                        ? { ...msg, text: confirmedBotText, final: true }
-                                        : msg;
-                                });
+                                const messagesWithBotFinalized = finalizeActiveBotMessage(prev, confirmedBotText);
 
                                 // Step 2: Remove any previous interim transcription
                                 const messagesWithoutInterim = messagesWithBotFinalized.filter(
-                                    msg => !(msg.type === 'user-transcription' && !msg.final) &&
-                                        !(msg.type === 'bot-text' && msg.final && !msg.text.trim())
+                                    msg => !(msg.type === 'user-transcription' && !msg.final)
                                 );
 
                                 // Step 3: Add new transcription (interim or final)
@@ -664,9 +661,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             previewTextRef.current = '';
                             spokenTextRef.current = '';
                             setFeedbackMessages(prev => [
-                                ...prev.map(msg => msg.type === 'bot-text' && !msg.final
-                                    ? { ...msg, text: confirmedBeforeError, final: true }
-                                    : msg).filter(msg => msg.type !== 'bot-text' || !!msg.text.trim()),
+                                ...finalizeActiveBotMessage(prev, confirmedBeforeError),
                                 {
                                     id: `error-${Date.now()}`,
                                     type: 'pipeline-error',
@@ -689,19 +684,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             }
                             // Finalize the last bot message so "speaking..." indicator is removed
                             const completedSpokenText = spokenTextRef.current;
-                            setFeedbackMessages(prev => {
-                                const lastIdx = activeBotMessageIndex(prev);
-                                if (lastIdx >= 0) {
-                                    const updated = [...prev];
-                                    if (!completedSpokenText) {
-                                        updated.splice(lastIdx, 1);
-                                        return updated;
-                                    }
-                                    updated[lastIdx] = { ...updated[lastIdx], text: completedSpokenText, final: true };
-                                    return updated;
-                                }
-                                return prev;
-                            });
+                            setFeedbackMessages(prev => finalizeActiveBotMessage(prev, completedSpokenText));
                             previewTextRef.current = '';
                             spokenTextRef.current = '';
                             break;

@@ -20,6 +20,8 @@ import {
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { startConfiguredCheckout } from "@/lib/billing/checkout";
+import { paymentsApi } from "@/lib/kodewavesApi";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -81,8 +83,14 @@ export default function SovereignBillingPage() {
     if (!confirm(`Subscribe to ${plan.name} for ₹${plan.monthly_price_inr.toLocaleString()} / month?`)) return;
     setSubscribingId(plan.id);
     try {
-      await sovereignBillingApi.subscribe(plan.id);
-      alert(`Successfully subscribed to ${plan.name}! Your minute quota has been updated.`);
+      if (plan.monthly_price_inr > 0 || plan.monthly_price_usd > 0) {
+        const result = await startConfiguredCheckout({ plan_id: String(plan.id), billing_cycle: "monthly" });
+        if (result.redirected) return;
+        alert(result.receipt.message);
+      } else {
+        const result = await sovereignBillingApi.subscribe(plan.id);
+        alert(result.message);
+      }
       await fetchData();
     } catch (err: any) {
       alert(err.message || "Failed to update subscription");
@@ -90,6 +98,26 @@ export default function SovereignBillingPage() {
       setSubscribingId(null);
     }
   };
+
+  useEffect(() => {
+    if (authLoading || !user) return;
+    const params = new URLSearchParams(window.location.search);
+    const session = params.get("session_id");
+    if (params.get("payment") !== "success" || !session) return;
+    let cancelled = false;
+    // A return URL is not payment proof: fetch the provider receipt through
+    // the authenticated backend before showing success or updating the wallet.
+    paymentsApi.verifyPayment({ gateway: "stripe", order_id: session, payment_id: session })
+      .then(async (receipt) => {
+        if (cancelled) return;
+        if (!receipt.success) throw new Error("Payment has not been verified.");
+        window.history.replaceState(null, "", window.location.pathname);
+        await fetchData();
+      }).catch((error) => {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Payment verification failed. Refresh before retrying payment.");
+      });
+    return () => { cancelled = true; };
+  }, [authLoading, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">

@@ -149,6 +149,22 @@ def booking_tool_choice(params: dict) -> dict | None:
 
 
 class _BookingToolChoiceMixin:
+    def can_speculate_caller_turn(self, text: str) -> bool:
+        """Keep confirmed-only contact/settings handling out of speculation."""
+        from api.services.pipecat.caller_language_context import standalone_language_request
+        from api.services.workflow.contact_context import caller_name_followup_reply
+        from api.services.workflow.direct_caller_reply import direct_caller_reply
+
+        state = dict(getattr(self, "_contact_conversation_state", {}))
+        if standalone_language_request(text) or state.get("awaiting_phone"):
+            return False
+        if direct_caller_reply(text, has_lookup_tools=False):
+            return False
+        provider = getattr(self, "_contact_context_messages_provider", None)
+        messages = list(provider()) if callable(provider) else []
+        messages.append({"role": "user", "content": text})
+        return caller_name_followup_reply(messages, state) is None
+
     async def _run_or_defer_function_calls(self, function_calls, *, text_generated):
         # A tool-only completion is valid silence while its registered handler
         # runs. Distinguish it from a successful but empty model response.
@@ -229,6 +245,7 @@ class _BookingToolChoiceMixin:
         from api.services.workflow.contact_context import (
             booking_contact_question,
             caller_name_followup_reply,
+            caller_phone_fragment_reply,
         )
         from api.services.workflow.direct_caller_reply import direct_caller_reply
 
@@ -237,6 +254,34 @@ class _BookingToolChoiceMixin:
             if messages and isinstance(messages[-1], dict)
             and messages[-1].get("role") == "user" else ""
         )
+        from api.services.pipecat.caller_language_context import (
+            CallerLanguageContext,
+            standalone_language_request,
+        )
+
+        requested_language = standalone_language_request(latest_user_text)
+        if requested_language:
+            if not hasattr(self, "_caller_language_context"):
+                self._caller_language_context = CallerLanguageContext()
+            source = getattr(self, "_caller_language_source", None)
+            self._caller_language_context.choose_language(
+                requested_language, source, text=latest_user_text
+            )
+            self._caller_language_context.apply(messages, source)
+            state = getattr(self, "_contact_conversation_state", None)
+            if not isinstance(state, dict):
+                state = {}
+                self._contact_conversation_state = state
+            state["reply_language"] = requested_language
+            await self.start_ttfb_metrics()
+            await self.push_frame(LLMFullResponseStartFrame())
+            await self._push_llm_text(
+                "Yes, we can continue in English."
+                if requested_language == "English"
+                else "ज़रूर, हम हिंदी में बात कर सकते हैं।"
+            )
+            await self.push_frame(LLMFullResponseEndFrame())
+            return
         direct_reply = direct_caller_reply(
             latest_user_text,
             # Ending a call cannot retrieve an order. Other tools remain
@@ -267,9 +312,18 @@ class _BookingToolChoiceMixin:
             await self._push_llm_text(name_followup_reply)
             await self.push_frame(LLMFullResponseEndFrame())
             return
+        phone_fragment_reply = caller_phone_fragment_reply(messages, contact_state)
+        if phone_fragment_reply:
+            await self.start_ttfb_metrics()
+            await self.push_frame(LLMFullResponseStartFrame())
+            await self._push_llm_text(phone_fragment_reply)
+            await self.push_frame(LLMFullResponseEndFrame())
+            return
 
         known = getattr(self, "_known_contact", {})
         contact_state = getattr(self, "_contact_conversation_state", None)
+        if contact_state and contact_state.get("caller_name"):
+            known = {**known, "customer_name": contact_state["caller_name"]}
         has_booking_tool = any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
         fast_booking_question = None
         if has_booking_tool:

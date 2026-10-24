@@ -46,7 +46,7 @@ async def selected_voice_persona_instruction(user_config) -> str:
     ):
         return voice_persona_instruction("female")
     try:
-        if provider == "speaches" and model == "indic-vits-rasa-13":
+        if provider == "speaches" and model in {"indic-vits-rasa-13", "dhvaani-0.5", "indic-parler-tts"}:
             from api.services.catalog.local_inventory import get_local_tts_models
 
             endpoint = str(getattr(tts, "base_url", "") or "").rstrip("/").removesuffix("/audio/speech")

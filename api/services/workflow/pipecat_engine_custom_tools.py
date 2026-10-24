@@ -345,10 +345,12 @@ class CustomToolManager:
 
                 known = known_contact(getattr(self._engine, "_call_context_vars", {}))
                 state = getattr(self._engine, "_contact_conversation_state", {})
-                if not arguments.get("customer_name") and known.get("customer_name"):
-                    arguments["customer_name"] = known["customer_name"]
-                if not arguments.get("customer_phone") and state.get("approved_phone"):
-                    arguments["customer_phone"] = state["approved_phone"]
+                caller_name = state.get("caller_name") or known.get("customer_name")
+                if not arguments.get("customer_name") and caller_name:
+                    arguments["customer_name"] = caller_name
+                caller_phone = state.get("caller_phone") or state.get("approved_phone")
+                if not arguments.get("customer_phone") and caller_phone:
+                    arguments["customer_phone"] = caller_phone
                 arguments["confirmed_by_caller"] = caller_confirmed_booking(
                     messages
                 )
