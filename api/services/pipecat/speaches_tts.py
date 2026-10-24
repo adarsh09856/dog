@@ -20,6 +20,13 @@ from pipecat.utils.tracing.service_decorators import traced_tts
 class SpeachesLiveTTSService(SpeachesTTSService):
     """Keep a synthesis context open while the CPU provider is working."""
 
+    @property
+    def chunk_size(self) -> int:
+        # The local gateway generates faster than playback. A 200 ms initial
+        # buffer releases speech sooner without requesting one HTTP frame per
+        # tiny model callback.
+        return int(self.sample_rate * 0.2 * 2)
+
     def __init__(self, *, speech_language: str | None = None, **kwargs):
         kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=45.0))
         super().__init__(**kwargs)
