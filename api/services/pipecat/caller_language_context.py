@@ -105,6 +105,21 @@ class CallerLanguageContext:
             self._explicit_preference = None
             self._explicit_source_language = None
 
+        # Text chat creates a new service for each turn and has no STT source.
+        # Recover explicit choices from its persisted caller history so a
+        # successful switch acknowledgment also governs subsequent replies.
+        if source is None:
+            for ordinal, (_, text) in enumerate(users):
+                requested = standalone_language_request(text)
+                if requested:
+                    self._explicit_preference = requested
+                if self._explicit_preference:
+                    self._hints.setdefault((ordinal, text), (
+                        f"The caller explicitly chose {self._explicit_preference} "
+                        f"for assistant replies. Reply only in {self._explicit_preference}; "
+                        "do not repeat questions already answered."
+                    ))
+
         detected = getattr(source, "latest_detected_language", None)
         detected_text = getattr(source, "latest_detected_text", None)
         if (

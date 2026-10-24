@@ -146,6 +146,8 @@ def caller_name_followup_reply(messages: list, state: dict) -> str | None:
 
     state["caller_name"] = candidate
     state["awaiting_phone"] = True
+    if state.get("reply_language") == "English":
+        return f"Thanks, {candidate}. What's your mobile number?"
     is_hindi = any("\u0900" <= char <= "\u097f" for char in prompt + text)
     roman_hindi = bool(
         re.search(
