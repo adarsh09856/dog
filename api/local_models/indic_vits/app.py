@@ -394,7 +394,14 @@ async def stream_pcm(request, context_language: str | None = None):
     async with LOCK:
         future = loop.run_in_executor(
             WORKER, _generate, request.input, request.voice, request.speed, callback, context_language)
-        future.add_done_callback(lambda _: queue.put_nowait(None))
+        # The generation future completes on WORKER's thread. asyncio.Queue is
+        # not thread-safe, so enqueue its sentinel through the event loop just
+        # like audio chunks. A direct put_nowait can fail to wake queue.get(),
+        # leaving the PCM response open after all speech bytes were sent.
+        def signal_stream_complete(_future):
+            loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        future.add_done_callback(signal_stream_complete)
         try:
             while (chunk := await queue.get()) is not None:
                 yield chunk
