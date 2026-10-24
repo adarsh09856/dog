@@ -235,38 +235,108 @@ _SPOKEN_DIGITS = {
     "five": "5", "पांच": "5", "पाँच": "5", "फाइव": "5",
     "six": "6", "छह": "6", "सिक्स": "6", "seven": "7", "सात": "7", "सेवन": "7",
     "eight": "8", "आठ": "8", "एट": "8", "nine": "9", "नौ": "9", "नाइन": "9",
+    # STT commonly renders spoken "nine" as नीन/निन in code-switched speech.
+    "नीन": "9", "निन": "9",
 }
 _PHONE_INTRO = re.compile(
-    r"^(?:(?:अः|अह|uh|um)\s+)?(?:मेरा\s+(?:मोबाइल|फोन)?\s*(?:नंबर|नम्बर)\s*(?:है)?|"
+    r"(?:(?:अः|अह|uh|um)\s+)?(?:मेरा\s+(?:मोबाइल|फोन)?\s*(?:नंबर|नम्बर)\s*(?:है)?|"
     r"my\s+(?:mobile|phone)?\s*number\s*(?:is)?)[,:\s]*", re.IGNORECASE
 )
 
 
 def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
-    """Keep incomplete dictation on the pending phone question, without guessing digits."""
-    if not state.get("awaiting_phone") or not messages:
+    """Collect a caller's explicitly introduced phone number across short turns.
+
+    Speech recognition often splits dictated numbers across utterances. Keep
+    only digit words while a phone number is explicitly being provided or the
+    assistant has just requested one; unrelated speech stays on the normal
+    conversation path.
+    """
+    if not messages or not isinstance(state, dict):
         return None
-    latest = messages[-1]
-    if not isinstance(latest, dict) or latest.get("role") != "user":
+    latest_index = next((
+        index for index in range(len(messages) - 1, -1, -1)
+        if isinstance(messages[index], dict) and messages[index].get("role") == "user"
+    ), None)
+    if latest_index is None:
         return None
+    latest = messages[latest_index]
     text = latest.get("content")
     if not isinstance(text, str):
         return None
-    introduced = bool(_PHONE_INTRO.match(text.strip()))
-    rest = _PHONE_INTRO.sub("", text.strip()).translate(str.maketrans("०१२३४५६७८९", "0123456789"))
-    words = re.findall(r"[^\s,.!?।:;()+-]+", rest.casefold())
-    tokens = [word for word in words if word not in {"है", "अः", "अह", "is", "uh", "um"}]
-    exact_digits = bool(tokens) and all(word.isdecimal() or word in _SPOKEN_DIGITS for word in tokens)
-    if not introduced and not exact_digits:
-        return None  # A changed request must remain on the normal conversation path.
-    number = "".join(word if word.isdecimal() else _SPOKEN_DIGITS[word] for word in tokens) if exact_digits else ""
-    if 10 <= len(number) <= 15:
-        state["caller_phone"] = number
+    text = text.strip()
+    intro = _PHONE_INTRO.search(text)
+    previous_assistant = next((
+        message for message in reversed(messages[:latest_index])
+        if isinstance(message, dict) and message.get("role") == "assistant"
+    ), None)
+    assistant_text = previous_assistant.get("content", "") if previous_assistant else ""
+    asked_for_phone = isinstance(assistant_text, str) and bool(_PHONE_REQUEST.search(assistant_text))
+    if intro or asked_for_phone:
+        state["awaiting_phone"] = True
+    elif not state.get("awaiting_phone"):
+        return None
+
+    rest = text[intro.end():] if intro else text
+    rest = rest.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
+    words = re.findall(r"[^\s,.!?।:;]+", rest.casefold())
+    fillers = {"है", "हैं", "हूँ", "हूं", "hai", "hain", "he", "is", "uh", "um"}
+    tokens = [word for word in words if word not in fillers]
+    digits = []
+    unknown = []
+    for word in tokens:
+        cleaned = re.sub(r"[()+.-]", "", word)
+        if cleaned.isdecimal():
+            digits.append(cleaned)
+        elif word in _SPOKEN_DIGITS:
+            digits.append(_SPOKEN_DIGITS[word])
+        else:
+            unknown.append(word)
+
+    if unknown and not intro and not digits:
+        # A changed request is not phone dictation, even while the slot is open.
+        return None
+    if unknown and not intro and digits:
+        # Permit natural separators between spoken digits, but don't silently
+        # discard any other words from a non-introduced answer.
+        if any(word not in {"and", "plus", "और", "तथा"} for word in unknown):
+            return None
+
+    accumulated = str(state.get("caller_phone_digits") or "") + "".join(digits)
+    if 10 <= len(accumulated) <= 15 and not unknown:
+        state["caller_phone"] = accumulated
+        state.pop("caller_phone_digits", None)
         state["awaiting_phone"] = False
         return None
-    if state.get("reply_language") == "English" or not re.search(r"[\u0900-\u097f]", text):
-        return "I didn't get the complete number. Please say the full phone number together."
-    return "नंबर पूरा नहीं मिला। कृपया पूरा मोबाइल नंबर एक साथ बताइए।"
+    if len(accumulated) > 15:
+        state.pop("caller_phone_digits", None)
+        state["awaiting_phone"] = True
+        return "That was too many digits. Please repeat the phone number."
+
+    if digits:
+        state["caller_phone_digits"] = accumulated
+    hindi = (
+        state.get("reply_language") != "English"
+        and bool(re.search(r"[\u0900-\u097f]", text + str(assistant_text)))
+    )
+    if accumulated:
+        remaining = max(1, 10 - len(accumulated))
+        if unknown:
+            if hindi:
+                return (
+                    f"अब तक {len(accumulated)} अंक मिले हैं, लेकिन एक शब्द साफ़ नहीं था। "
+                    "कृपया वह अंक फिर से बताकर बाकी अंक जारी रखें।"
+                )
+            return (
+                f"I have {len(accumulated)} digits, but one part was unclear. "
+                f"Please repeat that digit and continue with at least {remaining} more."
+            )
+        if hindi:
+            return f"अब तक {len(accumulated)} अंक मिले हैं। कृपया बाकी अंक बताइए।"
+        return f"I have {len(accumulated)} digits so far. Please continue with at least {remaining} more."
+    if hindi:
+        return "नंबर के अंक साफ़ नहीं मिले। कृपया मोबाइल नंबर के अंक बताइए।"
+    return "I didn't catch any digits. Please say the phone number one digit at a time."
 
 
 
@@ -307,7 +377,10 @@ def booking_phone_question(messages: list, contact: dict, state: dict) -> str | 
         return None
     phone = contact.get('customer_phone')
     if (
-        not phone or state.get('approved_phone') == phone or state.get('declined_phone') == phone
+        not phone
+        or state.get('caller_phone')
+        or state.get('approved_phone') == phone
+        or state.get('declined_phone') == phone
         or not new_booking_requested(text) or re.search(r'\+?\d[\d ().-]{6,}\d', text)
     ):
         return None

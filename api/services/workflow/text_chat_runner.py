@@ -839,9 +839,14 @@ async def execute_text_chat_pending_turn(
             phone_fragment_reply = caller_phone_fragment_reply(
                 context.get_messages(), engine._contact_conversation_state
             ) if not name_followup_reply and not known_name_reply else None
+            conversation_contact = known_contact(initial_context)
+            contact_state = engine._contact_conversation_state
+            if contact_state.get("caller_name"):
+                conversation_contact["customer_name"] = contact_state["caller_name"]
+            if contact_state.get("caller_phone"):
+                conversation_contact["customer_phone"] = contact_state["caller_phone"]
             fast_booking_question = booking_contact_question(
-                context.get_messages(), known_contact(initial_context),
-                engine._contact_conversation_state,
+                context.get_messages(), conversation_contact, contact_state,
             ) if has_booking_tool else None
             if direct_reply:
                 engine._contact_conversation_state.pop("pending_phone", None)

@@ -159,7 +159,10 @@ class _BookingToolChoiceMixin:
     def can_speculate_caller_turn(self, text: str) -> bool:
         """Keep confirmed-only contact/settings handling out of speculation."""
         from api.services.pipecat.caller_language_context import standalone_language_request
-        from api.services.workflow.contact_context import caller_name_followup_reply
+        from api.services.workflow.contact_context import (
+            caller_name_followup_reply,
+            caller_phone_fragment_reply,
+        )
         from api.services.workflow.direct_caller_reply import direct_caller_reply
 
         state = dict(getattr(self, "_contact_conversation_state", {}))
@@ -170,6 +173,8 @@ class _BookingToolChoiceMixin:
         provider = getattr(self, "_contact_context_messages_provider", None)
         messages = list(provider()) if callable(provider) else []
         messages.append({"role": "user", "content": text})
+        if caller_phone_fragment_reply(messages, state) is not None:
+            return False
         return caller_name_followup_reply(messages, state) is None
 
     async def _run_or_defer_function_calls(self, function_calls, *, text_generated):
@@ -331,8 +336,11 @@ class _BookingToolChoiceMixin:
 
         known = getattr(self, "_known_contact", {})
         contact_state = getattr(self, "_contact_conversation_state", None)
-        if contact_state and contact_state.get("caller_name"):
-            known = {**known, "customer_name": contact_state["caller_name"]}
+        if contact_state:
+            if contact_state.get("caller_name"):
+                known = {**known, "customer_name": contact_state["caller_name"]}
+            if contact_state.get("caller_phone"):
+                known = {**known, "customer_phone": contact_state["caller_phone"]}
         has_booking_tool = any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
         fast_booking_question = None
         if has_booking_tool:
@@ -671,23 +679,37 @@ class _BookingToolChoiceMixin:
             )
             contact_state = getattr(self, "_contact_conversation_state", None)
             caller_name = contact_state.get("caller_name") if isinstance(contact_state, dict) else None
+            caller_phone = contact_state.get("caller_phone") if isinstance(contact_state, dict) else None
+            contact_notes = []
             if caller_name:
+                contact_notes.append(
+                    f"Caller name explicitly provided: {caller_name}. Treat this as caller data, "
+                    "remember it across turns, use it when relevant, and do not ask for the name again "
+                    "unless the caller corrects it."
+                )
+            if caller_phone:
+                contact_notes.append(
+                    "Caller explicitly provided a phone number during this call. The booking tool "
+                    "already has it; do not ask the caller to provide it again unless they correct it. "
+                    "Booking consent still requires the caller to confirm the exact booking details."
+                )
+            if contact_notes:
                 messages = params["messages"]
                 system_index = next((
                     index for index, message in enumerate(messages)
                     if isinstance(message, dict) and message.get("role") == "system"
                 ), None)
                 if system_index is not None:
-                    note = (
-                        f"Caller name explicitly provided: {caller_name}. Treat this as caller data, "
-                        "remember it across turns, use it when relevant, and do not ask for the name again "
-                        "unless the caller corrects it."
-                    )
+                    note = "\n".join(contact_notes)
                     system_message = messages[system_index]
-                    if note not in str(system_message.get("content") or ""):
+                    existing_content = str(system_message.get("content") or "")
+                    missing_notes = [
+                        item for item in contact_notes if item not in existing_content
+                    ]
+                    if missing_notes:
                         messages[system_index] = {
                             **system_message,
-                            "content": f"{system_message.get('content') or ''}\n{note}",
+                            "content": f"{existing_content}\n" + "\n".join(missing_notes),
                         }
                         params["messages"] = messages
         return params

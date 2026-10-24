@@ -349,17 +349,21 @@ class CustomToolManager:
                 if not arguments.get("customer_name") and caller_name:
                     arguments["customer_name"] = caller_name
                 caller_phone = state.get("caller_phone") or state.get("approved_phone")
-                if not arguments.get("customer_phone") and caller_phone:
+                if caller_phone:
                     arguments["customer_phone"] = caller_phone
                 arguments["confirmed_by_caller"] = caller_confirmed_booking(
                     messages
                 )
                 selected_phone = arguments.get("customer_phone", "")
+                explicitly_spoken_phone = bool(caller_phone) and re.sub(
+                    r"\D", "", selected_phone
+                ) == re.sub(r"\D", "", str(caller_phone))
                 uses_known_phone = bool(known.get("customer_phone")) and re.sub(
                     r"\D", "", selected_phone
                 ) == re.sub(r"\D", "", known["customer_phone"])
                 if (uses_known_phone and state.get("approved_phone") != known["customer_phone"]
-                        and not caller_supplied_phone(messages, selected_phone)):
+                        and not caller_supplied_phone(messages, selected_phone)
+                        and not explicitly_spoken_phone):
                     result = {"status": "error", "booked": False,
                               "error": "Ask whether to use the known contact number first. If declined, ask for another number. No booking was saved."}
                 elif not caller_phone_matches_booking(selected_phone, messages):
