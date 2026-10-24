@@ -167,8 +167,17 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         if text and not any(
             unicodedata.category(char)[0] in {"L", "N"} for char in text
         ):
+            self.latest_detected_language = None
             self.latest_detected_text = None
             return result.model_copy(update={"text": ""})
+        if not text:
+            self.latest_detected_language = None
+        elif settings is not None and settings.model == "indicconformer-ctc-int8":
+            # This recognizer uses a language-specific decoder. Carry its
+            # selected language to the per-turn reply/voice routing state;
+            # this is the pinned recognition language, not auto detection.
+            selected = str(settings.language or "").strip().lower().replace("_", "-").split("-", 1)[0]
+            self.latest_detected_language = selected or None
         self.latest_detected_text = text or None
         return result
 
