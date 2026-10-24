@@ -46,6 +46,8 @@ describe("public pricing", () => {
     expect(await screen.findByText(/Plans could not be loaded/)).toBeTruthy();
     expect(screen.queryByText("₹1,499")).toBeNull();
     expect(screen.queryByText("99.99% Guaranteed SLA")).toBeNull();
+    expect(screen.queryByText(/Your Monthly Savings/)).toBeNull();
+    expect(screen.getByText(/Your final cost also depends on telephony/)).toBeTruthy();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Retry" })[0]);
 

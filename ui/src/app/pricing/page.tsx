@@ -6,7 +6,6 @@ import {
   Check,
   Zap,
   ArrowRight,
-  Calculator,
   ChevronDown,
   HelpCircle,
 } from "lucide-react";
@@ -23,7 +22,6 @@ export default function PricingPage() {
   const [plansState, setPlansState] = useState<"loading" | "ready" | "error">("loading");
   const [packagesState, setPackagesState] = useState<"loading" | "ready" | "error">("loading");
   const [reloadKey, setReloadKey] = useState(0);
-  const [calculatorMinutes, setCalculatorMinutes] = useState(2500);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
@@ -57,20 +55,10 @@ export default function PricingPage() {
   const displayPlans = plans;
   const displayPackages = packages;
 
-  // Cost comparison math:
-  // Typical Cloud Stack (Twilio $0.015/m + Deepgram $0.007/m + GPT-4o $0.04/m + ElevenLabs $0.08/m) = ~$0.14/m (~₹12.00/min)
-  // Kodewaves Sovereign Stack (Exotel SIP ₹0.30 + Navana ₹0.20 + Gemini 2.5 Flash ₹0.15 + Cartesia ₹0.25) = ~₹0.90/min
-  const typicalCloudRate = currency === "INR" ? 12.0 : 0.14;
-  const kodewavesRate = currency === "INR" ? 0.90 : 0.011;
-  const cloudTotalCost = Math.round(calculatorMinutes * typicalCloudRate);
-  const kodewavesTotalCost = Math.round(calculatorMinutes * kodewavesRate);
-  const savings = cloudTotalCost - kodewavesTotalCost;
-  const savingsPercent = Math.round((savings / cloudTotalCost) * 100);
-
   const faqs = [
     {
-      q: "What makes Kodewaves 90% cheaper than Retell or Vapi?",
-      a: "Traditional voice platforms charge high markups on top of expensive US cloud providers (Twilio, ElevenLabs, OpenAI). Kodewaves provides native direct integration with ultra-cost-effective sovereign models like Navana Bodhi Indic speech, Gemini 2.5 Flash, Cartesia Sonic, and even ultra-lightweight self-hosted local CPU models (Faster-Whisper + Piper ONNX Hindi), bringing your effective per-minute cost down from ₹12–18/min to just ₹0.55–1.20/min.",
+      q: "What determines my total voice cost?",
+      a: "Your plan and credit bundle are shown above. Total cost also depends on call volume, carrier charges, selected speech and language providers, and any infrastructure you host yourself. Review the active plan and provider rates for your deployment before estimating a monthly total.",
     },
     {
       q: "Can I bring my own API keys (BYOK)?",
@@ -78,11 +66,11 @@ export default function PricingPage() {
     },
     {
       q: "How does the self-hosted AI engine use server hardware?",
-      a: "Our self-hosted stack uses lightweight quantized models specifically optimized for CPUs: Qwen 2.5 1.5B (or Phi-4 Mini), Faster-Whisper (STT), and Piper Native Indic ONNX (TTS). It operates within 2–3 GB RAM inside Docker containers, allowing you to run zero-cloud voice agents on budget cloud servers without GPUs.",
+      a: "The local engine runs on the server hosting your deployment, not on an end user's device. Hardware needs depend on the installed STT, LLM and TTS models and the number of simultaneous calls. Size the server using measured performance for your chosen configuration.",
     },
     {
       q: "Which Indian languages and accents are supported?",
-      a: "Through our official Navana.ai Bodhi integration, we offer state-of-the-art native speech recognition and synthesis across 10 Indic languages: Hindi, English (Indian accent), Tamil, Telugu, Kannada, Marathi, Gujarati, Bengali, Malayalam, and Punjabi, tuned specifically for telephonic 8kHz audio.",
+      a: "Language and voice availability depends on the model and provider configured for your agent. Check the current voice and model catalog for your deployment before publishing an agent.",
     },
     {
       q: "Do unused voice minutes expire?",
@@ -358,73 +346,39 @@ export default function PricingPage() {
           </div>
         </div>
 
-        {/* Interactive Cost Calculator */}
+        {/* Deployment cost guidance */}
         <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-[#141619] to-[#0f1012] border border-amber-500/20 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 blur-3xl rounded-full pointer-events-none" />
 
           <div className="grid lg:grid-cols-12 gap-8 items-center">
             <div className="lg:col-span-7 space-y-6">
               <div className="inline-flex items-center gap-2 text-xs font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full">
-                <Calculator className="h-3.5 w-3.5" />
-                Live ROI & Cost Comparison Calculator
+                <Zap className="h-3.5 w-3.5" />
+                CHOOSE YOUR DEPLOYMENT
               </div>
 
               <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-                Calculate Your Monthly Voice Savings
+                Plan for the full cost of a call
               </h2>
               <p className="text-sm text-stone-400 leading-relaxed">
-                See what you spend on traditional platforms (Retell / Vapi with OpenAI + ElevenLabs) versus the Kodewaves Sovereign Stack.
+                The plans and credit bundles above come from the current catalog. Your final cost also depends on telephony, model providers, hosting, and call volume.
               </p>
 
-              <div className="space-y-4 pt-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-stone-300 font-medium">Monthly Call Volume:</span>
-                  <span className="font-mono text-lg font-bold text-amber-400">{calculatorMinutes.toLocaleString()} minutes</span>
-                </div>
-                <input
-                  type="range"
-                  min={500}
-                  max={50000}
-                  step={500}
-                  value={calculatorMinutes}
-                  onChange={(e) => setCalculatorMinutes(parseInt(e.target.value) || 500)}
-                  className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                />
-                <div className="flex justify-between text-[11px] font-mono text-stone-400">
-                  <span>500 mins</span>
-                  <span>10,000 mins</span>
-                  <span>50,000 mins</span>
-                </div>
-              </div>
+              <p className="text-sm text-stone-300">A client-installed edition requires its own installation license and server capacity. Contact Kodewaves for an installation proposal.</p>
             </div>
 
             <div className="lg:col-span-5 bg-[#0a0a0c] p-6 rounded-2xl border border-white/10 space-y-6">
-              <div className="space-y-3">
-                <div className="flex justify-between text-xs text-stone-400 pb-1 border-b border-white/5">
-                  <span>Traditional Cloud Voice</span>
-                  <span className="font-mono font-semibold text-stone-300">
-                    {currency === "INR" ? `₹${cloudTotalCost.toLocaleString()}` : `$${cloudTotalCost.toLocaleString()}`}
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs text-amber-400/90 font-medium pb-1 border-b border-white/5">
-                  <span>Kodewaves Sovereign Platform</span>
-                  <span className="font-mono font-bold text-white">
-                    {currency === "INR" ? `₹${kodewavesTotalCost.toLocaleString()}` : `$${kodewavesTotalCost.toLocaleString()}`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center space-y-1">
-                <div className="text-xs uppercase font-mono text-amber-400 font-semibold tracking-wider">Your Monthly Savings</div>
-                <div className="text-3xl font-extrabold text-amber-300 font-mono">
-                  {currency === "INR" ? `₹${savings.toLocaleString()}` : `$${savings.toLocaleString()}`}
-                </div>
-                <div className="text-[11px] text-emerald-400 font-medium">({savingsPercent}% reduction in telephony bills)</div>
-              </div>
+              <h3 className="text-sm font-semibold text-white">Include these in your estimate</h3>
+              <ul className="space-y-3 text-xs text-stone-300 list-disc pl-4">
+                <li>Subscription and any platform credits</li>
+                <li>Inbound and outbound carrier minutes</li>
+                <li>Cloud provider charges or local server capacity</li>
+                <li>Concurrency, storage, and support needs</li>
+              </ul>
 
               <Link href="/auth/signup" className="block w-full">
                 <Button className="w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs h-10 shadow-lg shadow-amber-500/20">
-                  Start Saving Today <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
+                  Explore Kodewaves <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
                 </Button>
               </Link>
             </div>

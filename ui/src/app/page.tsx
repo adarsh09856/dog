@@ -55,7 +55,7 @@ export default function HomePage() {
 
   const llmOptions = [
     "OpenAI GPT-4o-mini",
-    "Ollama Qwen2.5 (Self-hosted)",
+    "Ollama Qwen (Self-hosted)",
     "Gemini 2.5 Flash",
     "Groq Llama-3.3-70B",
     "Claude 3.5 Sonnet",
@@ -63,7 +63,7 @@ export default function HomePage() {
   ];
 
   const ttsOptions = [
-    "Piper Native Indic (Self-hosted)",
+    "Indic VITS (Self-hosted)",
     "Google Gemini Voice Studio",
     "Cartesia Sonic 3.5",
     "ElevenLabs Flash v2.5",
@@ -244,7 +244,7 @@ export default function HomePage() {
               href="/pricing"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg border border-[#3b3a3d] bg-[#252427] px-6 py-3.5 text-sm font-medium text-[#f3f1ed] hover:border-[#e5a84b]/40 hover:bg-[#2c2a2e] transition-colors"
             >
-              Explore Sovereign Pricing (₹0.60/min)
+              Explore Pricing
             </Link>
           </div>
 
@@ -607,7 +607,7 @@ export default function HomePage() {
                 Sovereign Self-hosted Stack
               </h3>
               <p className="text-xs text-[#8f8c87] leading-relaxed">
-                Run 100% self-hosted Ollama (Qwen2.5) + Faster-Whisper STT + Piper Native Indic ONNX TTS directly on your server CPU. Zero cloud API keys and ₹0 minute costs.
+                Choose local speech and language models on your own server. Hosting, telephony, and any optional provider charges depend on your setup.
               </p>
             </div>
 
@@ -631,7 +631,7 @@ export default function HomePage() {
                 Indic Speech & Multilingual
               </h3>
               <p className="text-xs text-[#8f8c87] leading-relaxed">
-                Native support for Hindi, Tamil, Telugu, Kannada, Bengali, and 10+ Indian languages powered by Navana Bodhi and Sarvam Indic models.
+                Configure speech models for your caller languages. Available languages and voices depend on the models installed or connected for your deployment.
               </p>
             </div>
 
@@ -671,28 +671,28 @@ export default function HomePage() {
                 LOW-SPEC VPS OPTIMIZATION
               </span>
               <h3 className="text-2xl sm:text-3xl font-bold text-[#f3f1ed] tracking-tight">
-                Host The Entire Voice Stack On A 2–4 GB CPU Server
+                Run Local Voice Models On Your Own Server
               </h3>
               <p className="text-sm text-[#9f9c96] leading-relaxed">
-                No GPUs required. Kodewaves runs lightweight quantised models directly on standard Hostinger, Hetzner, or DigitalOcean CPU droplets using Docker Compose.
+                Use Docker Compose to deploy local models where your server has enough memory and compute. Measure your selected models and expected call concurrency before choosing a server.
               </p>
 
               <div className="pt-2 grid grid-cols-2 gap-3 text-xs font-mono text-[#cecbc6]">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  Qwen2.5 0.5B / 1.5B (Ollama)
+                  Ollama language models
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  Faster-Whisper Tiny (Speaches STT)
+                  Local speech recognition
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  Piper ONNX Indic (Speaches TTS)
+                  Local speech synthesis
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  Total RAM consumption &lt; 2.5 GB
+                  Capacity sized to your workload
                 </div>
               </div>
 
@@ -701,7 +701,7 @@ export default function HomePage() {
                   href="/pricing"
                   className="inline-flex items-center gap-2 text-xs font-semibold text-[#e5a84b] hover:underline"
                 >
-                  View Self-Hosted vs Cloud Pricing comparison →
+                  View plans and credit bundles →
                 </Link>
               </div>
             </div>
