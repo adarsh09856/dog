@@ -43,6 +43,47 @@ MELO_FILES = {
 THREADS = max(1, int(os.environ.get("INDIC_VITS_THREADS", "2")))
 SAMPLE_RATE = 24_000
 
+
+class _StreamingEdgeSilenceTrimmer:
+    """Keep natural pauses inside speech, but shorten padding at request edges."""
+
+    _frame_bytes = SAMPLE_RATE // 100 * 2  # 10 ms of mono PCM16
+    _leading_bytes = SAMPLE_RATE * 2 // 25  # 40 ms
+    _trailing_bytes = SAMPLE_RATE * 2 // 10  # 100 ms
+
+    def __init__(self):
+        self._remainder = b""
+        self._pending = bytearray()
+        self._started = False
+
+    def push(self, chunk: bytes) -> bytes:
+        data = self._remainder + chunk
+        complete = len(data) // self._frame_bytes * self._frame_bytes
+        self._remainder = data[complete:]
+        output = bytearray()
+        for offset in range(0, complete, self._frame_bytes):
+            frame = data[offset:offset + self._frame_bytes]
+            samples = np.frombuffer(frame, dtype="<i2").astype(np.float32)
+            voiced = float(np.sqrt(np.mean(samples * samples))) > 80.0
+            if voiced:
+                if self._pending:
+                    output.extend(self._pending)
+                    self._pending.clear()
+                output.extend(frame)
+                self._started = True
+            else:
+                self._pending.extend(frame)
+                if not self._started and len(self._pending) > self._leading_bytes:
+                    del self._pending[:-self._leading_bytes]
+        return bytes(output)
+
+    def finish(self) -> bytes:
+        self._pending.extend(self._remainder)
+        self._remainder = b""
+        if self._started:
+            return bytes(self._pending[:self._trailing_bytes])
+        return bytes(self._pending)
+
 # Trained speaker slots for AI4Bharat VITS Rasa 13 regional languages
 RASA_SPEAKERS: dict[str, tuple[int, str, str, str]] = {
     "ASM_F": (0, "as", "Assamese", "female"),
@@ -381,6 +422,13 @@ async def stream_pcm(request, context_language: str | None = None):
     queue = asyncio.Queue()
     stopped = threading.Event()
     emitted = False
+    # Indus adds about 100-200 ms before each independent phrase and about
+    # 340 ms after it. Repeated synthesis requests expose that padding as a
+    # stop/start gap even when the next clip was synthesized in time.
+    trimmer = (
+        _StreamingEdgeSilenceTrimmer()
+        if INDUS_READY and request.voice in {"HIN_F", "ENG_IN"} else None
+    )
 
     def callback(samples, _progress):
         nonlocal emitted
@@ -404,10 +452,18 @@ async def stream_pcm(request, context_language: str | None = None):
         future.add_done_callback(signal_stream_complete)
         try:
             while (chunk := await queue.get()) is not None:
-                yield chunk
+                ready = trimmer.push(chunk) if trimmer else chunk
+                if ready:
+                    yield ready
             pcm = await asyncio.shield(future)
             if not emitted:
-                yield pcm
+                ready = trimmer.push(pcm) if trimmer else pcm
+                if ready:
+                    yield ready
+            if trimmer:
+                tail = trimmer.finish()
+                if tail:
+                    yield tail
         finally:
             stopped.set()
             if not future.done():

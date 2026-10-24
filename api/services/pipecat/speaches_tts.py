@@ -186,13 +186,13 @@ class SpeachesCachingTTSService(SpeachesLiveTTSService):
             # backend changes. Do not replay former Piper/Melo audio as Inaya,
             # or Inaya audio after an operator rolls back to the regional route.
             payload["routing_profile"] = (
-                "indus-inaya-v1" if os.environ.get("INDUS_COMBINED_ENDPOINT") else "regional-v4"
+                "indus-inaya-edge-v2" if os.environ.get("INDUS_COMBINED_ENDPOINT") else "regional-v4"
             )
         request = SynthesisRequest.from_payload(
             organization_id=self._organization_id,
             provider="speaches",
             # Unified voice routing must not reuse former Rasa-only audio.
-            adapter_version=4 if self._settings.model == "indic-vits-rasa-13" else 1,
+            adapter_version=5 if self._settings.model == "indic-vits-rasa-13" else 1,
             endpoint=self._cache_endpoint,
             credential=self._client.api_key,
             payload=payload,
