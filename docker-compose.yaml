@@ -261,6 +261,8 @@ services:
       JWT_SECRET: "${OSS_JWT_SECRET}"
       MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
+      # Set the local LLM's inference thread budget independently of API workers.
+      OLLAMA_NUM_THREADS: "${OLLAMA_NUM_THREADS:-3}"
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
       INDIC_MIO_TTS_ENDPOINT: "${INDIC_MIO_TTS_ENDPOINT:-http://indic-mio-tts:8000/v1}"
       INDIC_PARLER_TTS_ENDPOINT: "${INDIC_PARLER_TTS_ENDPOINT:-http://indic-parler-tts:8000/v1}"

@@ -1,5 +1,6 @@
 """Require the calendar action when a caller explicitly confirms a booking."""
 
+import os
 import re
 import time
 from loguru import logger
@@ -27,6 +28,24 @@ _LOCAL_CALLER_RESPONSE_GUARD = (
     "reply. Remember their name and contact details from the conversation; ask only "
     "for details that are missing or corrected."
 )
+
+
+def _local_ollama_num_threads() -> int | None:
+    """Honor the container's Ollama CPU budget for local model requests."""
+    raw_value = os.getenv("OLLAMA_NUM_THREADS", "3").strip().lower()
+    if raw_value in {"", "auto", "0"}:
+        return None
+    try:
+        value = int(raw_value)
+    except ValueError:
+        logger.warning("Ignoring invalid OLLAMA_NUM_THREADS value")
+        return None
+    if not 1 <= value <= 64:
+        logger.warning("Ignoring out-of-range OLLAMA_NUM_THREADS value")
+        return None
+    return value
+
+
 _EXPLICIT_END_REQUEST = re.compile(
     r"\b(?:goodbye|bye(?:\s+bye)?|hang\s*up|end\s+(?:the\s+)?call|disconnect|"
     r"that's\s+all|that\s+is\s+all|i(?:'m| am)\s+done|we(?:'re| are)\s+done)\b"
@@ -575,12 +594,15 @@ class _BookingToolChoiceMixin:
                     # while retaining a bounded voice response.
                     "num_predict": 80,
                     "num_ctx": 4096,
+                    "num_thread": _local_ollama_num_threads(),
                 },
                 # Prevent multi-minute model reloads on the first caller turn.
                 # The OpenAI-compatible endpoint parses this as a Go duration;
                 # a bare "-1" is rejected there (native /api/chat accepts -1).
                 "keep_alive": "8760h",
             }
+            if params["extra_body"]["options"]["num_thread"] is None:
+                params["extra_body"]["options"].pop("num_thread")
             # Ollama's OpenAI-compatible streaming API sends input/output usage
             # in a final chunk when requested. The trace wrapper records these
             # counts without logging caller text, letting production distinguish
