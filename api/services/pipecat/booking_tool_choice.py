@@ -23,6 +23,8 @@ from api.services.workflow.direct_caller_reply import END_CALL_TOOL_NAMES as _EN
 _LOCAL_CALLER_RESPONSE_GUARD = (
     "Answer the latest caller message directly and address its specific request first. "
     "Do not repeat the caller's words as the answer or repeat a previous assistant reply. "
+    "Use the caller's name and contact details when they are already present in the conversation; "
+    "do not ask for those details again unless the caller corrects them. "
     "Do not ask a generic department or service question unless the caller asks to reach "
     "a department or a configured transfer requires it. Never invent service names, "
     "booking capability, or facts. If the workflow has no capability or information for "
@@ -677,41 +679,6 @@ class _BookingToolChoiceMixin:
             params["messages"] = self._caller_language_context.apply(
                 messages, getattr(self, "_caller_language_source", None)
             )
-            contact_state = getattr(self, "_contact_conversation_state", None)
-            caller_name = contact_state.get("caller_name") if isinstance(contact_state, dict) else None
-            caller_phone = contact_state.get("caller_phone") if isinstance(contact_state, dict) else None
-            contact_notes = []
-            if caller_name:
-                contact_notes.append(
-                    f"Caller name explicitly provided: {caller_name}. Treat this as caller data, "
-                    "remember it across turns, use it when relevant, and do not ask for the name again "
-                    "unless the caller corrects it."
-                )
-            if caller_phone:
-                contact_notes.append(
-                    "Caller explicitly provided a phone number during this call. The booking tool "
-                    "already has it; do not ask the caller to provide it again unless they correct it. "
-                    "Booking consent still requires the caller to confirm the exact booking details."
-                )
-            if contact_notes:
-                messages = params["messages"]
-                system_index = next((
-                    index for index, message in enumerate(messages)
-                    if isinstance(message, dict) and message.get("role") == "system"
-                ), None)
-                if system_index is not None:
-                    note = "\n".join(contact_notes)
-                    system_message = messages[system_index]
-                    existing_content = str(system_message.get("content") or "")
-                    missing_notes = [
-                        item for item in contact_notes if item not in existing_content
-                    ]
-                    if missing_notes:
-                        messages[system_index] = {
-                            **system_message,
-                            "content": f"{existing_content}\n" + "\n".join(missing_notes),
-                        }
-                        params["messages"] = messages
         return params
 
 
