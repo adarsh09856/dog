@@ -25,7 +25,10 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         # The local gateway generates faster than playback. A 200 ms initial
         # buffer releases speech sooner without requesting one HTTP frame per
         # tiny model callback.
-        return int(self.sample_rate * 0.2 * 2)
+        # Pipecat initializes sample_rate when StartFrame arrives. Before that,
+        # use the configured output rate so this property never yields zero.
+        rate = self.sample_rate or self._init_sample_rate or 24000
+        return int(rate * 0.2 * 2)
 
     def __init__(self, *, speech_language: str | None = None, **kwargs):
         kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=45.0))
