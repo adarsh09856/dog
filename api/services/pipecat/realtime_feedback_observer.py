@@ -21,6 +21,7 @@ node changes.
 """
 
 import json
+import os
 import time
 import numpy as np
 from typing import TYPE_CHECKING, Awaitable, Callable, Optional
@@ -384,6 +385,17 @@ class RealtimeFeedbackObserver(BaseObserver):
             self._stage_audio_seen = True
             stage = "tts_first_audio"
         if stage:
+            try:
+                host_load_1m = round(os.getloadavg()[0], 2)
+            except (AttributeError, OSError):
+                host_load_1m = None
+            logger.info(
+                "voice_stage_trace run={} workflow={} stage={} host_load_1m={}",
+                self._workflow_run_id,
+                self._workflow_id,
+                stage,
+                host_load_1m,
+            )
             await self._append_to_buffer({
                 "type": "rtf-speech-stage",
                 "payload": {"stage": stage, "monotonic_seconds": time.monotonic()},
