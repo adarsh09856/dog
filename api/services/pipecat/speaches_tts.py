@@ -44,7 +44,11 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 min_characters=24,
                 first_chunk_characters=12,
                 first_clause_characters=36,
-                first_phrase_characters=None,
+                # If the LLM has not completed a sentence yet, start speech
+                # after a coherent word-boundary phrase instead of waiting
+                # several more seconds for punctuation. The aggregator retains
+                # every character and keeps later phrases at the larger size.
+                first_phrase_characters=36,
                 # Keep each later Inaya request long enough for coherent
                 # prosody, but release it before the full sentence ends so the
                 # next synthesis can overlap the current audio playback.

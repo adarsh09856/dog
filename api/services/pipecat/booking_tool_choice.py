@@ -7,6 +7,7 @@ from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
 
 from pipecat.services.kodewaves.llm import KodewavesLLMService
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.utils.run_context import get_current_run_id
 
 _CONFIRMATION = re.compile(r"\b(confirm(?:ed)?|save|proceed|book it)\b|पुष्टि|पक्क[ाी]|सेव", re.IGNORECASE)
 _BOOKING = re.compile(r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", re.IGNORECASE)
@@ -162,6 +163,7 @@ class _BookingToolChoiceMixin:
             first_output_ms = None
             chunks = 0
             prompt_tokens = None
+            cached_prompt_tokens = None
             completion_tokens = None
             finish_reason = None
             complete = False
@@ -191,6 +193,15 @@ class _BookingToolChoiceMixin:
                     usage = getattr(chunk, "usage", None)
                     if usage is not None:
                         prompt_tokens = getattr(usage, "prompt_tokens", prompt_tokens)
+                        prompt_details = getattr(usage, "prompt_tokens_details", None)
+                        if isinstance(prompt_details, dict):
+                            cached_prompt_tokens = prompt_details.get(
+                                "cached_tokens", cached_prompt_tokens
+                            )
+                        elif prompt_details is not None:
+                            cached_prompt_tokens = getattr(
+                                prompt_details, "cached_tokens", cached_prompt_tokens
+                            )
                         completion_tokens = getattr(
                             usage, "completion_tokens", completion_tokens
                         )
@@ -207,7 +218,8 @@ class _BookingToolChoiceMixin:
                 complete = True
             finally:
                 logger.info(
-                    "llm_stream_trace model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} total_ms={} chunks={} prompt_tokens={} completion_tokens={} history_messages={} history_chars={} system_chars={} tools={} finish_reason={} complete={}",
+                    "llm_stream_trace run={} model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} total_ms={} chunks={} prompt_tokens={} cached_prompt_tokens={} completion_tokens={} history_messages={} history_chars={} system_chars={} tools={} finish_reason={} complete={}",
+                    get_current_run_id(),
                     getattr(getattr(self, "_settings", None), "model", None),
                     getattr(self, "_usage_context", None) or "conversation_or_shared_inference",
                     round(headers_ms, 1),
@@ -216,6 +228,7 @@ class _BookingToolChoiceMixin:
                     round((time.perf_counter() - started) * 1000, 1),
                     chunks,
                     prompt_tokens,
+                    cached_prompt_tokens,
                     completion_tokens,
                     len(messages),
                     message_chars,
