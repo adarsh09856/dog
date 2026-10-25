@@ -6,6 +6,7 @@ import { TurnCredentialsResponse } from "@/client/types.gen";
 import { WorkflowValidationError } from "@/components/flow/types";
 import type { ConversationNodeTransitionItem, RealtimeFeedbackMessage as FeedbackMessage } from "@/components/workflow/conversation";
 import { activeBotMessageIndex, finalizeActiveBotMessage } from "@/components/workflow/conversation/activeBotMessage";
+import { replacePendingTranscription } from "@/components/workflow/conversation/pendingTranscription";
 import { isLlmTtfb } from "@/components/workflow/conversation/adapters/fromRealtimeFeedback";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { resolveBrowserBackendUrl } from '@/lib/apiClient';
@@ -489,19 +490,16 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 // Step 1: Finalize the last bot message (user started speaking)
                                 const messagesWithBotFinalized = finalizeActiveBotMessage(prev, confirmedBotText);
 
-                                // Step 2: Remove any previous interim transcription
-                                const messagesWithoutInterim = messagesWithBotFinalized.filter(
-                                    msg => !(msg.type === 'user-transcription' && !msg.final)
-                                );
-
-                                // Step 3: Add new transcription (interim or final)
-                                return [...messagesWithoutInterim, {
+                                // Replace only this utterance's interim text. Older
+                                // unfinished turns may lack a final STT event and
+                                // still belong in the visible conversation.
+                                return replacePendingTranscription(messagesWithBotFinalized, {
                                     id: nextFeedbackMessageId('user'),
                                     type: 'user-transcription',
                                     text: transcription.text,
                                     final: transcription.final,
                                     timestamp: new Date().toISOString(),
-                                }];
+                                });
                             });
                             break;
                         }
