@@ -47,6 +47,7 @@ from api.services.configuration.registry import (
     SpeachesSTTConfiguration,
     SpeachesTTSConfiguration,
 )
+from api.services.configuration.stt_capabilities import stt_model_supports_auto_detect
 from api.services.credentials.master_credential_service import master_credential_service
 
 CredentialSource = Literal["user_key", "master_key", "local"]
@@ -251,6 +252,17 @@ async def _resolve_catalog_layer(effective: EffectiveAIModelConfiguration, layer
             continue
         voice = getattr(current, "voice", None)
         language = getattr(current, "language", None)
+        if (
+            layer == "stt"
+            and str(language or "").casefold() in {"auto", "multi", "unknown", "default"}
+            and not stt_model_supports_auto_detect(provider, model.model_identifier)
+        ):
+            if explicit:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Selected STT model '{model.model_identifier}' does not support automatic language detection. Choose a language or select a model that supports auto-detection.",
+                )
+            continue
         if layer == "llm":
             config = _build_master_llm(provider, model.model_identifier, creds["api_key"], creds.get("base_url"))
         elif layer == "stt":
@@ -494,6 +506,16 @@ async def apply_kodewaves_sovereign_resolution(
                 if is_local_stt and str(raw_lang or "auto").lower() in ("auto", "multi", "default")
                 else normalize_stt_language(provider_name, raw_lang)
             )
+
+            if (
+                norm_lang in ("multi", "auto", "unknown")
+                and provider_name not in ("kodewaves", "dograh", "default")
+                and not stt_model_supports_auto_detect(provider_name, model)
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Selected STT model '{model}' does not support automatic language detection. Choose a language or select a model that supports auto-detection.",
+                )
 
             if hasattr(effective.stt, "language"):
                 effective.stt.language = norm_lang

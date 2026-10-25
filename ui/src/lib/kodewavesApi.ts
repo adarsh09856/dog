@@ -791,6 +791,8 @@ export interface CatalogModelOption {
   provider?: string;
   /** Languages advertised by the installed engine, when it reports them. */
   languages?: string[];
+  /** True only when this exact STT model has a supported auto-detect setting. */
+  supports_auto_detect?: boolean;
 }
 
 export interface AvailableCatalogResponse {

@@ -24,6 +24,7 @@ from api.services.catalog.local_inventory import (
 from api.services.catalog.gemini_voices import discover_indian_voices
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.registry import GEMINI_TTS_VOICES
+from api.services.configuration.stt_capabilities import stt_model_supports_auto_detect
 from api.services.configuration.options.google import GEMINI_38_INDIC_TTS_LANGUAGES
 from api.utils.common import normalize_local_ai_endpoint
 
@@ -875,6 +876,10 @@ class CatalogService:
                 "supports_streaming": m.supports_streaming,
                 "verification_status": m.status,
                 "languages": m.languages or [],
+                "supports_auto_detect": (
+                    (m.layer or m.category) == "stt"
+                    and stt_model_supports_auto_detect(prov, m.model_identifier)
+                ),
             }
 
             layer = m.layer or m.category
@@ -943,6 +948,7 @@ class CatalogService:
                                         ),
                                         "provider": "indicconformer",
                                         "languages": installed_model.get("languages", []),
+                                        "supports_auto_detect": False,
                                     })
             except (aiohttp.ClientError, TimeoutError):
                 pass
@@ -1071,7 +1077,13 @@ class CatalogService:
         if cloud_llm:
             cloud_llm.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": True})
         if cloud_stt:
-            cloud_stt.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": True})
+            cloud_stt.insert(0, {
+                "value": "auto",
+                "label": "Auto model selection (language detection depends on that model)",
+                "provider": "auto",
+                "has_master_key": True,
+                "supports_auto_detect": False,
+            })
         if cloud_tts:
             cloud_tts.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": True})
         if cloud_s2s:
