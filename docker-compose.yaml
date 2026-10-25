@@ -346,6 +346,9 @@ services:
       start_period: 20s
     networks:
       - app-network
+      # aaPanel runs the API in its own Compose project. Keep UI reachable by
+      # the API's fallback proxy, and allow UI to resolve that API service.
+      - kodewaves-shared
 
   # Cloudflare tunnel for inbound webhook / WSS reachability when the host has no
   # usable public IP (behind NAT or a firewall). Gated behind the "tunnel" profile
