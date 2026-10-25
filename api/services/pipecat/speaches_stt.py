@@ -94,16 +94,19 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                         latest = frame
                     else:
                         if isinstance(frame, ErrorFrame):
-                            pending_text.clear()
-                            latest = None
+                            # A later segment can fail after earlier recognized
+                            # text was already shown as interim. Keep that
+                            # accepted text so the caller's words still reach
+                            # conversation history and the UI gets a final.
                             await self.push_error_frame(frame)
                         else:
                             await self.push_frame(frame)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                pending_text.clear()
-                latest = None
+                # Do not discard successful earlier segments from this
+                # utterance when a subsequent HTTP recognition request fails.
+                # The queue drain below will finalize that partial transcript.
                 await self.push_error(f"{self}: transcription failed: {exc}", exception=exc)
             finally:
                 self._recognizing_segment = False
