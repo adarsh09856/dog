@@ -20,6 +20,8 @@ from pipecat.utils.tracing.service_decorators import traced_tts
 class SpeachesLiveTTSService(SpeachesTTSService):
     """Keep a synthesis context open while the CPU provider is working."""
 
+    _INITIAL_PCM_BUFFER_SECONDS = 0.4
+
     @property
     def chunk_size(self) -> int:
         # The local gateway generates faster than playback. A 200 ms initial
@@ -61,6 +63,48 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         # history never treats not-yet-generated audio as spoken. The endpoint
         # is single-worker, so background HTTP prefetch cannot parallelize it.
         self._turn_keepalive: asyncio.Task | None = None
+        self._initial_pcm_context_id: str | None = None
+        self._initial_pcm_claimed = False
+
+    def _claim_initial_pcm_buffer(self, context_id: str) -> bool:
+        """Buffer only the first local speech segment in each turn."""
+        if (
+            self._settings.model != "indic-vits-rasa-13"
+            or context_id != self._initial_pcm_context_id
+            or self._initial_pcm_claimed
+        ):
+            return False
+        self._initial_pcm_claimed = True
+        return True
+
+    async def _buffer_initial_pcm(self, frames):
+        # Two short, sequential CPU synthesis requests can leave a silent gap
+        # between phrases. Hold a small amount of the first phrase so paced
+        # playback has audio while the next phrase is being synthesized.
+        sample_rate = self.sample_rate or self._init_sample_rate or 24000
+        target_bytes = int(sample_rate * 2 * self._INITIAL_PCM_BUFFER_SECONDS)
+        pending = []
+        buffered_bytes = 0
+        buffering = True
+        async for frame in frames:
+            if buffering and isinstance(frame, TTSAudioRawFrame):
+                pending.append(frame)
+                buffered_bytes += len(frame.audio)
+                if buffered_bytes < target_bytes:
+                    continue
+                buffering = False
+                for buffered in pending:
+                    yield buffered
+                pending.clear()
+                continue
+            if buffering and pending:
+                buffering = False
+                for buffered in pending:
+                    yield buffered
+                pending.clear()
+            yield frame
+        for buffered in pending:
+            yield buffered
 
     async def _stop_turn_keepalive(self):
         task, self._turn_keepalive = self._turn_keepalive, None
@@ -130,6 +174,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             yield ErrorFrame(error=f"Local speech request was rejected: {exc}")
 
     async def run_tts(self, text: str, context_id: str):
+        buffer_initial = self._claim_initial_pcm_buffer(context_id)
         async def keep_context_open():
             while True:
                 await asyncio.sleep(min(1.0, self._stop_frame_timeout_s / 2))
@@ -144,7 +189,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 else super().run_tts(text, context_id)
             )
             async with aclosing(generator) as frames:
-                async for frame in frames:
+                output = self._buffer_initial_pcm(frames) if buffer_initial else frames
+                async for frame in output:
                     yield frame
         finally:
             keepalive.cancel()
@@ -153,6 +199,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
 
     async def on_turn_context_created(self, context_id: str):
         await self._stop_turn_keepalive()
+        self._initial_pcm_context_id = context_id
+        self._initial_pcm_claimed = False
         self._turn_speech_language = self._resolve_speech_language()
         self._speech_turn_open = True
         await super().on_turn_context_created(context_id)
@@ -174,6 +222,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
 
     async def _handle_interruption(self, frame: InterruptionFrame, direction: FrameDirection):
         await self._stop_turn_keepalive()
+        self._initial_pcm_context_id = None
         self._speech_turn_open = False
         await super()._handle_interruption(frame, direction)
 
@@ -232,5 +281,10 @@ class SpeachesCachingTTSService(SpeachesLiveTTSService):
             chunk_size=self.chunk_size, text_length=len(text),
         )
         async with aclosing(frames):
-            async for frame in frames:
+            # Cache hits bypass the base run_tts method. Apply the same first
+            # phrase buffer here; cache misses have already claimed the turn,
+            # so the nested base method will not buffer twice.
+            buffer_initial = self._claim_initial_pcm_buffer(context_id)
+            output = self._buffer_initial_pcm(frames) if buffer_initial else frames
+            async for frame in output:
                 yield frame
