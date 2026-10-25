@@ -331,12 +331,32 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
 
     # A full number re-introduction or a retry after an unclear digit replaces
     # the prior attempt. Otherwise, short digit-only turns append as fragments.
-    replace_previous = bool(intro) or bool(state.get("replace_phone_digits_on_next_turn"))
-    if replace_previous and digits:
-        accumulated = "".join(digits)
+    previous_digits = str(state.get("caller_phone_digits") or "")
+    current_digits = "".join(digits)
+    repeated_partial = bool(
+        previous_digits
+        and current_digits
+        and len(previous_digits) >= 7
+        and len(current_digits) >= 7
+        and (
+            current_digits.startswith(previous_digits)
+            or previous_digits.startswith(current_digits)
+        )
+    )
+    complete_number_retry = bool(
+        previous_digits and 10 <= len(current_digits) <= 15
+    )
+    replace_previous = (
+        bool(intro)
+        or bool(state.get("replace_phone_digits_on_next_turn"))
+        or repeated_partial
+        or complete_number_retry
+    )
+    if replace_previous and current_digits:
+        accumulated = current_digits
         state.pop("replace_phone_digits_on_next_turn", None)
     else:
-        accumulated = str(state.get("caller_phone_digits") or "") + "".join(digits)
+        accumulated = previous_digits + current_digits
     if 10 <= len(accumulated) <= 15 and not unknown:
         state["caller_phone"] = accumulated
         state.pop("caller_phone_digits", None)
@@ -367,7 +387,10 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
                 "one digit at a time."
             )
         if hindi:
-            return f"अब तक {len(accumulated)} अंक मिले हैं। कृपया बाकी अंक बताइए।"
+            return (
+                f"अब तक {len(accumulated)} अंक मिले हैं। बाकी अंक बताइए—"
+                f"{remaining} अंक और चाहिए।"
+            )
         return f"I have {len(accumulated)} digits so far. Please continue with at least {remaining} more."
     if hindi:
         if unknown:
