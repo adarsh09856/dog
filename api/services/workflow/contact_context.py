@@ -244,9 +244,11 @@ _SPOKEN_DIGITS = {
     "five": "5", "पांच": "5", "पाँच": "5", "फाइव": "5",
     "six": "6", "छह": "6", "सिक्स": "6", "seven": "7", "सात": "7", "सेवन": "7",
     "eight": "8", "आठ": "8", "एट": "8", "nine": "9", "नौ": "9", "नाइन": "9",
-    # STT commonly renders spoken "nine" as नीन/निन in code-switched speech.
-    "नीन": "9", "निन": "9",
+    # STT commonly renders spoken English digit names phonetically in Devanagari.
+    "नीन": "9", "निन": "9", "नान": "9", "नाईन": "9",
+    "थी": "3", "आइट": "8", "आईट": "8",
 }
+_DOUBLE_DIGIT_WORDS = {"double", "डबल"}
 _PHONE_INTRO = re.compile(
     r"(?:(?:अः|अह|uh|um)\s+)?(?:मेरा\s+(?:मोबाइल|फोन)?\s*(?:नंबर|नम्बर)\s*(?:है)?|"
     r"my\s+(?:mobile|phone)?\s*number\s*(?:is)?)[,:\s]*", re.IGNORECASE
@@ -293,14 +295,30 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
     tokens = [word for word in words if word not in fillers]
     digits = []
     unknown = []
-    for word in tokens:
+    index = 0
+    while index < len(tokens):
+        word = tokens[index]
         cleaned = re.sub(r"[()+.-]", "", word)
         if cleaned.isdecimal():
             digits.append(cleaned)
         elif word in _SPOKEN_DIGITS:
             digits.append(_SPOKEN_DIGITS[word])
+        elif word in _DOUBLE_DIGIT_WORDS:
+            next_word = tokens[index + 1] if index + 1 < len(tokens) else ""
+            next_cleaned = re.sub(r"[()+.-]", "", next_word)
+            repeated_digit = (
+                next_cleaned
+                if len(next_cleaned) == 1 and next_cleaned.isdecimal()
+                else _SPOKEN_DIGITS.get(next_word)
+            )
+            if repeated_digit is None:
+                unknown.append(word)
+            else:
+                digits.extend((repeated_digit, repeated_digit))
+                index += 1
         else:
             unknown.append(word)
+        index += 1
 
     if unknown and not intro and not digits:
         # A changed request is not phone dictation, even while the slot is open.
@@ -311,7 +329,14 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
         if any(word not in {"and", "plus", "और", "तथा"} for word in unknown):
             return None
 
-    accumulated = str(state.get("caller_phone_digits") or "") + "".join(digits)
+    # A full number re-introduction or a retry after an unclear digit replaces
+    # the prior attempt. Otherwise, short digit-only turns append as fragments.
+    replace_previous = bool(intro) or bool(state.get("replace_phone_digits_on_next_turn"))
+    if replace_previous and digits:
+        accumulated = "".join(digits)
+        state.pop("replace_phone_digits_on_next_turn", None)
+    else:
+        accumulated = str(state.get("caller_phone_digits") or "") + "".join(digits)
     if 10 <= len(accumulated) <= 15 and not unknown:
         state["caller_phone"] = accumulated
         state.pop("caller_phone_digits", None)
@@ -331,20 +356,25 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
     if accumulated:
         remaining = max(1, 10 - len(accumulated))
         if unknown:
+            state["replace_phone_digits_on_next_turn"] = True
             if hindi:
                 return (
-                    f"अब तक {len(accumulated)} अंक मिले हैं, लेकिन एक शब्द साफ़ नहीं था। "
-                    "कृपया वह अंक फिर से बताकर बाकी अंक जारी रखें।"
+                    "एक अंक साफ़ नहीं मिला। कृपया पूरा फ़ोन नंबर फिर से बोलें, "
+                    "एक-एक अंक करके।"
                 )
             return (
-                f"I have {len(accumulated)} digits, but one part was unclear. "
-                f"Please repeat that digit and continue with at least {remaining} more."
+                "One digit was unclear. Please repeat the full phone number, "
+                "one digit at a time."
             )
         if hindi:
             return f"अब तक {len(accumulated)} अंक मिले हैं। कृपया बाकी अंक बताइए।"
         return f"I have {len(accumulated)} digits so far. Please continue with at least {remaining} more."
     if hindi:
+        if unknown:
+            state["replace_phone_digits_on_next_turn"] = True
         return "नंबर के अंक साफ़ नहीं मिले। कृपया मोबाइल नंबर के अंक बताइए।"
+    if unknown:
+        state["replace_phone_digits_on_next_turn"] = True
     return "I didn't catch any digits. Please say the phone number one digit at a time."
 
 
