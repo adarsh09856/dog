@@ -45,6 +45,9 @@ def _looks_like_name(value: str) -> bool:
     if not 1 <= len(words) <= 3:
         return False
     for word in words:
+        # A short dictated phone fragment must not overwrite the caller's name.
+        if word.casefold() in _SPOKEN_DIGITS:
+            return False
         letters = [char for char in word if char not in " .'’-"]
         if not letters or not unicodedata.category(letters[0]).startswith("L"):
             return False
