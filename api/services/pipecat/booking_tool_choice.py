@@ -165,6 +165,23 @@ class _BookingToolChoiceMixin:
             completion_tokens = None
             finish_reason = None
             complete = False
+            messages = []
+            try:
+                messages = context.get_messages() or []
+            except (AttributeError, TypeError):
+                pass
+            message_chars = sum(
+                len(message.get("content", ""))
+                for message in messages
+                if isinstance(message, dict)
+                and isinstance(message.get("content"), str)
+            )
+            system_prompt = getattr(
+                getattr(self, "_settings", None), "system_instruction", None
+            )
+            system_chars = len(system_prompt) if isinstance(system_prompt, str) else 0
+            tools = getattr(context, "tools", None)
+            tool_count = len(getattr(tools, "standard_tools", []) or [])
             try:
                 async for chunk in stream:
                     now = time.perf_counter()
@@ -190,7 +207,7 @@ class _BookingToolChoiceMixin:
                 complete = True
             finally:
                 logger.info(
-                    "llm_stream_trace model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} total_ms={} chunks={} prompt_tokens={} completion_tokens={} finish_reason={} complete={}",
+                    "llm_stream_trace model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} total_ms={} chunks={} prompt_tokens={} completion_tokens={} history_messages={} history_chars={} system_chars={} tools={} finish_reason={} complete={}",
                     getattr(getattr(self, "_settings", None), "model", None),
                     getattr(self, "_usage_context", None) or "conversation_or_shared_inference",
                     round(headers_ms, 1),
@@ -200,6 +217,10 @@ class _BookingToolChoiceMixin:
                     chunks,
                     prompt_tokens,
                     completion_tokens,
+                    len(messages),
+                    message_chars,
+                    system_chars,
+                    tool_count,
                     finish_reason,
                     complete,
                 )
@@ -553,6 +574,11 @@ class _BookingToolChoiceMixin:
                 # a bare "-1" is rejected there (native /api/chat accepts -1).
                 "keep_alive": "8760h",
             }
+            # Ollama's OpenAI-compatible streaming API sends input/output usage
+            # in a final chunk when requested. The trace wrapper records these
+            # counts without logging caller text, letting production distinguish
+            # slow prompt prefill from slow token generation.
+            params["stream_options"] = {"include_usage": True}
 
         from api.services.workflow.tools.booking import caller_confirmed_booking
 
