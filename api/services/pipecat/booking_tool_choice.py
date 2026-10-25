@@ -23,15 +23,9 @@ _OPENING_WORDS = (
 _GREETING_SEPARATORS = " \t\r\n!,.:;?।॥،؛"
 from api.services.workflow.direct_caller_reply import END_CALL_TOOL_NAMES as _END_CALL_TOOLS
 _LOCAL_CALLER_RESPONSE_GUARD = (
-    "Answer the latest caller message directly and address its specific request first. "
-    "Do not repeat the caller's words as the answer or repeat a previous assistant reply. "
-    "Use the caller's name and contact details when they are already present in the conversation; "
-    "do not ask for those details again unless the caller corrects them. "
-    "Do not ask a generic department or service question unless the caller asks to reach "
-    "a department or a configured transfer requires it. Never invent service names, "
-    "booking capability, or facts. If the workflow has no capability or information for "
-    "the request, say so briefly and ask one relevant follow-up. If the transcript is "
-    "unclear, ask what the caller meant instead of guessing."
+    "Answer the latest caller message directly; do not echo it or repeat an earlier "
+    "reply. Remember their name and contact details from the conversation; ask only "
+    "for details that are missing or corrected."
 )
 _EXPLICIT_END_REQUEST = re.compile(
     r"\b(?:goodbye|bye(?:\s+bye)?|hang\s*up|end\s+(?:the\s+)?call|disconnect|"
