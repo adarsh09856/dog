@@ -1243,7 +1243,7 @@ export function AIModelConfigurationV2Editor({
                                             Installed recognizer languages: {selectedSttModel.languages.map((language) => LANGUAGE_DISPLAY_NAMES[language] || LANGUAGE_DISPLAY_NAMES[language.split("-")[0]] || language).join(", ")}.
                                         </p>
                                     ) : null}
-                                    {kodewaves.stt_engine_type === "cloud" && !supportsRecognitionAutoDetect && mode !== "realtime" && (
+                                    {kodewaves.stt_engine_type === "cloud" && !supportsRecognitionAutoDetect && (
                                         <p className="text-xs text-muted-foreground">
                                             Automatic language detection is hidden because the selected STT model does not advertise it. Select a model with auto-detection to enable it.
                                         </p>
