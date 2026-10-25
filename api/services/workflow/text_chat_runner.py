@@ -236,10 +236,13 @@ class _ResponseWindowState:
 
     @property
     def frontier_is_idle(self) -> bool:
+        # Text chat has no audio playback to await. An LLMFullResponseEndFrame
+        # is the authoritative response boundary; the assistant context
+        # aggregator can miss or delay its stopped event, which must not leave
+        # a completed text response waiting for the full 60 second timeout.
         return (
             self.pending_context_requests == 0
             and self.active_llm_completions == 0
-            and self.active_assistant_segments == 0
             and not self.has_blocking_tool_calls
         )
 
@@ -263,6 +266,8 @@ class _TextChatCaptureProcessor(FrameProcessor):
         self._response_window = response_window
         self._context = context
         self._engine = engine
+        self._current_llm_text: list[str] = []
+        self.completed_llm_text: list[str] = []
 
     def _touch(self) -> None:
         self.last_activity_at = time.monotonic()
@@ -301,6 +306,17 @@ class _TextChatCaptureProcessor(FrameProcessor):
             playback.note_output()
         if isinstance(frame, TTSAudioRawFrame):
             playback.after_output(self, frame)
+
+        # Keep a fallback copy of streamed LLM text. The normal assistant
+        # aggregator callback remains the primary output path, but a missing
+        # turn-stopped event must not turn a completed model answer into an
+        # empty text-chat response.
+        if (
+            isinstance(frame, TextFrame)
+            and direction is FrameDirection.DOWNSTREAM
+            and self._response_window.active_llm_completions > 0
+        ):
+            self._current_llm_text.append(frame.text)
 
         if isinstance(frame, TTSSpeakFrame):
             append_to_context = (
@@ -341,6 +357,10 @@ class _TextChatCaptureProcessor(FrameProcessor):
             and direction is FrameDirection.DOWNSTREAM
         ):
             self._response_window.note_llm_end()
+            streamed_text = "".join(self._current_llm_text).strip()
+            self._current_llm_text.clear()
+            if streamed_text:
+                self.completed_llm_text.append(streamed_text)
             await self.push_frame(frame, direction)
             # Text chat has no TTS/output transport, so mixed text+tool responses
             # would otherwise leave function calls waiting forever on a
@@ -934,6 +954,8 @@ async def execute_text_chat_pending_turn(
         if response_window.outputs
         else None
     )
+    if not assistant_text and capture_processor.completed_llm_text:
+        assistant_text = "\n\n".join(capture_processor.completed_llm_text).strip() or None
     from api.services.configuration.language_normalizer import resolve_agent_speech_language
 
     verified_reply = guard_booking_reply(
