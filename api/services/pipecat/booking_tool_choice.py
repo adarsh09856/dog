@@ -1,6 +1,7 @@
 """Require the calendar action when a caller explicitly confirms a booking."""
 
 import re
+import time
 from loguru import logger
 from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
 
@@ -150,6 +151,64 @@ def booking_tool_choice(params: dict) -> dict | None:
 
 
 class _BookingToolChoiceMixin:
+    async def get_chat_completions(self, context):
+        """Trace model first-output versus generation time without caller text."""
+        started = time.perf_counter()
+        stream = await super().get_chat_completions(context)
+        headers_ms = (time.perf_counter() - started) * 1000
+
+        async def traced_stream():
+            first_event_ms = None
+            first_output_ms = None
+            chunks = 0
+            prompt_tokens = None
+            completion_tokens = None
+            finish_reason = None
+            complete = False
+            try:
+                async for chunk in stream:
+                    now = time.perf_counter()
+                    chunks += 1
+                    if first_event_ms is None:
+                        first_event_ms = (now - started) * 1000
+                    usage = getattr(chunk, "usage", None)
+                    if usage is not None:
+                        prompt_tokens = getattr(usage, "prompt_tokens", prompt_tokens)
+                        completion_tokens = getattr(
+                            usage, "completion_tokens", completion_tokens
+                        )
+                    choices = getattr(chunk, "choices", None) or []
+                    if choices:
+                        choice = choices[0]
+                        delta = getattr(choice, "delta", None)
+                        content = getattr(delta, "content", None) if delta else None
+                        tool_calls = getattr(delta, "tool_calls", None) if delta else None
+                        if first_output_ms is None and (content or tool_calls):
+                            first_output_ms = (now - started) * 1000
+                        finish_reason = getattr(choice, "finish_reason", None) or finish_reason
+                    yield chunk
+                complete = True
+            finally:
+                logger.info(
+                    "llm_stream_trace model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} total_ms={} chunks={} prompt_tokens={} completion_tokens={} finish_reason={} complete={}",
+                    getattr(getattr(self, "_settings", None), "model", None),
+                    getattr(self, "_usage_context", None) or "conversation_or_shared_inference",
+                    round(headers_ms, 1),
+                    round(first_event_ms, 1) if first_event_ms is not None else None,
+                    round(first_output_ms, 1) if first_output_ms is not None else None,
+                    round((time.perf_counter() - started) * 1000, 1),
+                    chunks,
+                    prompt_tokens,
+                    completion_tokens,
+                    finish_reason,
+                    complete,
+                )
+                close = getattr(stream, "close", None)
+                if callable(close):
+                    await close()
+
+        return traced_stream()
+
     async def _emit_direct_reply(self, text: str):
         # OpenAI's process_frame owns the response start/end pair. Nested
         # boundaries here leave aggregators waiting for an extra completion
