@@ -32,7 +32,10 @@ class ContextSummarizationManager:
         self._summarization_task: Optional[asyncio.Task] = None
         self._config = LLMContextSummaryConfig(
             target_context_tokens=4000,
-            min_messages_after_summary=2,
+            # Keep several complete caller/assistant turns verbatim. On local
+            # CPU models an early summary both costs another inference and can
+            # erase booking/contact details needed by the next follow-up.
+            min_messages_after_summary=8,
             summarization_timeout=30.0,
         )
 
@@ -82,8 +85,22 @@ class ContextSummarizationManager:
                 )
                 return
             messages = context.messages
-            # Not worth summarizing if context is small
-            if len(messages) <= 6:
+            # A system prompt plus the last eight messages are always retained.
+            # Also require at least four older messages before paying for a
+            # summary inference; otherwise compaction adds CPU contention while
+            # preserving almost no useful context budget.
+            system_message_count = int(
+                bool(
+                    messages
+                    and isinstance(messages[0], dict)
+                    and messages[0].get("role") == "system"
+                )
+            )
+            older_message_count = (
+                len(messages) - system_message_count
+                - self._config.min_messages_after_summary
+            )
+            if older_message_count < 4:
                 return
 
             config = self._config
