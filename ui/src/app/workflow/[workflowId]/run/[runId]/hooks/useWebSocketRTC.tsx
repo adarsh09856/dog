@@ -46,6 +46,8 @@ const HANDLED_SERVICE_ERROR_TYPES = new Set([
 // start a fresh run rather than being offered a retry that cannot succeed.
 const SPENT_RUN_ERROR_TYPES = new Set(['workflow_run_already_completed']);
 const DISCONNECTED_GRACE_MS = 5000;
+let feedbackMessageSequence = 0;
+const nextFeedbackMessageId = (kind: string) => `${kind}-${Date.now()}-${++feedbackMessageSequence}`;
 
 export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initialContextVariables, onNodeTransition }: UseWebSocketRTCProps) => {
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
@@ -476,7 +478,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             ) {
                                 interruptWarningShownRef.current = true;
                                 setFeedbackMessages(prev => [...prev, {
-                                    id: `interrupt-warning-${Date.now()}`,
+                                    id: nextFeedbackMessageId('interrupt-warning'),
                                     type: 'interrupt-warning',
                                     text: 'Interruption is disabled for this step. The bot will finish speaking before processing your input. You can enable interruption in the workflow editor.',
                                     timestamp: new Date().toISOString(),
@@ -494,7 +496,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                                 // Step 3: Add new transcription (interim or final)
                                 return [...messagesWithoutInterim, {
-                                    id: `user-${Date.now()}`,
+                                    id: nextFeedbackMessageId('user'),
                                     type: 'user-transcription',
                                     text: transcription.text,
                                     final: transcription.final,
@@ -517,7 +519,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                     return updated;
                                 }
                                 return [...prev, {
-                                    id: `bot-${Date.now()}`,
+                                    id: nextFeedbackMessageId('bot'),
                                     type: 'bot-text',
                                     text: visibleText,
                                     final: false,
@@ -543,7 +545,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 }
                                 // Start new bot message
                                 return [...prev, {
-                                    id: `bot-${Date.now()}`,
+                                    id: nextFeedbackMessageId('bot'),
                                     type: 'bot-text',
                                     text: visibleText,
                                     final: false,
@@ -559,7 +561,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 // Check if we already have this function call
                                 const existingId = tool_call_id
                                     ? `func-${tool_call_id}`
-                                    : `func-${Date.now()}`;
+                                    : nextFeedbackMessageId('func');
                                 if (prev.some(msg => msg.id === existingId)) {
                                     return prev;
                                 }
@@ -599,7 +601,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             const transitionTimestamp = new Date().toISOString();
                             const transition: ConversationNodeTransitionItem = {
                                 kind: 'node-transition',
-                                id: `node-${Date.now()}`,
+                                id: nextFeedbackMessageId('node'),
                                 timestamp: transitionTimestamp,
                                 nodeId: node_id,
                                 nodeName: node_name ?? 'Node',
@@ -631,7 +633,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 break;
                             }
                             setFeedbackMessages(prev => [...prev, {
-                                id: `ttfb-${Date.now()}`,
+                                id: nextFeedbackMessageId('ttfb'),
                                 type: 'ttfb-metric',
                                 text: `${(ttfb_seconds * 1000).toFixed(0)}ms`,
                                 ttfbSeconds: ttfb_seconds,
@@ -646,7 +648,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             const latencySeconds = Number(message.payload?.latency_seconds);
                             if (!Number.isFinite(latencySeconds) || latencySeconds < 0) break;
                             setFeedbackMessages(prev => [...prev, {
-                                id: `latency-${Date.now()}`,
+                                id: nextFeedbackMessageId('latency'),
                                 type: 'latency-metric',
                                 text: `${(latencySeconds * 1000).toFixed(0)}ms`,
                                 latencySeconds,
@@ -663,7 +665,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             setFeedbackMessages(prev => [
                                 ...finalizeActiveBotMessage(prev, confirmedBeforeError),
                                 {
-                                    id: `error-${Date.now()}`,
+                                    id: nextFeedbackMessageId('error'),
                                     type: 'pipeline-error',
                                     text: error,
                                     fatal,
