@@ -45,10 +45,10 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 first_chunk_characters=12,
                 first_clause_characters=36,
                 first_phrase_characters=None,
-                # Each independent Inaya request restarts its prosody and adds
-                # end/start padding. Preserve natural sentence boundaries after
-                # the initial clause instead of splitting every 48 characters.
-                streaming_phrase_characters=None,
+                # Keep each later Inaya request long enough for coherent
+                # prosody, but release it before the full sentence ends so the
+                # next synthesis can overlap the current audio playback.
+                streaming_phrase_characters=64,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
