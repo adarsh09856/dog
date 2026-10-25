@@ -767,31 +767,18 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
             // Fetch time-limited TURN credentials from backend API only if the
             // server reports a TURN server is configured. Skipping the request
             // avoids a 503 on OSS local deployments that don't run coturn.
-            if (appConfig?.turnEnabled === false) {
-                logger.info('TURN server disabled in app config, using STUN only');
-            } else {
-                try {
-                    const turnResponse = await getTurnCredentialsApiV1TurnCredentialsGet({
-                        headers: {
-                            'Authorization': `Bearer ${accessToken}`,
-                        },
-                    });
-                    if (turnResponse.data) {
-                        turnCredentialsRef.current = turnResponse.data;
-                        logger.info(`TURN credentials obtained, TTL: ${turnResponse.data.ttl}s`);
-                    } else if (turnResponse.response?.status === 503) {
-                        // TURN not configured on server - this is OK, we'll use STUN only
-                        logger.info('TURN server not configured, using STUN only');
-                    } else {
-                        logger.warn(`Failed to fetch TURN credentials: ${turnResponse.response?.status}`);
-                    }
-                } catch (e) {
-                    logger.warn('Failed to fetch TURN credentials, continuing without TURN:', e);
-                }
-            }
+            const turnPromise = appConfig?.turnEnabled === false
+                ? Promise.resolve(null)
+                : getTurnCredentialsApiV1TurnCredentialsGet({
+                    headers: { 'Authorization': `Bearer ${accessToken}` },
+                }).catch((error) => {
+                    logger.warn('Failed to fetch TURN credentials, continuing without TURN:', error);
+                    return null;
+                });
 
-            // Validate API keys
-            const response = await validateUserConfigurationsApiV1UserConfigurationsUserValidateGet({
+            // These checks do not depend on one another. Start them together
+            // so connection setup waits for the slowest check, not their sum.
+            const configurationPromise = validateUserConfigurationsApiV1UserConfigurationsUserValidateGet({
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
                 },
@@ -799,6 +786,23 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                     validity_ttl_seconds: 86400
                 },
             });
+            const workflowPromise = validateWorkflowApiV1WorkflowWorkflowIdValidatePost({
+                path: { workflow_id: workflowId },
+                headers: { 'Authorization': `Bearer ${accessToken}` },
+            });
+            const [turnResponse, response, workflowResponse] = await Promise.all([
+                turnPromise, configurationPromise, workflowPromise,
+            ]);
+            if (appConfig?.turnEnabled === false) {
+                logger.info('TURN server disabled in app config, using STUN only');
+            } else if (turnResponse?.data) {
+                turnCredentialsRef.current = turnResponse.data;
+                logger.info(`TURN credentials obtained, TTL: ${turnResponse.data.ttl}s`);
+            } else if (turnResponse?.response?.status === 503) {
+                logger.info('TURN server not configured, using STUN only');
+            } else if (turnResponse) {
+                logger.warn(`Failed to fetch TURN credentials: ${turnResponse.response?.status}`);
+            }
 
             if (response.error) {
                 const isServiceUnavailable = response.response?.status === 503;
@@ -828,15 +832,6 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
             }
 
             // Validate workflow
-            const workflowResponse = await validateWorkflowApiV1WorkflowWorkflowIdValidatePost({
-                path: {
-                    workflow_id: workflowId,
-                },
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            });
-
             if (workflowResponse.error) {
                 setWorkflowConfigModalOpen(true);
                 let msg = 'Workflow validation failed';
