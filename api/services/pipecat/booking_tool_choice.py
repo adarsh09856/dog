@@ -433,13 +433,13 @@ class _BookingToolChoiceMixin:
         if known_name_reply:
             await self._emit_direct_reply(known_name_reply)
             return
-        name_followup_reply = caller_name_followup_reply(messages, contact_state)
-        if name_followup_reply:
-            await self._emit_direct_reply(name_followup_reply)
-            return
         phone_fragment_reply = caller_phone_fragment_reply(messages, contact_state)
         if phone_fragment_reply:
             await self._emit_direct_reply(phone_fragment_reply)
+            return
+        name_followup_reply = caller_name_followup_reply(messages, contact_state)
+        if name_followup_reply:
+            await self._emit_direct_reply(name_followup_reply)
             return
 
         known = getattr(self, "_known_contact", {})

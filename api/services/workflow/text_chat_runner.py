@@ -850,15 +850,15 @@ async def execute_text_chat_pending_turn(
             direct_reply = direct_caller_reply(
                 pending_user_message, has_lookup_tools=has_live_lookup_tools(active_tools)
             )
-            name_followup_reply = caller_name_followup_reply(
-                context.get_messages(), engine._contact_conversation_state
-            )
             known_name_reply = remember_explicit_caller_name(
                 context.get_messages(), engine._contact_conversation_state
             )
             phone_fragment_reply = caller_phone_fragment_reply(
                 context.get_messages(), engine._contact_conversation_state
-            ) if not name_followup_reply and not known_name_reply else None
+            ) if not known_name_reply else None
+            name_followup_reply = caller_name_followup_reply(
+                context.get_messages(), engine._contact_conversation_state
+            ) if not known_name_reply and not phone_fragment_reply else None
             conversation_contact = known_contact(initial_context)
             contact_state = engine._contact_conversation_state
             if contact_state.get("caller_name"):

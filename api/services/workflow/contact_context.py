@@ -166,6 +166,12 @@ def caller_name_followup_reply(messages: list, state: dict) -> str | None:
     if not isinstance(messages, list) or not isinstance(state, dict):
         return None
 
+    # The phone collector runs before this helper. If the caller supplied a
+    # complete number in the same utterance as their name, let the conversation
+    # continue instead of asking for the already collected number again.
+    if state.get("caller_phone"):
+        return None
+
     latest_user_index = next(
         (
             index
