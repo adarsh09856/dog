@@ -199,8 +199,8 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
                 errors.append(f"{key} registry port must be between 1 and 65535")
 
     installation_id = env.get("KODEWAVES_INSTALLATION_ID", "")
-    if installation_id and "<" not in installation_id and ">" not in installation_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{2,127}", installation_id):
-        errors.append("KODEWAVES_INSTALLATION_ID must be 3–128 URL-safe identifier characters")
+    if installation_id and "<" not in installation_id and ">" not in installation_id and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{2,99}", installation_id):
+        errors.append("KODEWAVES_INSTALLATION_ID must be 3–100 URL-safe identifier characters")
 
     license_token = env.get("KODEWAVES_LICENSE_TOKEN", "")
     if license_token and "<" not in license_token and ">" not in license_token and not re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", license_token):

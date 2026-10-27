@@ -425,3 +425,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 - Eight parallel account creations competed for a two-seat client limit; exactly two accounts persisted and the others received the limit denial. The actual account creation and transaction lock ran on disposable PostgreSQL; license decoding and owner status were controlled test inputs.
 - The focused test passed and the temporary database/tunnel were removed. This does not establish deployed licensing, other quotas, or a complete client installation. The regression is included in the dedicated PostgreSQL CI suite, which has not run remotely yet.
 - Follow-up: the same concurrency test now verifies a real Ed25519-signed license and its installation/domain binding before enforcing the two-seat limit. The owner status response remains mocked. The enhanced test passed on disposable PostgreSQL; its container and tunnel were removed.
+
+## 27 October 2026 — align installation ID preflight
+
+- Owner issuance, the database and enrollment accept installation IDs up to 100 characters, while installer preflight incorrectly accepted 128. Preflight now matches the 3–100 character issuance rule; the regression checks both boundary lengths.
+- Package, installer archive and issuance suites passed **72 tests**. This is input and source verification; a clean packaged installation remains open.

@@ -250,6 +250,11 @@ def test_client_install_preflight_accepts_valid_inputs_and_rejects_common_mistak
     ]:
         env_file.write_text("\n".join(lines + extra) + "\n", encoding="utf-8")
         assert any(expected in error for error in validate_install.validate(env_file, client_dir / "docker-compose.client.yaml"))
+    for length, valid in ((100, True), (101, False)):
+        identity_lines = [f"KODEWAVES_INSTALLATION_ID={'a' * length}" if line.startswith("KODEWAVES_INSTALLATION_ID=") else line for line in lines]
+        env_file.write_text("\n".join(identity_lines) + "\n", encoding="utf-8")
+        errors = validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")
+        assert any("KODEWAVES_INSTALLATION_ID" in error for error in errors) is not valid
     env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     # The real Compose file must also accept an external-proxy deployment with
