@@ -184,7 +184,11 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str, mani
         if service.get("group_add") != [str(identity_gid)]:
             raise ValueError(f"Rendered {service_name.upper()} identity group does not match the key group")
         if expected_mount not in service.get("volumes", []):
-            raise ValueError(f"Rendered {service_name.upper()} identity key mount is not read-only and non-creating")
+            mounts = [mount for mount in service.get("volumes", []) if mount.get("target") == expected_mount["target"]]
+            raise ValueError(
+                f"Rendered {service_name.upper()} identity key mount is not read-only and non-creating: "
+                f"{json.dumps(mounts, sort_keys=True)}"
+            )
         if service.get("environment", {}).get("KODEWAVES_INSTALLATION_KEY_FILE") != expected_mount["target"]:
             raise ValueError(f"Rendered {service_name.upper()} identity key path does not match its mount")
 
