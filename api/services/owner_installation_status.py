@@ -139,10 +139,10 @@ async def require_current_owner_status(
             fields = await redis_client.hgetall(_status_key(license_data.installation_id))
         except Exception as exc:
             raise InstallationLicenseError("Owner status cache is unavailable") from exc
-        if fields.get(b"revoked_latched") == b"1":
-            raise InstallationLicenseError("Installation license was revoked by the owner")
         if fields.get(b"integrity_failed_latched") == b"1":
             raise InstallationLicenseError("Protected installation files were modified")
+        if fields.get(b"revoked_latched") == b"1":
+            raise InstallationLicenseError("Installation license was revoked by the owner")
         signed_status = fields.get(b"signed_status")
         nonce = fields.get(b"nonce")
         if not signed_status or not nonce:

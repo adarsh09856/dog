@@ -310,3 +310,8 @@ async def test_local_integrity_failure_latches_even_when_owner_unreachable(monke
     )
     with pytest.raises(InstallationLicenseError, match="Protected installation files were modified"):
         await owner_status.require_current_owner_status(license_data, redis)
+    # Owner confirmation of the same failure also latches revocation. The
+    # customer must still see the more specific locally verified cause.
+    await redis.hset("ignored", {"revoked_latched": "1"})
+    with pytest.raises(InstallationLicenseError, match="Protected installation files were modified"):
+        await owner_status.require_current_owner_status(license_data, redis)
