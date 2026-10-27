@@ -131,4 +131,14 @@ describe("shared platform branding", () => {
       ),
     ).toBeGreaterThanOrEqual(4.5);
   });
+
+  it("restores the configured browser title after framework metadata overwrites it", async () => {
+    const configured = { ...DEFAULT_BRANDING, company_name: "Acme Voice" };
+    mocks.apiFetch.mockReturnValue(new Promise(() => {}));
+    render(<ClientBrandingProvider initialBranding={configured}><BrandLogo /></ClientBrandingProvider>);
+    await waitFor(() => expect(document.title).toBe("Admin | Acme Voice"));
+
+    act(() => { document.title = "Kodewaves"; });
+    await waitFor(() => expect(document.title).toBe("Admin | Acme Voice"));
+  });
 });

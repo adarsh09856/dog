@@ -84,9 +84,20 @@ export function ClientBrandingProvider({
               : pathname?.startsWith("/auth/login")
                 ? "Sign in"
                 : "Workspace";
-    document.title = section
+    const expectedTitle = section
       ? `${section} | ${branding.company_name}`
       : branding.company_name;
+    const syncTitle = () => {
+      // Next can apply server metadata after the client branding refresh.
+      if (document.title !== expectedTitle) document.title = expectedTitle;
+    };
+    syncTitle();
+    const titleObserver = new MutationObserver(syncTitle);
+    titleObserver.observe(document.head, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
     let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (!icon) {
       icon = document.createElement("link");
@@ -102,6 +113,7 @@ export function ClientBrandingProvider({
       root.style.setProperty(key, value);
     }
     if (branding.font !== "system") root.style.removeProperty("--brand-font-family");
+    return () => titleObserver.disconnect();
   }, [branding, pathname, resolvedTheme]);
 
   return (
