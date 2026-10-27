@@ -10,7 +10,7 @@ import asyncio
 import os
 import sys
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from api.db import db_client
 from api.db.models import UserModel
@@ -29,7 +29,8 @@ async def create_or_promote_superuser(
     if user:
         print(f"[INFO] User '{email}' already exists. Ensuring superuser privileges...")
         async with db_client.async_session() as session:
-            stmt = select(UserModel).where(UserModel.id == user.id)
+            await session.execute(text("SELECT pg_advisory_xact_lock(492565710844)"))
+            stmt = select(UserModel).where(UserModel.id == user.id).with_for_update()
             res = await session.execute(stmt)
             u = res.scalar_one()
             u.is_superuser = True
