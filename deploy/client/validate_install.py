@@ -115,6 +115,15 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
     required = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?", compose_text))
 
     profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()}
+    local_ports = {}
+    for key, default in (("API_PORT", "8000"), ("UI_PORT", "3010"), ("MINIO_PORT", "9000")):
+        value = env.get(key, "") or default
+        if not re.fullmatch(r"[0-9]{1,5}", value) or not 1 <= int(value) <= 65535:
+            errors.append(f"{key} must be a TCP port between 1 and 65535")
+        else:
+            local_ports[key] = int(value)
+    if len(set(local_ports.values())) != len(local_ports):
+        errors.append("API_PORT, UI_PORT and MINIO_PORT must be distinct")
     try:
         internal_network = ipaddress.ip_network(
             env.get("CLIENT_INTERNAL_SUBNET", DEFAULT_CLIENT_INTERNAL_SUBNET), strict=True

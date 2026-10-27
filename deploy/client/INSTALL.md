@@ -42,6 +42,8 @@ inspection; the application images use their own baked verification keys.
    `/api/v1` to `127.0.0.1:8000`, `/voice-audio` to `127.0.0.1:9000`, and
    other web requests to `127.0.0.1:3010`. Pass WebSocket upgrades through
    the API route. Expose TURN media directly; HTTP proxies do not carry it.
+   If you change `API_PORT`, `UI_PORT` or `MINIO_PORT`, use those ports in
+   your external proxy instead of the defaults. The three ports must differ.
 
 Do not put private credentials in the image-reference file or publish this
 directory through a web server. Do not change or replace an approved image or

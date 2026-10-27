@@ -242,6 +242,16 @@ def test_client_install_preflight_accepts_valid_inputs_and_rejects_common_mistak
     result = validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")
     assert result == ["preflight passed; run docker compose config --quiet for Compose validation and API startup to verify signed license and manifest"]
 
+    for extra, expected in [
+        (["API_PORT=0"], "API_PORT"),
+        (["UI_PORT=65536"], "UI_PORT"),
+        (["MINIO_PORT=invalid"], "MINIO_PORT"),
+        (["UI_PORT=8000"], "distinct"),
+    ]:
+        env_file.write_text("\n".join(lines + extra) + "\n", encoding="utf-8")
+        assert any(expected in error for error in validate_install.validate(env_file, client_dir / "docker-compose.client.yaml"))
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
     # The real Compose file must also accept an external-proxy deployment with
     # no Caddy image, not just a reduced fixture containing the Caddy service.
     external_proxy_lines = [

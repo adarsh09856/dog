@@ -409,3 +409,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - The signed-in billing card labeled free-plan minutes “per payment” despite granting them once on activation. It now labels those as one-time trial minutes; paid plans retain the per-payment label.
 - Billing and public-pricing suites passed **11 tests**; changed-file ESLint passed. Live catalog and payment acceptance remain open.
+
+## 27 October 2026 — client local port preflight
+
+- The installer now rejects invalid or duplicate API, UI and MinIO local ports before Compose startup, using the same defaults as the Compose file. The operator guide now says to update an external proxy when custom ports are selected.
+- The regression failed before the change; package and installer archive suites passed **51 tests** after it. This validates input handling, not host port availability or a full customer install.
