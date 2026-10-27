@@ -1,6 +1,7 @@
 """Owner-side persistence for commercial installation entitlements."""
 
 import hashlib
+import hmac
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -100,6 +101,54 @@ async def create_client_installation_record(**fields) -> None:
     async with kodewaves_db_client.get_session() as session:
         session.add(record)
         await session.commit()
+
+
+def _utc(value: datetime) -> datetime:
+    """Treat naive test/legacy timestamps as UTC; PostgreSQL stores UTC offsets."""
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+async def issue_installation_enrollment(installation_id: str, token_fingerprint: str) -> datetime | None:
+    """Replace a pending token and return its expiry; never rebind an enrolled key."""
+    async with kodewaves_db_client.get_session() as session:
+        record = await session.get(ClientInstallationModel, installation_id, with_for_update=True)
+        now = datetime.now(UTC)
+        if (
+            record is None or record.revoked_at is not None or record.integrity_failed_at is not None
+            or record.installation_public_key is not None or _utc(record.expires_at) <= now
+        ):
+            return None
+        expires_at = min(now + timedelta(minutes=15), _utc(record.expires_at))
+        record.enrollment_token_fingerprint = token_fingerprint
+        record.enrollment_expires_at = expires_at
+        record.updated_at = now
+        await session.commit()
+        return expires_at
+
+
+async def consume_installation_enrollment(
+    installation_id: str, license_fingerprint: str, token_fingerprint: str, public_key: str,
+) -> bool:
+    """Atomically consume a pending token and bind one installation public key."""
+    async with kodewaves_db_client.get_session() as session:
+        record = await session.get(ClientInstallationModel, installation_id, with_for_update=True)
+        now = datetime.now(UTC)
+        if (
+            record is None or record.revoked_at is not None or record.integrity_failed_at is not None
+            or record.installation_public_key is not None or record.enrollment_expires_at is None
+            or _utc(record.enrollment_expires_at) <= now or _utc(record.expires_at) <= now
+            or not record.enrollment_token_fingerprint
+            or not hmac.compare_digest(record.enrollment_token_fingerprint, token_fingerprint)
+            or not hmac.compare_digest(record.token_fingerprint, license_fingerprint)
+        ):
+            return False
+        record.installation_public_key = public_key
+        record.enrollment_token_fingerprint = None
+        record.enrollment_expires_at = None
+        record.enrolled_at = now
+        record.updated_at = now
+        await session.commit()
+        return True
 
 
 async def get_client_installation_record(installation_id: str) -> dict | None:

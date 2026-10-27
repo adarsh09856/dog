@@ -100,3 +100,71 @@ async def test_signed_owner_check_and_revocation_use_committed_database_state(ow
     assert await check() is False
     await client_installations.revoke_client_installation_record("client-test", 1)
     assert await check() is True
+
+
+@pytest.mark.asyncio
+async def test_enrollment_token_binds_one_public_key_once(owner_database):
+    expiry = await client_installations.issue_installation_enrollment("client-test", "b" * 64)
+    assert datetime.now(UTC) < expiry <= datetime.now(UTC) + timedelta(minutes=15)
+    assert not await client_installations.consume_installation_enrollment(
+        "client-test", "a" * 64, "c" * 64, "A" * 43
+    )
+    assert not await client_installations.consume_installation_enrollment(
+        "client-test", "d" * 64, "b" * 64, "A" * 43
+    )
+    assert await client_installations.consume_installation_enrollment(
+        "client-test", "a" * 64, "b" * 64, "A" * 43
+    )
+    assert not await client_installations.consume_installation_enrollment(
+        "client-test", "a" * 64, "b" * 64, "B" * 43
+    )
+    assert await client_installations.issue_installation_enrollment("client-test", "d" * 64) is None
+    async with owner_database() as session:
+        stored = await session.get(ClientInstallationModel, "client-test")
+        assert stored.installation_public_key == "A" * 43
+        assert stored.enrollment_token_fingerprint is None
+        assert stored.enrollment_expires_at is None
+        assert stored.enrolled_at is not None
+
+
+@pytest.mark.asyncio
+async def test_enrollment_reissue_invalidates_previous_token_and_expired_token_is_rejected(owner_database):
+    assert await client_installations.issue_installation_enrollment("client-test", "b" * 64)
+    assert await client_installations.issue_installation_enrollment("client-test", "c" * 64)
+    assert not await client_installations.consume_installation_enrollment(
+        "client-test", "a" * 64, "b" * 64, "A" * 43
+    )
+    async with owner_database() as session:
+        stored = await session.get(ClientInstallationModel, "client-test")
+        stored.enrollment_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        await session.commit()
+    assert not await client_installations.consume_installation_enrollment(
+        "client-test", "a" * 64, "c" * 64, "A" * 43
+    )
+
+
+@pytest.mark.asyncio
+async def test_revoked_installation_cannot_receive_or_consume_enrollment(owner_database):
+    assert await client_installations.issue_installation_enrollment("client-test", "b" * 64)
+    await client_installations.revoke_client_installation_record("client-test", 1)
+    assert await client_installations.issue_installation_enrollment("client-test", "c" * 64) is None
+    assert not await client_installations.consume_installation_enrollment(
+        "client-test", "a" * 64, "b" * 64, "A" * 43
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("condition", ["expired", "integrity_failed"])
+async def test_expired_or_integrity_failed_installations_cannot_enroll(owner_database, condition):
+    assert await client_installations.issue_installation_enrollment("client-test", "b" * 64)
+    async with owner_database() as session:
+        stored = await session.get(ClientInstallationModel, "client-test")
+        if condition == "expired":
+            stored.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        else:
+            stored.integrity_failed_at = datetime.now(UTC)
+        await session.commit()
+    assert await client_installations.issue_installation_enrollment("client-test", "c" * 64) is None
+    assert not await client_installations.consume_installation_enrollment(
+        "client-test", "a" * 64, "b" * 64, "A" * 43
+    )
