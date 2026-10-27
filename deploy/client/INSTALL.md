@@ -94,20 +94,20 @@ Run these commands from the extracted installation directory:
 
 ```bash
 python3 validate_install.py
-docker compose -f docker-compose.client.yaml config --quiet
-docker compose -f docker-compose.client.yaml pull
-docker compose -f docker-compose.client.yaml up -d api
-docker compose -f docker-compose.client.yaml ps
-docker compose -f docker-compose.client.yaml logs --tail=100 api
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml config --quiet
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml pull
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d api
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml ps
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml logs --tail=100 api
 ```
 
 Wait for API health and `Initial owner installation check succeeded` in its
 logs. For a new empty installation, create the first local administrator:
 
 ```bash
-docker compose -f docker-compose.client.yaml run --rm --no-deps api \
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml run --rm --no-deps api \
   python -m api.services.bootstrap_client_admin --email admin@customer.example.com
-docker compose -f docker-compose.client.yaml up -d
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d
 ```
 
 The bootstrap command prompts for a password. It refuses to run after any user
@@ -127,8 +127,11 @@ ambiguous, or unapproved revision stops startup before migrations run; resolve
 the mismatch with the installation owner and restore a compatible backup when
 needed. Rollback requires explicit application/database compatibility approval;
 an old image alone is insufficient. Install a replacement license before its
-handover window expires and recreate the API service. Ask your installation
-owner for license, domain/IP policy, renewal, capacity and recovery changes.
+handover window expires and recreate the API service. Keep both Compose files
+(`docker-compose.client.yaml` and `docker-compose.identity.yaml`) on every later
+update, bootstrap, log or recovery command so the API and UI can read the
+enrolled key. Ask your installation owner for license, domain/IP policy,
+renewal, capacity and recovery changes.
 
 If the bundled ingress displays “Service temporarily unavailable,” check the
 API and UI container logs and contact the installation owner. This message can

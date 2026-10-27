@@ -445,3 +445,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - The client image CI verifier now validates a disposable enrolled-key input and renders the real Compose identity overlay alongside the base bundle. It checks that both API and UI use the configured group and the identical read-only key bind mount with host-path creation disabled, and records the gate in its evidence report. The key is generated in the verifier's external temporary directory and is removed on exit.
 - Focused verifier tests passed **12 tests**, including rejection of a writable API identity mount. The installed standalone Compose CLI v5.6.1 also rendered the base config, custom-network proxy trust and enrolled identity overlay successfully. This is Compose-level evidence only; real Linux container key access, owner enrollment, packaged image, install and recovery acceptance remain open.
+
+## 27 October 2026 — keep enrollment identity mounted during client setup
+
+- The packaged install guide said to keep the identity overlay on every Compose command after enrollment, but its API startup, administrator bootstrap, UI startup and health commands omitted it. Those commands now include both Compose files, as does the developer-side start guide; renewal instructions repeat the rule.
+- The package archive regression now checks that every Compose command in the post-enrollment startup/bootstrap section includes the overlay, while the pre-enrollment API image pull stays base-only. Installer archive and CI verifier suites passed **21 tests**; `git diff --check` passed. No real customer install was performed.

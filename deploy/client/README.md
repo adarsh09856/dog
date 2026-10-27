@@ -208,14 +208,16 @@ image build, clean-install, owner-alert or upgrade/rollback acceptance.
 
 Run commands from this directory so Compose resolves `.env` and the manifest
 path consistently. Validate the inputs before Docker contacts any registry or
-starts the services:
+starts the services. Complete the enrolled-identity steps in `INSTALL.md` for
+the customer license first. Every Compose command in this section then includes
+the identity overlay so both API and UI retain access to the key:
 
 ```bash
 python3 validate_install.py
-docker compose -f docker-compose.client.yaml config --quiet
-docker compose -f docker-compose.client.yaml pull
-docker compose -f docker-compose.client.yaml up -d api
-docker compose -f docker-compose.client.yaml ps
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml config --quiet
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml pull
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d api
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml ps
 ```
 
 Wait until the API reports healthy and its logs contain
@@ -235,7 +237,7 @@ from the client image. Create the initial local administrator once, using the
 licensed bootstrap below with a new empty installation database.
 
 ```bash
-docker compose -f docker-compose.client.yaml run --rm --no-deps api \
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml run --rm --no-deps api \
   python -m api.services.bootstrap_client_admin --email admin@customer.example.com
 ```
 
@@ -243,8 +245,8 @@ The command prompts for the password interactively. It refuses to run after a
 user or workspace already exists. Then start the UI and remaining services:
 
 ```bash
-docker compose -f docker-compose.client.yaml up -d
-docker compose -f docker-compose.client.yaml ps
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml ps
 ```
 
 Complete HTTPS/WSS proxy setup and check the public hostname before signing in.

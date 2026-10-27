@@ -70,6 +70,12 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
         }
         contents = {name: archive.extractfile(name).read() for name in archive.getnames()}
         assert archive.getmember(".env.example").mode == 0o600
+    install_guide = contents["README.md"].decode("utf-8")
+    assert "docker compose -f docker-compose.client.yaml pull api" in install_guide
+    start_section = install_guide.split("## Start and create the administrator", 1)[1].split("## Renewal and recovery", 1)[0]
+    compose_commands = [line.strip() for line in start_section.splitlines() if line.strip().startswith("docker compose")]
+    assert compose_commands
+    assert all("-f docker-compose.identity.yaml" in command for command in compose_commands)
     assert b"customer-secret" not in b"".join(contents.values())
     assert b"private-key-must-never-ship" not in b"".join(contents.values())
     assert b"owner-signer-must-never-ship" not in b"".join(contents.values())
