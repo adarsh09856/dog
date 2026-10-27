@@ -2,12 +2,49 @@
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+import sqlite3
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.dialects import sqlite
 
+from api.db.campaign_client import CampaignClient
 from api.tasks import campaign_tasks
 from api.tasks.campaign_tasks import process_campaign_batch, sync_campaign_source
+
+
+@pytest.mark.asyncio
+async def test_failed_batch_transition_preserves_paused_and_stopped_campaigns():
+    connection = sqlite3.connect(":memory:")
+    connection.execute("CREATE TABLE campaigns (id INTEGER PRIMARY KEY, state TEXT, updated_at TEXT)")
+    connection.executemany("INSERT INTO campaigns (id, state) VALUES (?, ?)", [(1, "running"), (2, "paused"), (3, "stopped")])
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def execute(self, statement):
+            compiled = statement.compile(dialect=sqlite.dialect(paramstyle="named"))
+            row = connection.execute(str(compiled), compiled.params).fetchone()
+            return SimpleNamespace(scalar_one_or_none=lambda: row[0] if row else None)
+
+        async def commit(self):
+            connection.commit()
+
+    client = object.__new__(CampaignClient)
+    client.async_session = Session
+    try:
+        assert await client.fail_running_campaign(1) is True
+        assert await client.fail_running_campaign(2) is False
+        assert await client.fail_running_campaign(3) is False
+        assert connection.execute("SELECT id, state FROM campaigns ORDER BY id").fetchall() == [
+            (1, "failed"), (2, "paused"), (3, "stopped"),
+        ]
+    finally:
+        connection.close()
 
 
 @pytest.mark.asyncio
@@ -44,6 +81,7 @@ async def test_shared_setup_failure_is_logged():
         dispatcher.process_batch = AsyncMock(side_effect=ValueError("setup incomplete"))
         db.get_campaign_by_id = AsyncMock(return_value=SimpleNamespace(organization_id=206, state="running"))
         db.update_campaign = AsyncMock()
+        db.fail_running_campaign = AsyncMock(return_value=True)
         db.append_campaign_log = AsyncMock()
         with patch("api.tasks.campaign_tasks.enforce_saas_feature", AsyncMock()):
             with pytest.raises(ValueError):
@@ -62,6 +100,7 @@ async def test_client_entitlement_failure_prevents_campaign_dispatch():
     ):
         dispatcher.process_batch = AsyncMock()
         db.update_campaign = AsyncMock()
+        db.fail_running_campaign = AsyncMock(return_value=True)
         db.append_campaign_log = AsyncMock()
         with pytest.raises(ValueError, match="not licensed"):
             await process_campaign_batch({}, 48)
@@ -74,7 +113,7 @@ async def test_disabled_saas_campaign_feature_blocks_queued_batch(monkeypatch):
     campaign = SimpleNamespace(organization_id=206, state="running")
     db = SimpleNamespace(
         get_campaign_by_id=AsyncMock(return_value=campaign),
-        update_campaign=AsyncMock(), append_campaign_log=AsyncMock(),
+        update_campaign=AsyncMock(), fail_running_campaign=AsyncMock(return_value=True), append_campaign_log=AsyncMock(),
     )
     feature_check = AsyncMock(side_effect=HTTPException(status_code=403, detail="campaigns disabled"))
     dispatcher = SimpleNamespace(process_batch=AsyncMock())
@@ -91,6 +130,7 @@ async def test_disabled_saas_campaign_feature_blocks_queued_batch(monkeypatch):
     assert error.value.status_code == 403
     feature_check.assert_awaited_once_with(206, "campaigns")
     dispatcher.process_batch.assert_not_awaited()
+    db.fail_running_campaign.assert_awaited_once_with(48)
     publisher.publish_batch_failed.assert_awaited_once()
 
 

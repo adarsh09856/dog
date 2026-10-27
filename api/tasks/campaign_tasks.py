@@ -153,8 +153,8 @@ async def process_campaign_batch(
             processed_count=0,
         )
 
-        # Update campaign state to failed
-        await db_client.update_campaign(campaign_id=campaign_id, state="failed")
+        # Preserve a pause or stop that raced with this batch failure.
+        await db_client.fail_running_campaign(campaign_id)
         await db_client.append_campaign_log(
             campaign_id=campaign_id,
             level="error",
