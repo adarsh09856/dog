@@ -350,3 +350,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Traced owner issuance through DNS TXT challenge verification, signed domain/IP claims, installation ID and Host binding, owner-observed source IP (using forwarded headers only behind configured trusted proxies), and fail-closed signed status enforcement. The IP allowlist disables outage-stale grace; licenses without IP ranges do not require source-IP matching.
 - Domain, IP, enrollment, issuance and owner-status regressions: **70 passed**. One unrelated OpenAPI route-inventory test requires live MinIO and is not verified on this workstation. DNS challenge and forwarded-proxy behavior still need acceptance against the deployed owner/customer networks.
+
+## 27 October 2026 — enforce IP policy before enrollment token consumption
+
+- Enrollment previously verified the license and proof of key possession, then consumed the one-time token without checking the source IP. It now applies the same observed-peer/trusted-proxy IP matcher used by owner status before the atomic consume. A disallowed source gets a generic enrollment rejection and cannot strand the valid installation key; unbound licenses remain unaffected.
+- The regression covers denied, permitted and no-allowlist cases. License/enrollment/owner-status suite: **73 passed, 1 deselected** (the separate OpenAPI inventory test needs live MinIO). Python compilation and `git diff --check` passed. Ruff is not installed; deployed proxy/IP acceptance remains open.

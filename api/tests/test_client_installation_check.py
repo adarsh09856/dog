@@ -14,6 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 from api.db import client_installations as installation_records
 from api.routes.admin import client_installation_check
+from api.services.installation_identity import sign_enrollment
 from api.services.installation_license import (
     InstallationLicenseError,
     issue_license_token,
@@ -40,6 +41,85 @@ def test_owner_ip_ignores_untrusted_forwarded_header_and_honors_trusted_proxy(mo
         _http_request("198.51.100.9", "203.0.113.44, 198.51.100.12")
     )
     assert proxied == "203.0.113.44"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("peer", "ip_ranges", "allowed"),
+    [
+        ("203.0.113.7", ["198.51.100.0/24"], False),
+        ("198.51.100.7", ["198.51.100.0/24"], True),
+        ("203.0.113.7", [], True),
+    ],
+)
+async def test_owner_applies_optional_ip_policy_before_consuming_enrollment_token(
+    monkeypatch, peer, ip_ranges, allowed,
+):
+    owner_key = Ed25519PrivateKey.generate()
+    owner_private = owner_key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    owner_public = base64.urlsafe_b64encode(owner_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode("ascii")
+    client_key = Ed25519PrivateKey.generate()
+    client_private = client_key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    client_public = base64.urlsafe_b64encode(client_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode("ascii")
+    now = int(time.time())
+    token = issue_license_token({
+        "iat": now - 1, "exp": now + 3600, "edition": "client",
+        "installation_id": "client-1", "customer_id": "buyer-1",
+        "domains": ["example.com"], "ip_ranges": ip_ranges,
+        "features": [], "limits": {},
+    }, owner_private)
+    enrollment_token = "enrollment-token-" + "x" * 32
+    nonce = "nonce-" + "y" * 32
+    request = client_installation_check.InstallationEnrollmentRequest(
+        enrollment_token=enrollment_token,
+        public_key=client_public,
+        nonce=nonce,
+        issued_at=now,
+        signature=sign_enrollment(
+            client_private,
+            installation_id="client-1",
+            license_token=token,
+            enrollment_token=enrollment_token,
+            public_key=client_public,
+            nonce=nonce,
+            issued_at=now,
+        ),
+    )
+    consume = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        client_installation_check,
+        "_owner_verification_signers",
+        lambda: [(owner_private, owner_public)],
+    )
+    monkeypatch.setattr(client_installation_check, "consume_installation_enrollment", consume)
+
+    call = client_installation_check.enroll_client_installation(
+        _http_request(peer),
+        request,
+        f"Bearer {token}",
+    )
+    if allowed:
+        assert await call == {"enrolled": True}
+        consume.assert_awaited_once()
+    else:
+        with pytest.raises(HTTPException) as error:
+            await call
+        assert error.value.status_code == 401
+        consume.assert_not_awaited()
 
 
 @pytest.mark.asyncio

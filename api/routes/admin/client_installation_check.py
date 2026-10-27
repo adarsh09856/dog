@@ -55,6 +55,17 @@ def _observed_client_ip(request: Request) -> str | None:
     return str(chain[-1])
 
 
+def _license_ip_binding_valid(ip_ranges: tuple[str, ...], observed_ip: str | None) -> bool:
+    """Match the owner's observed peer address against an optional license allowlist."""
+    if not ip_ranges:
+        return True
+    try:
+        address = ipaddress.ip_address(observed_ip or "")
+        return any(address in ipaddress.ip_network(value) for value in ip_ranges)
+    except ValueError:
+        return False
+
+
 class IntegrityFinding(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -97,6 +108,7 @@ class InstallationEnrollmentRequest(BaseModel):
 
 @router.post("/enroll")
 async def enroll_client_installation(
+    http_request: Request,
     request: InstallationEnrollmentRequest,
     authorization: str | None = Header(default=None),
 ) -> dict:
@@ -121,6 +133,8 @@ async def enroll_client_installation(
         )
     except InstallationIdentityError as exc:
         raise HTTPException(status_code=401, detail="Invalid installation enrollment") from exc
+    if not _license_ip_binding_valid(license_data.ip_ranges, _observed_client_ip(http_request)):
+        raise HTTPException(status_code=401, detail="Invalid installation enrollment")
     enrolled = await consume_installation_enrollment(
         license_data.installation_id, hashlib.sha256(token.encode("ascii")).hexdigest(),
         hashlib.sha256(request.enrollment_token.encode("ascii")).hexdigest(), request.public_key,
@@ -153,13 +167,7 @@ async def check_client_installation(
     license_data, private_key = verified
 
     observed_ip = _observed_client_ip(http_request)
-    binding_valid = True
-    if license_data.ip_ranges:
-        try:
-            address = ipaddress.ip_address(observed_ip or "")
-            binding_valid = any(address in ipaddress.ip_network(value) for value in license_data.ip_ranges)
-        except ValueError:
-            binding_valid = False
+    binding_valid = _license_ip_binding_valid(license_data.ip_ranges, observed_ip)
 
     fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
     identity_args = {}
