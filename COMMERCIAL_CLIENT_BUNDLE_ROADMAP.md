@@ -345,3 +345,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - The plan model and entitlement gate include `max_agents`, but `/billing-sovereign/public/plans` omitted it and the public plan cards therefore hid a configured quota. The API now returns the same catalog value and the pricing card displays it beside included minutes and concurrent calls.
 - Backend public pricing tests: **25 passed**; pricing page tests: **6 passed**; scoped ESLint and TypeScript checks passed. Live catalog/payment verification and saved-brand browser review remain open.
+
+## 27 October 2026 — domain and optional IP license-path audit
+
+- Traced owner issuance through DNS TXT challenge verification, signed domain/IP claims, installation ID and Host binding, owner-observed source IP (using forwarded headers only behind configured trusted proxies), and fail-closed signed status enforcement. The IP allowlist disables outage-stale grace; licenses without IP ranges do not require source-IP matching.
+- Domain, IP, enrollment, issuance and owner-status regressions: **70 passed**. One unrelated OpenAPI route-inventory test requires live MinIO and is not verified on this workstation. DNS challenge and forwarded-proxy behavior still need acceptance against the deployed owner/customer networks.
