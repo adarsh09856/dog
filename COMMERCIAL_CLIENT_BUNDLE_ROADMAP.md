@@ -1,5 +1,10 @@
 # Kodewaves platform delivery roadmap
 
+## 27 October 2026 - disposable owner PostgreSQL gate
+
+- GitHub Actions run [40559667514](https://github.com/adarsh09856/dog/actions/runs/40559667514), commit `f70770a5`, passed the `owner-postgres` job: four integration tests against a disposable PostgreSQL 17 service. The tests cover first-owner concurrency, enrolled identity replay and integrity-alert persistence, workspace-scoped user changes, and signed client seat limits.
+- The image-build job is manual-only because it requires an approved Caddy image digest. This push did not rebuild images or install a customer stack. Clean installation, live owner availability and recovery, upgrade/rollback, billing, browser/phone audio and cross-branch integration remain open.
+
 Updated 26 October 2026. Worktree: `codex/client-bundle-theme`. This is the ordered execution plan for the current shared-platform and commercial client-bundle scope. It is not a completion claim. Voice-flow implementation remains in the other chat's checkout; preserve that checkout and branch until its owner reports completion.
 
 ## Outcome
