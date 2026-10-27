@@ -349,14 +349,19 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 ## 27 October 2026 — domain and optional IP license-path audit
 
 - Traced owner issuance through DNS TXT challenge verification, signed domain/IP claims, installation ID and Host binding, owner-observed source IP (using forwarded headers only behind configured trusted proxies), and fail-closed signed status enforcement. The IP allowlist disables outage-stale grace; licenses without IP ranges do not require source-IP matching.
-- Domain, IP, enrollment, issuance and owner-status regressions: **70 passed**. One unrelated OpenAPI route-inventory test requires live MinIO and is not verified on this workstation. DNS challenge and forwarded-proxy behavior still need acceptance against the deployed owner/customer networks.
+- Domain, IP, enrollment, issuance and owner-status regressions: **70 passed** in the scoped run. The separate OpenAPI route-inventory test was initially blocked by running without `ENVIRONMENT=test`; it uses `NullFileSystem` in test mode and later passed in the full suite. DNS challenge and forwarded-proxy behavior still need acceptance against the deployed owner/customer networks.
 
 ## 27 October 2026 — enforce IP policy before enrollment token consumption
 
 - Enrollment previously verified the license and proof of key possession, then consumed the one-time token without checking the source IP. It now applies the same observed-peer/trusted-proxy IP matcher used by owner status before the atomic consume. A disallowed source gets a generic enrollment rejection and cannot strand the valid installation key; unbound licenses remain unaffected.
-- The regression covers denied, permitted and no-allowlist cases. License/enrollment/owner-status suite: **73 passed, 1 deselected** (the separate OpenAPI inventory test needs live MinIO). Python compilation and `git diff --check` passed. Ruff is not installed; deployed proxy/IP acceptance remains open.
+- The regression covers denied, permitted and no-allowlist cases. License/enrollment/owner-status suite: **73 passed, 1 deselected** before test-mode environment was corrected; all **74 passed** when rerun with `ENVIRONMENT=test`. Python compilation and `git diff --check` passed. Ruff is not installed; deployed proxy/IP acceptance remains open.
 
 ## 27 October 2026 — saved tagline in authentication panel
 
 - Shared branding already updated the public hero/footer, app shell and superadmin title/logo, but the authentication panel kept a hard-coded headline. It now renders the saved tagline from the same live branding context, so an admin branding save reaches sign-in/sign-up without changing the customer-facing brand lockup.
 - `ClientBrandingContext.test.tsx`: **3 passed**, including a live context refresh after a saved tagline change; changed-file ESLint and `tsc --noEmit` passed. Cross-session browser verification against a persisted brand remains open.
+
+## 27 October 2026 — full API feature-map route inventory
+
+- Re-ran the OpenAPI entitlement audit with `ENVIRONMENT=test` so the app uses `NullFileSystem`; the test found **no unclassified API data routes**. The same focused batch verifies license binding, enrollment/IP restrictions, owner status and route gates.
+- `py -3.13 -m pytest --noconftest api/tests/test_installation_license.py api/tests/test_installation_identity.py api/tests/test_client_installation_check.py api/tests/test_client_installation_issuance.py api/tests/test_owner_installation_status.py -q` — **74 passed**, with five dependency/deprecation warnings. This is local API/source verification, not client-image or live two-tenant acceptance.
