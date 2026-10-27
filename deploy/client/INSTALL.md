@@ -119,6 +119,23 @@ Public self-registration is disabled on client installations.
 ## Renewal and recovery
 
 Keep encrypted backups of the database, persistent volumes and configuration.
+Treat the database and object storage as one recovery set: the Compose stack
+stores application records in `postgres_data` and uploaded objects/recordings
+in `minio_data`. An unmatched restore can leave database references pointing
+to missing objects. `redis_data` can contain queue and owner-check state; its
+recovery must be planned with the owner to avoid replaying old work. Preserve
+the `.env` secrets, signed manifest, exact image digests and the enrolled
+identity key separately in encrypted, access-controlled backups. The identity
+key must be restored with its original group and permissions; ask the owner
+for recovery if it is unavailable.
+
+Arrange a maintenance window, stop new calls and background writes, and use
+the owner's approved, version-compatible backup process to obtain a consistent
+set. Test restoration on an isolated host without live telephony or outbound
+jobs before relying on it. The package does not yet provide an accepted backup
+and restore procedure; obtain owner assistance rather than assuming copying
+live database files or rolling back an image is sufficient.
+
 For an update, use the supplied matching API/UI digests and signed manifest,
 back up first, then recreate the services with Docker Compose. Before applying
 Alembic migrations, API startup checks the current database revision against
