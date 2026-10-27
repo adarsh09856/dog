@@ -83,6 +83,14 @@ if (owner.length || privileged.length) {
   throw new Error(`Owner-only UI routes shipped: ${[...owner, ...privileged].join(', ')}`);
 }
 if (!routes.includes('/page')) throw new Error('Public page missing from client UI');
+const routing = JSON.parse(fs.readFileSync('/app/.next/routes-manifest.json', 'utf8'));
+const rewrites = routing.rewrites || {};
+const deployedRewrites = Array.isArray(rewrites)
+  ? rewrites
+  : Object.values(rewrites).flat();
+if (deployedRewrites.length) {
+  throw new Error(`Client UI image contains unexpected proxy rewrites: ${deployedRewrites.map(route => route.source).join(', ')}`);
+}
 console.log(`Client UI route boundary verified (${routes.length} routes)`);
 """
     print(_run("docker", "run", "--rm", "--network", "none", "--entrypoint", "node", image, "-e", code))
