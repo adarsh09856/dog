@@ -221,7 +221,7 @@ export default function OverviewPage() {
                 </Button>
                 <Button asChild variant="outline" size="sm" className="gap-1.5">
                   <Link href="/billing-sovereign">
-                    <Wallet className="h-4 w-4 text-emerald-500" /> Top Up
+                    <Wallet className="h-4 w-4 text-primary" /> Top Up
                   </Link>
                 </Button>
               </div>
@@ -230,7 +230,7 @@ export default function OverviewPage() {
           <CardContent className="pt-0">
             <div className="flex flex-wrap items-center gap-3 border-t border-border/40 pt-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5 font-medium text-foreground">
-                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                <ShieldCheck className="h-4 w-4 text-primary" />
                 Hosted or customer-managed deployment
               </span>
               <span>•</span>
@@ -249,7 +249,7 @@ export default function OverviewPage() {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Voice Minutes
               </span>
-              <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <Wallet className="h-4 w-4" />
               </div>
             </div>

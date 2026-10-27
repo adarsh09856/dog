@@ -295,3 +295,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Worker audit found `complete_inactive_text_chat_session` reloaded a queued text-chat run and could execute completion integrations without checking whether the client installation's `voice` feature or owner approval had changed after enqueue. The job now revalidates both before looking up run/session data. A regression first failed because the worker reached the database without invoking the gate, then passed after the gate was added.
 - The focused regression plus the two neighboring completion tests passed **3/3**. A broader `--noconftest` file run passed 9 tests; its one DB-query test could not set up because disabling conftest removes its required `async_session` fixture. Python compilation and `git diff --check` passed. Database-backed inactivity query and deployed client worker acceptance remain open.
+
+## 27 October 2026 - overview theme accents
+
+- Replaced non-semantic green highlights on the Top Up action, deployment capability, and Voice Minutes tile with the configured primary brand tokens. Success/error colors remain reserved for actual state.
+- Overview UI tests passed **3/3**, including the new theme-token assertion; TypeScript and scoped ESLint passed. Saved-brand browser verification remains open.

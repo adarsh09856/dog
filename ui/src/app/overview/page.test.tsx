@@ -60,4 +60,20 @@ describe("workspace overview", () => {
     const configureLink = await screen.findByRole("link", { name: "Configure models" });
     expect(configureLink.getAttribute("href")).toBe("/model-configurations");
   });
+
+  it("uses the configured brand theme for overview capability and wallet accents", async () => {
+    mocks.getStats.mockResolvedValue(emptyStats);
+    render(<OverviewPage />);
+
+    const topUp = await screen.findByRole("link", { name: "Top Up" });
+    expect(topUp.querySelector("svg")?.classList.contains("text-primary")).toBe(true);
+
+    const deployment = screen.getByText("Hosted or customer-managed deployment");
+    expect(deployment.querySelector("svg")?.classList.contains("text-primary")).toBe(true);
+
+    const voiceMinutes = screen.getByText("Voice Minutes").parentElement?.parentElement;
+    const walletIcon = voiceMinutes?.querySelector(".h-8.w-8");
+    expect(walletIcon?.classList.contains("bg-primary/10")).toBe(true);
+    expect(walletIcon?.classList.contains("text-primary")).toBe(true);
+  });
 });
