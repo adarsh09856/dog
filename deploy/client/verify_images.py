@@ -18,6 +18,8 @@ def _run(*args: str) -> str:
 def verify_api(image: str) -> None:
     code = """
 import os
+import ctypes
+import subprocess
 from pathlib import Path
 from api.services.deployment_edition import IMAGE_EDITION
 
@@ -26,6 +28,10 @@ assert os.environ.get('KODEWAVES_EDITION') == 'client', 'API image is not client
 assert IMAGE_EDITION == 'client', 'API image edition is not pinned to client'
 assert os.getuid() != 0, 'API image must run as a non-root user'
 assert os.getuid() == 10001, 'API runtime UID must match the client cache volume owner'
+rnnoise = root / 'api/native/rnnoise/librnnoise.so'
+assert rnnoise.is_file() and not rnnoise.is_symlink(), 'Client RNNoise library must be a regular file'
+ctypes.CDLL(str(rnnoise))
+subprocess.run(['node', '-e', "require('/app/api/mcp_server/ts_validator/node_modules/typescript')"], check=True)
 for path in ('api/routes/admin', 'api/routes/superuser.py', 'api/tests',
              'api/db/owner_user_management.py', 'api/db/saas_plan_catalog.py',
              'scripts/create_superuser.py'):

@@ -188,6 +188,16 @@ COPY --from=api-source --chown=kodewaves:kodewaves /app/scripts ./scripts
 # The validator runs as a short-lived subprocess from api/mcp_server/ts_bridge.py.
 COPY --from=ts-deps --chown=kodewaves:kodewaves /ts_validator/node_modules ./api/mcp_server/ts_validator/node_modules
 
+# The client integrity scanner rejects symlinks in protected application files.
+# The shipped RNNoise names must still resolve to the library; npm's .bin links
+# are not used by the validator, which invokes its TypeScript entry with node.
+# Materialize the two library aliases and remove only the unused CLI links.
+RUN if [ "$KODEWAVES_EDITION" = "client" ]; then \
+      cp --remove-destination /app/api/native/rnnoise/librnnoise.so.0.4.1 /app/api/native/rnnoise/librnnoise.so && \
+      cp --remove-destination /app/api/native/rnnoise/librnnoise.so.0.4.1 /app/api/native/rnnoise/librnnoise.so.0 && \
+      rm -rf /app/api/mcp_server/ts_validator/node_modules/.bin; \
+    fi
+
 # Product documentation — read at runtime by the MCP docs tools
 # (search_kodewaves_docs / fetch_kodewaves_doc) so agents can learn Kodewaves.
 COPY --chown=kodewaves:kodewaves ./docs ./docs
