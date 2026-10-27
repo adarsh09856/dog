@@ -14,7 +14,6 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -42,6 +41,7 @@ from api.db.user_client import UserClient
 from api.db.client_user_management import list_workspace_users, set_workspace_user_active
 from api.db import db_client
 from api.services import client_creation_limits
+from api.services import installation_license
 from api.routes.admin import client_installation_check
 from api.services.installation_identity import sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status_claims
@@ -328,8 +328,25 @@ async def test_concurrent_client_signups_cannot_exceed_signed_seat_limit(monkeyp
                 is_superuser BOOLEAN, is_active BOOLEAN NOT NULL, email VARCHAR, password_hash VARCHAR
             )"""))
         monkeypatch.setattr(client_creation_limits, "KODEWAVES_EDITION", "client")
-        monkeypatch.setattr(client_creation_limits, "load_license", lambda: SimpleNamespace(limits={"max_seats": 2}))
-        monkeypatch.setattr(client_creation_limits, "validate_installation_license", lambda _: None)
+        key = Ed25519PrivateKey.generate()
+        private_key = key.private_bytes(
+            serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+        )
+        public_key = base64.urlsafe_b64encode(key.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw
+        )).rstrip(b"=").decode("ascii")
+        now = int(time.time())
+        token = issue_license_token({
+            "iat": now - 1, "exp": now + 3600, "edition": "client",
+            "installation_id": "seat-test-1", "customer_id": "customer-1",
+            "domains": ["customer.example"], "features": ["voice"],
+            "limits": {"max_seats": 2},
+        }, private_key)
+        monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", token)
+        monkeypatch.setenv("KODEWAVES_INSTALLATION_ID", "seat-test-1")
+        monkeypatch.setattr(installation_license, "runtime_edition", lambda: "client")
+        monkeypatch.setattr(installation_license, "trusted_license_public_keys", lambda: (public_key,))
+        monkeypatch.setattr(installation_license, "get_installation_binding", lambda: "customer.example")
         monkeypatch.setattr(client_creation_limits, "require_current_owner_status", AsyncMock())
         client = UserClient.__new__(UserClient)
         client.async_session = async_sessionmaker(engine)
