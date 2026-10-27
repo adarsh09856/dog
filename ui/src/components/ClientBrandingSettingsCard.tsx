@@ -36,10 +36,11 @@ export function ClientBrandingSettingsCard() {
     setSaved(false);
     setError("");
     try {
-      await apiFetch<ClientBranding>("/installation/branding", {
+      const savedBranding = await apiFetch<ClientBranding>("/installation/branding", {
         method: "PUT",
         body: JSON.stringify(branding),
       });
+      setBranding(savedBranding);
       notifyBrandingChanged();
       setSaved(true);
       setSaving(false);

@@ -435,3 +435,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - The official standalone Compose CLI v5.6.1 rendered the base client configuration together with the identity overlay using a disposable 32-byte test key. Both API and UI received the configured group and the same read-only key mount, with host-path creation disabled; the temporary inputs were removed.
 - This verifies Compose interpolation only. Linux container access to the group-owned key, live enrollment, customer installation and recovery remain open. No Docker containers or production services were started.
+
+## 27 October 2026 — show saved branding values
+
+- The client branding form now replaces its local fields with the server's saved response before broadcasting the brand refresh, so normalized names and colors match the persisted settings.
+- The branding form and shared branding context suites passed **4 tests**; changed-file ESLint passed. Live persistence across browser sessions remains open.
