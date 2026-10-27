@@ -151,6 +151,8 @@ async function verifyRelease({ base = root, releaseManifestPath = manifestPath, 
 async function reportFailure(error, {
   ownerStatusUrl,
   licenseToken,
+  identityKeyPath,
+  installationId,
   fetchImplementation = fetch,
 } = {}) {
   try {
@@ -164,10 +166,24 @@ async function reportFailure(error, {
       reason: mismatch ? "modified_file" : missing ? "missing_file" : "invalid_manifest",
       component: mismatch?.[1] || (missing ? "ui/runtime" : "ui/manifest"),
     };
+    const nonce = randomBytes(32).toString("base64url");
+    const body = { nonce, integrity_ok: false, integrity_finding: finding };
+    const keyPath = identityKeyPath ?? process.env.KODEWAVES_INSTALLATION_KEY_FILE;
+    if (keyPath) {
+      const id = installationId ?? process.env.KODEWAVES_INSTALLATION_ID;
+      if (!id) throw new Error("installation identity is unavailable");
+      const issuedAt = Math.floor(Date.now() / 1000);
+      const fields = {
+        installation_id: id, license_token: token, nonce, issued_at: issuedAt,
+        integrity_ok: false, integrity_finding: finding,
+      };
+      body.proof_issued_at = issuedAt;
+      body.proof_signature = signOwnerCheck(await readFile(keyPath), fields);
+    }
     const response = await fetchImplementation(statusUrl, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify({ nonce: randomBytes(32).toString("base64url"), integrity_ok: false, integrity_finding: finding }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) throw new Error(`owner returned HTTP ${response.status}`);

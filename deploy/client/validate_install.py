@@ -7,7 +7,9 @@ import argparse
 import base64
 import binascii
 import ipaddress
+import os
 import re
+import stat
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -62,12 +64,42 @@ def parse_env(path: Path) -> dict[str, str]:
     return values
 
 
+def validate_identity_key(env: dict[str, str]) -> list[str]:
+    """Validate the optional host key shared read-only with API and UI."""
+    key_file = env.get("CLIENT_IDENTITY_KEY_FILE", "").strip()
+    group = env.get("CLIENT_IDENTITY_GID", "").strip()
+    if not key_file and not group:
+        return []
+    if not key_file or not group:
+        return ["CLIENT_IDENTITY_KEY_FILE and CLIENT_IDENTITY_GID must be set together"]
+    if not re.fullmatch(r"[0-9]{1,10}", group) or not 1 <= int(group) <= 2**31 - 1:
+        return ["CLIENT_IDENTITY_GID must be a nonzero numeric group ID"]
+    if "$" in key_file:
+        return ["CLIENT_IDENTITY_KEY_FILE must not contain Compose interpolation characters"]
+    path = Path(key_file)
+    if not path.is_absolute():
+        return ["CLIENT_IDENTITY_KEY_FILE must be an absolute path"]
+    try:
+        metadata = path.lstat()
+    except OSError:
+        return ["CLIENT_IDENTITY_KEY_FILE must exist before starting the identity overlay"]
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != 32:
+        return ["CLIENT_IDENTITY_KEY_FILE must be a regular 32-byte private key, not a symlink"]
+    if os.name != "nt" and (
+        metadata.st_gid != int(group) or not metadata.st_mode & stat.S_IRGRP
+        or metadata.st_mode & (stat.S_IWGRP | stat.S_IXGRP | stat.S_IRWXO)
+    ):
+        return ["CLIENT_IDENTITY_KEY_FILE must be group-readable by CLIENT_IDENTITY_GID and inaccessible to others"]
+    return []
+
+
 def validate(env_path: Path, compose_path: Path) -> list[str]:
     errors: list[str] = []
     try:
         env = parse_env(env_path)
     except (OSError, ValueError) as exc:
         return [str(exc)]
+    errors.extend(validate_identity_key(env))
 
     try:
         compose_text = compose_path.read_text(encoding="utf-8")

@@ -71,6 +71,46 @@ def signing_keys():
 
 
 @pytest.mark.asyncio
+async def test_owner_poll_signs_when_installation_key_is_configured(monkeypatch, tmp_path):
+    from api.services.installation_identity import verify_owner_check
+
+    owner_private, owner_public = signing_keys()
+    client_private, client_public = signing_keys()
+    key_path = tmp_path / "client.key"
+    key_path.write_bytes(client_private)
+    now = int(time.time())
+    token = issue_license_token({
+        "iat": now - 1, "exp": now + 3600, "edition": "client",
+        "installation_id": "client-1", "customer_id": "buyer-1",
+        "domains": ["example.com"], "features": [], "limits": {},
+    }, owner_private)
+    monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", token)
+    monkeypatch.setenv("KODEWAVES_INSTALLATION_KEY_FILE", str(key_path))
+    monkeypatch.setattr(owner_status, "_trusted_owner_key", lambda: (owner_public,))
+    monkeypatch.setattr(owner_status, "_status_url", lambda: "https://owner.example.com/check")
+    monkeypatch.setattr(owner_status, "validate_installation_license", lambda _license: None)
+    monkeypatch.setattr(owner_status, "verify_configured_release", lambda: None)
+
+    class FakeHttp:
+        async def post(self, _url, **kwargs):
+            body = kwargs["json"]
+            verify_owner_check(
+                client_public, body["proof_signature"], installation_id="client-1", license_token=token,
+                nonce=body["nonce"], issued_at=body["proof_issued_at"], integrity_ok=True,
+                integrity_finding=None,
+            )
+            signed = issue_license_token({
+                "kind": "installation_status", "installation_id": "client-1",
+                "license_sha256": hashlib.sha256(token.encode("ascii")).hexdigest(),
+                "nonce": body["nonce"], "revoked": True,
+                "issued_at": now, "expires_at": now + 300,
+            }, owner_private)
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"signed_status": signed})
+
+    assert await owner_status.poll_owner_status_once(FakeRedis(), FakeHttp()) is True
+
+
+@pytest.mark.asyncio
 async def test_owner_poll_saves_verified_response_and_revocation_blocks_new_calls(monkeypatch):
     monkeypatch.setattr(owner_status, "_logged_initial_owner_check", False)
     messages = []

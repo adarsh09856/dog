@@ -11,6 +11,7 @@ import hashlib
 import json
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 from cryptography.exceptions import InvalidSignature
@@ -94,6 +95,27 @@ def sign_owner_check(private_key: bytes, **fields: Any) -> str:
     except (TypeError, ValueError) as exc:
         raise InstallationIdentityError("Invalid installation private key") from exc
     return _encode_urlsafe(key.sign(owner_check_message(**fields)))
+
+
+def owner_check_payload(
+    *, installation_id: str, license_token: str, nonce: str, integrity_ok: bool,
+    integrity_finding: dict[str, Any] | None, private_key_path: str = "", issued_at: int | None = None,
+) -> dict[str, Any]:
+    """Attach a proof when configured; never fall back to bearer-only on key errors."""
+    payload = {"nonce": nonce, "integrity_ok": integrity_ok, "integrity_finding": integrity_finding}
+    if not private_key_path:
+        return payload
+    try:
+        private_key = Path(private_key_path).read_bytes()
+    except OSError as exc:
+        raise InstallationIdentityError("Installation private key is unavailable") from exc
+    timestamp = int(time.time()) if issued_at is None else issued_at
+    payload["proof_issued_at"] = timestamp
+    payload["proof_signature"] = sign_owner_check(
+        private_key, installation_id=installation_id, license_token=license_token,
+        nonce=nonce, issued_at=timestamp, integrity_ok=integrity_ok, integrity_finding=integrity_finding,
+    )
+    return payload
 
 
 def enrollment_message(

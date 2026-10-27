@@ -1,5 +1,6 @@
 import base64
 import json
+from types import SimpleNamespace
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -260,6 +261,38 @@ def test_failed_startup_reports_bounded_finding_to_pinned_owner_endpoint(monkeyp
     assert sent[0][1]["headers"] == {"Authorization": "Bearer signed-token"}
     assert sent[0][1]["json"]["integrity_finding"]["component"] == "api/app.py"
     assert sent[0][1]["timeout"] == 5.0
+
+
+def test_failed_startup_signs_alert_when_installation_key_is_configured(monkeypatch, tmp_path):
+    import httpx
+
+    from api.services import release_integrity
+    from api.services.installation_identity import verify_owner_check
+
+    private = Ed25519PrivateKey.generate()
+    key_path = tmp_path / "client.key"
+    key_path.write_bytes(private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+    ))
+    public = base64.urlsafe_b64encode(private.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw
+    )).rstrip(b"=").decode("ascii")
+    sent = []
+    monkeypatch.setattr(release_integrity, "IMAGE_EDITION", "client")
+    monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", "signed-token")
+    monkeypatch.setenv("KODEWAVES_INSTALLATION_ID", "client-1")
+    monkeypatch.setenv("KODEWAVES_INSTALLATION_KEY_FILE", str(key_path))
+    monkeypatch.setattr(release_integrity, "trusted_owner_status_url", lambda: "https://owner.example.com/check")
+    monkeypatch.setattr(httpx, "post", lambda _url, **kwargs: (
+        sent.append(kwargs) or SimpleNamespace(raise_for_status=lambda: None)
+    ))
+    report_startup_integrity_failure(ReleaseIntegrityError("modified", reason="modified_file", component="api/app.py"))
+    body = sent[0]["json"]
+    verify_owner_check(
+        public, body["proof_signature"], installation_id="client-1", license_token="signed-token",
+        nonce=body["nonce"], issued_at=body["proof_issued_at"], integrity_ok=False,
+        integrity_finding=body["integrity_finding"],
+    )
 
 
 def test_direct_app_startup_reports_and_rejects_integrity_failure(monkeypatch):

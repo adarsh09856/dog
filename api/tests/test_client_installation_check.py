@@ -136,7 +136,7 @@ async def test_owner_records_integrity_alert_and_does_not_clear_it(monkeypatch):
     record = SimpleNamespace(
         installation_id="client-1", revoked_at=None, integrity_failed_at=None,
         last_seen_at=None, updated_at=None,
-        expires_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC), installation_public_key=None,
     )
     session = SimpleNamespace(
         execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: record)),

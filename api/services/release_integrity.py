@@ -243,14 +243,15 @@ def report_startup_integrity_failure(error: ReleaseIntegrityError) -> None:
         return
     try:
         import httpx
+        from api.services.installation_identity import owner_check_payload
 
         response = httpx.post(
             trusted_owner_status_url(),
-            json={
-                "nonce": secrets.token_urlsafe(32),
-                "integrity_ok": False,
-                "integrity_finding": error.finding(),
-            },
+            json=owner_check_payload(
+                installation_id=os.getenv("KODEWAVES_INSTALLATION_ID", ""), license_token=token,
+                nonce=secrets.token_urlsafe(32), integrity_ok=False, integrity_finding=error.finding(),
+                private_key_path=os.getenv("KODEWAVES_INSTALLATION_KEY_FILE", ""),
+            ),
             headers={"Authorization": f"Bearer {token}"},
             timeout=5.0,
         )

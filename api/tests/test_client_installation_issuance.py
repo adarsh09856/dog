@@ -28,6 +28,8 @@ from api.services.installation_license import load_license
         {"features": ["voice"], "limits": {"max_concurrent_calls": 2, "max_agents": True}},
         {"features": ["campaigns", "voice"], "limits": {"max_concurrent_calls": 2}},
         {"installation_id": "  "},
+        {"installation_id": "ab"},
+        {"installation_id": "client/invalid"},
     ],
 )
 def test_owner_issuance_rejects_unusable_entitlements(changes):

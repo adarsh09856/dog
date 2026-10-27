@@ -25,6 +25,8 @@ interface InstallationRecord {
   last_seen_at: string | null;
   observed_ip?: string | null;
   integrity_failed_at: string | null;
+  identity_enrolled?: boolean;
+  enrollment_expires_at?: string | null;
 }
 
 interface IssuedLicense {
@@ -40,6 +42,12 @@ interface DomainChallenge {
   record_name: string;
   record_type: "TXT";
   record_value: string;
+  expires_at: number;
+}
+
+interface EnrollmentToken {
+  installation_id: string;
+  enrollment_token: string;
   expires_at: number;
 }
 
@@ -65,8 +73,10 @@ export default function ClientInstallationsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [renewingId, setRenewingId] = useState<string | null>(null);
+  const [enrollingId, setEnrollingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [issued, setIssued] = useState<IssuedLicense | null>(null);
+  const [enrollment, setEnrollment] = useState<EnrollmentToken | null>(null);
   const [challenge, setChallenge] = useState<DomainChallenge | null>(null);
   const [challengeBusy, setChallengeBusy] = useState(false);
   const [domainVerified, setDomainVerified] = useState(false);
@@ -203,6 +213,24 @@ export default function ClientInstallationsPage() {
     }
   };
 
+  const createEnrollment = async (id: string) => {
+    setEnrollingId(id);
+    setEnrollment(null);
+    setError("");
+    try {
+      const result = await apiFetch<EnrollmentToken>(
+        `/admin/client-installations/${encodeURIComponent(id)}/enrollment-token`,
+        { method: "POST" },
+      );
+      setEnrollment(result);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to issue enrollment token.");
+    } finally {
+      setEnrollingId(null);
+    }
+  };
+
   const acknowledgeAlert = async (id: number) => {
     setError("");
     try {
@@ -228,7 +256,7 @@ export default function ClientInstallationsPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={issue} className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2"><Label htmlFor="installation-id">Installation ID</Label><Input id="installation-id" required value={installationId} onChange={(event) => setInstallationId(event.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="installation-id">Installation ID</Label><Input id="installation-id" required minLength={3} maxLength={100} pattern="[A-Za-z0-9][A-Za-z0-9._:-]{2,99}" title="Use 3–100 letters, digits, dots, underscores, colons or hyphens, starting with a letter or digit." value={installationId} onChange={(event) => setInstallationId(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="customer-id">Customer ID</Label><Input id="customer-id" required value={customerId} onChange={(event) => { setCustomerId(event.target.value); setChallenge(null); setDomainVerified(false); }} /></div>
             <div className="space-y-2"><Label htmlFor="domain">Licensed domain</Label><Input id="domain" required placeholder="client.example.com" value={domain} onChange={(event) => { setDomain(event.target.value); setChallenge(null); setDomainVerified(false); }} /></div>
             <div className="space-y-2 sm:col-span-2"><Button type="button" variant="outline" disabled={challengeBusy || !customerId.trim() || !domain.trim()} onClick={() => void createChallenge()}>{challengeBusy ? "Checking DNS…" : "Create DNS challenge"}</Button></div>
@@ -252,6 +280,10 @@ export default function ClientInstallationsPage() {
       </Card>
 
       {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+      {enrollment && <Card>
+        <CardHeader><CardTitle className="text-base">Enrollment token for {enrollment.installation_id}</CardTitle><CardDescription>Shown once; expires {new Date(enrollment.expires_at * 1000).toLocaleString()}. Share it privately with the installation operator. Creating another token invalidates this one.</CardDescription></CardHeader>
+        <CardContent className="space-y-3"><div><Label htmlFor="enrollment-token">One-time enrollment token</Label><Input id="enrollment-token" readOnly value={enrollment.enrollment_token} className="font-mono text-xs" /></div><Button variant="outline" onClick={() => setEnrollment(null)}>I have saved the token</Button></CardContent>
+      </Card>}
       {alerts.length > 0 && <Card className="border-destructive/50">
         <CardHeader><CardTitle className="flex items-center gap-2 text-base text-destructive"><Ban className="h-4 w-4" />Installation integrity alerts ({alerts.length})</CardTitle><CardDescription>These reports contain protected-file paths and hashes only. Acknowledging an alert does not re-enable the client installation.</CardDescription></CardHeader>
         <CardContent className="space-y-3">
@@ -277,7 +309,7 @@ export default function ClientInstallationsPage() {
       )}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-base">Issued installations</CardTitle><CardDescription>Metadata only; signed tokens are not stored here. Online clients check owner status periodically; offline clients use the configured grace period.</CardDescription></div><Button variant="outline" size="sm" onClick={() => void refresh()}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button></CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-base">Issued installations</CardTitle><CardDescription>Metadata only; signed tokens are not stored here. Enroll an identity only with an approved release configured to use that key: owner checks require its proof after enrollment.</CardDescription></div><Button variant="outline" size="sm" onClick={() => void refresh()}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button></CardHeader>
         <CardContent className="space-y-3">
           {loading && <p className="text-sm text-muted-foreground">Loading installations…</p>}
           {!loading && records.length === 0 && <p className="text-sm text-muted-foreground">No installations issued yet.</p>}
@@ -289,11 +321,12 @@ export default function ClientInstallationsPage() {
               <p className="mt-1 text-muted-foreground">{item.features.join(", ") || "No features"} · {item.limits.max_concurrent_calls ?? 0} concurrent calls</p>
               <p className="mt-1 text-muted-foreground">Provisioned caps: {item.limits.max_seats ?? "unlimited"} users · {item.limits.max_workspaces ?? "unlimited"} workspaces · {item.limits.max_agents ?? "unlimited"} agents · {item.limits.max_campaigns ?? "unlimited"} campaigns</p>
               <p className="mt-1 text-muted-foreground">{item.last_seen_at ? `Last owner check ${new Date(item.last_seen_at).toLocaleString()}` : "No client check received"}</p>
+              <p className="mt-1 text-muted-foreground">{item.identity_enrolled ? "Installation identity enrolled" : "Installation identity not enrolled"}{!item.identity_enrolled && item.enrollment_expires_at ? ` · Token expires ${new Date(item.enrollment_expires_at).toLocaleString()}` : ""}</p>
               {item.observed_ip && <p className="mt-1 text-muted-foreground">Last observed source IP {item.observed_ip}</p>}
               {item.renewed_at && <p className="mt-1 text-muted-foreground">Renewed {new Date(item.renewed_at).toLocaleString()}</p>}
               {item.previous_token_valid_until && new Date(item.previous_token_valid_until).getTime() > Date.now() && <p className="mt-1 text-muted-foreground">Previous token handover ends {new Date(item.previous_token_valid_until).toLocaleString()}</p>}
               {item.integrity_failed_at && <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive"><p className="font-semibold">Integrity alert received {new Date(item.integrity_failed_at).toLocaleString()}.</p><p className="mt-1">This installation is blocked and cannot be renewed. Preserve the incident, restore a clean approved release, and issue a replacement with a new installation ID. Acknowledgment records review only.</p></div>}
-              {item.revoked_at ? <p className="mt-2 text-destructive">Marked revoked {new Date(item.revoked_at).toLocaleString()}. The client applies this after its next successful owner check.</p> : <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={renewingId === item.installation_id || Boolean(item.integrity_failed_at) || Boolean(item.previous_token_valid_until && new Date(item.previous_token_valid_until).getTime() > Date.now())} onClick={() => void renew(item)}>{renewingId === item.installation_id ? "Renewing…" : "Renew for 30 days"}</Button><Button variant="destructive" size="sm" disabled={revokingId === item.installation_id} onClick={() => void revoke(item.installation_id)}><Ban className="mr-2 h-4 w-4" />{revokingId === item.installation_id ? "Recording…" : "Mark revoked"}</Button></div>}
+              {item.revoked_at ? <p className="mt-2 text-destructive">Marked revoked {new Date(item.revoked_at).toLocaleString()}. The client applies this after its next successful owner check.</p> : <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={enrollingId === item.installation_id || Boolean(item.identity_enrolled) || Boolean(item.integrity_failed_at) || item.expires_at * 1000 <= Date.now()} onClick={() => void createEnrollment(item.installation_id)}>{enrollingId === item.installation_id ? "Creating…" : "Create enrollment token"}</Button><Button variant="outline" size="sm" disabled={renewingId === item.installation_id || Boolean(item.integrity_failed_at) || Boolean(item.previous_token_valid_until && new Date(item.previous_token_valid_until).getTime() > Date.now())} onClick={() => void renew(item)}>{renewingId === item.installation_id ? "Renewing…" : "Renew for 30 days"}</Button><Button variant="destructive" size="sm" disabled={revokingId === item.installation_id} onClick={() => void revoke(item.installation_id)}><Ban className="mr-2 h-4 w-4" />{revokingId === item.installation_id ? "Recording…" : "Mark revoked"}</Button></div>}
             </div>
           ))}
         </CardContent>

@@ -64,6 +64,18 @@ class ClientDomainChallengeModel(Base):
     created_at = Column(DateTime(timezone=True), nullable=False)
 
 
+class ClientInstallationNonceModel(Base):
+    """Short-lived replay protection for signed owner checks."""
+
+    __tablename__ = "client_installation_nonces"
+
+    installation_id = Column(
+        String(100), ForeignKey("client_installations.installation_id", ondelete="CASCADE"), primary_key=True
+    )
+    nonce_fingerprint = Column(String(64), primary_key=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
 class ClientIntegrityAlertModel(Base):
     """Deduplicated owner notification for protected client-file changes."""
 

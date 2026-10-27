@@ -106,6 +106,7 @@ def package_installer(
     files = {
         "README.md": (directory / "INSTALL.md").read_bytes(),
         "docker-compose.client.yaml": (directory / "docker-compose.client.yaml").read_bytes(),
+        "docker-compose.identity.yaml": (directory / "docker-compose.identity.yaml").read_bytes(),
         "Caddyfile": (directory / "Caddyfile").read_bytes(),
         "validate_install.py": (directory / "validate_install.py").read_bytes(),
         ".env.example": env_template.encode("utf-8"),

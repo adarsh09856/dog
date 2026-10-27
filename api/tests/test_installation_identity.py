@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from api.services.installation_identity import (
     InstallationIdentityError,
     owner_check_message,
+    owner_check_payload,
     sign_enrollment,
     sign_owner_check,
     verify_enrollment,
@@ -61,6 +62,26 @@ def test_proof_rejects_invalid_encoding_stale_time_and_inconsistent_integrity(id
         verify_owner_check(public, signature, now=fields["issued_at"] + 91, **fields)
     with pytest.raises(InstallationIdentityError):
         owner_check_message(**{**fields, "integrity_ok": True})
+
+
+def test_configured_private_key_signs_and_missing_key_never_falls_back(identity, tmp_path):
+    private, public, fields = identity
+    key_path = tmp_path / "installation.key"
+    key_path.write_bytes(private)
+    payload = owner_check_payload(
+        installation_id=fields["installation_id"], license_token=fields["license_token"],
+        nonce=fields["nonce"], integrity_ok=fields["integrity_ok"],
+        integrity_finding=fields["integrity_finding"], private_key_path=str(key_path),
+        issued_at=fields["issued_at"],
+    )
+    verify_owner_check(public, payload["proof_signature"], now=fields["issued_at"], **fields)
+    key_path.unlink()
+    with pytest.raises(InstallationIdentityError):
+        owner_check_payload(
+            installation_id=fields["installation_id"], license_token=fields["license_token"],
+            nonce=fields["nonce"], integrity_ok=True, integrity_finding=None,
+            private_key_path=str(key_path),
+        )
 
 
 def test_enrollment_binds_one_time_token_license_and_key(identity):

@@ -5,13 +5,14 @@ import hmac
 import json
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import (
     ClientDomainChallengeModel,
     ClientInstallationModel,
+    ClientInstallationNonceModel,
     ClientIntegrityAlertModel,
 )
 
@@ -84,6 +85,8 @@ async def list_client_installation_records() -> list[dict]:
                 "limits": item.limits,
                 "expires_at": int(item.expires_at.timestamp()),
                 "token_fingerprint": item.token_fingerprint,
+                "identity_enrolled": item.installation_public_key is not None,
+                "enrollment_expires_at": item.enrollment_expires_at.isoformat() if item.enrollment_expires_at else None,
                 "renewed_at": item.renewed_at.isoformat() if item.renewed_at else None,
                 "previous_token_valid_until": item.previous_token_valid_until.isoformat() if item.previous_token_valid_until else None,
                 "created_at": item.created_at.isoformat(),
@@ -165,6 +168,7 @@ async def get_client_installation_record(installation_id: str) -> dict | None:
             "limits": record.limits,
             "expires_at": int(record.expires_at.timestamp()),
             "token_fingerprint": record.token_fingerprint,
+            "installation_public_key": record.installation_public_key,
             "previous_token_valid_until": record.previous_token_valid_until,
             "revoked_at": record.revoked_at,
             "integrity_failed_at": record.integrity_failed_at,
@@ -222,6 +226,8 @@ async def revoke_client_installation_record(installation_id: str, user_id: int) 
 async def record_client_installation_check(
     installation_id: str, fingerprint: str, *, integrity_ok: bool,
     integrity_finding: dict | None = None, observed_ip: str | None = None,
+    expected_public_key: str | None = None, nonce_fingerprint: str | None = None,
+    nonce_expires_at: datetime | None = None,
 ) -> dict | None:
     """Record verified-client observation and latch any integrity alert."""
     async with kodewaves_db_client.get_session() as session:
@@ -238,9 +244,26 @@ async def record_client_installation_check(
             ).with_for_update()
         )
         record = result.scalar_one_or_none()
-        if record is None:
+        if record is None or record.installation_public_key != expected_public_key:
             return None
         now = datetime.now(UTC)
+        if expected_public_key is not None:
+            if not nonce_fingerprint or nonce_expires_at is None or _utc(nonce_expires_at) <= now:
+                return None
+            await session.execute(delete(ClientInstallationNonceModel).where(
+                ClientInstallationNonceModel.installation_id == installation_id,
+                ClientInstallationNonceModel.expires_at <= now,
+            ))
+            inserted = await session.execute(
+                insert(ClientInstallationNonceModel).values(
+                    installation_id=installation_id, nonce_fingerprint=nonce_fingerprint,
+                    expires_at=nonce_expires_at,
+                ).on_conflict_do_nothing(
+                    index_elements=["installation_id", "nonce_fingerprint"]
+                )
+            )
+            if inserted.rowcount != 1:
+                return None
         previous_token = getattr(record, "previous_token_fingerprint", None) == fingerprint
         record.last_seen_at = now
         record.observed_ip = observed_ip

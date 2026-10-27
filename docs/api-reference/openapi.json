@@ -8540,6 +8540,185 @@
         "title": "InitiateCallRequest",
         "type": "object"
       },
+      "InstallationCheckRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "integrity_finding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntegrityFinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "integrity_ok": {
+            "title": "Integrity Ok",
+            "type": "boolean"
+          },
+          "nonce": {
+            "maxLength": 128,
+            "minLength": 32,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Nonce",
+            "type": "string"
+          },
+          "proof_issued_at": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740991.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof Issued At"
+          },
+          "proof_signature": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9_-]{86}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof Signature"
+          }
+        },
+        "required": [
+          "nonce",
+          "integrity_ok"
+        ],
+        "title": "InstallationCheckRequest",
+        "type": "object"
+      },
+      "InstallationEnrollmentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enrollment_token": {
+            "maxLength": 128,
+            "minLength": 32,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Enrollment Token",
+            "type": "string"
+          },
+          "issued_at": {
+            "maximum": 9007199254740991.0,
+            "minimum": 0.0,
+            "title": "Issued At",
+            "type": "integer"
+          },
+          "nonce": {
+            "maxLength": 128,
+            "minLength": 32,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "title": "Nonce",
+            "type": "string"
+          },
+          "public_key": {
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "title": "Public Key",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^[A-Za-z0-9_-]{86}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enrollment_token",
+          "public_key",
+          "nonce",
+          "issued_at",
+          "signature"
+        ],
+        "title": "InstallationEnrollmentRequest",
+        "type": "object"
+      },
+      "InstallationEnrollmentTokenResponse": {
+        "properties": {
+          "enrollment_token": {
+            "title": "Enrollment Token",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "integer"
+          },
+          "installation_id": {
+            "title": "Installation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "installation_id",
+          "enrollment_token",
+          "expires_at"
+        ],
+        "title": "InstallationEnrollmentTokenResponse",
+        "type": "object"
+      },
+      "IntegrityFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "maxLength": 500,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_./-]+$",
+            "title": "Component",
+            "type": "string"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sha256"
+          },
+          "observed_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Sha256"
+          },
+          "reason": {
+            "enum": [
+              "unknown",
+              "modified_file",
+              "missing_file",
+              "added_file",
+              "invalid_manifest",
+              "missing_manifest",
+              "missing_trust_root"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "component"
+        ],
+        "title": "IntegrityFinding",
+        "type": "object"
+      },
       "InworldTTSConfiguration": {
         "description": "Inworld AI streaming text-to-speech with built-in and cloned voices. Defaults to the Ashley system voice on inworld-tts-2.",
         "properties": {
@@ -20444,6 +20623,268 @@
         ]
       }
     },
+    "/admin/client-installations/check": {
+      "post": {
+        "description": "Return a short-lived signed status bound to this token and request nonce.",
+        "operationId": "check_client_installation_admin_client_installations_check_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Check Client Installation Admin Client Installations Check Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Client Installation",
+        "tags": [
+          "main",
+          "admin",
+          "client-installation-check"
+        ]
+      }
+    },
+    "/admin/client-installations/enroll": {
+      "post": {
+        "description": "Bind a client key after verifying license, one-time secret and key possession.",
+        "operationId": "enroll_client_installation_admin_client_installations_enroll_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationEnrollmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Enroll Client Installation Admin Client Installations Enroll Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enroll Client Installation",
+        "tags": [
+          "main",
+          "admin",
+          "client-installation-check"
+        ]
+      }
+    },
+    "/admin/client-installations/{installation_id}/enrollment-token": {
+      "post": {
+        "description": "Issue a short-lived one-time enrollment secret to the owner only.",
+        "operationId": "create_installation_enrollment_token_admin_client_installations__installation_id__enrollment_token_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "installation_id",
+            "required": true,
+            "schema": {
+              "title": "Installation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "kodewaves_auth_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kodewaves Auth Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dograh_auth_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dograh Auth Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "oss_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oss Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationEnrollmentTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Installation Enrollment Token",
+        "tags": [
+          "main",
+          "admin",
+          "admin-client-installations"
+        ]
+      }
+    },
     "/admin/credit-packages": {
       "get": {
         "description": "List all top-up credit packages.",
@@ -27101,6 +27542,268 @@
           "main",
           "admin",
           "admin-audit-logs"
+        ]
+      }
+    },
+    "/api/v1/admin/client-installations/check": {
+      "post": {
+        "description": "Return a short-lived signed status bound to this token and request nonce.",
+        "operationId": "check_client_installation_api_v1_admin_client_installations_check_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Check Client Installation Api V1 Admin Client Installations Check Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Client Installation",
+        "tags": [
+          "main",
+          "admin",
+          "client-installation-check"
+        ]
+      }
+    },
+    "/api/v1/admin/client-installations/enroll": {
+      "post": {
+        "description": "Bind a client key after verifying license, one-time secret and key possession.",
+        "operationId": "enroll_client_installation_api_v1_admin_client_installations_enroll_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallationEnrollmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Enroll Client Installation Api V1 Admin Client Installations Enroll Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enroll Client Installation",
+        "tags": [
+          "main",
+          "admin",
+          "client-installation-check"
+        ]
+      }
+    },
+    "/api/v1/admin/client-installations/{installation_id}/enrollment-token": {
+      "post": {
+        "description": "Issue a short-lived one-time enrollment secret to the owner only.",
+        "operationId": "create_installation_enrollment_token_api_v1_admin_client_installations__installation_id__enrollment_token_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "installation_id",
+            "required": true,
+            "schema": {
+              "title": "Installation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-API-Key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Api-Key"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "kodewaves_auth_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kodewaves Auth Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "dograh_auth_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dograh Auth Token"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "oss_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Oss Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationEnrollmentTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Installation Enrollment Token",
+        "tags": [
+          "main",
+          "admin",
+          "admin-client-installations"
         ]
       }
     },

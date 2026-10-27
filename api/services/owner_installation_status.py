@@ -22,6 +22,7 @@ from api.services.installation_license import (
     validate_installation_license,
     verify_installation_status_claims,
 )
+from api.services.installation_identity import owner_check_payload
 from api.services.owner_trust import (
     OwnerTrustError,
     trusted_license_public_keys,
@@ -84,7 +85,11 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
     nonce = secrets.token_urlsafe(32)
     response = await client.post(
         _status_url(),
-        json={"nonce": nonce, "integrity_ok": integrity_ok, "integrity_finding": integrity_finding},
+        json=owner_check_payload(
+            installation_id=license_data.installation_id, license_token=token, nonce=nonce,
+            integrity_ok=integrity_ok, integrity_finding=integrity_finding,
+            private_key_path=os.getenv("KODEWAVES_INSTALLATION_KEY_FILE", ""),
+        ),
         headers={"Authorization": f"Bearer {token}"},
         timeout=5.0,
     )

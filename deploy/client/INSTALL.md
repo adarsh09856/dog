@@ -48,6 +48,31 @@ directory through a web server. Do not change or replace an approved image or
 manifest independently. A changed API or UI file causes integrity enforcement
 to deny access and report the finding when the owner service is reachable.
 
+### Enrolled installation identity
+
+Key enrollment requires an owner-issued enrollment token and matching approved
+images. Complete enrollment with the owner before enabling the identity overlay;
+enrolling a key without configuring the overlay will make owner checks fail.
+Keep the enrolled 32-byte private key outside this installation directory and
+back it up securely. Losing or replacing it requires owner-assisted recovery.
+
+Set `CLIENT_IDENTITY_KEY_FILE` in `.env` to the absolute path of that existing
+key and `CLIENT_IDENTITY_GID` to its nonzero numeric group. On a standard Linux
+host, the file must be group-readable by that group and inaccessible to other
+users, for example mode `0640`. Both API and UI containers join that group and
+mount the key read-only. `python3 validate_install.py` checks the file and group.
+After enrollment, add `-f docker-compose.identity.yaml` after
+`-f docker-compose.client.yaml` to **every** Compose command below, including
+the administrator bootstrap and future updates. For example:
+
+```bash
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml config --quiet
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d api
+```
+
+The enrollment tooling and live recovery process are still being validated;
+do not use this overlay for production until your release passes acceptance.
+
 ## Start and create the administrator
 
 Run these commands from the extracted installation directory:

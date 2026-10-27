@@ -21,7 +21,7 @@ def package_inputs(monkeypatch, tmp_path):
     root = tmp_path / "source"
     directory = root / "deploy/client"
     directory.mkdir(parents=True)
-    for name in ("INSTALL.md", "docker-compose.client.yaml", "Caddyfile", "validate_install.py", ".env.example"):
+    for name in ("INSTALL.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "Caddyfile", "validate_install.py", ".env.example"):
         shutil.copy2(repository / "deploy/client" / name, directory / name)
     (directory / ".env").write_text("KODEWAVES_LICENSE_TOKEN=customer-secret")
     (root / "owner-tools").mkdir()
@@ -65,7 +65,7 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
 
     with tarfile.open(output, "r:gz") as archive:
         assert set(archive.getnames()) == {
-            "README.md", "docker-compose.client.yaml", "Caddyfile", "validate_install.py",
+            "README.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "Caddyfile", "validate_install.py",
             ".env.example", "client-release-manifest.json", "release-public-key.txt", "SHA256SUMS",
         }
         contents = {name: archive.extractfile(name).read() for name in archive.getnames()}

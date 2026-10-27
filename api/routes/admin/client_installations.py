@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+import re
 import secrets
 import time
 from datetime import UTC, datetime
@@ -22,6 +23,7 @@ from api.db.client_installations import (
     create_client_installation_record,
     get_client_installation_record,
     get_pending_domain_challenge,
+    issue_installation_enrollment,
     list_client_installation_records,
     list_client_integrity_alerts,
     mark_domain_verified,
@@ -67,6 +69,13 @@ class IssueClientInstallation(BaseModel):
         value = value.strip()
         if not value or any(character.isspace() for character in value):
             raise ValueError("IDs must be nonempty and contain no spaces")
+        return value
+
+    @field_validator("installation_id")
+    @classmethod
+    def portable_installation_id(cls, value: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{2,99}", value):
+            raise ValueError("Installation ID must be 3–100 URL-safe identifier characters")
         return value
 
     @field_validator("features")
@@ -129,6 +138,12 @@ class DomainChallengeRequest(BaseModel):
 
 
 class RenewClientInstallation(BaseModel):
+    expires_at: int
+
+
+class InstallationEnrollmentTokenResponse(BaseModel):
+    installation_id: str
+    enrollment_token: str
     expires_at: int
 
 
@@ -335,6 +350,21 @@ async def renew_client_installation(
         "public_key": public_key,
         "expires_at": request.expires_at,
     }
+
+
+@router.post("/{installation_id}/enrollment-token", response_model=InstallationEnrollmentTokenResponse)
+async def create_installation_enrollment_token(
+    installation_id: str,
+    _user: Annotated[UserModel, Depends(get_superuser)],
+) -> dict:
+    """Issue a short-lived one-time enrollment secret to the owner only."""
+    token = secrets.token_urlsafe(32)
+    expires_at = await issue_installation_enrollment(
+        installation_id, hashlib.sha256(token.encode("ascii")).hexdigest()
+    )
+    if expires_at is None:
+        raise HTTPException(status_code=409, detail="Installation cannot be enrolled")
+    return {"installation_id": installation_id, "enrollment_token": token, "expires_at": int(expires_at.timestamp())}
 
 
 @router.post("/{installation_id}/revoke")

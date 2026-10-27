@@ -55,13 +55,18 @@ def test_admin_routes_require_superuser_except_signed_installation_status():
             audited_routes += 1
             calls = [node for node in ast.walk(function) if isinstance(node, ast.Call)]
 
-            if source_path.name == "client_installation_check.py" and function.name == "check_client_installation":
+            if source_path.name == "client_installation_check.py" and function.name in {
+                "check_client_installation", "enroll_client_installation",
+            }:
                 parameter_names = {argument.arg for argument in function.args.args}
                 called_names = {
                     node.func.id for node in calls if isinstance(node.func, ast.Name)
                 }
                 assert "authorization" in parameter_names
-                assert {"load_license", "record_client_installation_check"} <= called_names
+                required = {"load_license", "record_client_installation_check"} if function.name == "check_client_installation" else {
+                    "load_license", "verify_enrollment", "consume_installation_enrollment"
+                }
+                assert required <= called_names
                 continue
 
             assert any(

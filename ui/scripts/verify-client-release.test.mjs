@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, sign } from "node:crypto";
+import { generateKeyPairSync, sign, verify } from "node:crypto";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { canonicalize, collectFiles, reportFailure, verifyRelease } from "./verify-client-release.mjs";
+import { canonicalize, collectFiles, ownerCheckMessage, reportFailure, verifyRelease } from "./verify-client-release.mjs";
 
 async function createRuntimeFixture(base) {
   for (const directory of [".next/server", ".next/static", "public"]) {
@@ -44,6 +44,48 @@ test("client UI integrity failure sends an authenticated owner alert with a boun
     reason: "modified_file",
     component: ".next/server/app.js",
   });
+});
+
+test("client UI signs alerts when its installation key is configured", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "kodewaves-ui-identity-"));
+  try {
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const seed = privateKey.export({ type: "pkcs8", format: "der" }).subarray(-32);
+    const identityKeyPath = path.join(base, "identity.key");
+    await writeFile(identityKeyPath, seed);
+    let body;
+    await reportFailure(new Error("Client UI integrity check failed: .next/server/app.js"), {
+      ownerStatusUrl: "https://owner.example.test/check", licenseToken: "license-token",
+      identityKeyPath, installationId: "client-1",
+      fetchImplementation: async (_url, options) => {
+        body = JSON.parse(options.body);
+        return { ok: true };
+      },
+    });
+    const message = ownerCheckMessage({
+      installation_id: "client-1", license_token: "license-token", nonce: body.nonce,
+      issued_at: body.proof_issued_at, integrity_ok: body.integrity_ok,
+      integrity_finding: body.integrity_finding,
+    });
+    assert.equal(verify(null, message, publicKey, Buffer.from(body.proof_signature, "base64url")), true);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
+});
+
+test("client UI never sends a bearer-only alert when the configured key is missing", async () => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "kodewaves-ui-missing-identity-"));
+  try {
+    let sent = false;
+    await reportFailure(new Error("Client UI integrity check failed: .next/server/app.js"), {
+      ownerStatusUrl: "https://owner.example.test/check", licenseToken: "license-token",
+      identityKeyPath: path.join(base, "missing.key"), installationId: "client-1",
+      fetchImplementation: async () => { sent = true; return { ok: true }; },
+    });
+    assert.equal(sent, false);
+  } finally {
+    await rm(base, { recursive: true, force: true });
+  }
 });
 
 test("client UI verifier accepts the signed image inventory and rejects tampering", async () => {

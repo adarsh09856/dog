@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,6 +47,48 @@ def test_client_compose_has_no_source_build_or_runtime_checkout_mount():
     assert any(str(item).endswith(":/app/kodewaves_pcm_cache") for item in api["volumes"])
     assert "api_audio_cache" in stack["volumes"]
     assert api["environment"]["ENABLE_SIGNUP"] == "false"
+
+
+def test_identity_overlay_mounts_only_the_read_only_key_for_api_and_ui():
+    root = Path(__file__).resolve().parents[2]
+    overlay = yaml.safe_load((root / "deploy/client/docker-compose.identity.yaml").read_text())
+    assert set(overlay["services"]) == {"api", "ui"}
+    for service in overlay["services"].values():
+        assert service["environment"]["KODEWAVES_INSTALLATION_KEY_FILE"] == "/run/kodewaves-identity/installation.key"
+        assert service["group_add"] == ["${CLIENT_IDENTITY_GID:?Set the key file's numeric read-only group}"]
+        mount = service["volumes"][0]
+        assert mount["source"].startswith("${CLIENT_IDENTITY_KEY_FILE:?")
+        assert mount["read_only"] is True
+        assert mount["bind"]["create_host_path"] is False
+
+
+def test_identity_preflight_requires_an_existing_private_key_and_group(tmp_path, monkeypatch):
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(root / "deploy/client"))
+    import validate_install
+
+    path = tmp_path / "installation.key"
+    path.write_bytes(b"x" * 32)
+    assert validate_install.validate_identity_key({}) == []
+    assert validate_install.validate_identity_key({"CLIENT_IDENTITY_KEY_FILE": str(path)})
+    assert validate_install.validate_identity_key({"CLIENT_IDENTITY_KEY_FILE": str(path), "CLIENT_IDENTITY_GID": "0"})
+    if os.name == "nt":
+        group = "10003"
+    else:
+        group = str(path.stat().st_gid)
+        if group == "0":
+            os.chown(path, -1, 10003)
+            group = "10003"
+        path.chmod(0o640)
+    values = {"CLIENT_IDENTITY_KEY_FILE": str(path), "CLIENT_IDENTITY_GID": group}
+    assert validate_install.validate_identity_key(values) == []
+    if os.name != "nt":
+        path.chmod(0o644)
+        assert any("inaccessible to others" in error for error in validate_install.validate_identity_key(values))
+    path.write_bytes(b"short")
+    assert any("32-byte" in error for error in validate_install.validate_identity_key({
+        "CLIENT_IDENTITY_KEY_FILE": str(path), "CLIENT_IDENTITY_GID": "10003",
+    }))
 
 
 def test_client_compose_waits_for_healthy_stateful_and_upstream_services():

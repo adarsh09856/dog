@@ -1,0 +1,28 @@
+# Optional identity overlay for an enrolled installation. The key remains on
+# the customer host and is never copied into either image or release manifest.
+services:
+  api:
+    environment:
+      KODEWAVES_INSTALLATION_KEY_FILE: /run/kodewaves-identity/installation.key
+    group_add:
+      - "${CLIENT_IDENTITY_GID:?Set the key file's numeric read-only group}"
+    volumes:
+      - type: bind
+        source: "${CLIENT_IDENTITY_KEY_FILE:?Set the existing installation key file}"
+        target: /run/kodewaves-identity/installation.key
+        read_only: true
+        bind:
+          create_host_path: false
+  ui:
+    environment:
+      KODEWAVES_INSTALLATION_ID: "${KODEWAVES_INSTALLATION_ID:?Set installation ID}"
+      KODEWAVES_INSTALLATION_KEY_FILE: /run/kodewaves-identity/installation.key
+    group_add:
+      - "${CLIENT_IDENTITY_GID:?Set the key file's numeric read-only group}"
+    volumes:
+      - type: bind
+        source: "${CLIENT_IDENTITY_KEY_FILE:?Set the existing installation key file}"
+        target: /run/kodewaves-identity/installation.key
+        read_only: true
+        bind:
+          create_host_path: false
