@@ -156,15 +156,18 @@ async def revoke_client_installation_record(installation_id: str, user_id: int) 
         record = result.scalar_one_or_none()
         if record is None:
             return None
-        if record.revoked_at is None:
+        needs_commit = record.revoked_at is None
+        if needs_commit:
             record.revoked_at = datetime.now(UTC)
             record.revoked_by_user_id = user_id
             record.updated_at = record.revoked_at
-            await session.commit()
-        return {
+        result = {
             "installation_id": record.installation_id,
             "revoked_at": record.revoked_at.isoformat(),
         }
+        if needs_commit:
+            await session.commit()
+        return result
 
 
 async def record_client_installation_check(
@@ -221,8 +224,9 @@ async def record_client_installation_check(
             )
             await session.execute(statement)
         record.updated_at = now
-        await session.commit()
-        return {
+        # SQLAlchemy expires ORM attributes on commit; capture the status while
+        # the row is loaded, then return it only after the commit succeeds.
+        status = {
             "installation_id": record.installation_id,
             "revoked_at": record.revoked_at.isoformat() if record.revoked_at else None,
             "integrity_failed_at": record.integrity_failed_at.isoformat() if record.integrity_failed_at else None,
@@ -230,6 +234,8 @@ async def record_client_installation_check(
                 (record.previous_token_valid_until if previous_token else record.expires_at).timestamp()
             ),
         }
+        await session.commit()
+        return status
 
 
 async def list_client_integrity_alerts(*, include_acknowledged: bool = False) -> list[dict]:
