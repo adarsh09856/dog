@@ -205,7 +205,7 @@ def main() -> int:
                 args.api_tag, "-c",
                 "import json; from pathlib import Path; from api.services.release_integrity import protected_files; print(json.dumps(protected_files(Path('/app'))))",
             ],
-            check=True, capture_output=True, text=True,
+            check=True, stdout=subprocess.PIPE, text=True,
         )
         api_inventory_elapsed_ms = round((time.perf_counter() - api_inventory_started) * 1000, 1)
         api_files = json.loads(inventory.stdout)
@@ -215,7 +215,7 @@ def main() -> int:
         ui_inventory = subprocess.run(
             ["docker", "run", "--rm", "--network", "none", "--entrypoint", "node",
              args.ui_tag, "/app/verify-client-release.mjs", "--inventory"],
-            check=True, capture_output=True, text=True,
+            check=True, stdout=subprocess.PIPE, text=True,
         )
         ui_inventory_elapsed_ms = round((time.perf_counter() - ui_inventory_started) * 1000, 1)
         ui_files = json.loads(ui_inventory.stdout)
