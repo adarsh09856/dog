@@ -2,9 +2,11 @@
 
 > **Implementation status:** the client/server verification path and read-only
 > settings status, owner issuance/revocation records and DNS challenge verification
-> are implemented. Renewal and staged key rotation are supported in code, but
-> deployment-key enrollment, complete worker/provider limits, pushed owner alerts,
-> live key-rotation checks and full upgrade acceptance are still open.
+> are implemented. Owner-issued one-time installation-key enrollment, the client
+> enrollment CLI and read-only identity overlay are also implemented in code.
+> Renewal and staged key rotation are supported in code, but customer-image
+> enrollment, live key-rotation checks, complete worker/provider limits, pushed
+> owner alerts and full upgrade acceptance remain unverified.
 > Do not use this as a production sales or onboarding procedure yet.
 
 ## License fields
@@ -334,6 +336,8 @@ The periodic owner check and in-app incident alerts exist, but pushed alerts
 and independent remote attestation do not. The Compose
 package is a packaging input, not an accepted production installation.
 The owner can compare the observed egress IP with a licensed range, but
-independent network attestation and deployment-key enrollment remain unavailable.
-Renewal and staged key rotation are implemented but require live multi-version
-acceptance. Production rollout and rollback are also unverified.
+independent network attestation remains unavailable. The enrollment protocol,
+owner API and client CLI exist, but enrollment from a clean customer installation
+and recovery have not passed acceptance. Renewal and staged key rotation are
+implemented but require live multi-version acceptance. Production rollout and
+rollback are also unverified.
