@@ -118,11 +118,15 @@ Public self-registration is disabled on client installations.
 
 Keep encrypted backups of the database, persistent volumes and configuration.
 For an update, use the supplied matching API/UI digests and signed manifest,
-back up first, then recreate the services with Docker Compose. Rollback requires
-explicit application/database compatibility approval; an old image alone is
-insufficient. Install a replacement license before its handover window expires
-and recreate the API service. Ask your installation owner for license,
-domain/IP policy, renewal, capacity and recovery changes.
+back up first, then recreate the services with Docker Compose. Before applying
+Alembic migrations, API startup checks the current database revision against
+the signed manifest's `schema_compatibility.upgrade_from` list. An unknown,
+ambiguous, or unapproved revision stops startup before migrations run; resolve
+the mismatch with the installation owner and restore a compatible backup when
+needed. Rollback requires explicit application/database compatibility approval;
+an old image alone is insufficient. Install a replacement license before its
+handover window expires and recreate the API service. Ask your installation
+owner for license, domain/IP policy, renewal, capacity and recovery changes.
 
 A host administrator can replace local software and disable local monitoring.
 Integrity enforcement protects the approved, unmodified package; it is not

@@ -3,10 +3,78 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import re
 from pathlib import Path
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
+
 _REVISION = re.compile(r"^[A-Za-z0-9_]{1,64}$")
+
+
+class SchemaCompatibilityError(RuntimeError):
+    """The installed database revision is not approved by the signed release."""
+
+
+def validate_database_upgrade_allowed(
+    schema: dict[str, object], current_revisions: tuple[str, ...]
+) -> None:
+    """Allow a fresh DB or exactly one revision listed as upgrade-compatible."""
+    allowed = schema.get("upgrade_from") if isinstance(schema, dict) else None
+    if not isinstance(allowed, list) or not all(isinstance(item, str) for item in allowed):
+        raise SchemaCompatibilityError("Signed release has invalid upgrade compatibility metadata")
+    if not current_revisions:
+        return
+    if len(current_revisions) != 1:
+        raise SchemaCompatibilityError(
+            f"Database has {len(current_revisions)} Alembic revisions; expected exactly one"
+        )
+    current = current_revisions[0]
+    if current not in allowed:
+        raise SchemaCompatibilityError(
+            f"Database revision {current} is not approved by this signed release; "
+            "restore a compatible backup or use a supported upgrade image"
+        )
+
+
+async def current_database_revisions(database_url: str) -> tuple[str, ...]:
+    """Read Alembic's current revision without applying migrations."""
+    engine = create_async_engine(database_url, poolclass=NullPool)
+    try:
+        async with engine.connect() as connection:
+            table = await connection.execute(text("SELECT to_regclass('alembic_version')"))
+            if table.scalar_one_or_none() is None:
+                return ()
+            result = await connection.execute(text("SELECT version_num FROM alembic_version"))
+            return tuple(result.scalars().all())
+    finally:
+        await engine.dispose()
+
+
+async def verify_client_schema_before_migration() -> None:
+    """Verify release files, then gate DB upgrades on signed compatibility."""
+    from api.constants import DATABASE_URL, KODEWAVES_EDITION
+
+    if KODEWAVES_EDITION != "client":
+        return
+
+    from api.services.release_integrity import verify_release_before_startup
+
+    payload = verify_release_before_startup()
+    schema = payload.get("schema_compatibility") if isinstance(payload, dict) else None
+    if not isinstance(schema, dict):
+        raise SchemaCompatibilityError(
+            "Signed client release is missing database upgrade compatibility metadata"
+        )
+    revisions = await current_database_revisions(DATABASE_URL)
+    validate_database_upgrade_allowed(schema, revisions)
+
+
+def main() -> int:
+    asyncio.run(verify_client_schema_before_migration())
+    return 0
 
 
 def migration_compatibility(migrations_dir: Path) -> dict[str, object]:
@@ -77,3 +145,7 @@ def migration_compatibility(migrations_dir: Path) -> dict[str, object]:
         "upgrade_from": sorted(ancestors),
         "rollback_to": [],
     }
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -54,7 +54,7 @@ fi
 ### 2) Run migrations & seed platform catalog
 ###############################################################################
 
-python -m api.services.release_integrity
+python -m api.services.release_schema
 alembic -c "$BASE_DIR/api/alembic.ini" upgrade head
 python -m scripts.seed_platform
 

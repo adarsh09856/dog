@@ -194,7 +194,7 @@ def verify_release_manifest(
         ) from exc
 
 
-def verify_configured_release(root: Path | None = None) -> None:
+def verify_configured_release(root: Path | None = None) -> dict[str, object] | None:
     configured_edition = os.getenv("KODEWAVES_EDITION", "saas").strip().lower()
     image_edition = IMAGE_EDITION or configured_edition
     if IMAGE_EDITION is not None and configured_edition != IMAGE_EDITION:
@@ -203,7 +203,7 @@ def verify_configured_release(root: Path | None = None) -> None:
             reason="unknown", component="runtime_edition",
         )
     if image_edition != "client":
-        return
+        return None
     manifest = os.getenv("KODEWAVES_RELEASE_MANIFEST", "")
     if not manifest:
         raise ReleaseIntegrityError(
@@ -231,6 +231,7 @@ def verify_configured_release(root: Path | None = None) -> None:
                     f"Configured {service.upper()} image does not match the signed release",
                     reason="unknown", component=f"{service}_image",
                 )
+    return payload
 
 
 def report_startup_integrity_failure(error: ReleaseIntegrityError) -> None:
@@ -260,10 +261,10 @@ def report_startup_integrity_failure(error: ReleaseIntegrityError) -> None:
         print(f"Owner integrity alert delivery failed: {type(exc).__name__}", file=sys.stderr)
 
 
-def verify_release_before_startup(root: Path | None = None) -> None:
+def verify_release_before_startup(root: Path | None = None) -> dict[str, object] | None:
     """Enforce integrity even if a deployment bypasses the image entrypoint."""
     try:
-        verify_configured_release(root)
+        return verify_configured_release(root)
     except ReleaseIntegrityError as error:
         report_startup_integrity_failure(error)
         raise

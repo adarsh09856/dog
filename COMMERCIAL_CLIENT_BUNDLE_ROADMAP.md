@@ -324,3 +324,9 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Installer packaging used a current-time gzip header, so identical signed inputs could produce different archive hashes between runs. The new regression reproduced this by shifting the gzip clock and failed before the fix. Packaging now fixes gzip metadata at epoch zero and uses deterministic USTAR entries.
 - `py -3.13 -m pytest --noconftest api/tests/test_client_installer_archive.py -q` — **9 passed**. Python compilation and `git diff --check` passed. Fixtures used synthetic signing keys and digest references; no customer release was created. Docker image build and clean installation remain open.
+
+## 27 October 2026 — signed database upgrade preflight
+
+- The client entrypoint previously ran `alembic upgrade head` after checking code integrity but did not consult the signed release's `schema_compatibility.upgrade_from`. It now verifies the signed release and reads the current `alembic_version` before migration. Fresh databases and exactly one signed-compatible revision proceed; unknown, multiple, or unapproved revisions stop startup before migration. Rollback remains disallowed unless a future release explicitly lists tested `rollback_to` revisions.
+- Added regression coverage for fresh/ancestor/current/unsupported/ambiguous revisions, the DB revision query, and startup halting before Alembic. Focused release-schema, integrity, startup-entrypoint and installer-archive batch: **51 passed, 2 skipped**. Python compilation, `bash -n scripts/start_services_docker.sh`, and `git diff --check` passed.
+- Verification is mocked/unit-level. A PostgreSQL-backed upgrade/downgrade, customer database backup/restore, and actual Docker upgrade remain open; operator guidance is now documented in the bundled installer.
