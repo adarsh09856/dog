@@ -47,6 +47,16 @@ else
     echo -e "${BLUE}[1/6] Deploying from local workspace directory...${NC}"
 fi
 
+COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+OWNER_KEYS_CONFIGURED="${KODEWAVES_OWNER_KEYS_DIR:-}"
+if [ -z "$OWNER_KEYS_CONFIGURED" ] && [ -f .env ]; then
+    OWNER_KEYS_CONFIGURED="$(sed -n 's/^KODEWAVES_OWNER_KEYS_DIR=//p' .env | tail -n 1 | tr -d "\"'")"
+fi
+if [ -n "$OWNER_KEYS_CONFIGURED" ]; then
+    COMPOSE_ARGS+=(-f deploy/owner/docker-compose.owner.yaml)
+    echo "Owner license signer overlay enabled."
+fi
+
 read_boolean_setting() {
     local setting_name="$1"
     local setting_value="${!setting_name:-}"
@@ -117,14 +127,14 @@ if [ "$COMPOSE_FILE" = "docker-compose.aapanel.yaml" ] && [ -f .env ]; then
     fi
     echo -e "${GREEN}Restricted forwarded-header trust to the local Docker gateway ($PROXY_PEER).${NC}"
 fi
-docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS config -q
+docker compose "${COMPOSE_ARGS[@]}" $PROFILE_FLAGS config -q
 
 # Back up before restarting the API: its entrypoint itself runs migrations.
 BACKUP_DIR="$APP_DIR/run/deploy-backups"
 umask 077
 mkdir -p "$BACKUP_DIR"
 BACKUP_FILE="$BACKUP_DIR/database_$(date +%Y%m%d_%H%M%S).sql"
-docker compose -f "$COMPOSE_FILE" exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$BACKUP_FILE"
+docker compose "${COMPOSE_ARGS[@]}" exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$BACKUP_FILE"
 test -s "$BACKUP_FILE"
 printf '%s\n' "$PREVIOUS_REVISION" > "$BACKUP_FILE.previous-revision"
 git rev-parse HEAD > "$BACKUP_FILE.target-revision"
@@ -132,20 +142,20 @@ umask 022
 
 # 2. Build only application images; leave existing infrastructure in place.
 echo -e "${BLUE}[2/6] Building and updating application containers...${NC}"
-docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS build api ui
+docker compose "${COMPOSE_ARGS[@]}" $PROFILE_FLAGS build api ui
 if [ "$ENABLE_LOCAL" = "true" ]; then
     if [ "$ENABLE_INDIC_MIO" = "true" ]; then
-        docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS $INDIC_MIO_PROFILE_FLAGS build indic-mio-tts
+        docker compose "${COMPOSE_ARGS[@]}" $PROFILE_FLAGS $INDIC_MIO_PROFILE_FLAGS build indic-mio-tts
     fi
 fi
-docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps api ui
+docker compose "${COMPOSE_ARGS[@]}" $PROFILE_FLAGS up -d --no-deps api ui
 
 # The API entrypoint runs migrations before starting its services. Wait for
 # readiness rather than swallowing failures or running concurrent migrations.
 echo "Waiting for application readiness..."
 for attempt in $(seq 1 60); do
-    if docker compose -f "$COMPOSE_FILE" exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)" >/dev/null 2>&1 &&
-       docker compose -f "$COMPOSE_FILE" exec -T ui node -e "fetch('http://127.0.0.1:3010/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+    if docker compose "${COMPOSE_ARGS[@]}" exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)" >/dev/null 2>&1 &&
+       docker compose "${COMPOSE_ARGS[@]}" exec -T ui node -e "fetch('http://127.0.0.1:3010/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
         break
     fi
     if [ "$attempt" = 60 ]; then
@@ -158,9 +168,9 @@ done
 # Keep the selected local LLM resident after Docker or VPS restarts. The small
 # monitor checks Ollama's installed-model inventory and never downloads weights.
 if [ "$ENABLE_LOCAL" = "true" ]; then
-    docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS up -d --no-deps ollama-warmup
+    docker compose "${COMPOSE_ARGS[@]}" $PROFILE_FLAGS up -d --no-deps ollama-warmup
     if [ "$ENABLE_INDIC_MIO" = "true" ]; then
-        docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS $INDIC_MIO_PROFILE_FLAGS up -d --no-deps indic-mio-tts
+        docker compose "${COMPOSE_ARGS[@]}" $PROFILE_FLAGS $INDIC_MIO_PROFILE_FLAGS up -d --no-deps indic-mio-tts
     fi
 fi
 
@@ -172,7 +182,7 @@ fi
 
 # 6. Service health verification
 echo -e "${BLUE}[6/6] Verifying running services and API health...${NC}"
-docker compose -f "$COMPOSE_FILE" ps
+docker compose "${COMPOSE_ARGS[@]}" ps
 
 # Read API port from .env or default to 8000
 API_PORT="${API_PORT:-$(grep '^API_PORT=' .env 2>/dev/null | cut -d '=' -f2- || true)}"

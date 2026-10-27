@@ -28,10 +28,41 @@ verification keys or switch the baked client edition to SaaS; an edition
 mismatch fails the integrity startup check and is reported to the owner when
 the owner endpoint is reachable. The image does not need the private signing keys. Store
 those keys outside client repositories,
-Docker build contexts, images, volumes and shared logs. Use the owner-only commands under
+Docker build contexts, client images and volumes, and shared logs. Use the owner-only commands under
 `owner-tools/` to create a keypair and issue a token. The owner API supports
 renewal and staged key rotation; follow the live rollout sequence below and
 verify it against the deployed owner and client versions before production use.
+
+### Configure the owner signer in Docker Compose
+
+The normal SaaS Compose stacks do not mount signing keys. On the **owner** host,
+store the license private key as `current.key` in a dedicated absolute directory
+outside the checkout and build context. The API image runs as UID/GID 10001;
+grant that identity read access to this directory and its key files while keeping
+them inaccessible to other users. For example, on a standard Linux Docker host,
+use a root-owned directory with group 10001 and mode `0750`, and key files with
+group 10001 and mode `0640`. Adapt this for rootless Docker or user namespaces.
+Keep release-signing keys and all client installations out of this directory.
+
+Set `KODEWAVES_OWNER_KEYS_DIR` to that host directory in the owner stack's
+environment, then add `deploy/owner/docker-compose.owner.yaml` as a second
+Compose file. For the repository's default SaaS stack, for example:
+
+```bash
+docker compose -f docker-compose.yaml -f deploy/owner/docker-compose.owner.yaml config
+docker compose -f docker-compose.yaml -f deploy/owner/docker-compose.owner.yaml up -d api
+```
+
+The overlay binds the directory read-only into the owner API, sets the current
+signer path, and passes the optional legacy signer paths and trusted proxy
+CIDRs. Paths in `KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES` are
+colon-separated container paths under `/run/kodewaves-owner-keys`; for example,
+`/run/kodewaves-owner-keys/old.key`. Use the same overlay with the chosen owner
+SaaS Compose stack when upgrading, so recreation does not remove the mount.
+The repository's `deploy.sh` adds it automatically when
+`KODEWAVES_OWNER_KEYS_DIR` is set in the environment or root `.env`.
+The customer installer does not include this overlay. Check that the API can
+read the key and that issuance and a client check succeed before using it.
 
 Before API issuance, the owner creates a challenge using
 `POST /admin/client-installations/domain-challenges` with `customer_id` and
@@ -70,8 +101,8 @@ handover ends and restart the client API services.
    `--legacy-license-public-key-file`. Keep the release verification key and
    signed manifest aligned with that exact image. Upgrade clients to this
    dual-trust image before giving them new-key tokens.
-2. Set `KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE` to the new private key on the
-   owner and list the old private key file under
+2. Replace the owner's `current.key` with the new private key and list the old
+   private key file under
    `KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES` (path-separated). Owner
    status checks verify each bearer token and sign the reply with its matching
    key, so clients still pinned to the old key continue checking in.
@@ -88,11 +119,13 @@ An out-of-range source blocks new calls and data-plane requests without latching
 permanent revocation; a later check from an allowed IP restores access. IP-bound
 licenses require a fresh owner status and do not use the general 24-hour owner
 outage grace for new calls. The
-owner stores the most recently observed IP in installation inventory. Forwarded
-IP headers are ignored unless the owner sets
-`KODEWAVES_OWNER_TRUSTED_PROXY_CIDRS` to the CIDRs of its actual reverse proxies;
-then the owner resolves the client address through that trusted proxy chain.
-Never list customer-controlled proxy ranges here. The client API polls every 60
+owner stores the most recently observed IP in installation inventory. Uvicorn
+first processes forwarded headers only from peers listed in `FORWARDED_ALLOW_IPS`;
+configure that setting to the actual ingress proxy or dedicated trusted network,
+never `*`. If the application itself receives an unprocessed proxy chain, set
+`KODEWAVES_OWNER_TRUSTED_PROXY_CIDRS` to the CIDRs of its actual reverse proxies
+so the owner resolves that chain. Never list customer-controlled proxy ranges
+in either setting. The client API polls every 60
 seconds and caches verified status in shared Redis.
 This observed address is the client's outbound egress IP as seen by the owner;
 the Caddy/`FORWARDED_ALLOW_IPS` setting in the client install package controls

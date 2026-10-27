@@ -26,6 +26,10 @@ def package_inputs(monkeypatch, tmp_path):
     (directory / ".env").write_text("KODEWAVES_LICENSE_TOKEN=customer-secret")
     (root / "owner-tools").mkdir()
     (root / "owner-tools/private.key").write_text("private-key-must-never-ship")
+    owner_deploy = root / "deploy/owner"
+    owner_deploy.mkdir()
+    shutil.copy2(repository / "deploy/owner/docker-compose.owner.yaml", owner_deploy)
+    (owner_deploy / "owner-secret.key").write_text("owner-signer-must-never-ship")
     images = {
         key: f"registry.example.com/kodewaves/{key.lower()}@sha256:{'a' * 64}"
         for key in packager.IMAGE_KEYS
@@ -68,6 +72,7 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
         assert archive.getmember(".env.example").mode == 0o600
     assert b"customer-secret" not in b"".join(contents.values())
     assert b"private-key-must-never-ship" not in b"".join(contents.values())
+    assert b"owner-signer-must-never-ship" not in b"".join(contents.values())
     template = contents[".env.example"].decode("utf-8")
     for key, value in images.items():
         assert f"{key}={value}" in template
