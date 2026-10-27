@@ -440,3 +440,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - The client branding form now replaces its local fields with the server's saved response before broadcasting the brand refresh, so normalized names and colors match the persisted settings.
 - The branding form and shared branding context suites passed **4 tests**; changed-file ESLint passed. Live persistence across browser sessions remains open.
+
+## 27 October 2026 — automate enrolled identity overlay verification
+
+- The client image CI verifier now validates a disposable enrolled-key input and renders the real Compose identity overlay alongside the base bundle. It checks that both API and UI use the configured group and the identical read-only key bind mount with host-path creation disabled, and records the gate in its evidence report. The key is generated in the verifier's external temporary directory and is removed on exit.
+- Focused verifier tests passed **12 tests**, including rejection of a writable API identity mount. The installed standalone Compose CLI v5.6.1 also rendered the base config, custom-network proxy trust and enrolled identity overlay successfully. This is Compose-level evidence only; real Linux container key access, owner enrollment, packaged image, install and recovery acceptance remain open.

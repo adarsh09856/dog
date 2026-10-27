@@ -8,6 +8,7 @@ import base64
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -139,6 +140,54 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str, mani
     if proxy_ip != values["CLIENT_CADDY_IPV4"] or trusted_peer != proxy_ip:
         raise ValueError("Rendered API proxy trust does not match the custom Caddy address")
 
+    # Verify the enrolled-identity overlay too. The disposable key stays in the
+    # temp directory outside the image build context and is never copied into
+    # an image or release manifest.
+    identity_key = directory / "ci-installation.key"
+    identity_key.write_bytes(b"i" * 32)
+    identity_key.chmod(0o640)
+    identity_gid = getattr(os, "getegid", lambda: 12345)()
+    if not 1 <= identity_gid <= 2**31 - 1:
+        raise ValueError("Identity overlay verification requires a non-root group ID")
+    identity_env_values = {
+        **values,
+        "CLIENT_IDENTITY_KEY_FILE": str(identity_key.resolve()),
+        "CLIENT_IDENTITY_GID": str(identity_gid),
+    }
+    identity_env = directory / "client-identity-ci.env"
+    identity_env.write_text(
+        "".join(f"{key}={value}\n" for key, value in identity_env_values.items()),
+        encoding="utf-8",
+    )
+    identity_preflight = validate_client_install(identity_env, compose_file)
+    failures = [message for message in identity_preflight if not message.startswith("preflight passed;")]
+    if failures:
+        raise ValueError("Identity installer preflight failed: " + "; ".join(failures))
+    identity_rendered = subprocess.run(
+        [
+            "docker", "compose", "--env-file", str(identity_env),
+            "-f", str(compose_file), "-f", str(root / "deploy/client/docker-compose.identity.yaml"),
+            "config", "--format", "json",
+        ],
+        cwd=root, check=True, capture_output=True, text=True,
+    )
+    identity_services = json.loads(identity_rendered.stdout)["services"]
+    for service_name in ("api", "ui"):
+        service = identity_services[service_name]
+        expected_mount = {
+            "type": "bind",
+            "source": str(identity_key.resolve()),
+            "target": "/run/kodewaves-identity/installation.key",
+            "read_only": True,
+            "bind": {"create_host_path": False},
+        }
+        if service.get("group_add") != [str(identity_gid)]:
+            raise ValueError(f"Rendered {service_name.upper()} identity group does not match the key group")
+        if expected_mount not in service.get("volumes", []):
+            raise ValueError(f"Rendered {service_name.upper()} identity key mount is not read-only and non-creating")
+        if service.get("environment", {}).get("KODEWAVES_INSTALLATION_KEY_FILE") != expected_mount["target"]:
+            raise ValueError(f"Rendered {service_name.upper()} identity key path does not match its mount")
+
 
 def verify(caddy_image: str, report: Path) -> None:
     if not re.fullmatch(r"[^@]+@sha256:[0-9a-f]{64}", caddy_image):
@@ -182,9 +231,10 @@ def verify(caddy_image: str, report: Path) -> None:
         _verify_manifest_evidence(manifest, inventory_metrics, image_ids)
         evidence = {
             "status": "passed", "production_release": False,
-            "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight and Compose interpolation",
+            "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation and enrolled identity overlay",
             "installer_preflight": "passed", "compose_config": "passed",
             "custom_network_proxy_config": "passed",
+            "identity_overlay_config": "passed",
             "protected_inventory": inventory_metrics,
             "not_verified": ["clean install", "upgrade/rollback", "live owner alerts", "browser audio", "telephone"],
             "image_ids": image_ids, "caddy_image": caddy_image,

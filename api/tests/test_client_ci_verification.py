@@ -55,6 +55,24 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
             assert "KODEWAVES_LICENSE_TOKEN=ci-payload.ci-signature" in contents
             assert Path(contents.split("CLIENT_RELEASE_MANIFEST_FILE=", 1)[1].splitlines()[0]).is_file()
             if command[-3:] == ["config", "--format", "json"]:
+                if any(str(argument).endswith("docker-compose.identity.yaml") for argument in command):
+                    assert "CLIENT_IDENTITY_KEY_FILE=" in contents
+                    assert "CLIENT_IDENTITY_GID=" in contents
+                    key_path = contents.split("CLIENT_IDENTITY_KEY_FILE=", 1)[1].splitlines()[0]
+                    assert Path(key_path).read_bytes() == b"i" * 32
+                    gid = contents.split("CLIENT_IDENTITY_GID=", 1)[1].splitlines()[0]
+                    mount = {
+                        "type": "bind", "source": key_path,
+                        "target": "/run/kodewaves-identity/installation.key",
+                        "read_only": True, "bind": {"create_host_path": False},
+                    }
+                    return SimpleNamespace(stdout=json.dumps({"services": {
+                        name: {
+                            "group_add": [gid], "volumes": [mount],
+                            "environment": {"KODEWAVES_INSTALLATION_KEY_FILE": mount["target"]},
+                        }
+                        for name in ("api", "ui")
+                    }}))
                 assert "CLIENT_CADDY_IPV4=172.31.40.2" in contents
                 assert "FORWARDED_ALLOW_IPS=" not in contents
                 return SimpleNamespace(stdout=json.dumps({"services": {
@@ -76,13 +94,14 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
     assert evidence["installer_preflight"] == "passed"
     assert evidence["compose_config"] == "passed"
     assert evidence["custom_network_proxy_config"] == "passed"
+    assert evidence["identity_overlay_config"] == "passed"
     assert evidence["protected_inventory"] == {
         "api": {"file_count": 2, "elapsed_ms": 840.5},
         "ui": {"file_count": 1, "elapsed_ms": 121.0},
     }
     assert "telephone" in evidence["not_verified"]
     assert "Compose interpolation" in evidence["scope"]
-    assert len(commands) == 5
+    assert len(commands) == 6
     assert captured_keys and all(not key.exists() for key in captured_keys)
     assert "private" not in report.read_text()
 
@@ -120,6 +139,45 @@ def test_ci_rejects_rendered_custom_proxy_trust_mismatch(verifier, monkeypatch, 
     with pytest.raises(ValueError, match="proxy trust does not match"):
         verifier.verify("registry.example.com/kodewaves/caddy@sha256:" + "b" * 64, report)
     assert not report.exists()
+
+
+def test_ci_rejects_writable_enrolled_identity_mount(verifier, monkeypatch, tmp_path):
+    root = Path(__file__).resolve().parents[2]
+
+    def run(command, **kwargs):
+        if command[-3:] == ["config", "--format", "json"]:
+            if any(str(argument).endswith("docker-compose.identity.yaml") for argument in command):
+                env = Path(command[command.index("--env-file") + 1]).read_text()
+                key_path = env.split("CLIENT_IDENTITY_KEY_FILE=", 1)[1].splitlines()[0]
+                gid = env.split("CLIENT_IDENTITY_GID=", 1)[1].splitlines()[0]
+                return SimpleNamespace(stdout=json.dumps({"services": {
+                    name: {
+                        "group_add": [gid],
+                        "volumes": [{
+                            "type": "bind", "source": key_path,
+                            "target": "/run/kodewaves-identity/installation.key",
+                            "read_only": name != "api",
+                            "bind": {"create_host_path": False},
+                        }],
+                        "environment": {
+                            "KODEWAVES_INSTALLATION_KEY_FILE": "/run/kodewaves-identity/installation.key"
+                        },
+                    }
+                    for name in ("api", "ui")
+                }}))
+            return SimpleNamespace(stdout=json.dumps({"services": {
+                "caddy": {"networks": {"internal": {"ipv4_address": "172.31.40.2"}}},
+                "api": {"environment": {"FORWARDED_ALLOW_IPS": "172.31.40.2"}},
+            }}))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(verifier.subprocess, "run", run)
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text("{}")
+    with pytest.raises(ValueError, match="API identity key mount is not read-only"):
+        verifier._verify_installer_config(
+            root, tmp_path, "registry.example.com/kodewaves/caddy@sha256:" + "b" * 64, manifest
+        )
 
 
 def test_ci_compose_failure_does_not_write_success_report(verifier, monkeypatch, tmp_path):
