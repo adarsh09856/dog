@@ -106,6 +106,20 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
     assert "Client installation inputs look valid" in checked.stdout
 
 
+def test_customer_archive_is_reproducible_for_identical_release_inputs(package_inputs, monkeypatch):
+    packager, root, _, images_env, manifest, public_key, output, _ = package_inputs
+    second_output = output.with_name("installer-second.tar.gz")
+
+    packager.package_installer(images_env, manifest, public_key, output, root=root)
+    import gzip
+
+    real_time = gzip.time.time
+    monkeypatch.setattr(gzip.time, "time", lambda: real_time() + 10)
+    packager.package_installer(images_env, manifest, public_key, second_output, root=root)
+
+    assert output.read_bytes() == second_output.read_bytes()
+
+
 @pytest.mark.parametrize("problem", ["signature", "image", "floating", "secret", "schema", "port"])
 def test_customer_archive_rejects_untrusted_or_unmatched_inputs_without_output(package_inputs, problem):
     packager, root, images, images_env, manifest, public_key, output, private = package_inputs

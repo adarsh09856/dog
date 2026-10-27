@@ -319,3 +319,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Reproduced a stale-job gap: `sync_campaign_source` checked client license status but returned early from that helper in SaaS mode, then could fetch external contacts even after the owner disabled the organization's campaign feature. It now resolves the campaign and rechecks the SaaS campaign entitlement before obtaining or invoking the source-sync provider.
 - The regression failed before the check (the source-sync path completed despite a disabled feature) and passes after the change. `py -3.13 -m pytest --noconftest api/tests/test_campaign_tasks.py api/tests/test_saas_entitlements.py -q` — **37 passed**; changed Python files compile and `git diff --check` passes. This is mocked worker/API evidence; real plan changes during active queued campaigns remain unverified.
+
+## 27 October 2026 — deterministic client installer archive
+
+- Installer packaging used a current-time gzip header, so identical signed inputs could produce different archive hashes between runs. The new regression reproduced this by shifting the gzip clock and failed before the fix. Packaging now fixes gzip metadata at epoch zero and uses deterministic USTAR entries.
+- `py -3.13 -m pytest --noconftest api/tests/test_client_installer_archive.py -q` — **9 passed**. Python compilation and `git diff --check` passed. Fixtures used synthetic signing keys and digest references; no customer release was created. Docker image build and clean installation remain open.

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import gzip
 import hashlib
 import io
 import json
@@ -119,12 +120,15 @@ def package_installer(
         for name, content in sorted(files.items())
     ).encode("ascii")
     archive = io.BytesIO()
-    with tarfile.open(fileobj=archive, mode="w:gz") as bundle:
-        for name, content in sorted(files.items()):
-            entry = tarfile.TarInfo(name)
-            entry.size = len(content)
-            entry.mode = 0o600 if name == ".env.example" else 0o644
-            bundle.addfile(entry, io.BytesIO(content))
+    # Fix gzip metadata and use a simple tar format so identical approved inputs
+    # produce byte-for-byte identical customer archives and delivery checksums.
+    with gzip.GzipFile(fileobj=archive, mode="wb", filename="", mtime=0) as compressed:
+        with tarfile.open(fileobj=compressed, mode="w", format=tarfile.USTAR_FORMAT) as bundle:
+            for name, content in sorted(files.items()):
+                entry = tarfile.TarInfo(name)
+                entry.size = len(content)
+                entry.mode = 0o600 if name == ".env.example" else 0o644
+                bundle.addfile(entry, io.BytesIO(content))
     output.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation avoids overwriting an existing package even if another
     # process created it while signature verification was running.
