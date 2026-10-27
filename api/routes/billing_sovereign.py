@@ -138,6 +138,7 @@ class SaaSPlanPublicItem(BaseModel):
     monthly_price_cents: int = 0
     annual_price_cents: int = 0
     currency: str = "INR"
+    max_agents: int
     max_concurrent_calls: int
     allow_user_byok: bool
     features: List[str] = []
@@ -175,6 +176,7 @@ async def list_public_plans():
             annual_price_cents=r.annual_price_cents,
             currency=r.currency,
             included_minutes=r.included_monthly_minutes,
+            max_agents=r.max_agents,
             max_concurrent_calls=r.max_concurrent_calls,
             allow_user_byok=r.allow_user_byok,
             features=[label for enabled, label in (

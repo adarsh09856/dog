@@ -177,6 +177,7 @@ export interface PublicSaaSPlan extends Omit<SaaSPlan, "overage_rate_per_minute"
   monthly_price_cents: number;
   annual_price_cents: number;
   currency: string;
+  max_agents: number;
   overage_rate_per_minute: number | null;
 }
 

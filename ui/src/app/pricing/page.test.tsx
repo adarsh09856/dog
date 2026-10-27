@@ -36,6 +36,7 @@ describe("public pricing", () => {
         monthly_price_inr: 2499,
         monthly_price_usd: null,
         included_minutes: 500,
+        max_agents: 5,
         overage_rate_per_minute: 1.2,
         max_concurrent_calls: 2,
         allow_user_byok: true,
@@ -60,6 +61,7 @@ describe("public pricing", () => {
 
     await waitFor(() => expect(screen.getByText("Starter")).toBeTruthy());
     expect(screen.getByText("₹2,499")).toBeTruthy();
+    expect(screen.getByText("5 agents")).toBeTruthy();
     expect(screen.queryByText("Save 20%")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Annual" }));
     expect(screen.getByText("₹24,990")).toBeTruthy();
@@ -76,6 +78,7 @@ describe("public pricing", () => {
       annual_price_cents: 0,
       currency: "USD",
       included_minutes: 100,
+      max_agents: 3,
       max_concurrent_calls: 1,
       features: [],
       is_active: true,
@@ -98,6 +101,7 @@ describe("public pricing", () => {
       annual_price_cents: 120000,
       currency: "INR",
       included_minutes: 100,
+      max_agents: 3,
       max_concurrent_calls: 1,
       features: [],
       is_active: true,
@@ -121,6 +125,7 @@ describe("public pricing", () => {
       annual_price_cents: 0,
       currency: "INR",
       included_minutes: 60,
+      max_agents: 1,
       max_concurrent_calls: 1,
       features: [],
       is_active: true,
@@ -144,6 +149,7 @@ describe("public pricing", () => {
       annual_price_cents: 120000,
       currency: "",
       included_minutes: 100,
+      max_agents: 3,
       max_concurrent_calls: 1,
       features: [],
       is_active: true,

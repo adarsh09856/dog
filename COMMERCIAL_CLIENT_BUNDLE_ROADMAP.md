@@ -340,3 +340,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Root-cause check confirmed the DB reader returned `()` both when `alembic_version` was absent and when the table existed with zero rows. The latter now fails closed as an incomplete schema state instead of being treated as a fresh installation.
 - The new regression failed before the change and passed afterward. Release schema/integrity/startup suite: **43 passed, 2 skipped**; Python compilation, `bash -n`, and `git diff --check` passed. PostgreSQL-backed migration acceptance remains open.
+
+## 27 October 2026 — expose configured agent quota in public pricing
+
+- The plan model and entitlement gate include `max_agents`, but `/billing-sovereign/public/plans` omitted it and the public plan cards therefore hid a configured quota. The API now returns the same catalog value and the pricing card displays it beside included minutes and concurrent calls.
+- Backend public pricing tests: **25 passed**; pricing page tests: **6 passed**; scoped ESLint and TypeScript checks passed. Live catalog/payment verification and saved-brand browser review remain open.

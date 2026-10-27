@@ -229,6 +229,10 @@ export default function PricingPage() {
                   </li>
                   <li className="flex gap-3">
                     <Check className="size-4 shrink-0 text-cta" />
+                    {plan.max_agents.toLocaleString()} agents
+                  </li>
+                  <li className="flex gap-3">
+                    <Check className="size-4 shrink-0 text-cta" />
                     {plan.max_concurrent_calls.toLocaleString()} concurrent
                     calls
                   </li>
