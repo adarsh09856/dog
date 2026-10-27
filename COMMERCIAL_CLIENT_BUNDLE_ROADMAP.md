@@ -355,3 +355,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Enrollment previously verified the license and proof of key possession, then consumed the one-time token without checking the source IP. It now applies the same observed-peer/trusted-proxy IP matcher used by owner status before the atomic consume. A disallowed source gets a generic enrollment rejection and cannot strand the valid installation key; unbound licenses remain unaffected.
 - The regression covers denied, permitted and no-allowlist cases. License/enrollment/owner-status suite: **73 passed, 1 deselected** (the separate OpenAPI inventory test needs live MinIO). Python compilation and `git diff --check` passed. Ruff is not installed; deployed proxy/IP acceptance remains open.
+
+## 27 October 2026 — saved tagline in authentication panel
+
+- Shared branding already updated the public hero/footer, app shell and superadmin title/logo, but the authentication panel kept a hard-coded headline. It now renders the saved tagline from the same live branding context, so an admin branding save reaches sign-in/sign-up without changing the customer-facing brand lockup.
+- `ClientBrandingContext.test.tsx`: **3 passed**, including a live context refresh after a saved tagline change; changed-file ESLint and `tsc --noEmit` passed. Cross-session browser verification against a persisted brand remains open.

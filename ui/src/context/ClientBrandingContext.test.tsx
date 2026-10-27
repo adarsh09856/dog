@@ -8,6 +8,7 @@ vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light", setTheme: vi.fn() }),
 }));
 
+import { AuthShell } from "@/components/auth/AuthShell";
 import { BrandLogo } from "@/components/BrandLogo";
 import { PublicFooter } from "@/components/PublicSiteChrome";
 import { DEFAULT_BRANDING } from "@/lib/branding";
@@ -74,9 +75,11 @@ describe("shared platform branding", () => {
       <ClientBrandingProvider initialBranding={initial}>
         <BrandLogo className="h-8" />
         <PublicFooter />
+        <AuthShell><p>Sign in form</p></AuthShell>
       </ClientBrandingProvider>,
     );
     expect(screen.getAllByText("Acme Voice").length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Acme conversations" })).toBeTruthy();
     await waitFor(() => expect(document.title).toBe("Admin | Acme Voice"));
     expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
       "#123456",
@@ -112,10 +115,14 @@ describe("shared platform branding", () => {
     mocks.apiFetch.mockResolvedValue({
       ...initial,
       company_name: "New Brand",
+      tagline: "New conversations, with less busywork.",
       primary_color: "#654321",
     });
     act(() => notifyBrandingChanged());
     await waitFor(() => expect(document.title).toBe("Admin | New Brand"));
+    expect(screen.getByRole("heading", {
+      name: "New conversations, with less busywork.",
+    })).toBeTruthy();
     expect(screen.queryByText("Acme Voice")).toBeNull();
     expect(screen.getAllByText("New Brand").length).toBeGreaterThan(0);
     expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
@@ -141,4 +148,5 @@ describe("shared platform branding", () => {
     act(() => { document.title = "Kodewaves"; });
     await waitFor(() => expect(document.title).toBe("Admin | Acme Voice"));
   });
+
 });

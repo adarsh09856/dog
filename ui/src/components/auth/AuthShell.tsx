@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 
 const HIGHLIGHTS = [
   "Web and phone agents",
@@ -21,6 +22,8 @@ export function AuthShell({
   children: ReactNode;
   enterpriseSlot?: ReactNode;
 }) {
+  const branding = useClientBranding();
+
   return (
     <div className="grid min-h-screen w-full bg-background lg:grid-cols-[55%_45%]">
       {/* Form column (LEFT) — scrolls and stays centered */}
@@ -52,7 +55,7 @@ export function AuthShell({
 
         <div className="relative max-w-md space-y-5">
           <h1 className="text-3xl font-semibold leading-tight tracking-tight text-zinc-50 xl:text-4xl">
-            Good conversations. Real work, done.
+            {branding.tagline}
           </h1>
           <ul className="flex flex-wrap gap-2">
             {HIGHLIGHTS.map((point) => (
