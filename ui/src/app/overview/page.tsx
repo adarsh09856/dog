@@ -21,7 +21,6 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   UserCheck,
   Wallet,
   Wrench,
@@ -72,20 +71,20 @@ export default function OverviewPage() {
           href: "/workflow",
           icon: Bot,
           badge: stats?.agents.total_agents_count ? `${stats.agents.total_agents_count} Agents` : "Core",
-          desc: "Build and deploy conversational voice agents with low-latency speech pipelines.",
+          desc: "Build agents with prompts, workflow branches, speech settings and channel connections.",
         },
         {
           title: "Campaigns",
           href: "/campaigns",
           icon: Megaphone,
-          desc: "Schedule and execute outbound calling campaigns with smart retry logic.",
+          desc: "Schedule outbound calls and review campaign progress and outcomes.",
         },
         {
           title: "Models & Engines",
           href: "/model-configurations",
           icon: Brain,
           badge: stats?.model_health.total_models ? `${stats.model_health.total_models} Models` : "BYOK + Cloud",
-          desc: "Configure LLM, STT, and TTS engines across Cloud (Gemini, OpenAI) & Self-hosted.",
+          desc: "Choose configured cloud or self-hosted LLM, STT and TTS providers.",
         },
         {
           title: "Telephony",
@@ -103,7 +102,7 @@ export default function OverviewPage() {
           title: "Knowledge Base",
           href: "/files",
           icon: Database,
-          desc: "Upload documents and knowledge files for instant retrieval (RAG) during calls.",
+          desc: "Upload and manage documents used by agents during conversations.",
         },
         {
           title: "Recordings & Cache",
@@ -114,7 +113,7 @@ export default function OverviewPage() {
       ],
     },
     {
-      category: "GROWTH & LEADS",
+      category: "GROWTH AND LEADS",
       description: "Convert callers into customers with automated qualification and scheduling",
       items: [
         {
@@ -152,7 +151,7 @@ export default function OverviewPage() {
       ],
     },
     {
-      category: "MANAGE & OBSERVABILITY",
+      category: "MANAGE AND OBSERVABILITY",
       description: "Monitor call executions, review analytics, and manage minute balances",
       items: [
         {
@@ -183,12 +182,11 @@ export default function OverviewPage() {
     <div className="container mx-auto px-4 py-8">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       <div className="max-w-6xl mx-auto space-y-8">
-        {/* Sovereign Platform Banner */}
-        <Card className="border border-border/70 bg-gradient-to-br from-card via-card/90 to-card/50 shadow-sm">
+        <Card className="border border-border/70 bg-card shadow-sm">
           <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-primary text-xs font-semibold tracking-wider uppercase">
-                <Sparkles className="h-4 w-4" />
+                <Activity className="h-4 w-4" />
                 {branding.company_name} workspace
               </div>
               <div className="flex items-center gap-2">
@@ -201,8 +199,8 @@ export default function OverviewPage() {
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
                 </Button>
-                <Badge variant="outline" className="border-emerald-500/30 text-emerald-500 bg-emerald-500/5">
-                  ● Platform Active
+                <Badge variant="outline" className="text-muted-foreground">
+                  Workspace overview
                 </Badge>
               </div>
             </div>
@@ -212,7 +210,7 @@ export default function OverviewPage() {
                   {user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}!` : `Welcome to ${branding.company_name}`}
                 </CardTitle>
                 <CardDescription className="text-sm text-muted-foreground mt-1 max-w-2xl">
-                  Enterprise conversational voice AI platform with sovereign telephony, direct BYOK model pools, and low-latency voice orchestration.
+                  Configure voice agents, connect speech and telephony providers, and review call activity from one workspace.
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -233,12 +231,12 @@ export default function OverviewPage() {
             <div className="flex flex-wrap items-center gap-3 border-t border-border/40 pt-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5 font-medium text-foreground">
                 <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                100% Self-Hosted &amp; Sovereign
+                Hosted or customer-managed deployment
               </span>
               <span>•</span>
-              <span>Cloud Models (Gemini 3.5, OpenAI, Deepgram, Sarvam, Cartesia)</span>
+              <span>Configure cloud or self-hosted speech models</span>
               <span>•</span>
-              <span>Self-hosted Speech Engines (Piper ONNX &amp; Faster-Whisper)</span>
+              <span>Browser and telephony channels</span>
             </div>
           </CardContent>
         </Card>
@@ -305,9 +303,11 @@ export default function OverviewPage() {
             </div>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-3xl font-bold tracking-tight text-foreground">
-                {stats ? `${stats.calls.success_rate_percent}%` : "--%"}
+                {stats && stats.recent_runs.length > 0 ? `${stats.calls.success_rate_percent}%` : "—"}
               </span>
-              <span className="text-xs text-muted-foreground">completed</span>
+              <span className="text-xs text-muted-foreground">
+                {stats && stats.recent_runs.length > 0 ? "recent calls" : "no calls yet"}
+              </span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>{stats ? `${stats.calls.active_calls} active calls` : ""}</span>
@@ -332,11 +332,11 @@ export default function OverviewPage() {
                 {stats ? stats.agents.active_agents_count : "--"}
               </span>
               <span className="text-xs text-muted-foreground">
-                of {stats ? stats.agents.total_agents_count : "--"} active
+                of {stats ? stats.agents.total_agents_count : "--"} total
               </span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-              <span className="text-emerald-500 font-medium">Ready</span>
+              <span className="font-medium text-muted-foreground">Active</span>
               <Link href="/workflow" className="text-primary hover:underline font-medium flex items-center gap-1">
                 View all <ArrowRight className="h-3 w-3" />
               </Link>
@@ -345,12 +345,12 @@ export default function OverviewPage() {
         </div>
 
         {/* Model Health Banner */}
-        {stats && stats.model_health.warnings && stats.model_health.warnings.length > 0 ? (
+        {stats ? stats.model_health.warnings.length > 0 ? (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-600 dark:text-amber-400">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
               <div className="flex-1 text-xs">
-                <div className="font-semibold text-sm">Capability Notice: Missing Layer Credentials</div>
+              <div className="font-semibold text-sm">Model configuration needs attention</div>
                 <div className="mt-1 space-y-0.5">
                   {stats.model_health.warnings.map((w, idx) => (
                     <p key={idx}>• {w}</p>
@@ -358,17 +358,24 @@ export default function OverviewPage() {
                 </div>
               </div>
               <Button asChild size="sm" variant="outline" className="border-amber-500/50 hover:bg-amber-500/10 text-xs shrink-0">
-                <Link href="/admin/models">Configure Keys</Link>
+                <Link href="/model-configurations">Configure models</Link>
               </Button>
             </div>
           </div>
         ) : (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 px-4 flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400">
+          <div className="rounded-xl border border-border bg-muted/30 p-3 px-4 flex items-center justify-between text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              <span className="font-medium">All Voice AI Layers Operational:</span>
-              <span className="text-muted-foreground">LLM, STT, and TTS voice engines verified in catalog.</span>
+              <Brain className="h-4 w-4 text-primary" />
+              <span className="font-medium text-foreground">Model settings</span>
+              <span>No model availability warnings.</span>
             </div>
+            <Link href="/model-configurations" className="text-primary hover:underline font-medium flex items-center gap-1">
+              Model Settings <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-muted/30 p-3 px-4 flex items-center justify-between text-xs text-muted-foreground" role="status">
+            <span>{loadError ? "Model availability could not be checked." : "Checking model availability…"}</span>
             <Link href="/model-configurations" className="text-primary hover:underline font-medium flex items-center gap-1">
               Model Settings <ArrowRight className="h-3 w-3" />
             </Link>
@@ -487,22 +494,22 @@ export default function OverviewPage() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-emerald-500" />
-                <CardTitle className="text-base font-semibold">Sovereign Administration</CardTitle>
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base font-semibold">Platform administration</CardTitle>
               </div>
               <Badge variant="outline" className="text-xs">
                 Admin Console
               </Badge>
             </div>
             <CardDescription className="text-xs">
-              Manage platform master API keys, toggle self-hosted AI permissions, inspect system audit logs, and configure email SMTP settings.
+              Manage shared model credentials, client installations, platform plans and audit records.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
               <Button asChild size="sm">
                 <Link href="/admin">
-                  Open Sovereign Admin <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  Open administration <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">
