@@ -47,7 +47,7 @@ import {
     generateTemplateWorkflowDefinition,
     TEMPLATE_CATEGORIES,
 } from '@/constants/agentTemplates';
-import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
+import { INDIAN_TEMPLATE_LANGUAGES, WORKFLOW_GENERATION_LANGUAGES } from '@/constants/languages';
 import { detailFromError } from '@/lib/apiError';
 import { useAuth } from '@/lib/auth';
 import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
@@ -575,7 +575,7 @@ export default function CreateWorkflowPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="custom-builder-language">Agent Language</Label>
+                                    <Label htmlFor="custom-builder-language">Prompt language</Label>
                                     <select
                                         id="custom-builder-language"
                                         value={customBuilderLanguage}
@@ -583,12 +583,12 @@ export default function CreateWorkflowPage() {
                                         className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"
                                     >
                                         <option value="model">Use the language configured in Models</option>
-                                        {INDIAN_TEMPLATE_LANGUAGES.map(({ code, name }) => (
+                                        {WORKFLOW_GENERATION_LANGUAGES.map(({ code, name }) => (
                                             <option key={code} value={code}>{name}</option>
                                         ))}
                                     </select>
                                     <p className="text-xs text-muted-foreground">
-                                        The agent prompt follows this language and supports natural English code-switching. Configure compatible STT and TTS models in Models.
+                                        This sets the generated prompt language; it does not limit speech recognition or voice output. STT and TTS language coverage varies by selected provider, model, and voice. Check their supported-language lists in Models.
                                     </p>
                                 </div>
 
