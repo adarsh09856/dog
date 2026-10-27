@@ -4390,6 +4390,10 @@
           },
           "currency": {
             "default": "INR",
+            "enum": [
+              "INR",
+              "USD"
+            ],
             "title": "Currency",
             "type": "string"
           },
@@ -4424,18 +4428,33 @@
           },
           "price_cents": {
             "default": 0,
+            "minimum": 0.0,
             "title": "Price Cents",
             "type": "integer"
           },
           "price_inr": {
-            "default": 0.0,
-            "title": "Price Inr",
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Inr"
           },
           "price_usd": {
-            "default": 0.0,
-            "title": "Price Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Usd"
           },
           "sort_order": {
             "default": 0,

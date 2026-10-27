@@ -57,3 +57,11 @@ def test_published_api_schema_contains_popularity_field():
     documented = published["components"]["schemas"]["CreditPackagePublicItem"]["properties"]["is_popular"]
     actual = billing_sovereign.CreditPackagePublicItem.model_json_schema()["properties"]["is_popular"]
     assert documented == actual
+    saved_fields = published["components"]["schemas"]["CreditPackageItem"]["properties"]
+    model_fields = credit_packages.CreditPackageItem.model_json_schema()["properties"]
+    for name in ("currency", "price_cents", "price_inr", "price_usd", "is_popular"):
+        model_field = dict(model_fields[name])
+        # FastAPI omits null defaults when building the OpenAPI schema.
+        if "default" in model_field and model_field["default"] is None:
+            del model_field["default"]
+        assert saved_fields[name] == model_field

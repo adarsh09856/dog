@@ -101,11 +101,15 @@ handover ends and restart the client API services.
    `--legacy-license-public-key-file`. Keep the release verification key and
    signed manifest aligned with that exact image. Upgrade clients to this
    dual-trust image before giving them new-key tokens.
-2. Replace the owner's `current.key` with the new private key and list the old
-   private key file under
-   `KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES` (path-separated). Owner
-   status checks verify each bearer token and sign the reply with its matching
-   key, so clients still pinned to the old key continue checking in.
+2. Copy the old private key to a protected legacy file and add its container
+   path to `KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES` (path-separated).
+   Recreate the owner API with the overlay and verify old-token checks first.
+   Prepare the new key in the same owner key directory, set its group and mode
+   so UID/GID 10001 can read it, then atomically rename it to `current.key`.
+   The key generator creates private files with restrictive permissions; adjust
+   their group access before the rename. Owner status checks verify each bearer
+   token and sign the reply with its matching key, so clients still pinned to
+   the old key continue checking in.
 3. Renew installations, install their new tokens on dual-trust client images,
    and wait for the old-token handovers to finish. Retire the old owner private
    key and publish an image without the old public key only after all clients
