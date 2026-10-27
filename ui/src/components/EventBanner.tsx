@@ -137,7 +137,7 @@ export function EventBanner() {
                 a single line but still narrow enough that the full label costs
                 the title characters. Below 640 the bar is two lines and has the
                 room. */}
-            <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-cta sm:text-[10px]">
+            <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-cta-text sm:text-[10px]">
               <span className="hidden sm:inline md:hidden">Live</span>
               <span className="sm:hidden md:inline">Live virtual session</span>
             </span>
@@ -162,7 +162,7 @@ export function EventBanner() {
             read as one control repeated. Inverting on hover keeps it the
             loudest thing in the bar at the moment of intent. group-hover, not
             hover, because the whole bar is the link. */}
-        <span className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-cta px-2.5 py-1 text-[11px] font-medium text-cta transition-colors duration-150 group-hover:bg-cta group-hover:text-cta-foreground sm:px-3 sm:py-1.5 sm:text-[12px] md:ml-0">
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-cta px-2.5 py-1 text-[11px] font-medium text-cta-text transition-colors duration-150 group-hover:bg-cta group-hover:text-cta-foreground sm:px-3 sm:py-1.5 sm:text-[12px] md:ml-0">
           <span>{event.cta}</span>
           <span aria-hidden>→</span>
         </span>

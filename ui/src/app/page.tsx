@@ -117,7 +117,7 @@ export default function HomePage() {
                   "Web and telephony",
                 ].map((item) => (
                   <span key={item} className="flex items-center gap-2">
-                    <Check className="size-3.5 text-cta" />
+                    <Check className="size-3.5 text-cta-text" />
                     {item}
                   </span>
                 ))}
@@ -129,14 +129,14 @@ export default function HomePage() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Operating lifecycle</p>
                   <p className="mt-2 text-base font-semibold tracking-tight">From first draft to live calls</p>
                 </div>
-                <span className="flex size-10 items-center justify-center rounded-md border border-border bg-muted/60 text-cta">
+                <span className="flex size-10 items-center justify-center rounded-md border border-border bg-muted/60 text-cta-text">
                   <Workflow className="size-5" aria-hidden="true" />
                 </span>
               </div>
               <ol className="px-6 py-2">
                 {stages.map(({ number, title, text }) => (
                   <li key={number} className="group relative flex gap-5 py-4 first:pt-5 last:pb-5">
-                    <span className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-background font-mono text-[10px] tabular-nums text-muted-foreground transition-colors group-hover:border-cta/50 group-hover:text-cta">{number}</span>
+                    <span className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-background font-mono text-[10px] tabular-nums text-muted-foreground transition-colors group-hover:border-cta/50 group-hover:text-cta-text">{number}</span>
                     <div className="min-w-0 pt-0.5">
                       <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
                       <p className="mt-1 text-[13px] leading-6 text-muted-foreground">{text}</p>
@@ -158,7 +158,7 @@ export default function HomePage() {
           <div className="mx-auto max-w-7xl">
             <div className="mb-12 grid gap-6 md:grid-cols-2 md:items-end">
               <div>
-                <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
+                <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
                 Configure the full call lifecycle
                 </p>
                 <h2 className="max-w-xl text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
@@ -174,7 +174,7 @@ export default function HomePage() {
               {platformAreas.map(({ number, label, title, summary, capabilities: areaCapabilities }) => (
                 <article key={number} className={`${number !== "03" ? "border-b border-border md:border-b-0" : ""} ${number !== "01" ? "md:border-l" : ""} py-7 md:px-7 md:py-8 md:first:pl-0 md:last:pr-0`}>
                   <div className="mb-8 flex items-center gap-3">
-                    <span className="font-mono text-xs tabular-nums text-cta">{number}</span>
+                    <span className="font-mono text-xs tabular-nums text-cta-text">{number}</span>
                     <span className="h-px w-7 bg-border" aria-hidden="true" />
                     <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
                   </div>
@@ -183,7 +183,7 @@ export default function HomePage() {
                   <ul className="mt-6 divide-y divide-border border-t border-border">
                     {areaCapabilities.map(({ icon: Icon, title: capabilityTitle, text }) => (
                       <li key={capabilityTitle} className="flex gap-3 py-4">
-                        <Icon className="mt-0.5 size-4 shrink-0 text-cta" aria-hidden="true" />
+                        <Icon className="mt-0.5 size-4 shrink-0 text-cta-text" aria-hidden="true" />
                         <div>
                           <h4 className="text-sm font-semibold">{capabilityTitle}</h4>
                           <p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p>
@@ -199,7 +199,7 @@ export default function HomePage() {
         <section className="border-y border-border bg-muted/40 px-5 py-20 sm:px-8 sm:py-24">
           <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2 lg:gap-24">
             <div>
-              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
                 Speech configuration
               </p>
               <h2 className="text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
@@ -212,7 +212,7 @@ export default function HomePage() {
               </p>
               <Link
                 href="/pricing"
-                className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-cta"
+                className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-cta-text"
               >
                 See deployment costs <ArrowRight className="size-4" />
               </Link>
@@ -225,7 +225,7 @@ export default function HomePage() {
               ].map(({ icon: Icon, title, text }, index) => (
                 <div key={title}>
                   <div className="flex items-center gap-5 border-b border-border py-5 first:pt-0 last:border-b-0">
-                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-cta/10 text-cta">
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-cta/10 text-cta-text">
                       <Icon className="size-5" />
                     </span>
                     <div>
@@ -247,7 +247,7 @@ export default function HomePage() {
         >
           <div className="mx-auto max-w-7xl">
             <div className="mb-12 max-w-2xl">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
                 Choose how you operate
               </p>
               <h2 className="text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
@@ -283,7 +283,7 @@ export default function HomePage() {
                   key={title}
                   className="rounded-2xl border border-border bg-card p-7 sm:p-10"
                 >
-                  <Icon className="mb-6 size-7 text-cta" />
+                  <Icon className="mb-6 size-7 text-cta-text" />
                   <h3 className="text-2xl font-medium tracking-tight">
                     {title}
                   </h3>
@@ -296,7 +296,7 @@ export default function HomePage() {
                         key={point}
                         className="flex items-center gap-3 text-sm"
                       >
-                        <ShieldCheck className="size-4 shrink-0 text-cta" />
+                        <ShieldCheck className="size-4 shrink-0 text-cta-text" />
                         {point}
                       </li>
                     ))}
@@ -315,7 +315,7 @@ export default function HomePage() {
         </section>
         <section className="border-t border-border bg-muted/40 px-5 py-20 text-center sm:px-8 sm:py-24">
           <div className="mx-auto max-w-3xl">
-            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
               Kodewaves voice agent workspace
             </p>
             <h2 className="text-4xl font-medium leading-tight tracking-tight sm:text-5xl">

@@ -365,3 +365,9 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Re-ran the OpenAPI entitlement audit with `ENVIRONMENT=test` so the app uses `NullFileSystem`; the test found **no unclassified API data routes**. The same focused batch verifies license binding, enrollment/IP restrictions, owner status and route gates.
 - `py -3.13 -m pytest --noconftest api/tests/test_installation_license.py api/tests/test_installation_identity.py api/tests/test_client_installation_check.py api/tests/test_client_installation_issuance.py api/tests/test_owner_installation_status.py -q` — **74 passed**, with five dependency/deprecation warnings. This is local API/source verification, not client-image or live two-tenant acceptance.
+
+## 27 October 2026 — readable accents for configured branding
+
+- A very light owner-selected primary color previously became hard to read when used as small text on light surfaces. Added a separate contrast-adjusted text accent for public pages and panel labels, keeping the configured CTA fill and its foreground unchanged. Both server and client theme generation use the same mapping.
+- Focused branding/pricing/admin UI suites: **16 passed**; TypeScript, changed-file ESLint and `git diff --check` passed. A local PostCSS compilation generated the new Tailwind text utility. The contrast regression covers very light and very dark configured colors against representative light and dark surfaces; saved-brand browser acceptance remains open.
+- An earlier UI run timed out starting two workers with only 172 MB physical RAM available. An old preview server from this worktree used about 4.8 GB; after stopping it and its children, the focused rerun passed. The active voice worktree and production services were not stopped.

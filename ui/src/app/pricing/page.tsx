@@ -175,7 +175,7 @@ export default function PricingPage() {
               </p>
               <Link
                 href="/auth/login"
-                className="mt-5 inline-flex text-sm font-semibold text-cta"
+                className="mt-5 inline-flex text-sm font-semibold text-cta-text"
               >
                 Sign in to your account →
               </Link>
@@ -222,23 +222,23 @@ export default function PricingPage() {
                 </div>
                 <ul className="mb-8 space-y-3 text-sm">
                   <li className="flex gap-3">
-                    <Check className="size-4 shrink-0 text-cta" />
+                    <Check className="size-4 shrink-0 text-cta-text" />
                     {plan.included_minutes.toLocaleString()} {billingCycle
                       ? "minutes credited per payment"
                       : "one-time trial minutes on activation"}
                   </li>
                   <li className="flex gap-3">
-                    <Check className="size-4 shrink-0 text-cta" />
+                    <Check className="size-4 shrink-0 text-cta-text" />
                     {plan.max_agents.toLocaleString()} agents
                   </li>
                   <li className="flex gap-3">
-                    <Check className="size-4 shrink-0 text-cta" />
+                    <Check className="size-4 shrink-0 text-cta-text" />
                     {plan.max_concurrent_calls.toLocaleString()} concurrent
                     calls
                   </li>
                   {plan.features?.map((feature) => (
                     <li key={feature} className="flex gap-3">
-                      <Check className="size-4 shrink-0 text-cta" />
+                      <Check className="size-4 shrink-0 text-cta-text" />
                       <span>{feature}</span>
                     </li>
                   ))}
@@ -262,7 +262,7 @@ export default function PricingPage() {
 
         <section className="mt-24">
           <div className="mb-8">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
               Additional usage
             </p>
             <h2 className="text-3xl font-medium tracking-tight">
@@ -320,7 +320,7 @@ export default function PricingPage() {
                 </p>
                 <Link
                   href={`/auth/login?credit_package=${encodeURIComponent(String(pkg.id))}`}
-                  className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-cta"
+                  className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-cta-text"
                 >
                   Continue to wallet
                   <ArrowRight className="size-4" />
@@ -332,7 +332,7 @@ export default function PricingPage() {
 
         <section className="my-24 grid gap-8 rounded-2xl border border-border bg-muted/40 p-7 sm:p-10 md:grid-cols-2">
           <div>
-            <Server className="mb-5 size-6 text-cta" />
+            <Server className="mb-5 size-6 text-cta-text" />
             <h2 className="text-3xl font-medium tracking-tight">
               Planning a client installation?
             </h2>
@@ -343,7 +343,7 @@ export default function PricingPage() {
             </p>
           </div>
           <div>
-            <Globe2 className="mb-5 size-6 text-cta" />
+            <Globe2 className="mb-5 size-6 text-cta-text" />
             <h3 className="text-lg font-semibold">
               Budget for the complete deployment.
             </h3>
@@ -355,7 +355,7 @@ export default function PricingPage() {
                 "Hosting, storage, support and maintenance",
               ].map((item) => (
                 <li key={item} className="flex gap-3">
-                  <Check className="mt-1 size-4 shrink-0 text-cta" />
+                  <Check className="mt-1 size-4 shrink-0 text-cta-text" />
                   {item}
                 </li>
               ))}

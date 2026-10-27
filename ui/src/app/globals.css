@@ -43,6 +43,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --color-cta: var(--cta);
+  --color-cta-text: var(--cta-text);
   --color-cta-foreground: var(--cta-foreground);
 }
 
@@ -81,6 +82,7 @@
   --foreground: oklch(0.24 0.025 245);
   /* Single restrained warm accent — used only on primary CTAs + focus rings. */
   --cta: oklch(0.72 0.15 65);
+  --cta-text: oklch(0.36 0.07 245);
   --cta-foreground: oklch(0.16 0.02 60);
   /* Giant faded "kodewaves" wordmark (authentic letterforms traced
      from the brand logo PNG). Theme-switched here; consumed by .app-surface and .auth-imprint. */
@@ -121,6 +123,7 @@
   --sidebar-ring: oklch(0.78 0.16 67);
   /* Warm accent, slightly brighter against the near-black surfaces. */
   --cta: oklch(0.78 0.16 67);
+  --cta-text: oklch(0.86 0.08 210);
   --cta-foreground: oklch(0.16 0.02 60);
   --brand-imprint: none;
 }

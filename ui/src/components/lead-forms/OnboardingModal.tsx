@@ -261,7 +261,7 @@ export function OnboardingModal({ open, onComplete }: OnboardingModalProps) {
                   <button
                     type="button"
                     onClick={expandOnPrem}
-                    className="text-xs font-medium text-cta underline-offset-4 hover:underline"
+                    className="text-xs font-medium text-cta-text underline-offset-4 hover:underline"
                   >
                     Talk to us about on-prem →
                   </button>

@@ -33,6 +33,28 @@ function mixHex(foreground: string, background: string, foregroundWeight: number
   return `#${channels.join("")}`;
 }
 
+// Text must remain legible on the light/dark surfaces even if the owner picks
+// a near-white or near-black brand color. Keep the configured CTA fill intact.
+function readableAccent(color: string, theme: BrandingTheme): string {
+  const surface = theme === "light" ? "#ededed" : "#303840";
+  const target = theme === "light" ? "#000000" : "#ffffff";
+  const surfaceLuminance = relativeLuminance(surface);
+  const contrast = (candidate: string) => {
+    const candidateLuminance = relativeLuminance(candidate);
+    return (Math.max(candidateLuminance, surfaceLuminance) + 0.05)
+      / (Math.min(candidateLuminance, surfaceLuminance) + 0.05);
+  };
+  if (contrast(color) >= 4.55) return color;
+  let low = 0;
+  let high = 1;
+  for (let i = 0; i < 16; i++) {
+    const middle = (low + high) / 2;
+    if (contrast(mixHex(color, target, middle)) >= 4.55) low = middle;
+    else high = middle;
+  }
+  return mixHex(color, target, low);
+}
+
 export function brandingCssVariables(
   branding: PlatformBranding,
   theme: BrandingTheme,
@@ -49,6 +71,7 @@ export function brandingCssVariables(
     "--primary": color,
     "--sidebar-primary": color,
     "--cta": color,
+    "--cta-text": readableAccent(color, theme),
     "--ring": color,
     "--accent": accent,
     "--sidebar-accent": accent,
