@@ -64,7 +64,8 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
                     mount = {
                         "type": "bind", "source": key_path,
                         "target": "/run/kodewaves-identity/installation.key",
-                        "read_only": True, "bind": {"create_host_path": False},
+                        # Compose versions may omit false-valued options.
+                        "read_only": True, "bind": {},
                     }
                     return SimpleNamespace(stdout=json.dumps({"services": {
                         name: {
