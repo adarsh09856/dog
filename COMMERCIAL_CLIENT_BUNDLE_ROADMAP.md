@@ -404,3 +404,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Focus, periodic and manual refreshes can overlap. An older successful response could previously overwrite a newer license denial in the client UI. Refreshes now use a request revision and invalidate pending results when the authenticated effect is replaced or unmounted; API enforcement remains the authority.
 - The focused context and layout suites passed **3 tests**, including a late valid response following a newer denial; changed-file ESLint passed. This uses mocked requests and does not replace a live multi-session acceptance check.
+
+## 27 October 2026 — accurate free-plan minutes label
+
+- The signed-in billing card labeled free-plan minutes “per payment” despite granting them once on activation. It now labels those as one-time trial minutes; paid plans retain the per-payment label.
+- Billing and public-pricing suites passed **11 tests**; changed-file ESLint passed. Live catalog and payment acceptance remain open.

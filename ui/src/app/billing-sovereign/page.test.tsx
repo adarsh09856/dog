@@ -47,6 +47,15 @@ describe("manual plan renewal", () => {
     vi.restoreAllMocks();
   });
 
+  it("labels free plan minutes as an activation grant", async () => {
+    mocks.getWallet.mockResolvedValue({ plan_code: "free", plan_name: "Free", included_minutes: 20, credit_balance_minutes: 20, bonus_minutes: 0, total_available_minutes: 20, is_frozen: false });
+    mocks.getLedger.mockResolvedValue([]);
+    mocks.getPlans.mockResolvedValue([{ id: "free", name: "Free", code: "free", currency: "INR", monthly_price_cents: 0, annual_price_cents: 0, included_minutes: 20, max_concurrent_calls: 1 }]);
+    render(<SovereignBillingPage />);
+    expect(await screen.findByText("One-time trial minutes:")).toBeTruthy();
+    expect(screen.queryByText("Minutes per payment:")).toBeNull();
+  });
+
   it("allows renewing the current paid plan and explains plan replacement before payment", async () => {
     mocks.getWallet.mockResolvedValue({
       plan_code: "pro",

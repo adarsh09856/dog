@@ -469,7 +469,7 @@ export default function SovereignBillingPage() {
                   <CardContent className="space-y-4">
                     <div className="space-y-2 text-xs">
                       <div className="flex items-center justify-between py-1 border-b border-border/40">
-                        <span className="text-muted-foreground">Minutes per payment:</span>
+                        <span className="text-muted-foreground">{isPaidPlan ? "Minutes per payment:" : "One-time trial minutes:"}</span>
                         <span className="font-bold text-foreground font-mono">{p.included_minutes.toLocaleString()} mins</span>
                       </div>
                       <div className="flex items-center justify-between py-1 border-b border-border/40">
