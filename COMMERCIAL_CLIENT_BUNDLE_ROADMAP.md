@@ -330,3 +330,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 - The client entrypoint previously ran `alembic upgrade head` after checking code integrity but did not consult the signed release's `schema_compatibility.upgrade_from`. It now verifies the signed release and reads the current `alembic_version` before migration. Fresh databases and exactly one signed-compatible revision proceed; unknown, multiple, or unapproved revisions stop startup before migration. Rollback remains disallowed unless a future release explicitly lists tested `rollback_to` revisions.
 - Added regression coverage for fresh/ancestor/current/unsupported/ambiguous revisions, the DB revision query, and startup halting before Alembic. Focused release-schema, integrity, startup-entrypoint and installer-archive batch: **51 passed, 2 skipped**. Python compilation, `bash -n scripts/start_services_docker.sh`, and `git diff --check` passed.
 - Verification is mocked/unit-level. A PostgreSQL-backed upgrade/downgrade, customer database backup/restore, and actual Docker upgrade remain open; operator guidance is now documented in the bundled installer.
+
+## 27 October 2026 — require schema preflight in API image verification
+
+- The client API image verifier now requires `api/services/release_schema.py` and imports its startup preflight during image inspection. This prevents publishing an image whose Docker entrypoint references a missing or unloadable schema gate.
+- `py -3.13 -m pytest --noconftest api/tests/test_client_package.py -q` — **42 passed**. Python compilation and `git diff --check` passed. A Docker-built API image has not yet been inspected in Linux CI.

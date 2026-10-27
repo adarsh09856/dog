@@ -563,6 +563,7 @@ def test_api_image_verifier_requires_the_signed_runtime_docs_index(monkeypatch):
 
     code = commands[0][-1]
     assert "docs/docs.json" in code
+    assert "api/services/release_schema.py" in code
 
 
 def test_release_verifier_checks_caddyfile_with_the_approved_digest(tmp_path, monkeypatch):

@@ -31,6 +31,7 @@ for path in ('api/routes/admin', 'api/routes/superuser.py', 'api/tests',
              'scripts/create_superuser.py'):
     assert not (root / path).exists(), f'Owner/test source shipped: {path}'
 for path in ('api/services/installation_license.py', 'api/services/release_integrity.py',
+             'api/services/release_schema.py',
              'api/services/owner_public_keys.json',
              'api/services/bootstrap_client_admin.py',
              'api/db/client_user_management.py', 'api/db/client_workspace_management.py',
@@ -42,6 +43,8 @@ for path in ('owner-tools', 'api/.env', 'api/.env.test'):
 import json
 trust = json.loads((root / 'api/services/owner_public_keys.json').read_text())
 assert trust.get('license') and trust.get('release') and trust.get('owner_status_url'), 'Owner trust settings are missing'
+from api.services.release_schema import verify_client_schema_before_migration
+assert callable(verify_client_schema_before_migration), 'Client schema preflight is unavailable'
 from api.app import app
 paths = set(app.openapi()['paths'])
 owner = [path for path in paths if path == '/admin' or path.startswith('/admin/')
