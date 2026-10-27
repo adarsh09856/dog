@@ -93,8 +93,10 @@ through `POST /admin/client-installations/{installation_id}/renew` or the owner
 panel. The replacement token is returned once. The prior token remains
 registered for at most 48 hours, bounded by its original expiration, to allow
 an operator to update the client environment. Another renewal is refused during
-that handover. The operator must install the replacement token before the
-handover ends and restart the client API services.
+that handover. Before it ends, the operator must update the client `.env` and
+recreate both API and UI containers as described in `deploy/client/INSTALL.md`.
+Both consume the token; the UI uses it for integrity alerts. A Compose restart
+alone does not reload a changed environment.
 
 ### Rotating the owner license key
 

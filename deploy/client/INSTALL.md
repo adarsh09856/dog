@@ -126,8 +126,25 @@ the signed manifest's `schema_compatibility.upgrade_from` list. An unknown,
 ambiguous, or unapproved revision stops startup before migrations run; resolve
 the mismatch with the installation owner and restore a compatible backup when
 needed. Rollback requires explicit application/database compatibility approval;
-an old image alone is insufficient. Install a replacement license before its
-handover window expires and recreate the API service. Keep both Compose files
+an old image alone is insufficient. For license renewal, replace
+`KODEWAVES_LICENSE_TOKEN` in `.env` before the handover window expires, then
+recreate both API and UI so they receive the new environment. A Compose
+`restart` does not reload changed environment values:
+
+```bash
+python3 validate_install.py
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d --no-deps --force-recreate api
+```
+
+Wait for API health and `Initial owner installation check succeeded`, then run:
+
+```bash
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d --no-deps --force-recreate ui
+docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml ps
+```
+
+The UI also needs the new token to report integrity failures to the owner.
+Keep both Compose files
 (`docker-compose.client.yaml` and `docker-compose.identity.yaml`) on every later
 update, bootstrap, log or recovery command so the API and UI can read the
 enrolled key. Ask your installation owner for license, domain/IP policy,

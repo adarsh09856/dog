@@ -270,8 +270,9 @@ approved release, then recreate the services. Keep the previous image digests,
 manifest and encrypted backup available for recovery. A rollback is safe only
 when the previous application version supports the current database schema;
 that compatibility has not yet been accepted across releases. For license
-renewal, install the replacement token before its handover window ends and
-restart the API service. Follow the license guide for key rotation, DNS changes
+renewal, follow `INSTALL.md` to replace the token and recreate both the API and
+UI before the handover window ends. A Compose restart does not reload changed
+environment variables. Follow the license guide for key rotation, DNS changes
 and owner outage behavior.
 
 Do not expose `.env`, the signed license token, database credentials or the
