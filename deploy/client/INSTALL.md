@@ -128,6 +128,12 @@ an old image alone is insufficient. Install a replacement license before its
 handover window expires and recreate the API service. Ask your installation
 owner for license, domain/IP policy, renewal, capacity and recovery changes.
 
+If the bundled ingress displays “Service temporarily unavailable,” check the
+API and UI container logs and contact the installation owner. This message can
+also appear during ordinary outages; the logs and owner integrity alerts identify
+whether a protected-file check failed. An external proxy needs its own equivalent
+error response.
+
 A host administrator can replace local software and disable local monitoring.
 Integrity enforcement protects the approved, unmodified package; it is not
 unbypassable attestation of a customer-controlled server.

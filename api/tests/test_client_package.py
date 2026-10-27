@@ -106,11 +106,8 @@ def test_client_compose_waits_for_healthy_stateful_and_upstream_services():
     assert services["ui"]["depends_on"] == {
         "api": {"condition": "service_healthy"},
     }
-    assert services["caddy"]["depends_on"] == {
-        "api": {"condition": "service_healthy"},
-        "ui": {"condition": "service_healthy"},
-        "minio": {"condition": "service_healthy"},
-    }
+    # Ingress must start even when a component fails its startup checks.
+    assert not services["caddy"].get("depends_on")
 
 
 def test_client_docker_entrypoint_keeps_one_reachable_fastapi_listener():
@@ -151,6 +148,9 @@ def test_client_direct_ingress_routes_api_audio_and_ui_by_path():
     assert "@audio path /voice-audio /voice-audio/*" in caddyfile
     assert "reverse_proxy minio:9000" in caddyfile
     assert "reverse_proxy ui:3010" in caddyfile
+    assert "handle_errors" in caddyfile
+    assert "Service temporarily unavailable" in caddyfile
+    assert 'Cache-Control "no-store"' in caddyfile
     assert "header_up Host {host}" in caddyfile
     assert "admin off" in caddyfile
     install_readme = (root / "deploy/client/README.md").read_text()

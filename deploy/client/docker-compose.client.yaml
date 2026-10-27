@@ -22,10 +22,6 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on:
-      api: {condition: service_healthy}
-      ui: {condition: service_healthy}
-      minio: {condition: service_healthy}
     networks:
       internal:
         ipv4_address: ${CLIENT_CADDY_IPV4:-172.30.0.2}
