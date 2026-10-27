@@ -300,3 +300,9 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Replaced non-semantic green highlights on the Top Up action, deployment capability, and Voice Minutes tile with the configured primary brand tokens. Success/error colors remain reserved for actual state.
 - Overview UI tests passed **3/3**, including the new theme-token assertion; TypeScript and scoped ESLint passed. Saved-brand browser verification remains open.
+
+## 27 October 2026 — serialize first-owner assignment
+
+- Review found the first email signup path counted users and inserted the new account without serializing the two operations. Concurrent requests could both observe an empty table and both receive superadmin privileges. Email account creation now takes the same PostgreSQL transaction advisory lock used by owner promotion/demotion/deletion before counting or inserting; this also serializes explicitly provisioned superadmins with signup.
+- Regression: `py -3.13 -m pytest --noconftest api/tests/test_first_owner_creation_lock.py api/tests/test_owner_account_controls.py -q` — 8 passed. The first attempt lacked required test environment variables and collected no tests; rerun with test-only placeholder DB/Redis URLs passed. No database connection was used by these mocked cases.
+- This closes the specific concurrent first-email-signup race. Other identity-provider account creation and live multi-process PostgreSQL concurrency still need review/verification; owner-only release acceptance remains open.

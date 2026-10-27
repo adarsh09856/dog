@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from loguru import logger
 from pydantic import ValidationError
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
 
@@ -228,6 +228,10 @@ class UserClient(BaseDBClient):
         """
         async with self.async_session() as session:
             await enforce_client_creation_limit(session, limit_name="max_seats", model=UserModel)
+            # Serialize user creation with owner promotions, demotions, and
+            # deletions. Without this transaction lock, two concurrent first
+            # signups can both observe an empty user table and both become owners.
+            await session.execute(text("SELECT pg_advisory_xact_lock(492565710844)"))
             if is_superuser is None:
                 count_res = await session.execute(select(func.count(UserModel.id)))
                 user_count = count_res.scalar_one_or_none() or 0
