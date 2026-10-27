@@ -314,3 +314,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Re-ran startup ordering, signed-license/middleware, owner-status/outage-grace, and queued worker entitlement coverage together: `py -3.13 -m pytest --noconftest api/tests/test_client_startup_entrypoint.py api/tests/test_installation_license.py api/tests/test_owner_installation_status.py api/tests/test_client_worker_entitlements.py -q` — **40 passed**. Five dependency/OpenAPI deprecation warnings were emitted.
 - These are source and mocked boundary checks. No PostgreSQL, Redis service, Docker image, clean customer installation, live owner endpoint, alert delivery, or license expiry/renewal deployment was exercised. Release acceptance remains open.
+
+## 27 October 2026 — recheck SaaS campaign entitlement in queued source sync
+
+- Reproduced a stale-job gap: `sync_campaign_source` checked client license status but returned early from that helper in SaaS mode, then could fetch external contacts even after the owner disabled the organization's campaign feature. It now resolves the campaign and rechecks the SaaS campaign entitlement before obtaining or invoking the source-sync provider.
+- The regression failed before the check (the source-sync path completed despite a disabled feature) and passes after the change. `py -3.13 -m pytest --noconftest api/tests/test_campaign_tasks.py api/tests/test_saas_entitlements.py -q` — **37 passed**; changed Python files compile and `git diff --check` passes. This is mocked worker/API evidence; real plan changes during active queued campaigns remain unverified.

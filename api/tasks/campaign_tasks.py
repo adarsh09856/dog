@@ -10,6 +10,7 @@ from api.services.campaign.campaign_event_publisher import (
 )
 from api.services.campaign.source_sync_factory import get_sync_service
 from api.services.client_worker_entitlements import require_client_worker_features
+from api.services.saas_entitlements import enforce_saas_feature
 
 
 async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
@@ -31,6 +32,9 @@ async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
         campaign = await db_client.get_campaign_by_id(campaign_id)
         if not campaign:
             raise ValueError(f"Campaign {campaign_id} not found")
+        # A queued sync may run after an owner disables the campaign feature.
+        # Check again before reading contacts from the configured source.
+        await enforce_saas_feature(campaign.organization_id, "campaigns")
 
         # Get appropriate sync service
         sync_service = get_sync_service(campaign.source_type)
