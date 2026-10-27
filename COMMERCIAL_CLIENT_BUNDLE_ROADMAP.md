@@ -394,3 +394,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - A local integrity failure sets an integrity latch and the owner can also mark that installation revoked. The revocation latch previously took precedence, hiding the verified modified-file message from client installation status. The integrity latch is now checked first; both conditions continue to deny access.
 - The regression reproduced the wrong message before the fix. Owner-status and installation-license suites passed **37 tests**, with five warnings; local optional speech-provider imports logged missing packages. A disposable Caddy probe also confirmed an unavailable API returns uncached JSON 503. This does not establish the startup proxy's specific tamper message or packaged/live acceptance.
+
+## 27 October 2026 — distinguish license lookup failure from feature denial
+
+- When the installation feature endpoint could not be reached, `valid` was unknown but the UI falsely said the requested feature was excluded. The workspace now displays the verification error with a Retry button; a verified license lacking the feature still shows the feature-specific explanation.
+- The two focused layout interaction tests passed and changed-file ESLint passed. These mock the entitlement context; live browser/network recovery acceptance remains open.

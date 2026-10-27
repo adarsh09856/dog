@@ -159,13 +159,18 @@ const AppLayout: React.FC<AppLayoutProps> = ({
                 ) : entitlements.isClientEdition && requiredFeature && !entitlements.hasFeature(requiredFeature) ? (
                   <section className="container mx-auto max-w-2xl px-4 py-16">
                     <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
-                      <h1 className="text-xl font-semibold">Feature unavailable</h1>
+                      <h1 className="text-xl font-semibold">{entitlements.valid === true ? "Feature unavailable" : "Installation access unavailable"}</h1>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {entitlements.valid === false
+                        {entitlements.valid !== true
                           ? entitlements.message || "The installation license could not be verified."
                           : `This installation does not include the ${requiredFeature.replaceAll("_", " ")} feature.`}
-                        {" "}Contact your platform owner to update the license.
+                        {" "}{entitlements.valid === true ? "Contact your platform owner to update the license." : "Try again or contact your platform owner."}
                       </p>
+                      {entitlements.valid !== true && (
+                        <Button type="button" variant="outline" className="mt-5 mr-4" onClick={() => void entitlements.refresh()}>
+                          Retry
+                        </Button>
+                      )}
                       <Link href="/settings" className="mt-5 inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline">
                         View installation status
                       </Link>
