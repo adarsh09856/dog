@@ -430,3 +430,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Owner issuance, the database and enrollment accept installation IDs up to 100 characters, while installer preflight incorrectly accepted 128. Preflight now matches the 3–100 character issuance rule; the regression checks both boundary lengths.
 - Package, installer archive and issuance suites passed **72 tests**. This is input and source verification; a clean packaged installation remains open.
+
+## 27 October 2026 — enrolled identity Compose rendering
+
+- The official standalone Compose CLI v5.6.1 rendered the base client configuration together with the identity overlay using a disposable 32-byte test key. Both API and UI received the configured group and the same read-only key mount, with host-path creation disabled; the temporary inputs were removed.
+- This verifies Compose interpolation only. Linux container access to the group-owned key, live enrollment, customer installation and recovery remain open. No Docker containers or production services were started.
