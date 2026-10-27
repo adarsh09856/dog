@@ -83,7 +83,7 @@ async def test_client_branding_can_change_without_editing_license(monkeypatch, e
     async def set_setting(key, value, *, category):
         saved[key] = (value, category)
 
-    async def get_setting(key):
+    async def get_setting(key, *, raise_on_error=False):
         return saved.get(key, ({}, ""))[0]
 
     monkeypatch.setattr(installation.kodewaves_db_client, "set_setting", set_setting)
@@ -109,7 +109,7 @@ async def test_hosted_public_branding_uses_admin_record_without_exposing_secrets
     })
     monkeypatch.setattr(installation.kodewaves_db_client, "get_setting", getter)
     result = await installation.get_client_branding()
-    getter.assert_awaited_once_with("branding")
+    getter.assert_awaited_once_with("branding", raise_on_error=True)
     assert result.company_name == "Customer Brand"
     assert result.support_email == "help@example.com"
     assert "smtp_password" not in result.model_dump()

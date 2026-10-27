@@ -467,6 +467,11 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 - The client branding form now disables its fields while a save is pending, preventing a returned server value from overwriting a newer local edit. Editing again clears the saved message.
 - The focused form suite passed **2 tests**, including a delayed save and subsequent edit; changed-file ESLint passed. Persisted cross-session browser acceptance remains open.
 
+## 27 October 2026 — retain branding during database failure
+
+- The public branding endpoint previously treated a failed database read as a missing setting and returned the default brand. It now returns 503 on a read failure, allowing open pages to retain their last saved brand; a genuinely absent setting still uses defaults.
+- Focused API branding tests passed **11 tests**, the shared branding context passed **5 tests**, and changed-file ESLint passed. These use mocked failures; live database recovery and cross-session acceptance remain open.
+
 ## 27 October 2026 — apply BYOK policy to embeddings at use time
 
 - External embedding keys previously reached the shared embedding factory without an independent current-plan/global-policy check. Document ingestion, manual search and agent retrieval now pass their workspace to that factory, which denies an excluded key before constructing a provider. Managed Kodewaves embeddings remain separate; policy database failures do not authorize external keys.

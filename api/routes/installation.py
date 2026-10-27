@@ -122,7 +122,10 @@ async def update_client_user_status(
 @router.get("/branding", response_model=ClientBranding)
 async def get_client_branding() -> ClientBranding:
     key = "client_branding" if KODEWAVES_EDITION == "client" else "branding"
-    current = await kodewaves_db_client.get_setting(key) or {}
+    try:
+        current = await kodewaves_db_client.get_setting(key, raise_on_error=True) or {}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Branding is temporarily unavailable") from exc
     return ClientBranding.model_validate(current)
 
 

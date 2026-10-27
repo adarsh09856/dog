@@ -51,6 +51,18 @@ describe("shared platform branding", () => {
     await waitFor(() => expect(document.title).toBe("Superadmin | Acme Voice"));
   });
 
+  it("retains the last brand when a refresh fails", async () => {
+    const branding = { ...DEFAULT_BRANDING, company_name: "Acme Voice" };
+    mocks.apiFetch.mockRejectedValue(new Error("Branding is temporarily unavailable"));
+    render(<ClientBrandingProvider initialBranding={branding}><BrandLogo /></ClientBrandingProvider>);
+
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(1));
+    act(() => notifyBrandingChanged());
+    await waitFor(() => expect(mocks.apiFetch).toHaveBeenCalledTimes(2));
+    expect(document.title).toBe("Admin | Acme Voice");
+    expect(screen.getByText("Acme Voice")).toBeTruthy();
+  });
+
   it("keeps a saved brand when an older refresh finishes afterward", async () => {
     let resolveInitial!: (value: typeof DEFAULT_BRANDING) => void;
     const initialRefresh = new Promise<typeof DEFAULT_BRANDING>((resolve) => {
