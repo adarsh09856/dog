@@ -170,6 +170,7 @@ export interface PublicCreditPackage {
   bonus_minutes: number;
   price_cents: number;
   currency: string;
+  is_popular?: boolean;
 }
 
 export interface PublicSaaSPlan extends Omit<SaaSPlan, "overage_rate_per_minute"> {
@@ -187,7 +188,7 @@ export function normalizePublicCreditPackage(pkg: PublicCreditPackage): CreditPa
     bonus_minutes: Number(pkg.bonus_minutes || 0),
     price_cents: Number(pkg.price_cents || 0),
     currency: pkg.currency,
-    is_popular: Number(pkg.bonus_minutes || 0) > 0,
+    is_popular: pkg.is_popular === true,
     is_active: true,
   };
 }

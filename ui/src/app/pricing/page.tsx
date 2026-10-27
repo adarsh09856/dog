@@ -301,7 +301,10 @@ export default function PricingPage() {
                 key={pkg.id}
                 className="rounded-2xl border border-border bg-card p-7"
               >
-                <h3 className="font-semibold">{pkg.name}</h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-semibold">{pkg.name}</h3>
+                  {pkg.is_popular && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Popular</span>}
+                </div>
                 <p className="mt-5 text-3xl font-medium tracking-tight">
                   {money(pkg.price_cents, pkg.currency)}
                 </p>

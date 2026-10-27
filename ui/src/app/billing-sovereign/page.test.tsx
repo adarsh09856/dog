@@ -113,7 +113,7 @@ describe("manual plan renewal", () => {
     mocks.getPlans.mockResolvedValue([]);
     mocks.getPublicCreditOffers.mockResolvedValue([{
       id: "bundle-500", name: "500 minute bundle", minutes: 500,
-      bonus_minutes: 25, price_cents: 150000, currency: "INR",
+      bonus_minutes: 25, price_cents: 150000, currency: "INR", is_popular: true,
     }]);
     window.history.replaceState({}, "", "/billing-sovereign?credit_package=bundle-500");
     vi.spyOn(window, "confirm").mockReturnValue(false);
@@ -121,6 +121,7 @@ describe("manual plan renewal", () => {
     render(<SovereignBillingPage />);
 
     expect(await screen.findByText("500 minute bundle")).toBeTruthy();
+    expect(screen.getByText("Popular")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toMatch(/selected a bundle from public pricing/i);
     fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }));
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("525 wallet minutes"));

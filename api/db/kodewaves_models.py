@@ -226,6 +226,7 @@ class CreditPackageModel(Base):
     bonus_minutes = Column(Integer, default=0, nullable=False)
     price_cents = Column(Integer, nullable=False)                                  # In cents or paise
     currency = Column(String(10), default="INR", nullable=False)
+    is_popular = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

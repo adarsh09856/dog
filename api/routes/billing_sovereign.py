@@ -49,6 +49,7 @@ class CreditPackagePublicItem(BaseModel):
     bonus_minutes: int
     price_cents: int
     currency: str
+    is_popular: bool = False
 
 
 @router.get("/wallet", response_model=WalletResponse)
@@ -121,6 +122,7 @@ async def list_available_packages(_user=Depends(get_user)):
     return [CreditPackagePublicItem(
         id=str(r.id), name=r.name, minutes=r.minutes,
         bonus_minutes=r.bonus_minutes, price_cents=r.price_cents, currency=r.currency,
+        is_popular=r.is_popular,
     ) for r in records]
 
 
@@ -194,6 +196,7 @@ async def list_public_packages():
     return [CreditPackagePublicItem(
         id=str(r.id), name=r.name, minutes=r.minutes,
         bonus_minutes=r.bonus_minutes, price_cents=r.price_cents, currency=r.currency,
+        is_popular=r.is_popular,
     ) for r in records]
 
 

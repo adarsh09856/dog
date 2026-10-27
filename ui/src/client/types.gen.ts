@@ -2603,6 +2603,10 @@ export type CreditPackagePublicItem = {
      * Currency
      */
     currency: string;
+    /**
+     * Is Popular
+     */
+    is_popular?: boolean;
 };
 
 /**

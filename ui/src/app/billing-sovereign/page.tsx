@@ -533,7 +533,10 @@ export default function SovereignBillingPage() {
                   return (
                     <Card key={packageId} id={`credit-package-${packageId}`} className={`flex flex-col border-border/60 ${selected ? "border-primary ring-1 ring-primary" : ""}`}>
                       <CardHeader>
-                        <CardTitle className="text-base">{pkg.name}</CardTitle>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CardTitle className="text-base">{pkg.name}</CardTitle>
+                          {pkg.is_popular && <Badge variant="secondary">Popular</Badge>}
+                        </div>
                         <CardDescription>{pkg.minutes.toLocaleString()} minutes{pkg.bonus_minutes > 0 ? ` + ${pkg.bonus_minutes.toLocaleString()} bonus` : ""} · one-time</CardDescription>
                         <p className="pt-2 text-2xl font-bold">{formatMinorUnits(pkg.price_cents, pkg.currency)}</p>
                       </CardHeader>

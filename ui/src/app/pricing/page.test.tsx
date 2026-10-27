@@ -160,12 +160,16 @@ describe("public pricing", () => {
     mocks.getPublicPlans.mockResolvedValue([]);
     mocks.getPublicCreditOffers.mockResolvedValue([{
       id: "bundle-500", name: "500 minute bundle", minutes: 500,
-      bonus_minutes: 25, price_cents: 150000, currency: "INR",
+      bonus_minutes: 25, price_cents: 150000, currency: "INR", is_popular: true,
+    }, {
+      id: "bundle-100", name: "100 minute bundle", minutes: 100,
+      bonus_minutes: 10, price_cents: 30000, currency: "INR", is_popular: false,
     }]);
 
     render(<PricingPage />);
 
-    const link = await screen.findByRole("link", { name: /Continue to wallet/ });
+    const [link] = await screen.findAllByRole("link", { name: /Continue to wallet/ });
     expect(link.getAttribute("href")).toBe("/auth/login?credit_package=bundle-500");
+    expect(screen.getAllByText("Popular")).toHaveLength(1);
   });
 });

@@ -4464,6 +4464,11 @@
             "title": "Id",
             "type": "string"
           },
+          "is_popular": {
+            "default": false,
+            "title": "Is Popular",
+            "type": "boolean"
+          },
           "minutes": {
             "title": "Minutes",
             "type": "integer"

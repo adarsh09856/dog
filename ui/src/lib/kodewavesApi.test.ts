@@ -11,15 +11,15 @@ describe('panel API transport', () => {
   it('preserves configured top-up currency and amount without estimating FX', () => {
     expect(normalizePublicCreditPackage({
       id: 'growth', name: 'Growth', minutes: 500, bonus_minutes: 50,
-      price_cents: 199900, currency: 'INR',
+      price_cents: 199900, currency: 'INR', is_popular: false,
     })).toEqual({
       id: 'growth', name: 'Growth', minutes: 500, bonus_minutes: 50,
-      price_cents: 199900, currency: 'INR', is_popular: true, is_active: true,
+      price_cents: 199900, currency: 'INR', is_popular: false, is_active: true,
     });
     expect(normalizePublicCreditPackage({
       id: 'usd', name: 'USD Pack', minutes: 100, bonus_minutes: 0,
-      price_cents: 2499, currency: 'USD',
-    })).toMatchObject({ price_cents: 2499, currency: 'USD', is_popular: false });
+      price_cents: 2499, currency: 'USD', is_popular: true,
+    })).toMatchObject({ price_cents: 2499, currency: 'USD', is_popular: true });
   });
 
   it('uses the configured backend and fresh auth token, ignoring stale local storage', async () => {
