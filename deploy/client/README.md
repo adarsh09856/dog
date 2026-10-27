@@ -101,8 +101,9 @@ Compose interpolation checks without production signing keys or registry
 publication. Select the reviewed branch and provide the approved immutable
 Caddy image reference as its `caddy_image` input.
 
-The same check runs on a Docker-capable Linux machine with Python and
-`cryptography` installed:
+The same check runs on a Docker-capable Linux machine with Python,
+`cryptography`, and SQLAlchemy 2.0.43 installed. SQLAlchemy is imported by the
+release schema checker even when the check only reads migration files:
 
 ```bash
 python deploy/client/ci_verify.py \

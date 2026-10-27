@@ -446,6 +446,11 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 - The client image CI verifier now validates a disposable enrolled-key input and renders the real Compose identity overlay alongside the base bundle. It checks that both API and UI use the configured group and the identical read-only key bind mount with host-path creation disabled, and records the gate in its evidence report. The key is generated in the verifier's external temporary directory and is removed on exit.
 - Focused verifier tests passed **12 tests**, including rejection of a writable API identity mount. The installed standalone Compose CLI v5.6.1 also rendered the base config, custom-network proxy trust and enrolled identity overlay successfully. This is Compose-level evidence only; real Linux container key access, owner enrollment, packaged image, install and recovery acceptance remain open.
 
+## 27 October 2026 — fix client image CI startup dependency
+
+- The client image verification workflow installed only `cryptography`, but its build helper imports the release schema module, which requires SQLAlchemy. A clean Python environment reproduced the missing-module failure. The workflow now installs the same SQLAlchemy version as the API and checks that the build, CI and customer-package helpers start before building.
+- In a temporary environment containing only those installed dependencies, all three helpers completed `--help`; the environment was removed. This confirms helper startup, not the Docker build or customer installation. The workflow is still absent from remote main and has not run on GitHub Actions.
+
 ## 27 October 2026 — keep enrollment identity mounted during client setup
 
 - The packaged install guide said to keep the identity overlay on every Compose command after enrollment, but its API startup, administrator bootstrap, UI startup and health commands omitted it. Those commands now include both Compose files, as does the developer-side start guide; renewal instructions repeat the rule.
