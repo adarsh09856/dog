@@ -9,12 +9,13 @@ from api.db.models import (
     APIKeyModel, UserConfigurationModel, UserModel, WorkflowModel,
     organization_users_association,
 )
+from api.db.owner_account_lock import lock_owner_account_mutation
 
 
 async def _locked_actor_and_target(session, actor_id: int, user_id: int):
     # Every demotion, suspension and deletion uses this same lock. Rechecking
     # the actor afterward stops two owners concurrently removing one another.
-    await session.execute(text("SELECT pg_advisory_xact_lock(492565710844)"))
+    await lock_owner_account_mutation(session)
     actor_result = await session.execute(select(UserModel).where(UserModel.id == actor_id).with_for_update())
     actor = actor_result.scalar_one_or_none()
     if actor is None or not actor.is_active or not actor.is_superuser:

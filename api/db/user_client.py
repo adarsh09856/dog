@@ -9,6 +9,7 @@ from sqlalchemy.future import select
 
 from api.db.base_client import BaseDBClient
 from api.db.models import UserConfigurationModel, UserModel
+from api.db.owner_account_lock import lock_owner_account_mutation
 from api.enums import UserConfigurationKey
 from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
 from api.services.client_creation_limits import enforce_client_creation_limit
@@ -231,7 +232,7 @@ class UserClient(BaseDBClient):
             # Serialize user creation with owner promotions, demotions, and
             # deletions. Without this transaction lock, two concurrent first
             # signups can both observe an empty user table and both become owners.
-            await session.execute(text("SELECT pg_advisory_xact_lock(492565710844)"))
+            await lock_owner_account_mutation(session)
             if is_superuser is None:
                 count_res = await session.execute(select(func.count(UserModel.id)))
                 user_count = count_res.scalar_one_or_none() or 0
