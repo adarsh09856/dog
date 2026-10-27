@@ -333,6 +333,7 @@ who controls the client host replacing both the verifier and its entrypoint.
 The periodic owner check and in-app incident alerts exist, but pushed alerts
 and independent remote attestation do not. The Compose
 package is a packaging input, not an accepted production installation.
-Observed IP attestation and deployment-key enrollment remain unavailable.
+The owner can compare the observed egress IP with a licensed range, but
+independent network attestation and deployment-key enrollment remain unavailable.
 Renewal and staged key rotation are implemented but require live multi-version
 acceptance. Production rollout and rollback are also unverified.
