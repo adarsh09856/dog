@@ -564,7 +564,29 @@ def test_client_install_readme_runs_preflight_before_compose():
     root = Path(__file__).resolve().parents[2]
     readme = (root / "deploy/client/README.md").read_text(encoding="utf-8")
     assert "python3 validate_install.py" in readme
-    assert readme.index("python3 validate_install.py") < readme.index("docker compose -f docker-compose.client.yaml config --quiet")
+    assert readme.index("python3 validate_install.py") < readme.index(
+        "docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml config --quiet"
+    )
+
+
+def test_release_builder_rejects_unknown_upgrade_origin_before_docker(monkeypatch, tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(root / "deploy/client"))
+    import build_and_verify
+
+    monkeypatch.setattr(build_and_verify.subprocess, "run", lambda *args, **kwargs: pytest.fail("Docker must not run"))
+    monkeypatch.setattr(sys, "argv", [
+        "build_and_verify.py", "--caddy-image", "registry.example.com/caddy@sha256:" + "a" * 64,
+        "--license-public-key-file", str(tmp_path / "license.pub"),
+        "--release-public-key-file", str(tmp_path / "release.pub"),
+        "--owner-status-url", "https://owner.example.com/check",
+        "--owner-private-key", str(tmp_path / "release.key"),
+        "--manifest-output", str(tmp_path / "manifest.json"),
+        "--public-key-output", str(tmp_path / "output.pub"),
+        "--approved-upgrade-from", "unknown_revision",
+    ])
+    with pytest.raises(ValueError, match="not ancestors"):
+        build_and_verify.main()
 
 
 def test_api_image_verifier_requires_the_signed_runtime_docs_index(monkeypatch):

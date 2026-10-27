@@ -164,6 +164,13 @@ the client install directory as `client-release-manifest.json`. Keep generated
 release artifacts and key material out of source control. This host has not run
 this Docker release flow.
 
+By default, the manifest allows a fresh database or a database already at this
+release's Alembic head. After testing an upgrade from a specific older revision,
+add `--approved-upgrade-from <revision>` to the release command; repeat the
+option for each tested origin. The builder rejects revisions outside the release
+migration history before starting the image builds. Migration ancestry alone is
+not evidence that a customer upgrade was tested. Rollback remains unapproved.
+
 Example secret generation on a machine with Python 3:
 
 ```bash

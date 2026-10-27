@@ -156,8 +156,9 @@ def test_migration_compatibility_derives_head_and_ancestors(tmp_path):
     (migrations / "first.py").write_text("revision = 'first'\ndown_revision = None\n")
     (migrations / "second.py").write_text("revision = 'second'\ndown_revision = 'first'\n")
     assert migration_compatibility(migrations) == {
-        "head": "second", "upgrade_from": ["first", "second"], "rollback_to": [],
+        "head": "second", "upgrade_from": ["second"], "rollback_to": [],
     }
+    assert migration_compatibility(migrations, ["first"])["upgrade_from"] == ["first", "second"]
 
 
 def test_migration_compatibility_rejects_ambiguous_heads(tmp_path):

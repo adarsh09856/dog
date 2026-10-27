@@ -121,6 +121,7 @@ def main() -> int:
     parser.add_argument("--manifest-output", type=Path, help="Where to write the signed release manifest")
     parser.add_argument("--public-key-output", type=Path, help="Where to write its public verification key")
     parser.add_argument("--inventory-metrics-output", type=Path, help="Write protected API/UI file counts and inventory scan durations")
+    parser.add_argument("--approved-upgrade-from", action="append", default=[], help="Tested Alembic revision permitted for upgrade; repeat for each verified origin")
     parser.add_argument("--push", action="store_true", help="Push verified images to their tagged registries")
     parser.add_argument("--release-env-output", type=Path, help="Write API/UI @sha256 references after pushing")
     args = parser.parse_args()
@@ -128,6 +129,8 @@ def main() -> int:
         (args.owner_private_key, args.manifest_output, args.public_key_output)
     ):
         parser.error("--owner-private-key, --manifest-output and --public-key-output must be used together")
+    if args.approved_upgrade_from and not args.owner_private_key:
+        parser.error("--approved-upgrade-from requires a signed release manifest")
     if args.push != (args.release_env_output is not None):
         parser.error("--push and --release-env-output must be used together")
     if args.push:
@@ -137,6 +140,10 @@ def main() -> int:
             if "/" not in _repository_name(tag):
                 parser.error(f"Publish tags must include a registry or namespace: {tag}")
     root = Path(__file__).resolve().parents[2]
+    schema_compatibility = (
+        migration_compatibility(root / "api" / "alembic" / "versions", args.approved_upgrade_from)
+        if args.owner_private_key else None
+    )
     license_public_key = read_public_key(args.license_public_key_file)
     previous_license_keys = list(dict.fromkeys(read_public_key(path) for path in args.legacy_license_public_key_file))
     previous_license_keys = [key for key in previous_license_keys if key != license_public_key]
@@ -235,7 +242,7 @@ def main() -> int:
             files_json.write_text(json.dumps(api_files), encoding="utf-8")
             ui_files_json.write_text(json.dumps(ui_files), encoding="utf-8")
             images_json.write_text(json.dumps(image_refs), encoding="utf-8")
-            schema_json.write_text(json.dumps(migration_compatibility(root / "api" / "alembic" / "versions")), encoding="utf-8")
+            schema_json.write_text(json.dumps(schema_compatibility), encoding="utf-8")
             subprocess.run(
                 [
                     sys.executable, str(root / "owner-tools" / "sign_client_release.py"),

@@ -17,7 +17,7 @@ def _write_revision(directory: Path, filename: str, revision: str, parent: str |
     )
 
 
-def test_release_schema_signs_upgrade_ancestors_but_no_untested_rollback(tmp_path):
+def test_release_schema_only_signs_explicitly_approved_upgrade_origins(tmp_path):
     migrations = tmp_path / "versions"
     _write_revision(migrations, "001.py", "root", None)
     _write_revision(migrations, "002.py", "middle", "root")
@@ -25,9 +25,16 @@ def test_release_schema_signs_upgrade_ancestors_but_no_untested_rollback(tmp_pat
 
     assert migration_compatibility(migrations) == {
         "head": "head",
-        "upgrade_from": ["head", "middle", "root"],
+        "upgrade_from": ["head"],
         "rollback_to": [],
     }
+    assert migration_compatibility(migrations, ["root"]) == {
+        "head": "head",
+        "upgrade_from": ["head", "root"],
+        "rollback_to": [],
+    }
+    with pytest.raises(ValueError, match="not ancestors"):
+        migration_compatibility(migrations, ["unrelated"])
 
 
 def test_release_schema_rejects_multiple_heads(tmp_path):

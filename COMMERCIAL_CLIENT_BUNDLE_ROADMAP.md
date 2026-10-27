@@ -451,6 +451,11 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 - The client image verification workflow installed only `cryptography`, but its build helper imports the release schema module, which requires SQLAlchemy. A clean Python environment reproduced the missing-module failure. The workflow now installs the same SQLAlchemy version as the API and checks that the build, CI and customer-package helpers start before building.
 - In a temporary environment containing only those installed dependencies, all three helpers completed `--help`; the environment was removed. This confirms helper startup, not the Docker build or customer installation. The workflow is still absent from remote main and has not run on GitHub Actions.
 
+## 27 October 2026 — require explicit tested upgrade origins
+
+- A migration graph previously caused every ancestor to be signed as upgrade-compatible without evidence of a tested upgrade. Release manifests now allow a fresh database and the current head by default; older revisions must be supplied explicitly as `--approved-upgrade-from` after testing. Unknown origins fail before Docker builds. Existing signed manifests are unchanged.
+- Release schema, integrity and package suites passed **84 tests with 2 OS-dependent skips**; CI verifier and installer archive suites passed **21 tests**. Explicit selection does not itself prove an upgrade was tested; a real customer upgrade and rollback remain open.
+
 ## 27 October 2026 — keep enrollment identity mounted during client setup
 
 - The packaged install guide said to keep the identity overlay on every Compose command after enrollment, but its API startup, administrator bootstrap, UI startup and health commands omitted it. Those commands now include both Compose files, as does the developer-side start guide; renewal instructions repeat the rule.
