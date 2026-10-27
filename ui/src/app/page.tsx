@@ -19,42 +19,36 @@ import Link from "next/link";
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { useClientBranding } from "@/context/ClientBrandingContext";
 
-const capabilities = [
+const platformAreas = [
   {
-    icon: Workflow,
-    label: "Workflow builder",
-    title: "Give every conversation a clear next step.",
-    text: "Build agent workflows visually. Add questions, branches and actions that follow the information your caller provides.",
+    number: "01",
+    label: "Design",
+    title: "Shape the work before the call.",
+    summary: "Build the conversation path and connect it to the systems your team already uses.",
+    capabilities: [
+      { icon: Workflow, title: "Workflow builder", text: "Add questions, branches and actions that follow what the caller says." },
+      { icon: Wrench, title: "Business tools", text: "Look up information, collect details and pass work into business systems." },
+    ],
   },
   {
-    icon: Phone,
-    label: "Connected channels",
-    title: "One agent. Web and phone.",
-    text: "Connect supported telephony providers for inbound calls and outbound campaigns, or let visitors talk through a web widget.",
+    number: "02",
+    label: "Connect",
+    title: "Choose how people reach you.",
+    summary: "Configure speech providers, languages and the channels enabled for your deployment.",
+    capabilities: [
+      { icon: Phone, title: "Web and telephone", text: "Connect supported carriers for inbound and outbound calls or add a web voice widget." },
+      { icon: Globe2, title: "Language and voice", text: "Select from the languages and voices supported by your chosen speech models; availability varies by model and deployment." },
+    ],
   },
   {
-    icon: Wrench,
-    label: "Business tools",
-    title: "Turn a conversation into an action.",
-    text: "Connect tools and APIs to look up information, collect details and move work into your business systems.",
-  },
-  {
-    icon: Globe2,
-    label: "Language & voice",
-    title: "Speak your caller’s language.",
-    text: "Configure models for Hindi, English and other supported languages. Test each agent with your selected models and voices before launch.",
-  },
-  {
-    icon: Headphones,
-    label: "Conversation review",
-    title: "Keep the conversation in view.",
-    text: "Review transcripts, recordings and workflow runs to understand what happened and improve the next conversation.",
-  },
-  {
-    icon: Layers3,
-    label: "Team operations",
-    title: "A workspace for each team.",
-    text: "Organize agents, provider connections and usage within workspaces, with access managed by your administrators.",
+    number: "03",
+    label: "Operate",
+    title: "Review what happened.",
+    summary: "Keep conversations and team operations in one workspace as you improve each agent.",
+    capabilities: [
+      { icon: Headphones, title: "Conversation review", text: "Review transcripts, recordings and workflow runs to understand each call." },
+      { icon: Layers3, title: "Team operations", text: "Organize agents, provider connections and usage with workspace access controls." },
+    ],
   },
 ];
 const stages = [
@@ -86,36 +80,37 @@ export default function HomePage() {
     <div className="min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content">
-        <section className="relative overflow-hidden border-b border-border">
+        <section className="relative overflow-hidden border-b border-border bg-muted/25">
           <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[1fr_0.82fr] lg:gap-20 lg:py-24">
             <div>
-              <p className="mb-6 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
-                Voice agent operations platform
+              <p className="mb-6 inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <span className="h-px w-8 bg-cta" aria-hidden="true" />
+                Voice operations platform
               </p>
               <h1 className="max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-6xl">
                 Build, test and operate voice agents.
               </h1>
-              <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground">
+              <p className="mt-7 max-w-xl text-lg leading-8 text-foreground/80">
                 {branding.tagline}
               </p>
-              <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
-                Configure the conversation, validate it in a browser, and connect it to web or phone channels.
+              <p className="mt-3 max-w-xl text-[15px] leading-7 text-muted-foreground">
+                Design the conversation, validate it before launch, and operate it across browser and telephone channels.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link
                   href="/auth/login"
-                  className="inline-flex items-center gap-3 rounded-lg bg-cta px-6 py-3.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90"
+                  className="inline-flex items-center gap-3 rounded-md bg-cta px-5 py-3 text-sm font-semibold text-cta-foreground shadow-sm transition-colors hover:bg-cta/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   Sign in to your workspace <ArrowRight className="size-4" />
                 </Link>
                 <Link
                   href="/pricing"
-                  className="rounded-lg border border-border px-6 py-3.5 text-sm font-medium hover:bg-muted"
+                  className="rounded-md border border-border bg-background/70 px-5 py-3 text-sm font-medium transition-colors hover:bg-background"
                 >
                   View plans and deployment
                 </Link>
               </div>
-              <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-xs text-muted-foreground">
+              <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 border-t border-border pt-5 text-xs text-muted-foreground">
                 {[
                   "Workflow editor",
                   "Browser testing",
@@ -128,25 +123,31 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              <div className="flex items-center justify-between border-b border-border px-6 py-4">
+            <div className="relative overflow-hidden rounded-lg border border-border bg-background shadow-[0_18px_55px_-36px_color-mix(in_oklab,var(--foreground)_35%,transparent)]">
+              <div className="flex items-center justify-between border-b border-border px-6 py-5">
                 <div>
-                  <p className="text-sm font-semibold">Agent lifecycle</p>
-                  <p className="mt-1 text-xs text-muted-foreground">From configuration to call review</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Operating lifecycle</p>
+                  <p className="mt-2 text-base font-semibold tracking-tight">From first draft to live calls</p>
                 </div>
-                <Workflow className="size-5 text-cta" aria-hidden="true" />
+                <span className="flex size-10 items-center justify-center rounded-md border border-border bg-muted/60 text-cta">
+                  <Workflow className="size-5" aria-hidden="true" />
+                </span>
               </div>
-              <ol className="divide-y divide-border">
+              <ol className="px-6 py-2">
                 {stages.map(({ number, title, text }) => (
-                  <li key={number} className="flex gap-5 px-6 py-5">
-                    <span className="pt-0.5 font-mono text-xs tabular-nums text-muted-foreground">{number}</span>
-                    <div>
-                      <h2 className="text-sm font-semibold">{title}</h2>
-                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{text}</p>
+                  <li key={number} className="group relative flex gap-5 py-4 first:pt-5 last:pb-5">
+                    <span className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-background font-mono text-[10px] tabular-nums text-muted-foreground transition-colors group-hover:border-cta/50 group-hover:text-cta">{number}</span>
+                    <div className="min-w-0 pt-0.5">
+                      <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+                      <p className="mt-1 text-[13px] leading-6 text-muted-foreground">{text}</p>
                     </div>
+                    {number !== "04" && <span className="absolute left-[15px] top-12 h-[calc(100%-1.25rem)] w-px bg-border" aria-hidden="true" />}
                   </li>
                 ))}
               </ol>
+              <div className="flex items-center justify-between border-t border-border bg-muted/35 px-6 py-3 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <span>Configure</span><span aria-hidden="true">/</span><span>Validate</span><span aria-hidden="true">/</span><span>Operate</span>
+              </div>
             </div>
           </div>
         </section>
@@ -169,19 +170,27 @@ export default function HomePage() {
                 telephony, and review the resulting conversations from the same workspace.
               </p>
             </div>
-            <div className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-2 lg:grid-cols-3">
-              {capabilities.map(({ icon: Icon, title, text, label }) => (
-                <article key={label} className="bg-background p-7 sm:p-9">
-                  <Icon className="mb-8 size-6 text-cta" />
-                  <p className="mb-3 text-xs font-medium text-muted-foreground">
-                    {label}
-                  </p>
-                  <h3 className="mb-4 text-xl font-medium leading-snug tracking-tight">
-                    {title}
-                  </h3>
-                  <p className="text-sm leading-7 text-muted-foreground">
-                    {text}
-                  </p>
+            <div className="grid border-y border-border md:grid-cols-3">
+              {platformAreas.map(({ number, label, title, summary, capabilities: areaCapabilities }) => (
+                <article key={number} className={`${number !== "03" ? "border-b border-border md:border-b-0" : ""} ${number !== "01" ? "md:border-l" : ""} py-7 md:px-7 md:py-8 md:first:pl-0 md:last:pr-0`}>
+                  <div className="mb-8 flex items-center gap-3">
+                    <span className="font-mono text-xs tabular-nums text-cta">{number}</span>
+                    <span className="h-px w-7 bg-border" aria-hidden="true" />
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
+                  </div>
+                  <h3 className="max-w-xs text-xl font-semibold leading-snug tracking-tight">{title}</h3>
+                  <p className="mt-3 min-h-[4.5rem] max-w-sm text-sm leading-6 text-muted-foreground">{summary}</p>
+                  <ul className="mt-6 divide-y divide-border border-t border-border">
+                    {areaCapabilities.map(({ icon: Icon, title: capabilityTitle, text }) => (
+                      <li key={capabilityTitle} className="flex gap-3 py-4">
+                        <Icon className="mt-0.5 size-4 shrink-0 text-cta" aria-hidden="true" />
+                        <div>
+                          <h4 className="text-sm font-semibold">{capabilityTitle}</h4>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </article>
               ))}
             </div>

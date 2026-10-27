@@ -50,6 +50,10 @@ describe("admin integrity alert notification", () => {
 
     expect(mocks.apiFetch).toHaveBeenCalledWith("/admin/client-installations/alerts");
     expect(screen.getByLabelText("2 installation integrity alerts")).toBeTruthy();
+    expect(screen.getByText("Access & commercial")).toBeTruthy();
+    expect(screen.getByText("Operations")).toBeTruthy();
+    expect(screen.getByText("Platform owner")).toBeTruthy();
+    expect(screen.queryByText("Sovereign Control")).toBeNull();
     expect(screen.getByText("admin content")).toBeTruthy();
   });
 

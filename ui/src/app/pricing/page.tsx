@@ -43,7 +43,7 @@ const faqs = [
   },
   {
     q: "Which languages are available?",
-    a: "Language and voice availability depends on the speech and language models configured for your agent. Test Hindi, English, Hinglish and any other required languages with your chosen configuration before launch.",
+    a: "Available languages and voices come from the STT and TTS models enabled for your agent. Support differs by model and deployment, so confirm that both selected models support each required language and code-switching pattern before launch.",
   },
   {
     q: "Do credits or included minutes expire?",
@@ -99,29 +99,29 @@ export default function PricingPage() {
     <div className="min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content" className="mx-auto max-w-7xl px-5 pb-24 sm:px-8">
-        <section className="mx-auto max-w-3xl py-16 text-center sm:py-24">
-          <p className="mb-5 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
-            Plans for your voice workflows
-          </p>
-          <h1 className="text-5xl font-medium leading-tight tracking-[-0.04em] sm:text-6xl">
-            A clear starting point.
-            <br />
-            <span className="text-muted-foreground">Room to grow.</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-muted-foreground">
-            Choose a configured plan for your team. Review included usage,
-            provider costs and deployment needs before you begin.
-          </p>
+        <section className="grid gap-8 border-b border-border py-14 sm:py-20 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <div className="max-w-2xl">
+            <p className="mb-5 inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="h-px w-8 bg-cta" aria-hidden="true" />
+              Plans and deployment
+            </p>
+            <h1 className="text-4xl font-semibold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-6xl">
+              Compare plans for your voice operation.
+            </h1>
+            <p className="mt-6 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+              See the configured price, included usage and enabled features for each workspace plan. Provider and deployment costs are shown separately.
+            </p>
+          </div>
           {hasCycleChoice && (
             <div
-              className="mt-8 inline-flex rounded-xl border border-border bg-muted p-1"
+              className="inline-flex h-fit rounded-md border border-border bg-muted/60 p-1 md:mb-1"
               aria-label="Billing period"
             >
               <button
                 type="button"
                 aria-pressed={!annual}
                 onClick={() => setAnnual(false)}
-                className={`rounded-lg px-5 py-2 text-sm ${!annual ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${!annual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
                 Monthly
               </button>
@@ -129,7 +129,7 @@ export default function PricingPage() {
                 type="button"
                 aria-pressed={annual}
                 onClick={() => setAnnual(true)}
-                className={`rounded-lg px-5 py-2 text-sm ${annual ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${annual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
                 Annual
               </button>
@@ -139,7 +139,7 @@ export default function PricingPage() {
 
         <section
           aria-label="Subscription plans"
-          className="grid gap-5 md:grid-cols-2 xl:grid-cols-3"
+          className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
         >
           {planState === "loading" && (
             <p
@@ -201,7 +201,7 @@ export default function PricingPage() {
             return (
               <article
                 key={plan.id}
-                className="flex flex-col rounded-2xl border border-border bg-card p-7 sm:p-8"
+                className="flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-foreground/20 sm:p-7"
               >
                 <h2 className="text-xl font-semibold tracking-tight">
                   {plan.name}
@@ -210,8 +210,8 @@ export default function PricingPage() {
                   {plan.description ||
                     "A configured workspace plan for your voice agents."}
                 </p>
-                <div className="my-8">
-                  <p className="text-4xl font-medium tracking-tight">
+                <div className="my-7 border-y border-border py-5">
+                  <p className="text-4xl font-semibold tracking-tight tabular-nums">
                     {available ? money(price, plan.currency) : billingCycle ? "Price unavailable" : "Free"}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
@@ -241,7 +241,7 @@ export default function PricingPage() {
                 </ul>
                 <Link
                   href={`/auth/login?plan=${encodeURIComponent(plan.code)}${billingCycle ? `&billing_cycle=${billingCycle}` : ""}`}
-                  className="mt-auto inline-flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 text-sm font-semibold hover:bg-muted"
+                  className="mt-auto inline-flex items-center justify-between gap-3 rounded-md border border-border px-4 py-3 text-sm font-semibold transition-colors hover:border-cta/50 hover:bg-muted"
                 >
                   Review in your account
                   <ArrowRight className="size-4" />

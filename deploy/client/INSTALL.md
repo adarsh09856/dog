@@ -51,16 +51,29 @@ to deny access and report the finding when the owner service is reachable.
 ### Enrolled installation identity
 
 Key enrollment requires an owner-issued enrollment token and matching approved
-images. Complete enrollment with the owner before enabling the identity overlay;
-enrolling a key without configuring the overlay will make owner checks fail.
+images. Complete enrollment before enabling the identity overlay; enrolling a
+key without configuring the overlay will make owner checks fail.
 Keep the enrolled 32-byte private key outside this installation directory and
 back it up securely. Losing or replacing it requires owner-assisted recovery.
 
-Set `CLIENT_IDENTITY_KEY_FILE` in `.env` to the absolute path of that existing
-key and `CLIENT_IDENTITY_GID` to its nonzero numeric group. On a standard Linux
-host, the file must be group-readable by that group and inaccessible to other
-users, for example mode `0640`. Both API and UI containers join that group and
-mount the key read-only. `python3 validate_install.py` checks the file and group.
+Set `CLIENT_IDENTITY_KEY_FILE` in `.env` to an absolute path in an existing
+private directory and `CLIENT_IDENTITY_GID` to a nonzero numeric group permitted
+to read the key. Pull the approved API image first, then run the enrollment
+command and enter the owner's one-time token at its prompt:
+
+```bash
+docker compose -f docker-compose.client.yaml pull api
+python3 enroll_identity.py
+```
+
+The command creates the key once on this server, uses the approved API image's
+baked owner endpoint and verification keys, and verifies the signed owner
+response. It does not send the private key to the owner. On a standard Linux
+host, the key must be group-readable by the configured group and inaccessible
+to other users, for example mode `0640`. Both API and UI containers join that
+group and mount the key read-only. `python3 validate_install.py` checks the file
+and group. To verify a previously enrolled key without creating or replacing
+it, run `python3 enroll_identity.py --verify-only`.
 After enrollment, add `-f docker-compose.identity.yaml` after
 `-f docker-compose.client.yaml` to **every** Compose command below, including
 the administrator bootstrap and future updates. For example:
@@ -70,8 +83,8 @@ docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml con
 docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d api
 ```
 
-The enrollment tooling and live recovery process are still being validated;
-do not use this overlay for production until your release passes acceptance.
+The enrollment tooling and live recovery process still require installation
+acceptance; do not use this overlay for production until your release passes it.
 
 ## Start and create the administrator
 

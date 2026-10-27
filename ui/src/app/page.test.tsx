@@ -32,9 +32,12 @@ describe("public home branding", () => {
     render(<HomePage />);
 
     expect(screen.getByRole("heading", { name: "Build, test and operate voice agents." })).toBeTruthy();
-    expect(screen.getByText("Agent lifecycle")).toBeTruthy();
+    expect(screen.getByText("Operating lifecycle")).toBeTruthy();
     expect(screen.getByText("Test the conversation")).toBeTruthy();
     expect(screen.getByText("Operate and improve")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Shape the work before the call." })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Choose how people reach you." })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Review what happened." })).toBeTruthy();
     expect(screen.queryByText("Illustrative workflow")).toBeNull();
     expect(screen.queryByRole("group", { name: "Conversation examples" })).toBeNull();
   });

@@ -109,6 +109,7 @@ def package_installer(
         "docker-compose.identity.yaml": (directory / "docker-compose.identity.yaml").read_bytes(),
         "Caddyfile": (directory / "Caddyfile").read_bytes(),
         "validate_install.py": (directory / "validate_install.py").read_bytes(),
+        "enroll_identity.py": (directory / "enroll_identity.py").read_bytes(),
         ".env.example": env_template.encode("utf-8"),
         "client-release-manifest.json": manifest_bytes,
         "release-public-key.txt": (public_key + "\n").encode("ascii"),

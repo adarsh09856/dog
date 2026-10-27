@@ -32,17 +32,17 @@ import { apiFetch } from "@/lib/kodewavesApi";
 import { cn } from "@/lib/utils";
 
 const ADMIN_NAV = [
-  { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { title: "Master Keys & Models", href: "/admin/models", icon: Cpu },
-  { title: "User Management", href: "/admin/users", icon: Users },
-  { title: "SaaS Plans", href: "/admin/plans", icon: FileSpreadsheet },
-  { title: "Client Installations", href: "/admin/client-installations", icon: PackageCheck },
-  { title: "Credit Bundles", href: "/admin/credit-packages", icon: Coins },
-  { title: "Live Call Monitor", href: "/admin/monitoring", icon: Radio },
-  { title: "Global Call History", href: "/superadmin/runs", icon: PhoneCall },
-  { title: "Content Moderation", href: "/admin/moderation", icon: ShieldAlert },
-  { title: "Platform Settings", href: "/admin/settings", icon: Settings },
-  { title: "Audit Trail", href: "/admin/audit-logs", icon: FileText },
+  { section: "Overview", title: "Dashboard", href: "/admin", icon: LayoutDashboard },
+  { section: "Access & commercial", title: "Master Keys & Models", href: "/admin/models", icon: Cpu },
+  { section: "Access & commercial", title: "User Management", href: "/admin/users", icon: Users },
+  { section: "Access & commercial", title: "SaaS Plans", href: "/admin/plans", icon: FileSpreadsheet },
+  { section: "Access & commercial", title: "Client Installations", href: "/admin/client-installations", icon: PackageCheck },
+  { section: "Access & commercial", title: "Credit Bundles", href: "/admin/credit-packages", icon: Coins },
+  { section: "Operations", title: "Live Call Monitor", href: "/admin/monitoring", icon: Radio },
+  { section: "Operations", title: "Global Call History", href: "/superadmin/runs", icon: PhoneCall },
+  { section: "Operations", title: "Content Moderation", href: "/admin/moderation", icon: ShieldAlert },
+  { section: "Operations", title: "Platform Settings", href: "/admin/settings", icon: Settings },
+  { section: "Operations", title: "Audit Trail", href: "/admin/audit-logs", icon: FileText },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -145,36 +145,39 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <BrandLogo mark className="h-9" />
           <div>
             <div className="text-sm font-bold tracking-tight">{branding.company_name} Admin</div>
-            <div className="text-[10px] uppercase font-semibold text-emerald-500 flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Sovereign Control
+            <div className="text-[10px] uppercase font-semibold tracking-[0.14em] text-muted-foreground">
+              Platform owner
             </div>
           </div>
         </div>
 
         <nav className="flex-1 space-y-1 p-3 overflow-y-auto">
-          <div className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            Management
-          </div>
-          {ADMIN_NAV.map((item) => {
+          {ADMIN_NAV.map((item, index) => {
             const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
             const Icon = item.icon;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium transition-colors",
-                  isActive
-                    ? "bg-primary text-primary-foreground font-semibold shadow-sm"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-                onClick={() => setMobileNavOpen(false)}
-              >
-                <Icon className={cn("h-4 w-4", isActive ? "text-primary-foreground" : "text-muted-foreground")} />
-                {item.title}
-                {item.href === "/admin/client-installations" && integrityAlertCount > 0 && <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-bold text-destructive-foreground" aria-label={`${integrityAlertCount} installation integrity alerts`}>{integrityAlertCount}</span>}
-              </Link>
+              <React.Fragment key={item.href}>
+                {index === 0 || ADMIN_NAV[index - 1].section !== item.section ? (
+                  <div className={cn("px-3 pb-1 pt-5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground", index === 0 && "pt-1")}>
+                    {item.section}
+                  </div>
+                ) : null}
+                <Link
+                  href={item.href}
+                  aria-current={isActive ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md border-l-2 py-2 text-sm font-medium transition-colors",
+                    isActive
+                      ? "border-primary bg-primary/10 pl-[10px] text-foreground"
+                      : "border-transparent pl-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                  )}
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  <Icon className={cn("h-4 w-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                  {item.title}
+                  {item.href === "/admin/client-installations" && integrityAlertCount > 0 && <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-bold text-destructive-foreground" aria-label={`${integrityAlertCount} installation integrity alerts`}>{integrityAlertCount}</span>}
+                </Link>
+              </React.Fragment>
             );
           })}
         </nav>
