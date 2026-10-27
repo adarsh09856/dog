@@ -22,6 +22,7 @@ sudo bash install.sh
 The installer will:
 - Check for host port availability (detecting conflicts with existing host services).
 - Configure your domain and generate secure master keys (`.env`).
+- Restrict Uvicorn forwarded-header trust to the local aaPanel/Docker ingress peer (never wildcard trust).
 - Launch PostgreSQL, Redis, MinIO, Backend API, and Next.js UI via Docker Compose.
 - Initialize database tables and create your initial Superadmin account.
 - Print your Nginx reverse proxy configuration for aaPanel.

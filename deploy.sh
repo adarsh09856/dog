@@ -101,6 +101,22 @@ else
 fi
 
 # Validate before any mutation. Compose scope must remain this application.
+if [ "$COMPOSE_FILE" = "docker-compose.aapanel.yaml" ] && [ -f .env ]; then
+    # The aaPanel host proxy reaches the API via its localhost-published port.
+    # Docker NAT presents the Compose bridge gateway to Uvicorn. Replace the
+    # historical wildcard with that exact peer before restarting the API.
+    PROXY_PEER="$(docker inspect kodewaves_postgres --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' 2>/dev/null || true)"
+    if [ -z "$PROXY_PEER" ]; then
+        echo -e "${RED}Could not determine the Docker bridge gateway; refusing to deploy with uncertain proxy-header trust.${NC}" >&2
+        exit 1
+    fi
+    if grep -q '^FORWARDED_ALLOW_IPS=' .env; then
+        sed -i "s|^FORWARDED_ALLOW_IPS=.*|FORWARDED_ALLOW_IPS=$PROXY_PEER|" .env
+    else
+        echo "FORWARDED_ALLOW_IPS=$PROXY_PEER" >> .env
+    fi
+    echo -e "${GREEN}Restricted forwarded-header trust to the local Docker gateway ($PROXY_PEER).${NC}"
+fi
 docker compose -f "$COMPOSE_FILE" $PROFILE_FLAGS config -q
 
 # Back up before restarting the API: its entrypoint itself runs migrations.

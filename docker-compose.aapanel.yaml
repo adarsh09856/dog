@@ -105,7 +105,9 @@ services:
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-https://your-domain.com}"
       PUBLIC_HOST: "${PUBLIC_HOST:-your-domain.com}"
       BACKEND_API_ENDPOINT: "${PUBLIC_BASE_URL:-https://your-domain.com}"
-      FORWARDED_ALLOW_IPS: "*"
+      # Set this to the aaPanel/Nginx proxy peer as seen by the API container.
+      # Wildcard trust allows spoofed X-Forwarded-For values to bypass IP policy.
+      FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-127.0.0.1}"
       
       # Database and Cache
       DATABASE_URL: "postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/postgres"

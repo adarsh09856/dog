@@ -176,10 +176,9 @@ services:
       # raise this and do not naively replicate this service.
       FASTAPI_WORKERS: "1"
 
-      # Trust Traefik's X-Forwarded-Proto: https so request.url is https and
-      # inbound webhook signature checks pass. Narrow to the Docker subnet if
-      # you prefer.
-      FORWARDED_ALLOW_IPS: "*"
+      # Trust forwarded headers only from the actual Traefik peer/network.
+      # Wildcard trust lets clients spoof X-Forwarded-For and bypass IP policy.
+      FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:?Set the trusted Traefik peer IP or CIDR}"
 
       # TURN — must match coturn. TURN_HOST is the VPS public IP / TURN domain.
       # This stack always runs coturn, so TURN is unconditionally enabled.
