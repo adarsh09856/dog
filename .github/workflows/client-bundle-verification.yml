@@ -1,6 +1,9 @@
 name: Verify client bundle images
 
 on:
+  push:
+    branches:
+      - codex/client-bundle-verification-*
   workflow_dispatch:
     inputs:
       caddy_image:
