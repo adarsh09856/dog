@@ -7,6 +7,7 @@ import argparse
 import base64
 import binascii
 import ipaddress
+import json
 import os
 import re
 import stat
@@ -275,6 +276,22 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
         manifest_path = (env_path.parent / manifest).resolve()
         if not manifest_path.is_file():
             errors.append(f"signed release manifest does not exist: {manifest_path}")
+        else:
+            try:
+                signed = json.loads(manifest_path.read_text(encoding="utf-8"))
+                images = signed.get("payload", {}).get("images", {})
+                if not isinstance(images, dict):
+                    raise ValueError("invalid image inventory")
+                for component, variable in (("api", "CLIENT_API_IMAGE"), ("ui", "CLIENT_UI_IMAGE")):
+                    image = images.get(component)
+                    if image and (
+                        not isinstance(image, dict)
+                        or image.get("kind") != "registry_digest"
+                        or image.get("reference") != env.get(variable)
+                    ):
+                        errors.append(f"{variable} does not match the signed release manifest")
+            except (OSError, ValueError, AttributeError):
+                errors.append("signed release manifest must contain valid JSON")
 
     if not errors:
         # Ensure the Compose document itself parses and interpolates with these values.

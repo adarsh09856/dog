@@ -242,6 +242,22 @@ def test_client_install_preflight_accepts_valid_inputs_and_rejects_common_mistak
     result = validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")
     assert result == ["preflight passed; run docker compose config --quiet for Compose validation and API startup to verify signed license and manifest"]
 
+    api_ref = next(line.split("=", 1)[1] for line in lines if line.startswith("CLIENT_API_IMAGE="))
+    ui_ref = next(line.split("=", 1)[1] for line in lines if line.startswith("CLIENT_UI_IMAGE="))
+    manifest.write_text(json.dumps({"payload": {"images": {
+        "api": {"kind": "registry_digest", "reference": api_ref},
+        "ui": {"kind": "registry_digest", "reference": ui_ref},
+    }}}), encoding="utf-8")
+    assert validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")[0].startswith("preflight passed;")
+    manifest.write_text(json.dumps({"payload": {"images": {
+        "api": {"kind": "registry_digest", "reference": api_ref[:-1] + "b"},
+        "ui": {"kind": "registry_digest", "reference": ui_ref},
+    }}}), encoding="utf-8")
+    assert any("CLIENT_API_IMAGE does not match" in error for error in validate_install.validate(
+        env_file, client_dir / "docker-compose.client.yaml"
+    ))
+    manifest.write_text("{}", encoding="utf-8")
+
     for extra, expected in [
         (["API_PORT=0"], "API_PORT"),
         (["UI_PORT=65536"], "UI_PORT"),
