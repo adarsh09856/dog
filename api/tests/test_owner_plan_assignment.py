@@ -71,7 +71,8 @@ async def test_unknown_plan_rejected_before_changing_any_user(monkeypatch, opera
 
 
 @pytest.mark.asyncio
-async def test_owner_created_user_receives_the_selected_catalog_plan(monkeypatch):
+@pytest.mark.parametrize("is_superuser", [False, True])
+async def test_owner_created_user_receives_role_and_selected_catalog_plan(monkeypatch, is_superuser):
     monkeypatch.setattr(catalog.kodewaves_db_client, "get_active_saas_plan", AsyncMock(return_value=SimpleNamespace(code="growth-v2")))
     assign = AsyncMock()
     monkeypatch.setattr(catalog, "assign_org_plan", assign)
@@ -88,7 +89,12 @@ async def test_owner_created_user_receives_the_selected_catalog_plan(monkeypatch
 
     result = await users.create_admin_user(users.CreateUserRequest(
         email="test@example.com", password="test-only", plan_code="growth-v2", initial_minutes=0,
+        is_superuser=is_superuser,
     ))
     assert result["organization_id"] == 42
+    users.db_client.create_user_with_email.assert_awaited_once_with(
+        email="test@example.com", password_hash="test-hash", name=None,
+        is_superuser=is_superuser,
+    )
     assign.assert_awaited_once_with(42, "growth-v2")
     grant_minutes.assert_not_awaited()

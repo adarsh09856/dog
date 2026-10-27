@@ -233,17 +233,8 @@ async def create_admin_user(req: CreateUserRequest, _user=Depends(get_superuser)
         email=req.email,
         password_hash=hashed,
         name=req.name,
+        is_superuser=req.is_superuser,
     )
-
-    # Set superadmin flag if requested
-    if req.is_superuser:
-        async with kodewaves_db_client.get_session() as session:
-            stmt = select(UserModel).where(UserModel.id == user.id)
-            res = await session.execute(stmt)
-            u_rec = res.scalar_one_or_none()
-            if u_rec:
-                u_rec.is_superuser = True
-                await session.commit()
 
     # Create primary organization
     org_provider_id = f"org_{user.provider_id}"
