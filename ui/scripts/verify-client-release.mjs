@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { createHash, createPublicKey, randomBytes, verify } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, randomBytes, sign, verify } from "node:crypto";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -59,6 +59,34 @@ function canonicalize(value) {
     return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalize(value[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+// Shared with api/services/installation_identity.py. The owner endpoint must
+// additionally consume the nonce atomically before accepting a proof.
+function ownerCheckMessage({ installation_id, license_token, nonce, issued_at, integrity_ok, integrity_finding }) {
+  const finding = integrity_finding == null ? null : {
+    reason: integrity_finding.reason,
+    component: integrity_finding.component,
+    expected_sha256: integrity_finding.expected_sha256 ?? null,
+    observed_sha256: integrity_finding.observed_sha256 ?? null,
+  };
+  const payload = {
+    installation_id,
+    license_sha256: createHash("sha256").update(license_token, "ascii").digest("hex"),
+    nonce,
+    issued_at,
+    integrity_ok,
+    integrity_finding: finding,
+  };
+  return Buffer.from(`kodewaves-owner-check-v1\n${canonicalize(payload)}`, "utf8");
+}
+
+function signOwnerCheck(privateSeed, fields) {
+  const seed = Buffer.from(privateSeed);
+  if (seed.length !== 32) throw new Error("Invalid installation private key");
+  const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
+  const key = createPrivateKey({ key: Buffer.concat([pkcs8Prefix, seed]), format: "der", type: "pkcs8" });
+  return sign(null, ownerCheckMessage(fields), key).toString("base64url");
 }
 
 async function verifyRelease({ base = root, releaseManifestPath = manifestPath, releasePublicKeyPath = publicKeyPath, environment = process.env } = {}) {
@@ -192,4 +220,4 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   });
 }
 
-export { canonicalize, collectFiles, reportFailure, verifyRelease };
+export { canonicalize, collectFiles, ownerCheckMessage, reportFailure, signOwnerCheck, verifyRelease };
