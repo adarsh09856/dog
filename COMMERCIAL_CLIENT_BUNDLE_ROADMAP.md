@@ -461,3 +461,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - External embedding keys previously reached the shared embedding factory without an independent current-plan/global-policy check. Document ingestion, manual search and agent retrieval now pass their workspace to that factory, which denies an excluded key before constructing a provider. Managed Kodewaves embeddings remain separate; policy database failures do not authorize external keys.
 - Chunked document jobs now perform that check before sending the document for conversion; manual search preserves the 403 denial. Focused embedding, search, agent retrieval and ingestion regressions passed **17 tests** with synthetic credentials and mocked provider calls. Optional speech-provider imports logged missing local dependencies; no real provider was contacted. Live plan-downgrade and customer-install acceptance remain open.
+
+## 27 October 2026 — reject disabled campaign batches before dispatch
+
+- A queued running campaign batch now rechecks its workspace campaign grant before the dispatcher initializes its calling provider or claims contacts. Per-call admission remains in place for changes while a batch is running. Paused campaigns retain the existing no-dispatch behavior.
+- The focused campaign task suite passed **7 tests**, including disabled running and paused campaigns. These use mocked dispatch and do not verify a live queue, telephone call, or a concurrent pause and entitlement change.

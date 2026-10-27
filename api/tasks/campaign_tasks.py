@@ -116,6 +116,13 @@ async def process_campaign_batch(
     failed_count = 0
     try:
         await require_client_worker_features("voice", "telephony", "campaigns")
+        campaign = await db_client.get_campaign_by_id(campaign_id)
+        if not campaign:
+            raise ValueError(f"Campaign {campaign_id} not found")
+        # A queued batch can outlive the workspace's campaign grant. Check
+        # before the dispatcher initializes a provider or claims contacts.
+        if campaign.state == "running":
+            await enforce_saas_feature(campaign.organization_id, "campaigns")
         # Process the batch
         processed_count = await campaign_call_dispatcher.process_batch(
             campaign_id=campaign_id, batch_size=batch_size
