@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowDown,
   ArrowRight,
   AudioLines,
   Check,
@@ -16,7 +15,6 @@ import {
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
 
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { useClientBranding } from "@/context/ClientBrandingContext";
@@ -59,86 +57,69 @@ const capabilities = [
     text: "Organize agents, provider connections and usage within workspaces, with access managed by your administrators.",
   },
 ];
-const examples = {
-  Support: {
-    question: "I need help with my order.",
-    answer: "Of course. What is your order number?",
-    action: "Look up order → understand request → route next step",
-  },
-  Appointments: {
-    question: "Can I book an appointment?",
-    answer: "Sure. Which day would work for you?",
-    action: "Collect preferences → check connected tools → confirm details",
-  },
-  "Follow-ups": {
-    question: "Can you tell me more about the service?",
-    answer: "Happy to help. What would you like to know?",
-    action: "Understand interest → answer from context → collect next step",
-  },
-};
 const stages = [
   {
-    icon: MessageSquareText,
-    title: "Speech recognition",
-    text: "Turn the caller’s speech into context.",
+    number: "01",
+    title: "Build the workflow",
+    text: "Define prompts, branches and actions in the visual editor.",
   },
   {
-    icon: Workflow,
-    title: "Reasoning & workflow",
-    text: "Understand the request and decide the next action.",
+    number: "02",
+    title: "Test the conversation",
+    text: "Run the agent in the browser and review what it heard and said.",
   },
   {
-    icon: AudioLines,
-    title: "Voice synthesis",
-    text: "Speak the response in your configured voice.",
+    number: "03",
+    title: "Connect voice and models",
+    text: "Choose speech, language and telephony providers for the deployment.",
+  },
+  {
+    number: "04",
+    title: "Operate and improve",
+    text: "Handle web and phone calls, then review transcripts and recordings.",
   },
 ];
 
 export default function HomePage() {
   const branding = useClientBranding();
-  const [example, setExample] = useState<keyof typeof examples>("Support");
-  const selected = examples[example];
   return (
     <div className="min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content">
         <section className="relative overflow-hidden border-b border-border">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute right-0 top-0 size-[600px] rounded-full bg-cta/10 blur-[120px]"
-          />
-          <div className="relative mx-auto grid max-w-7xl items-center gap-14 px-5 py-16 sm:px-8 sm:py-24 lg:grid-cols-[1.1fr_1fr] lg:gap-20 lg:py-28">
+          <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[1fr_0.82fr] lg:gap-20 lg:py-24">
             <div>
               <p className="mb-6 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
-                Voice AI, built around your business
+                Voice agent operations platform
               </p>
-              <h1 className="text-5xl font-medium leading-[1.06] tracking-[-0.05em] sm:text-6xl lg:text-7xl">
-                Good conversations.
-                <br />
-                <span className="text-muted-foreground">Real work, done.</span>
+              <h1 className="max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-6xl">
+                Build, test and operate voice agents.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-8 text-muted-foreground">
                 {branding.tagline}
+              </p>
+              <p className="mt-3 max-w-xl leading-7 text-muted-foreground">
+                Configure the conversation, validate it in a browser, and connect it to web or phone channels.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link
                   href="/auth/login"
                   className="inline-flex items-center gap-3 rounded-lg bg-cta px-6 py-3.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90"
                 >
-                  Open your workspace <ArrowRight className="size-4" />
+                  Sign in to your workspace <ArrowRight className="size-4" />
                 </Link>
                 <Link
                   href="/pricing"
                   className="rounded-lg border border-border px-6 py-3.5 text-sm font-medium hover:bg-muted"
                 >
-                  Explore plans
+                  View plans and deployment
                 </Link>
               </div>
               <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 text-xs text-muted-foreground">
                 {[
-                  "Visual workflows",
-                  "Your choice of models",
-                  "Web & telephony",
+                  "Workflow editor",
+                  "Browser testing",
+                  "Web and telephony",
                 ].map((item) => (
                   <span key={item} className="flex items-center gap-2">
                     <Check className="size-3.5 text-cta" />
@@ -147,68 +128,25 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-            <div className="rounded-3xl border border-border bg-card p-5 shadow-xl shadow-black/5 sm:p-7">
-              <div className="mb-7 flex items-center gap-3 border-b border-border pb-5">
-                <span className="flex size-10 items-center justify-center rounded-xl bg-cta/10 text-cta">
-                  <AudioLines className="size-5" />
-                </span>
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
+              <div className="flex items-center justify-between border-b border-border px-6 py-4">
                 <div>
-                  <p className="text-sm font-semibold">
-                    Your agent, in conversation
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Illustrative workflow
-                  </p>
+                  <p className="text-sm font-semibold">Agent lifecycle</p>
+                  <p className="mt-1 text-xs text-muted-foreground">From configuration to call review</p>
                 </div>
+                <Workflow className="size-5 text-cta" aria-hidden="true" />
               </div>
-              <div
-                className="mb-6 flex flex-wrap gap-2"
-                aria-label="Conversation examples"
-              >
-                {(Object.keys(examples) as Array<keyof typeof examples>).map(
-                  (key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      aria-pressed={example === key}
-                      onClick={() => setExample(key)}
-                      className={`rounded-full px-3 py-2 text-xs font-medium ${example === key ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground"}`}
-                    >
-                      {key}
-                    </button>
-                  ),
-                )}
-              </div>
-              <div aria-live="polite" className="space-y-4">
-                <div className="ml-8 rounded-2xl rounded-br-sm bg-muted px-5 py-4 text-sm leading-6">
-                  {selected.question}
-                </div>
-                <div className="mr-8 rounded-2xl rounded-bl-sm border border-border px-5 py-4 text-sm leading-6">
-                  {selected.answer}
-                </div>
-              </div>
-              <div
-                aria-hidden="true"
-                className="my-7 flex h-12 items-center justify-center gap-1.5"
-              >
-                {[
-                  10, 18, 28, 16, 38, 48, 30, 19, 36, 44, 22, 12, 29, 39, 17, 9,
-                ].map((height, index) => (
-                  <span
-                    key={index}
-                    className="w-1.5 rounded-full bg-cta/60"
-                    style={{ height }}
-                  />
+              <ol className="divide-y divide-border">
+                {stages.map(({ number, title, text }) => (
+                  <li key={number} className="flex gap-5 px-6 py-5">
+                    <span className="pt-0.5 font-mono text-xs tabular-nums text-muted-foreground">{number}</span>
+                    <div>
+                      <h2 className="text-sm font-semibold">{title}</h2>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">{text}</p>
+                    </div>
+                  </li>
                 ))}
-              </div>
-              <div className="rounded-xl bg-muted/60 p-4">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  A clear next step
-                </p>
-                <p className="text-xs leading-6 text-foreground/80">
-                  {selected.action}
-                </p>
-              </div>
+              </ol>
             </div>
           </div>
         </section>
@@ -220,15 +158,15 @@ export default function HomePage() {
             <div className="mb-12 grid gap-6 md:grid-cols-2 md:items-end">
               <div>
                 <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
-                  From first hello to next step
+                Configure the full call lifecycle
                 </p>
                 <h2 className="max-w-xl text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
-                  Make conversations part of your workflow.
+                  One workspace for agents, channels and call review.
                 </h2>
               </div>
               <p className="max-w-lg leading-7 text-muted-foreground md:justify-self-end">
-                Design the journey, choose your models and connect the systems
-                your team already uses. Review each run and keep improving.
+                Create agents, configure speech and language providers, connect
+                telephony, and review the resulting conversations from the same workspace.
               </p>
             </div>
             <div className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-2 lg:grid-cols-3">
@@ -253,12 +191,10 @@ export default function HomePage() {
           <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2 lg:gap-24">
             <div>
               <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
-                A stack you can choose
+                Speech configuration
               </p>
               <h2 className="text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
-                Connect the models.
-                <br />
-                Shape the experience.
+                Configure speech for your deployment.
               </h2>
               <p className="mt-6 max-w-lg leading-8 text-muted-foreground">
                 Use a speech-to-speech model or configure recognition, reasoning
@@ -273,9 +209,13 @@ export default function HomePage() {
               </Link>
             </div>
             <div>
-              {stages.map(({ icon: Icon, title, text }, index) => (
+              {[
+                { icon: MessageSquareText, title: "Speech recognition", text: "Choose a supported STT provider and configure the languages your agents need." },
+                { icon: Workflow, title: "Reasoning and actions", text: "Select an LLM and connect workflow branches, tools and business systems." },
+                { icon: AudioLines, title: "Voice synthesis", text: "Choose a supported TTS provider, voice and speaking settings." },
+              ].map(({ icon: Icon, title, text }, index) => (
                 <div key={title}>
-                  <div className="flex items-center gap-5 rounded-2xl border border-border bg-card p-6">
+                  <div className="flex items-center gap-5 border-b border-border py-5 first:pt-0 last:border-b-0">
                     <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-cta/10 text-cta">
                       <Icon className="size-5" />
                     </span>
@@ -286,9 +226,7 @@ export default function HomePage() {
                       </p>
                     </div>
                   </div>
-                  {index < 2 && (
-                    <ArrowDown className="mx-auto my-3 size-4 text-muted-foreground" />
-                  )}
+                  {index < 2 && <div className="sr-only">Next configuration stage</div>}
                 </div>
               ))}
             </div>
@@ -369,22 +307,20 @@ export default function HomePage() {
         <section className="border-t border-border bg-muted/40 px-5 py-20 text-center sm:px-8 sm:py-24">
           <div className="mx-auto max-w-3xl">
             <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta">
-              Build your next conversation
+              Kodewaves voice agent workspace
             </p>
             <h2 className="text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
-              Start with one agent.
-              <br />
-              Make every next step count.
+              Configure your first voice agent.
             </h2>
             <p className="mx-auto mt-6 max-w-xl leading-7 text-muted-foreground">
-              Explore the platform, review the available plans and configure a
-              workflow for your business.
+              Sign in to build and test an agent, or review plans and deployment
+              options before getting started.
             </p>
             <Link
               href="/pricing"
               className="mt-8 inline-flex items-center gap-3 rounded-lg bg-cta px-6 py-3.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90"
             >
-              Find your starting point
+              Review plans and deployment
               <ArrowRight className="size-4" />
             </Link>
           </div>

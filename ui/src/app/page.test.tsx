@@ -20,8 +20,22 @@ describe("public home branding", () => {
   it("uses the admin-configured brand tagline in the hero", () => {
     render(<HomePage />);
 
-    expect(
-      screen.getAllByText("Acme helps every caller take the next step."),
-    ).toHaveLength(2);
+    expect(screen.getByRole("main").textContent).toContain(
+      "Acme helps every caller take the next step.",
+    );
+    expect(screen.getByRole("contentinfo").textContent).toContain(
+      "Acme helps every caller take the next step.",
+    );
+  });
+
+  it("describes the real agent lifecycle without a fabricated conversation preview", () => {
+    render(<HomePage />);
+
+    expect(screen.getByRole("heading", { name: "Build, test and operate voice agents." })).toBeTruthy();
+    expect(screen.getByText("Agent lifecycle")).toBeTruthy();
+    expect(screen.getByText("Test the conversation")).toBeTruthy();
+    expect(screen.getByText("Operate and improve")).toBeTruthy();
+    expect(screen.queryByText("Illustrative workflow")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Conversation examples" })).toBeNull();
   });
 });
