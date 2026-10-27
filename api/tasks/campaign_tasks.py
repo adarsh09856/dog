@@ -145,14 +145,6 @@ async def process_campaign_batch(
     except Exception as e:
         logger.error(f"Error processing batch for campaign {campaign_id}: {e}")
 
-        # Publish batch failed event
-        publisher = await get_campaign_event_publisher()
-        await publisher.publish_batch_failed(
-            campaign_id=campaign_id,
-            error=str(e),
-            processed_count=0,
-        )
-
         # Preserve a pause or stop that raced with this batch failure.
         await db_client.fail_running_campaign(campaign_id)
         await db_client.append_campaign_log(
@@ -161,5 +153,14 @@ async def process_campaign_batch(
             event="batch_failed",
             message=f"Batch processing failed: {e}",
             details={"error": str(e)},
+        )
+
+        # The orchestrator clears its in-progress marker on this event, so
+        # publish only after the authoritative state and audit log are saved.
+        publisher = await get_campaign_event_publisher()
+        await publisher.publish_batch_failed(
+            campaign_id=campaign_id,
+            error=str(e),
+            processed_count=0,
         )
         raise

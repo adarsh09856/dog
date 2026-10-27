@@ -91,6 +91,36 @@ async def test_shared_setup_failure_is_logged():
 
 
 @pytest.mark.asyncio
+async def test_batch_failure_records_state_before_publishing(monkeypatch):
+    events = []
+    async def mark_failed(_campaign_id):
+        events.append("state")
+        return True
+
+    async def append_log(**_kwargs):
+        events.append("log")
+
+    async def publish(**_kwargs):
+        events.append("event")
+
+    db = SimpleNamespace(
+        get_campaign_by_id=AsyncMock(return_value=SimpleNamespace(organization_id=206, state="running")),
+        fail_running_campaign=AsyncMock(side_effect=mark_failed),
+        append_campaign_log=AsyncMock(side_effect=append_log),
+    )
+    monkeypatch.setattr(campaign_tasks, "require_client_worker_features", AsyncMock())
+    monkeypatch.setattr(campaign_tasks, "enforce_saas_feature", AsyncMock())
+    monkeypatch.setattr(campaign_tasks, "db_client", db)
+    monkeypatch.setattr(campaign_tasks, "campaign_call_dispatcher", SimpleNamespace(process_batch=AsyncMock(side_effect=ValueError("setup failed"))))
+    monkeypatch.setattr(campaign_tasks, "get_campaign_event_publisher", AsyncMock(return_value=SimpleNamespace(publish_batch_failed=AsyncMock(side_effect=publish))))
+
+    with pytest.raises(ValueError, match="setup failed"):
+        await process_campaign_batch({}, 48)
+
+    assert events == ["state", "log", "event"]
+
+
+@pytest.mark.asyncio
 async def test_client_entitlement_failure_prevents_campaign_dispatch():
     with (
         patch("api.tasks.campaign_tasks.require_client_worker_features", AsyncMock(side_effect=ValueError("campaigns not licensed"))),
