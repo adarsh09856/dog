@@ -419,3 +419,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - Added an opt-in real PostgreSQL check of the actual client user-management queries. With two workspaces, a foreign user cannot be suspended, a shared user cannot be suspended through a single-workspace action, and a member of the selected workspace can be suspended. The foreign account remains active.
 - The focused test passed against a disposable, resource-limited PostgreSQL container; it and its SSH tunnel were removed. This uses temporary minimal tables and does not prove full HTTP authorization, all resources, or deployed two-tenant isolation. The existing API CI workflow is configured to run this test using its dedicated test database.
+
+## 27 October 2026 — concurrent client seat limit on PostgreSQL
+
+- Eight parallel account creations competed for a two-seat client limit; exactly two accounts persisted and the others received the limit denial. The actual account creation and transaction lock ran on disposable PostgreSQL; license decoding and owner status were controlled test inputs.
+- The focused test passed and the temporary database/tunnel were removed. This does not establish deployed licensing, other quotas, or a complete client installation. The regression is included in the dedicated PostgreSQL CI suite, which has not run remotely yet.

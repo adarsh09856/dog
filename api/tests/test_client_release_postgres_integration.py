@@ -14,6 +14,8 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -39,6 +41,7 @@ from api.db.kodewaves_models import (
 from api.db.user_client import UserClient
 from api.db.client_user_management import list_workspace_users, set_workspace_user_active
 from api.db import db_client
+from api.services import client_creation_limits
 from api.routes.admin import client_installation_check
 from api.services.installation_identity import sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status_claims
@@ -298,6 +301,50 @@ async def test_client_user_changes_are_scoped_to_workspace(monkeypatch):
         assert (await set_workspace_user_active(1, 1, active=False)).is_active is False
         async with engine.connect() as conn:
             assert (await conn.execute(text("SELECT is_active FROM users WHERE id = 2"))).scalar_one() is True
+    finally:
+        await engine.dispose()
+        if schema_created:
+            async with admin_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_client_signups_cannot_exceed_signed_seat_limit(monkeypatch):
+    database_url = _disposable_database_url()
+    schema = f"client_seats_{uuid.uuid4().hex}"
+    admin_engine = create_async_engine(database_url)
+    engine = create_async_engine(database_url, connect_args={"server_settings": {"search_path": schema}})
+    schema_created = False
+    try:
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE TABLE organizations (id SERIAL PRIMARY KEY)"))
+            await conn.execute(text("""CREATE TABLE users (
+                id SERIAL PRIMARY KEY, provider_id VARCHAR NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ, selected_organization_id INTEGER REFERENCES organizations(id),
+                is_superuser BOOLEAN, is_active BOOLEAN NOT NULL, email VARCHAR, password_hash VARCHAR
+            )"""))
+        monkeypatch.setattr(client_creation_limits, "KODEWAVES_EDITION", "client")
+        monkeypatch.setattr(client_creation_limits, "load_license", lambda: SimpleNamespace(limits={"max_seats": 2}))
+        monkeypatch.setattr(client_creation_limits, "validate_installation_license", lambda _: None)
+        monkeypatch.setattr(client_creation_limits, "require_current_owner_status", AsyncMock())
+        client = UserClient.__new__(UserClient)
+        client.async_session = async_sessionmaker(engine)
+
+        async def signup(index):
+            try:
+                return await client.create_user_with_email(f"seat{index}@example.test", "test-hash")
+            except HTTPException as exc:
+                assert exc.status_code == 403 and "max_seats" in exc.detail
+                return None
+
+        users = await asyncio.wait_for(asyncio.gather(*(signup(i) for i in range(8))), timeout=45)
+        assert sum(user is not None for user in users) == 2
+        async with engine.connect() as conn:
+            assert (await conn.execute(text("SELECT count(*) FROM users"))).scalar_one() == 2
     finally:
         await engine.dispose()
         if schema_created:
