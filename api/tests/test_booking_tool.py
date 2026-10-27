@@ -8,6 +8,11 @@ from api.services.workflow.tools.custom_tool import tool_to_function_schema
 from api.schemas.tool import CreateToolRequest
 
 
+@pytest.fixture(autouse=True)
+def allow_saas_appointment_feature_in_unit_tests(monkeypatch):
+    monkeypatch.setattr(booking, "enforce_saas_feature", AsyncMock())
+
+
 def arguments(**overrides):
     return {"customer_name": "Test Caller", "customer_phone": "+15550100000",
             "start_time": "2035-10-20T10:00:00+05:30", "confirmed_by_caller": True, **overrides}

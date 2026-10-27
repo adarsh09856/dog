@@ -2,17 +2,14 @@
 
 import {
   AlertTriangle,
-  ArrowUpDown,
   Coins,
   Download,
   Edit,
   ExternalLink,
   KeyRound,
   Loader2,
-  Lock,
   MoreHorizontal,
   PhoneCall,
-  Plus,
   RefreshCw,
   Search,
   Shield,
@@ -24,7 +21,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -62,10 +59,36 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { adminApi, AdminUserItem } from "@/lib/kodewavesApi";
+import { useAuth } from "@/lib/auth";
+import { adminApi, AdminUserItem, SaaSPlan } from "@/lib/kodewavesApi";
+
+function userEditValues(user?: AdminUserItem) {
+  return {
+    is_superuser: Boolean(user?.is_superuser),
+    has_local_ai_access: Boolean(user?.has_local_ai_access),
+    is_wallet_frozen: Boolean(user?.is_wallet_frozen),
+    max_concurrent_calls: user?.max_concurrent_calls ?? 2,
+    max_agents: user?.max_agents ?? 10,
+    enable_campaigns: user?.enable_campaigns ?? true,
+    enable_crm: user?.enable_crm ?? true,
+    enable_widgets: user?.enable_widgets ?? true,
+    enable_appointments: user?.enable_appointments ?? true,
+    enable_forms: user?.enable_forms ?? true,
+    enable_byok: user?.enable_byok ?? true,
+    plan_code: user?.plan_code ?? "",
+    wallet_balance_minutes: user?.wallet_balance_minutes ?? user?.organization?.wallet_balance_minutes ?? 0,
+  };
+}
 
 export default function AdminUsersPage() {
+  const { user, loading: authLoading } = useAuth();
+  const ownerId = user?.id;
+  const canManageUsers = !authLoading && user?.is_superuser === true;
+  const requestRevision = useRef(0);
+  const invalidateRequests = useCallback(() => ++requestRevision.current, []);
   const [users, setUsers] = useState<AdminUserItem[]>([]);
+  const [plans, setPlans] = useState<SaaSPlan[]>([]);
+  const [plansError, setPlansError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -84,7 +107,7 @@ export default function AdminUsersPage() {
     name: "",
     is_superuser: false,
     has_local_ai_access: false,
-    plan_code: "starter",
+    plan_code: "",
     initial_minutes: 60,
   });
 
@@ -95,21 +118,7 @@ export default function AdminUsersPage() {
 
   // 3. Edit User Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editForm, setEditForm] = useState({
-    is_superuser: false,
-    has_local_ai_access: false,
-    is_wallet_frozen: false,
-    max_concurrent_calls: 2,
-    max_agents: 10,
-    enable_campaigns: true,
-    enable_crm: true,
-    enable_widgets: true,
-    enable_appointments: true,
-    enable_forms: true,
-    enable_byok: true,
-    plan_name: "Starter",
-    wallet_balance_minutes: 0,
-  });
+  const [editForm, setEditForm] = useState(userEditValues);
 
 
   // 4. Reset Password Modal State
@@ -119,7 +128,23 @@ export default function AdminUsersPage() {
   // 5. Delete Confirm Modal State
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  const fetchUsers = async () => {
+  useEffect(() => {
+    if (!canManageUsers) return;
+    let active = true;
+    void adminApi.getPlans().then((catalog) => {
+      if (active) {
+        setPlans(catalog.filter((plan) => plan.is_active));
+        setPlansError(null);
+      }
+    }).catch((error: unknown) => {
+      if (active) setPlansError(error instanceof Error ? error.message : "Plan catalog unavailable");
+    });
+    return () => { active = false; };
+  }, [canManageUsers, ownerId, createModalOpen, editModalOpen]);
+
+  const fetchUsers = useCallback(async () => {
+    if (!canManageUsers || ownerId == null) return;
+    const revision = invalidateRequests();
     setLoading(true);
     try {
       const data = await adminApi.getUsers({
@@ -127,22 +152,31 @@ export default function AdminUsersPage() {
         role: roleFilter !== "all" ? roleFilter : undefined,
         status: statusFilter !== "all" ? statusFilter : undefined,
       });
+      if (revision !== requestRevision.current) return;
       setUsers(data);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      if (revision !== requestRevision.current) return;
       console.error("Failed to load users:", err);
-      setError(err.message || "Failed to load users from database");
+      setError((err instanceof Error ? err.message : "") || "Failed to load users from database");
     } finally {
-      setLoading(false);
+      if (revision === requestRevision.current) setLoading(false);
     }
-  };
+  }, [canManageUsers, ownerId, invalidateRequests, search, roleFilter, statusFilter]);
 
   useEffect(() => {
+    if (!canManageUsers) {
+      setUsers([]);
+      return;
+    }
     const handler = setTimeout(() => {
       fetchUsers();
     }, 300);
-    return () => clearTimeout(handler);
-  }, [search, roleFilter, statusFilter]);
+    return () => {
+      clearTimeout(handler);
+      invalidateRequests();
+    };
+  }, [canManageUsers, fetchUsers, invalidateRequests]);
 
   // Handlers
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -153,7 +187,7 @@ export default function AdminUsersPage() {
     }
     setActionLoading(true);
     try {
-      await adminApi.createUser(createForm);
+      await adminApi.createUser({ ...createForm, plan_code: createForm.plan_code || undefined });
       setCreateModalOpen(false);
       setCreateForm({
         email: "",
@@ -161,12 +195,12 @@ export default function AdminUsersPage() {
         name: "",
         is_superuser: false,
         has_local_ai_access: false,
-        plan_code: "starter",
+        plan_code: "",
         initial_minutes: 60,
       });
       await fetchUsers();
-    } catch (err: any) {
-      alert(err.message || "Failed to create user");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : "") || "Failed to create user");
     } finally {
       setActionLoading(false);
     }
@@ -180,8 +214,8 @@ export default function AdminUsersPage() {
       setGrantModalOpen(false);
       setSelectedUser(null);
       await fetchUsers();
-    } catch (err: any) {
-      alert(err.message || "Failed to grant minutes");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : "") || "Failed to grant minutes");
     } finally {
       setActionLoading(false);
     }
@@ -192,12 +226,16 @@ export default function AdminUsersPage() {
     if (!selectedUser) return;
     setActionLoading(true);
     try {
-      await adminApi.updateUser(selectedUser.id, editForm);
+      const original = userEditValues(selectedUser);
+      const changes = Object.fromEntries(Object.entries(editForm).filter(
+        ([key, value]) => value !== original[key as keyof typeof original],
+      ));
+      await adminApi.updateUser(selectedUser.id, changes);
       setEditModalOpen(false);
       setSelectedUser(null);
       await fetchUsers();
-    } catch (err: any) {
-      alert(err.message || "Failed to update user");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : "") || "Failed to update user");
     } finally {
       setActionLoading(false);
     }
@@ -213,8 +251,8 @@ export default function AdminUsersPage() {
       setNewPassword("");
       setSelectedUser(null);
       alert(`Password updated successfully for ${selectedUser.email}`);
-    } catch (err: any) {
-      alert(err.message || "Failed to reset password");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : "") || "Failed to reset password");
     } finally {
       setActionLoading(false);
     }
@@ -224,13 +262,13 @@ export default function AdminUsersPage() {
     const nextStatus = !user.is_active;
     const confirmMsg = nextStatus
       ? `Reactivate account for ${user.email}?`
-      : `SUSPEND account for ${user.email}? This will revoke access and drop active calls immediately.`;
+      : `SUSPEND account for ${user.email}? This blocks new authenticated requests and freezes the selected workspace wallet. Existing calls may finish.`;
     if (!confirm(confirmMsg)) return;
     try {
       await adminApi.updateUserStatus(user.id, nextStatus);
       await fetchUsers();
-    } catch (err: any) {
-      alert(err.message || "Failed to update user status");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : "") || "Failed to update user status");
     }
   };
 
@@ -253,8 +291,8 @@ export default function AdminUsersPage() {
         document.cookie = `oss_token=${res.token}; path=/; max-age=86400`;
         window.location.href = res.redirect_url || "/workflow";
       }
-    } catch (err: any) {
-      alert(err.message || "Failed to impersonate user");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : "") || "Failed to impersonate user");
     }
   };
 
@@ -266,8 +304,8 @@ export default function AdminUsersPage() {
       setDeleteModalOpen(false);
       setSelectedUser(null);
       await fetchUsers();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete user");
+    } catch (err: unknown) {
+      alert((err instanceof Error ? err.message : "") || "Failed to delete user");
     } finally {
       setActionLoading(false);
     }
@@ -302,6 +340,7 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-8">
+      {plansError && <p role="alert" className="text-sm text-destructive">Plan catalog: {plansError}. Reopen the form to retry.</p>}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -496,7 +535,7 @@ export default function AdminUsersPage() {
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Manage ${u.email || u.id}`}>
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -516,21 +555,7 @@ export default function AdminUsersPage() {
                               <DropdownMenuItem
                                 onClick={() => {
                                   setSelectedUser(u);
-                                  setEditForm({
-                                    is_superuser: Boolean(u.is_superuser),
-                                    has_local_ai_access: Boolean(u.has_local_ai_access),
-                                    is_wallet_frozen: Boolean(u.is_wallet_frozen),
-                                    max_concurrent_calls: u.max_concurrent_calls ?? 2,
-                                    max_agents: u.max_agents ?? 10,
-                                    enable_campaigns: u.enable_campaigns ?? true,
-                                    enable_crm: u.enable_crm ?? true,
-                                    enable_widgets: u.enable_widgets ?? true,
-                                    enable_appointments: u.enable_appointments ?? true,
-                                    enable_forms: u.enable_forms ?? true,
-                                    enable_byok: u.enable_byok ?? true,
-                                    plan_name: u.plan_name || "Starter",
-                                    wallet_balance_minutes: balance,
-                                  });
+                                  setEditForm(userEditValues(u));
                                   setEditModalOpen(true);
                                 }}
                               >
@@ -545,11 +570,11 @@ export default function AdminUsersPage() {
                                   setPasswordModalOpen(true);
                                 }}
                               >
-                                <KeyRound className="h-3.5 w-3.5 mr-2 text-indigo-500" />
+                                <KeyRound className="h-3.5 w-3.5 mr-2 text-primary" />
                                 Reset Password
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleImpersonate(u)}>
-                                <ExternalLink className="h-3.5 w-3.5 mr-2 text-blue-500" />
+                                <ExternalLink className="h-3.5 w-3.5 mr-2 text-primary" />
                                 Login As User
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
@@ -638,18 +663,20 @@ export default function AdminUsersPage() {
                 <div className="space-y-1.5">
                   <Label className="text-xs">SaaS Plan</Label>
                   <Select
-                    value={createForm.plan_code}
-                    onValueChange={(val) => setCreateForm({ ...createForm, plan_code: val })}
+                    value={createForm.plan_code || "__default__"}
+                    onValueChange={(val) => setCreateForm({ ...createForm, plan_code: val === "__default__" ? "" : val })}
                   >
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="starter">Starter (60m)</SelectItem>
-                      <SelectItem value="pro">Pro (300m)</SelectItem>
-                      <SelectItem value="enterprise">Enterprise (Custom)</SelectItem>
+                      <SelectItem value="__default__">Use platform default</SelectItem>
+                      {plans.map((plan) => <SelectItem key={plan.code} value={plan.code}>{plan.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    A new paid-plan grant lasts 30 days and adds no minutes. Keeping the same plan preserves its current term.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Initial Minutes</Label>
@@ -792,27 +819,32 @@ export default function AdminUsersPage() {
                   </label>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  When frozen, all outbound telephone calls, web audio runs, and campaigns from this workspace are instantly blocked.
+                  Freezing blocks new billable voice runs from this workspace. Existing calls may finish.
                 </p>
               </div>
 
               {/* Plan & Minute Overrides */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border bg-muted/20">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">SaaS Subscription Plan</Label>
+                  <Label className="text-xs font-medium">Catalog Plan</Label>
                   <Select
-                    value={editForm.plan_name}
-                    onValueChange={(val) => setEditForm({ ...editForm, plan_name: val })}
+                    value={editForm.plan_code || "__unchanged__"}
+                    onValueChange={(val) => setEditForm({ ...editForm, plan_code: val === "__unchanged__" ? selectedUser?.plan_code ?? "" : val })}
                   >
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Starter">Starter Plan</SelectItem>
-                      <SelectItem value="Pro">Pro Plan</SelectItem>
-                      <SelectItem value="Enterprise">Enterprise Plan</SelectItem>
+                      <SelectItem value="__unchanged__">Keep current plan</SelectItem>
+                      {selectedUser?.plan_code && !plans.some((plan) => plan.code === selectedUser.plan_code) && (
+                        <SelectItem value={selectedUser.plan_code}>{selectedUser.plan_name || selectedUser.plan_code} (current)</SelectItem>
+                      )}
+                      {plans.map((plan) => <SelectItem key={plan.code} value={plan.code}>{plan.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    A new paid-plan grant lasts 30 days and adds no minutes. Keeping the same plan preserves its current term.
+                  </p>
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Wallet Minute Balance (Override)</Label>
@@ -834,29 +866,35 @@ export default function AdminUsersPage() {
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] text-muted-foreground">Max Concurrent Calls</Label>
+                  <Label htmlFor="owner-max-calls" className="text-[11px] text-muted-foreground">Max Concurrent Calls</Label>
                     <Input
+                      id="owner-max-calls"
                       type="number"
-                      min={1}
-                      max={100}
+                      min={0}
+                      step={1}
                       className="h-8 text-xs font-mono"
                       value={editForm.max_concurrent_calls}
-                      onChange={(e) => setEditForm({ ...editForm, max_concurrent_calls: parseInt(e.target.value) || 1 })}
+                      onChange={(e) => setEditForm({ ...editForm, max_concurrent_calls: Math.max(0, Math.trunc(e.target.valueAsNumber || 0)) })}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[11px] text-muted-foreground">Max Voice Agents</Label>
+                    <Label htmlFor="owner-max-agents" className="text-[11px] text-muted-foreground">Max Voice Agents</Label>
                     <Input
+                      id="owner-max-agents"
                       type="number"
-                      min={1}
-                      max={200}
+                      min={0}
+                      step={1}
                       className="h-8 text-xs font-mono"
                       value={editForm.max_agents}
-                      onChange={(e) => setEditForm({ ...editForm, max_agents: parseInt(e.target.value) || 1 })}
+                      onChange={(e) => setEditForm({ ...editForm, max_agents: Math.max(0, Math.trunc(e.target.valueAsNumber || 0)) })}
                     />
                   </div>
                 </div>
               </div>
+
+              <p className="text-xs text-muted-foreground">
+                A quota of zero blocks new calls or agent creation. Existing agents are retained.
+              </p>
 
               {/* Module Feature Flags */}
               <div className="p-3 rounded-lg border space-y-3">
@@ -999,7 +1037,7 @@ export default function AdminUsersPage() {
           <form onSubmit={handleResetPassword}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-indigo-500" />
+                <KeyRound className="h-5 w-5 text-primary" />
                 Reset User Password
               </DialogTitle>
               <DialogDescription>

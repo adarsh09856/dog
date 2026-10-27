@@ -15,4 +15,5 @@ PORT="${WEB_PORT:-8000}"
 # proxy it must be set (compose: api service env, helm: web.forwardedAllowIps)
 # or request.url stays http:// and URL-signed webhook validation fails.
 cd "$BASE_DIR"
+python -m api.services.release_integrity
 exec uvicorn api.app:app --host 0.0.0.0 --port "$PORT" --workers 1

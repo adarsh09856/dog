@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppConfig } from "@/context/AppConfigContext";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { useAuth } from "@/lib/auth";
 
 import { CaptchaChallenge } from "./CaptchaChallenge";
@@ -44,6 +45,7 @@ interface OnboardingModalProps {
 }
 
 export function OnboardingModal({ open, onComplete }: OnboardingModalProps) {
+  const branding = useClientBranding();
   const { user } = useAuth(); // logged-in identity → onboarding email (sent silently)
   const { config } = useAppConfig();
   // Deployment provenance (analytics only).
@@ -190,7 +192,7 @@ export function OnboardingModal({ open, onComplete }: OnboardingModalProps) {
       }}
       icon={Rocket}
       eyebrow="Welcome"
-      title="Welcome to Kodewaves"
+      title={`Welcome to ${branding.company_name}`}
       description="A few quick questions so we can tailor your experience. Takes ~20 seconds."
       primary={{ label: "Get started", onClick: handleSubmit, disabled: !canSubmit, loading: submitting }}
       overlay={captchaActive ? <CaptchaChallenge onVerified={submitWithOnPrem} onCancel={() => setCaptchaActive(false)} /> : undefined}

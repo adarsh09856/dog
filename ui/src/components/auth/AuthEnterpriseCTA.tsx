@@ -14,9 +14,18 @@ import { useState } from "react";
 import { EnterpriseModal } from "@/components/lead-forms/EnterpriseModal";
 import { Button } from "@/components/ui/button";
 import { PostHogEvent } from "@/constants/posthog-events";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 
 export function AuthEnterpriseCTA() {
   const [open, setOpen] = useState(false);
+  const branding = useClientBranding();
+
+  if (branding.support_email) {
+    return <Button asChild variant="outline" className="w-full border-white/20 bg-white/5 text-zinc-100 hover:bg-white/10 hover:text-white"><a href={`mailto:${branding.support_email}?subject=Enterprise%20enquiry`}>Contact {branding.company_name}</a></Button>;
+  }
+  if (!process.env.NEXT_PUBLIC_ONBOARDING_API_URL) {
+    return <p className="text-xs leading-6 text-zinc-400">Contact your platform administrator for deployment and support options.</p>;
+  }
 
   const openModal = () => {
     setOpen(true);

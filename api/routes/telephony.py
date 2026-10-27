@@ -29,8 +29,10 @@ from api.services.auth.depends import get_user
 from api.services.call_concurrency import (
     CallConcurrencyLimitError,
     WorkflowRunSlotAlreadyBoundError,
+    authorize_call_entitlement,
     call_concurrency,
 )
+from api.services.installation_license import InstallationLicenseError
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.telephony import ws_auth
 from api.services.telephony.call_transfer_manager import get_call_transfer_manager
@@ -273,6 +275,8 @@ async def initiate_call(
             "organization_id": user.selected_organization_id,
         }
 
+        await authorize_call_entitlement("telephony_outbound")
+
         # Initiate call via provider
         result = await provider.initiate_call(
             to_number=phone_number,
@@ -282,6 +286,10 @@ async def initiate_call(
             request=http_request,
             **keywords,
         )
+    except InstallationLicenseError as exc:
+        await mark_workflow_run_failed(workflow_run_id, str(exc))
+        await call_concurrency.release_workflow_run_slot(workflow_run_id)
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as e:
         await mark_workflow_run_failed(workflow_run_id, f"Failed to initiate call: {e}")
         await call_concurrency.release_workflow_run_slot(workflow_run_id)

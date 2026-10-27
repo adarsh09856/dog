@@ -90,6 +90,12 @@ function serializeSetCookie(
 }
 
 export async function GET(request: NextRequest) {
+    // Keep hosted superadmin session exchange unavailable in customer editions,
+    // including deployments built from a SaaS image by mistake.
+    if (process.env.KODEWAVES_EDITION === "client") {
+        return new Response("Not found", { status: 404 });
+    }
+
     const { searchParams } = new URL(request.url);
 
     const refreshToken = searchParams.get("refresh_token");

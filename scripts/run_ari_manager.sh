@@ -9,4 +9,5 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 cd "$BASE_DIR"
+python -m api.services.release_integrity
 exec python -m api.services.telephony.ari_manager

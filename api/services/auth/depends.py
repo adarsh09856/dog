@@ -98,6 +98,8 @@ async def get_user(
                     "auth_provider": "stack",
                 },
             )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Error while creating user from database {e}"
@@ -139,6 +141,8 @@ async def get_user(
                 org_was_created=org_was_created,
             )
 
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=500,

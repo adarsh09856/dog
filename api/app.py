@@ -25,6 +25,7 @@ if SENTRY_DSN and (
     print(f"Sentry initialized in environment: {ENVIRONMENT}")
 
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Request
@@ -32,15 +33,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
 
-from api.constants import REDIS_URL
+from api.constants import KODEWAVES_EDITION, REDIS_URL
 from api.errors.mps import MPS_UNAVAILABLE_PUBLIC_MESSAGE, MPSUnavailableError
 from api.mcp_server import mcp
 from api.routes.main import router as main_router
+from api.services.client_license_middleware import ClientLicenseMiddleware
 from api.services.pipecat.tracing_config import (
     handle_langfuse_sync,
     load_all_org_langfuse_credentials,
 )
 from api.services.pipecat.tts_cache.runtime import close_speech_cache
+from api.services.release_integrity import verify_release_before_startup
 from api.services.worker_sync.manager import (
     WorkerSyncManager,
     set_worker_sync_manager,
@@ -55,9 +58,13 @@ mcp_app = mcp.http_app(path="/", stateless_http=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Keep the protection active even when an operator overrides the image's
+    # normal entrypoint and launches Uvicorn directly.
+    verify_release_before_startup()
     async with mcp_app.lifespan(app):
         # Refuse to start if telephony signature verification is bypassed in production
         import os
+
         from api.constants import ENVIRONMENT
         if os.getenv("SKIP_TELEPHONY_SIGNATURE_VERIFICATION", "false").lower() in ("true", "1") and ENVIRONMENT in ("production", "prod"):
             raise RuntimeError(
@@ -69,6 +76,7 @@ async def lifespan(app: FastAPI):
         # Purge any legacy Kodewaves/Dograh Cloudonix SIP auto-created configurations
         try:
             from sqlalchemy import text
+
             from api.db import db_client
             async with db_client.get_session() as session:
                 await session.execute(
@@ -99,6 +107,11 @@ async def lifespan(app: FastAPI):
 
         call_event_delivery.start()
 
+        owner_status_task = None
+        if KODEWAVES_EDITION == "client":
+            from api.services.owner_installation_status import poll_owner_status_forever
+            owner_status_task = asyncio.create_task(poll_owner_status_forever())
+
         # Event-loop lag gauge — per-pod saturation signal read off
         # /health/active-calls during autoscaling load tests.
         metrics.start()
@@ -111,6 +124,12 @@ async def lifespan(app: FastAPI):
             yield  # Run app
         finally:
             logger.info("Starting graceful shutdown...")
+            if owner_status_task is not None:
+                owner_status_task.cancel()
+                try:
+                    await owner_status_task
+                except asyncio.CancelledError:
+                    pass
             await call_event_delivery.shutdown()
             try:
                 await sync_manager.stop()
@@ -133,6 +152,10 @@ app = FastAPI(
         {"url": "http://localhost:8000", "description": "Local development"},
     ],
 )
+
+# Client licenses gate both HTTP APIs and realtime websocket handshakes. Keep
+# health and license-status endpoints reachable for recovery diagnostics.
+app.add_middleware(ClientLicenseMiddleware)
 
 
 @app.exception_handler(MPSUnavailableError)
@@ -207,6 +230,7 @@ app.mount(f"{API_PREFIX}/mcp", mcp_app)
 # Fallback Reverse Proxy for UI internal endpoints (/api/auth/*, /api/config/*)
 # -----------------------------------------------------------------------------
 import os
+
 import aiohttp
 from fastapi import Response
 

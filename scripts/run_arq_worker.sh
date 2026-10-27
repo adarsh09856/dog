@@ -11,4 +11,5 @@ elif [[ -f "$BASE_DIR/.env" ]]; then
 fi
 
 cd "$BASE_DIR"
+python -m api.services.release_integrity
 exec python -m arq api.tasks.arq.WorkerSettings --custom-log-dict api.tasks.arq.LOG_CONFIG

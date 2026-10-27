@@ -27,6 +27,7 @@ def dependencies(monkeypatch):
     monkeypatch.setattr(resolver.kodewaves_db_client, "list_master_credentials", AsyncMock(return_value=[]))
     monkeypatch.setattr(resolver.kodewaves_db_client, "list_models", AsyncMock(return_value=[]))
     monkeypatch.setattr(resolver.kodewaves_db_client, "get_org_ai_policy", AsyncMock(return_value=None))
+    monkeypatch.setattr(resolver, "is_saas_feature_allowed", AsyncMock(return_value=True))
     return keys, wallet
 
 
@@ -134,6 +135,23 @@ async def test_disabled_byok_is_rejected_without_using_master_key(dependencies, 
     monkeypatch.setattr(resolver.kodewaves_db_client, "get_setting", AsyncMock(return_value={"allow_user_byok": False}))
     with pytest.raises(HTTPException) as error:
         await resolver.apply_kodewaves_sovereign_resolution(mixed_config(), 1)
+    assert error.value.status_code == 403
+    keys.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_plan_disallowed_byok_is_rejected_even_when_platform_allows_it(dependencies, monkeypatch):
+    keys, _ = dependencies
+    monkeypatch.setattr(resolver.kodewaves_db_client, "get_setting", AsyncMock(return_value={"allow_user_byok": True}))
+    monkeypatch.setattr(
+        resolver,
+        "is_saas_feature_allowed",
+        AsyncMock(return_value=False),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await resolver.apply_kodewaves_sovereign_resolution(mixed_config(), 1)
+
     assert error.value.status_code == 403
     keys.assert_not_awaited()
 

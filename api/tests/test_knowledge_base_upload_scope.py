@@ -59,3 +59,17 @@ async def test_background_job_checks_ownership_before_reading_or_mutating(monkey
     monkeypatch.setattr(worker.storage_fs,'adownload_file',download)
     await worker.process_knowledge_base_document({},42,'foreign',7,'synthetic')
     update.assert_not_awaited();download.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_background_job_rechecks_client_entitlement_before_document_access(monkeypatch):
+    from api.tasks import knowledge_base_processing as worker
+    monkeypatch.setattr(worker, 'require_client_worker_features', AsyncMock(side_effect=ValueError('knowledge_base not licensed')))
+    get_document=AsyncMock();update=AsyncMock();download=AsyncMock()
+    monkeypatch.setattr(worker.db_client,'get_document_by_id',get_document)
+    monkeypatch.setattr(worker.db_client,'update_document_status',update)
+    monkeypatch.setattr(worker.storage_fs,'adownload_file',download)
+    with pytest.raises(ValueError, match='not licensed'):
+        await worker.process_knowledge_base_document({},42,'key',7,'synthetic')
+    get_document.assert_not_awaited();download.assert_not_awaited()
+    update.assert_awaited_once()

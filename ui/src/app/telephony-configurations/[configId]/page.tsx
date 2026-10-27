@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   Copy,
-  ExternalLink,
   Pencil,
   Plus,
   RotateCcw,
@@ -311,7 +310,7 @@ export default function TelephonyConfigurationDetailPage() {
                     This configuration is disabled
                   </p>
                   <p className="text-muted-foreground">
-                    Kodewaves stopped reconnecting after repeated connection
+                    The platform stopped reconnecting after repeated connection
                     failures
                     {config.inactive_reason ? `: ${config.inactive_reason}` : ""}.
                     Calls will not work until it is reconnected. Correct the
@@ -346,7 +345,7 @@ export default function TelephonyConfigurationDetailPage() {
               <p className="text-xs text-muted-foreground">
                 Add this line to your Asterisk <code>extensions.conf</code>, then run{" "}
                 <code>dialplan reload</code>. Until you do, calls reach Asterisk but never
-                arrive at Kodewaves.
+                arrive at the platform.
               </p>
               <button
                 type="button"

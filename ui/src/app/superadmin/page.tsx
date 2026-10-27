@@ -1,7 +1,5 @@
 "use client";
 
-import { getUserEmail } from "@/lib/auth/userDisplay";
-
 import { ArrowRight, List, Loader2, ShieldAlert } from 'lucide-react';
 import Link from "next/link";
 import { useState } from "react";
@@ -11,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from '@/lib/auth';
+import { getUserEmail } from "@/lib/auth/userDisplay";
 import { impersonateAsSuperadmin } from "@/lib/utils";
 
 type ImpersonationTarget = "provider" | "email";
@@ -108,7 +107,7 @@ export default function SuperadminPage() {
 
                 <div className="p-4 rounded-xl border border-primary/40 bg-primary/5 flex items-center justify-between">
                     <div>
-                        <div className="font-bold text-sm text-primary">New: Kodewaves Sovereign Admin Suite</div>
+                        <div className="font-bold text-sm text-primary">Platform administration</div>
                         <div className="text-xs text-muted-foreground">Manage master provider keys, retail margins, credit bundles, live calls, and content moderation.</div>
                     </div>
                     <Link href="/admin">
@@ -140,7 +139,7 @@ export default function SuperadminPage() {
                                     </div>
 
                                     {error?.target === "provider" && (
-                                        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                                        <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg text-sm">
                                             {error.message}
                                         </div>
                                     )}
@@ -185,7 +184,7 @@ export default function SuperadminPage() {
                                     </div>
 
                                     {error?.target === "email" && (
-                                        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                                        <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg text-sm">
                                             {error.message}
                                         </div>
                                     )}

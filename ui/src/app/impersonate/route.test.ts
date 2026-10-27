@@ -42,6 +42,18 @@ function parseSetCookie(header: string) {
 }
 
 describe("GET /impersonate", () => {
+    it("is unavailable in client editions", async () => {
+        vi.stubEnv("KODEWAVES_EDITION", "client");
+        try {
+            const response = await GET(
+                makeRequest("https://app.kodewaves.com/impersonate?refresh_token=rt"),
+            );
+            expect(response.status).toBe(404);
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+
     it("returns 400 when refresh_token is missing", async () => {
         const response = await GET(
             makeRequest("https://app.kodewaves.com/impersonate"),

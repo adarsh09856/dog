@@ -43,3 +43,20 @@ async def test_shared_setup_failure_is_logged():
             await process_campaign_batch({}, 48)
         get_pub.return_value.publish_batch_failed.assert_awaited_once()
         assert db.append_campaign_log.await_args.kwargs["event"] == "batch_failed"
+
+
+@pytest.mark.asyncio
+async def test_client_entitlement_failure_prevents_campaign_dispatch():
+    with (
+        patch("api.tasks.campaign_tasks.require_client_worker_features", AsyncMock(side_effect=ValueError("campaigns not licensed"))),
+        patch("api.tasks.campaign_tasks.campaign_call_dispatcher") as dispatcher,
+        patch("api.tasks.campaign_tasks.db_client") as db,
+        patch("api.tasks.campaign_tasks.get_campaign_event_publisher", AsyncMock()) as get_pub,
+    ):
+        dispatcher.process_batch = AsyncMock()
+        db.update_campaign = AsyncMock()
+        db.append_campaign_log = AsyncMock()
+        with pytest.raises(ValueError, match="not licensed"):
+            await process_campaign_batch({}, 48)
+        dispatcher.process_batch.assert_not_awaited()
+        get_pub.return_value.publish_batch_failed.assert_awaited_once()

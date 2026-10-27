@@ -18,12 +18,16 @@ from api.routes.campaign import (
     _validate_max_concurrency,
     update_campaign,
 )
-from api.services.call_concurrency import CallConcurrencySlot
+from api.services.call_concurrency import (
+    CallConcurrencyLimitError,
+    CallConcurrencySlot,
+)
 from api.services.call_concurrency.rate_limiter import RateLimiter
 from api.services.campaign.campaign_call_dispatcher import CampaignCallDispatcher
 from api.services.campaign.errors import (
     ConcurrentSlotAcquisitionError,
 )
+from api.services.installation_license import InstallationLicenseError
 
 MODULE = "api.services.campaign.campaign_call_dispatcher"
 
@@ -86,6 +90,10 @@ def setup_call():
         patch(f"{MODULE}.db_client", db),
         patch(f"{MODULE}.call_concurrency", concurrency),
         patch(f"{MODULE}.rate_limiter", limiter),
+        patch(
+            f"{MODULE}.authorize_call_entitlement",
+            AsyncMock(),
+        ),
         patch(
             f"{MODULE}.get_backend_endpoints",
             AsyncMock(return_value=("http://test", None)),
@@ -217,6 +225,38 @@ async def test_full_concurrency_is_not_a_failed_contact(setup_call):
         206, 48, 30
     )
     assert await s.dispatcher.process_batch(48) == 0
+    s.db.update_queued_run.assert_not_awaited()
+    s.db.return_processing_queued_runs_without_workflow.assert_awaited_once_with([1])
+
+
+@pytest.mark.asyncio
+async def test_revocation_at_dial_boundary_requeues_contact(setup_call):
+    s = setup_call
+    with patch(
+        f"{MODULE}.authorize_call_entitlement",
+        AsyncMock(side_effect=InstallationLicenseError("revoked")),
+    ):
+        assert await s.dispatcher.process_batch(48) == 0
+
+    s.provider.initiate_call.assert_not_awaited()
+    s.concurrency.release_slot.assert_awaited_once_with(s.slot)
+    s.db.update_queued_run.assert_not_awaited()
+    s.db.return_processing_queued_runs_without_workflow.assert_awaited_once_with([1])
+
+
+@pytest.mark.asyncio
+async def test_owner_disabled_campaign_requeues_contact_without_dialing(setup_call):
+    s = setup_call
+    with patch(
+        f"{MODULE}.authorize_call_entitlement",
+        AsyncMock(side_effect=CallConcurrencyLimitError(
+            organization_id=206, source="campaign:48", wait_time=0, max_concurrent=0,
+        )),
+    ) as admission:
+        assert await s.dispatcher.process_batch(48) == 0
+    admission.assert_awaited_once_with("campaign:48", organization_id=206)
+    s.provider.initiate_call.assert_not_awaited()
+    s.concurrency.release_slot.assert_awaited_once_with(s.slot)
     s.db.update_queued_run.assert_not_awaited()
     s.db.return_processing_queued_runs_without_workflow.assert_awaited_once_with([1])
 

@@ -1,10 +1,9 @@
 "use client";
 
-import { AlertTriangle, Bot, CheckCircle2, Cloud, Cpu, Info, Key, Layers, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
+import { AlertTriangle, Bot, Cloud, Cpu, Info, Key, Layers, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getVoicesApiV1UserConfigurationsVoicesProviderGet } from "@/client/sdk.gen";
-import { detailFromError } from "@/lib/apiError";
 
+import { getVoicesApiV1UserConfigurationsVoicesProviderGet } from "@/client/sdk.gen";
 import type {
     ModelConfigurationMetricPrice,
     ModelConfigurationPricingResponse,
@@ -24,9 +23,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VoiceSelectorModal } from "@/components/VoiceSelectorModal";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
-import { formatRoundingPolicy } from "@/lib/billingDisplay";
-import { catalogApi, type AvailableCatalogResponse } from "@/lib/kodewavesApi";
+import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
+import { formatRoundingPolicy } from "@/lib/billingDisplay";
+import { type AvailableCatalogResponse,catalogApi } from "@/lib/kodewavesApi";
 
 type ModelMode = "realtime" | "kodewaves" | "dograh" | "byok";
 
@@ -138,7 +138,6 @@ function isKodewavesEffectiveConfig(config: Record<string, unknown> | null | und
            (tts?.provider === "kodewaves" || tts?.provider === "dograh" || tts?.provider === "speaches") &&
            (stt?.provider === "kodewaves" || stt?.provider === "dograh" || stt?.provider === "speaches");
 }
-const isDograhEffectiveConfig = isKodewavesEffectiveConfig;
 
 function byokDefaults(defaults: ModelConfigurationDefaultsV2): ServiceConfigurationDefaults {
     return {
@@ -235,7 +234,7 @@ function buildKodewavesState(
             : configuration?.mode === "dograh"
             ? asRecord(configuration.dograh)
             : null;
-    const cleanVoice = (v: unknown, lang?: string) => {
+    const cleanVoice = (v: unknown) => {
         const s = String(v || "");
         if (!s || s === "default" || s.startsWith("kw_") || s.startsWith("dg_") || s.startsWith("af_") || s.startsWith("am_")) {
             return "Puck";
@@ -248,12 +247,11 @@ function buildKodewavesState(
 
     if (configuredKodewaves) {
         const apiKey = String(configuredKodewaves.api_key || "");
-        const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu");
         const lang = String(configuredKodewaves.language || fallback.language);
         const llmModel = configuredKodewaves.llm_model ? String(configuredKodewaves.llm_model) : undefined;
         const sttModel = configuredKodewaves.stt_model ? String(configuredKodewaves.stt_model) : undefined;
         const ttsModel = configuredKodewaves.tts_model ? String(configuredKodewaves.tts_model) : undefined;
-        const chosenVoice = cleanVoice(configuredKodewaves.voice || fallback.voice, lang);
+        const chosenVoice = cleanVoice(configuredKodewaves.voice || fallback.voice);
 
         const llmEngineType = (configuredKodewaves.llm_engine_type as "cloud" | "local_cpu") ||
             (llmModel && (llmModel.startsWith("qwen") || llmModel.startsWith("llama3.2") || llmModel.startsWith("phi")) ? "local_cpu" : "cloud");
@@ -293,7 +291,7 @@ function buildKodewavesState(
         const llmModel = llm?.model ? String(llm.model) : undefined;
         const sttModel = stt?.model ? String(stt.model) : undefined;
         const ttsModel = tts?.model ? String(tts.model) : undefined;
-        const chosenVoice = cleanVoice(tts?.voice || fallback.voice, lang);
+        const chosenVoice = cleanVoice(tts?.voice || fallback.voice);
 
         const llmEngineType = (llm?.provider === "speaches" || (llmModel && llmModel.startsWith("qwen"))) ? "local_cpu" : "cloud";
         const sttEngineType = (stt?.provider === "speaches" || (sttModel && sttModel.startsWith("Systran/"))) ? "local_cpu" : "cloud";
@@ -319,7 +317,7 @@ function buildKodewavesState(
 
     return {
         api_key: "",
-        voice: cleanVoice(fallback.voice, fallback.language),
+        voice: cleanVoice(fallback.voice),
         speed: fallback.speed,
         language: fallback.language,
         engine_type: "cloud",
@@ -334,7 +332,6 @@ function buildKodewavesState(
         realtime_model: "",
     };
 }
-const buildDograhState = buildKodewavesState;
 
 function preferredMode(
     configuration: Record<string, unknown> | null,
@@ -403,7 +400,7 @@ function ThirdPartyProviderNotice() {
             <div>
                 <p className="font-medium">Third-party provider data notice</p>
                 <p className="mt-1 leading-6">
-                    Kodewaves sends data required by the selected model service. This may include prompts,
+                    The platform sends data required by the selected model service. This may include prompts,
                     transcripts, audio, generated text, tool data, and request metadata depending on the
                     provider and service type. Review the provider&apos;s data and retention policies before
                     using sensitive data.
@@ -454,7 +451,7 @@ function PricingSummary({
 }) {
     const platformPrice = pricing?.platform_usage;
     const shouldInclude = includeManagedModel ?? includeDograhModel ?? false;
-    const managedModelPrice = shouldInclude ? ((pricing as any)?.kodewaves_model || pricing?.dograh_model) : null;
+    const managedModelPrice = shouldInclude ? (pricing?.kodewaves_model || pricing?.dograh_model) : null;
     if (!platformPrice && !managedModelPrice) return null;
 
     return (
@@ -534,13 +531,13 @@ export function AIModelConfigurationV2Editor({
             return catalogManifest?.local_llm_models || [];
         }
         let list = catalogManifest?.cloud_llm_models || [];
-        
+
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
             const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
             if (allowed.has("gemini")) allowed.add("google");
             if (allowed.has("google")) allowed.add("gemini");
-            list = list.filter((m: any) => {
+            list = list.filter((m) => {
                 const prov = (m.provider || "").toLowerCase();
                 return prov === "auto" || allowed.has(prov) || m.has_master_key;
             });
@@ -554,13 +551,13 @@ export function AIModelConfigurationV2Editor({
             return catalogManifest?.local_stt_models || [];
         }
         let list = catalogManifest?.cloud_stt_models || [];
-        
+
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
             const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
             if (allowed.has("gemini")) allowed.add("google");
             if (allowed.has("google")) allowed.add("gemini");
-            list = list.filter((m: any) => {
+            list = list.filter((m) => {
                 const prov = (m.provider || "").toLowerCase();
                 return prov === "auto" || allowed.has(prov) || m.has_master_key;
             });
@@ -585,13 +582,13 @@ export function AIModelConfigurationV2Editor({
             return catalogManifest?.local_tts_models || [];
         }
         let list = catalogManifest?.cloud_tts_models || [];
-        
+
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
             const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
             if (allowed.has("gemini")) allowed.add("google");
             if (allowed.has("google")) allowed.add("gemini");
-            list = list.filter((m: any) => {
+            list = list.filter((m) => {
                 const prov = (m.provider || "").toLowerCase();
                 return prov === "auto" || allowed.has(prov) || m.has_master_key;
             });
@@ -614,7 +611,7 @@ export function AIModelConfigurationV2Editor({
             const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
             if (allowed.has("gemini")) allowed.add("google");
             if (allowed.has("google")) allowed.add("gemini");
-            list = list.filter((m: any) => {
+            list = list.filter((m) => {
                 const prov = (m.provider || "").toLowerCase();
                 return allowed.has(prov) || m.has_master_key;
             });
@@ -720,8 +717,6 @@ export function AIModelConfigurationV2Editor({
             setIsSavingKodewaves(false);
         }
     };
-    const saveDograhConfiguration = saveKodewavesConfiguration;
-
     const saveByokConfiguration = async (config: Record<string, unknown>) => {
         setError(null);
         const isRealtime = Boolean(config.is_realtime);

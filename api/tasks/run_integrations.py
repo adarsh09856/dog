@@ -20,6 +20,7 @@ from api.errors.failure import (
     classify_exception,
     log_failure,
 )
+from api.services.client_worker_entitlements import require_client_worker_features
 
 DograhFailure = KodewavesFailure
 from api.services.integrations import (
@@ -187,6 +188,11 @@ async def run_integrations_post_workflow_run(_ctx, workflow_run_id: int):
     logger.info("Running integrations for workflow run")
 
     try:
+        # A workflow may have been licensed when it ran, then revoked while
+        # this post-call job was waiting in the queue. Recheck before running
+        # QA models, registered integrations, or customer-configured webhooks.
+        await require_client_worker_features("voice")
+
         # Step 1: Get workflow run with full context
         workflow_run, organization_id = await db_client.get_workflow_run_with_context(
             workflow_run_id

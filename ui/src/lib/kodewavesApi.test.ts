@@ -8,18 +8,18 @@ import { apiFetch, normalizePublicCreditPackage } from './kodewavesApi';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('panel API transport', () => {
-  it('normalizes public top-up package prices from cents and currency', () => {
+  it('preserves configured top-up currency and amount without estimating FX', () => {
     expect(normalizePublicCreditPackage({
       id: 'growth', name: 'Growth', minutes: 500, bonus_minutes: 50,
       price_cents: 199900, currency: 'INR',
     })).toEqual({
       id: 'growth', name: 'Growth', minutes: 500, bonus_minutes: 50,
-      price_inr: 1999, price_usd: 1999 / 83, is_popular: true, is_active: true,
+      price_cents: 199900, currency: 'INR', is_popular: true, is_active: true,
     });
     expect(normalizePublicCreditPackage({
       id: 'usd', name: 'USD Pack', minutes: 100, bonus_minutes: 0,
       price_cents: 2499, currency: 'USD',
-    })).toMatchObject({ price_inr: 24.99 * 83, price_usd: 24.99, is_popular: false });
+    })).toMatchObject({ price_cents: 2499, currency: 'USD', is_popular: false });
   });
 
   it('uses the configured backend and fresh auth token, ignoring stale local storage', async () => {

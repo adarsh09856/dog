@@ -1,7 +1,5 @@
 "use client";
 
-import { getUserEmail } from "@/lib/auth/userDisplay";
-
 import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle, ChevronLeft, ChevronRight, ExternalLink, FileText, Info, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -25,6 +23,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDispositionCodes } from '@/hooks/useDispositionCodes';
 import { useAuth } from '@/lib/auth';
+import { getUserEmail } from "@/lib/auth/userDisplay";
 import { formatDateTime } from '@/lib/dateTime';
 import { superadminFilterAttributes, withDispositionCodeOptions } from "@/lib/filterAttributes";
 import { decodeFiltersFromURL, encodeFiltersToURL } from '@/lib/filters';
@@ -327,7 +326,7 @@ export default function RunsPage() {
             </div>
 
             {error && (
-                    <div className="mb-6 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
+                    <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg">
                         {error}
                     </div>
                 )}

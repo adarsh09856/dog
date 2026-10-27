@@ -1,11 +1,13 @@
 "use client";
 
-import { getUserEmail } from "@/lib/auth/userDisplay";
-
-import { ArrowRight, Building, Cpu, ExternalLink, KeyRound, Phone, ShieldAlert, ShieldCheck, Sparkles, User, Wallet } from "lucide-react";
+import { ArrowRight, Building, Cpu, Phone, ShieldAlert, ShieldCheck, User, Wallet } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { CallEventsSection } from "@/components/CallEventsSection";
+import { ClientBrandingSettingsCard } from "@/components/ClientBrandingSettingsCard";
+import { ClientUsersSettingsCard } from "@/components/ClientUsersSettingsCard";
+import { ClientWorkspacesSettingsCard } from "@/components/ClientWorkspacesSettingsCard";
 import { MCPSection } from "@/components/MCPSection";
 import { OrganizationPreferencesSection } from "@/components/OrganizationPreferencesSection";
 import { TelemetrySection } from "@/components/TelemetrySection";
@@ -18,11 +20,49 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
 import { useAuth } from "@/lib/auth";
+import { getUserEmail } from "@/lib/auth/userDisplay";
+import { apiFetch } from "@/lib/kodewavesApi";
+
+interface InstallationLicenseStatus {
+  edition: string;
+  valid?: boolean;
+  license_required?: boolean;
+  installation_id?: string;
+  customer_id?: string;
+  domains?: string[];
+  expires_at?: number;
+  features?: string[];
+  limits?: Record<string, number>;
+  ip_ranges?: string[];
+  owner_status?: "current" | "outage_grace";
+  last_owner_check?: number;
+  message?: string;
+}
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const isSuper = user?.is_superuser === true;
+  const { hasFeature, isClientEdition } = useClientEntitlements();
+  const canUseVoice = !isClientEdition || hasFeature("voice");
+  const canUseBilling = !isClientEdition || hasFeature("billing");
+  const canUseTelephony = !isClientEdition || hasFeature("telephony");
+  const isClientAdmin = isClientEdition && user?.is_superuser === true;
+  const isSuper = !isClientEdition && user?.is_superuser === true;
+  const organizationId = user && "organizationId" in user ? user.organizationId : undefined;
+  const selectedWorkspaceId = organizationId && Number.isInteger(Number(organizationId)) ? Number(organizationId) : undefined;
+  const [installation, setInstallation] = useState<InstallationLicenseStatus | null>(null);
+
+  useEffect(() => {
+    if (!isClientAdmin) return;
+    apiFetch<InstallationLicenseStatus>("/installation/license")
+      .then(setInstallation)
+      .catch((error: unknown) => setInstallation({
+        edition: "client",
+        valid: false,
+        message: error instanceof Error ? error.message : "Unable to read installation status.",
+      }));
+  }, [isClientAdmin]);
 
   return (
     <div className="flex justify-center py-12 px-4">
@@ -33,6 +73,11 @@ export default function SettingsPage() {
             Manage your personal profile, active workspace defaults, and integration endpoints.
           </p>
         </div>
+
+        {isClientAdmin && <InstallationLicenseCard installation={installation} />}
+        {isClientAdmin && <ClientBrandingSettingsCard />}
+        {isClientAdmin && <ClientWorkspacesSettingsCard selectedOrganizationId={selectedWorkspaceId} />}
+        {isClientAdmin && <ClientUsersSettingsCard />}
 
         {/* Superadmin Quick Access Banner (Only rendered for Superadmins) */}
         {isSuper && (
@@ -83,27 +128,27 @@ export default function SettingsPage() {
               <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
                 <span className="text-xs text-muted-foreground font-medium">Account Role</span>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-sm font-semibold">{isSuper ? "Superadmin" : "Workspace Member"}</span>
-                  <Badge variant={isSuper ? "default" : "secondary"} className="text-[10px]">
-                    {isSuper ? "Superuser" : "Standard"}
+                    <span className="text-sm font-semibold">{isSuper ? "Platform Owner" : isClientAdmin ? "Client Administrator" : "Workspace Member"}</span>
+                  <Badge variant={isSuper || isClientAdmin ? "default" : "secondary"} className="text-[10px]">
+                    {isSuper ? "Owner" : isClientAdmin ? "Administrator" : "Standard"}
                   </Badge>
                 </div>
               </div>
             </div>
-            {user && (user as any).organizationId && (
+            {organizationId && (
               <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 p-3 text-xs">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Building className="h-3.5 w-3.5 text-primary" />
                   <span>Workspace Organization ID:</span>
                 </div>
-                <code className="rounded bg-muted px-2 py-0.5 font-mono text-[11px] font-semibold">{(user as any).organizationId}</code>
+                <code className="rounded bg-muted px-2 py-0.5 font-mono text-[11px] font-semibold">{organizationId}</code>
               </div>
             )}
           </CardContent>
         </Card>
 
         {/* Sovereign Minute Wallet & Models Card */}
-        <Card className="border-primary/30 bg-primary/5">
+        {(canUseVoice || canUseBilling || canUseTelephony) && <Card className="border-primary/30 bg-primary/5">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Wallet className="h-4 w-4 text-primary" />
@@ -114,29 +159,29 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2.5">
-            <Link href="/billing-sovereign">
+            {canUseBilling && <Link href="/billing-sovereign">
               <Button variant="default" size="sm" className="text-xs gap-1.5">
                 <Wallet className="h-3.5 w-3.5" />
                 Open Sovereign Wallet & Plans
               </Button>
-            </Link>
-            <Link href="/model-configurations">
+            </Link>}
+            {canUseVoice && <Link href="/model-configurations">
               <Button variant="outline" size="sm" className="text-xs gap-1.5">
                 <Cpu className="h-3.5 w-3.5" />
                 Configure AI Engines & Keys
               </Button>
-            </Link>
-            <Link href="/telephony-configurations">
+            </Link>}
+            {canUseTelephony && <Link href="/telephony-configurations">
               <Button variant="outline" size="sm" className="text-xs gap-1.5">
                 <Phone className="h-3.5 w-3.5" />
                 SIP Trunks & Numbers
               </Button>
-            </Link>
+            </Link>}
           </CardContent>
-        </Card>
+        </Card>}
 
         {/* Organization Preferences */}
-        <Card>
+        {canUseVoice && <Card>
           <CardHeader>
             <CardTitle className="text-base">Organization Preferences</CardTitle>
             <CardDescription>
@@ -146,23 +191,23 @@ export default function SettingsPage() {
           <CardContent>
             <OrganizationPreferencesSection />
           </CardContent>
-        </Card>
+        </Card>}
 
         {/* MCP Server */}
-        <Card>
+        {canUseVoice && <Card>
           <CardHeader>
             <CardTitle className="text-base">Model Context Protocol (MCP)</CardTitle>
             <CardDescription>
-              Allow external agent environments (Cursor, Windsurf, Claude Desktop) to control your Kodewaves workflows securely.
+              Allow external agent environments (Cursor, Windsurf, Claude Desktop) to control your workflows securely.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <MCPSection />
           </CardContent>
-        </Card>
+        </Card>}
 
         {/* Telemetry (Langfuse) */}
-        <Card>
+        {canUseVoice && <Card>
           <CardHeader>
             <CardTitle className="text-base">Telemetry & Tracing</CardTitle>
             <CardDescription>
@@ -172,10 +217,10 @@ export default function SettingsPage() {
           <CardContent>
             <TelemetrySection />
           </CardContent>
-        </Card>
+        </Card>}
 
         {/* Call Events Webhook */}
-        <Card>
+        {canUseVoice && <Card>
           <CardHeader>
             <CardTitle className="text-base">Call Diagnostics & Events</CardTitle>
             <CardDescription>Configure external webhook URLs to stream call events and diagnostic metrics.</CardDescription>
@@ -183,8 +228,73 @@ export default function SettingsPage() {
           <CardContent>
             <CallEventsSection />
           </CardContent>
-        </Card>
+        </Card>}
       </div>
+    </div>
+  );
+}
+
+function InstallationLicenseCard({
+  installation,
+}: {
+  installation: InstallationLicenseStatus | null;
+}) {
+  const valid = installation?.valid === true;
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          {valid ? (
+            <ShieldCheck className="h-4 w-4 text-emerald-600" />
+          ) : (
+            <ShieldAlert className="h-4 w-4 text-destructive" />
+          )}
+          Client Installation License
+        </CardTitle>
+        <CardDescription>
+          License identity and permissions assigned by the platform owner. Your workspace administrator cannot change them.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!installation ? (
+          <p className="text-sm text-muted-foreground">Loading installation status…</p>
+        ) : (
+          <div className="space-y-3">
+            {!valid && <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{installation.message || "This installation does not have an active license. Contact your platform administrator."}</p>}
+            {installation.installation_id && <div className="grid gap-3 sm:grid-cols-2">
+            <LicenseValue label="Status" value={!valid ? "Action required" : installation.owner_status === "outage_grace" ? "Owner connection unavailable · outage grace" : "Active · owner verified"} />
+            <LicenseValue label="Last owner check" value={installation.last_owner_check ? new Date(installation.last_owner_check * 1000).toLocaleString() : "—"} />
+            <LicenseValue label="Installation ID" value={installation.installation_id || "—"} />
+            <LicenseValue label="Licensed domains" value={installation.domains?.join(", ") || "—"} />
+            <LicenseValue
+              label="Valid through"
+              value={installation.expires_at
+                ? new Date(installation.expires_at * 1000).toLocaleDateString()
+                : "—"}
+            />
+            <LicenseValue label="Enabled features" value={installation.features?.join(", ") || "None"} />
+            <LicenseValue
+              label="Limits"
+              value={installation.limits && Object.keys(installation.limits).length
+                ? Object.entries(installation.limits).map(([key, value]) => `${key}: ${value}`).join(" · ")
+                : "No limits listed"}
+            />
+            {Boolean(installation.ip_ranges?.length) && (
+              <LicenseValue label="Approved server IP ranges" value={installation.ip_ranges!.join(", ")} />
+            )}
+            </div>}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LicenseValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-border/60 bg-muted/20 p-3">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <p className="mt-0.5 break-words text-sm font-semibold">{value}</p>
     </div>
   );
 }

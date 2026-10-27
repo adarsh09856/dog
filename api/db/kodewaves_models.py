@@ -9,7 +9,6 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
-    Index,
     Integer,
     String,
     Text,
@@ -19,6 +18,67 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from api.db.models import Base
+
+
+class ClientInstallationModel(Base):
+    """Owner-side record of an issued client installation entitlement."""
+
+    __tablename__ = "client_installations"
+
+    installation_id = Column(String(100), primary_key=True)
+    customer_id = Column(String(100), nullable=False, index=True)
+    domains = Column(JSON, nullable=False)
+    ip_ranges = Column(JSON, nullable=False, default=list)
+    features = Column(JSON, nullable=False)
+    limits = Column(JSON, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    token_fingerprint = Column(String(64), nullable=False)
+    previous_token_fingerprint = Column(String(64), nullable=True)
+    previous_token_valid_until = Column(DateTime(timezone=True), nullable=True)
+    issued_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    renewed_at = Column(DateTime(timezone=True), nullable=True)
+    renewed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    observed_ip = Column(String(45), nullable=True)
+    integrity_failed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class ClientDomainChallengeModel(Base):
+    """Owner-side proof of DNS control before a domain enters a license."""
+
+    __tablename__ = "client_domain_challenges"
+
+    customer_id = Column(String(100), primary_key=True)
+    domain = Column(String(253), primary_key=True)
+    token_sha256 = Column(String(64), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class ClientIntegrityAlertModel(Base):
+    """Deduplicated owner notification for protected client-file changes."""
+
+    __tablename__ = "client_integrity_alerts"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    installation_id = Column(String(100), ForeignKey("client_installations.installation_id"), nullable=False, index=True)
+    event_fingerprint = Column(String(64), nullable=False)
+    reason = Column(String(30), nullable=False)
+    component = Column(String(500), nullable=False)
+    expected_sha256 = Column(String(64), nullable=True)
+    observed_sha256 = Column(String(64), nullable=True)
+    first_seen_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False)
+    occurrence_count = Column(Integer, nullable=False, default=1)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    acknowledged_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (UniqueConstraint("installation_id", "event_fingerprint", name="uq_client_integrity_alert_event"),)
 
 # ============================================================================
 # 1. PLATFORM MASTER CREDENTIALS (Centralized Sovereign Keys)
@@ -152,6 +212,7 @@ class SaaSPlanModel(Base):
     allow_user_byok = Column(Boolean, default=False, nullable=False)               # Admin per-plan BYOK control
     is_default = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_public = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 

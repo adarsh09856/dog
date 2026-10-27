@@ -43,6 +43,22 @@ describe("WorkflowVersionDiffDialog change navigation", () => {
         });
     });
 
+    it("uses shared theme surfaces for the comparison dialog", () => {
+        render(
+            <WorkflowVersionDiffDialog
+                open
+                onOpenChange={vi.fn()}
+                previousVersion={makeVersion(1, 1, "Old prompt", "Old reply")}
+                selectedVersion={makeVersion(2, 2, "New prompt", "New reply")}
+            />,
+        );
+
+        const dialog = screen.getByRole("dialog");
+        expect(dialog.className).toContain("bg-card");
+        expect(dialog.className).toContain("text-card-foreground");
+        expect(dialog.querySelector(".bg-background")).not.toBeNull();
+    });
+
     it("moves forward and backward through hunks without changing the compared versions", () => {
         const previousVersion = makeVersion(1, 1, "First old", "Second old");
         const selectedVersion = makeVersion(2, 2, "First new", "Second new");

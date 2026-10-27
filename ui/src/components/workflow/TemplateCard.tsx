@@ -7,9 +7,9 @@ import { toast } from 'sonner';
 
 import { duplicateWorkflowTemplateApiV1WorkflowTemplatesDuplicatePost } from '@/client/sdk.gen';
 import { Button } from "@/components/ui/button";
+import { detailFromError } from '@/lib/apiError';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
-import { detailFromError } from '@/lib/apiError';
 
 interface DuplicateWorkflowTemplateProps {
     id: number;
@@ -71,10 +71,10 @@ export function DuplicateWorkflowTemplate({ id, title, description, serverAccess
     };
 
     return (
-        <div className="bg-white border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow p-4">
+        <div className="bg-card text-card-foreground border border-border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow p-4">
             <div>
                 <h3 className="text-lg font-semibold mb-2">{title}</h3>
-                <p className="text-gray-600 mb-4">{description}</p>
+                <p className="text-muted-foreground mb-4">{description}</p>
                 <Button
                     variant="outline"
                     className="w-full"

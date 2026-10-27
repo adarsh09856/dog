@@ -32,6 +32,7 @@ async function resolveAuthConfig(): Promise<ResolvedAuthConfig> {
     const backendUrl = getServerBackendUrl();
     const res = await fetch(`${backendUrl}/api/v1/health`, {
       next: { revalidate: 300 },
+      signal: AbortSignal.timeout(3000),
     });
     if (res.ok) {
       const data = await res.json();
@@ -60,7 +61,9 @@ async function resolveAuthConfig(): Promise<ResolvedAuthConfig> {
   // do NOT cache it: caching here would pin the entire UI to local auth until a
   // container restart if the first resolution loses the startup race with the api
   // service. Leaving it uncached means the next request retries and self-heals.
-  return { authProvider: "local", stackConfig: null, signupEnabled: true };
+  // Fail closed while the backend is unavailable. Client installations never
+  // allow public signup, and hosted signup can be shown after the API responds.
+  return { authProvider: "local", stackConfig: null, signupEnabled: false };
 }
 
 /**

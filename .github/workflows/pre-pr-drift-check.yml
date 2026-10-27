@@ -70,6 +70,20 @@ jobs:
           fi
           echo "UI lint is clean."
 
+      - name: Check UI TypeScript
+        working-directory: ui
+        run: npx tsc --noEmit
+
+      - name: Run UI regression tests
+        working-directory: ui
+        env:
+          CI: "1"
+        run: npm test -- --maxWorkers=2 --reporter=dot
+
+      - name: Run client release verifier tests
+        working-directory: ui
+        run: npm run test:client-release
+
       - name: Dump OpenAPI spec
         env:
           DATABASE_URL: postgresql+asyncpg://dummy:dummy@localhost/dummy

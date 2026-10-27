@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { LEGACY_OSS_TOKEN_COOKIE, OSS_TOKEN_COOKIE } from '@/lib/auth/cookies';
+import { isHiddenInClientEdition } from '@/lib/deploymentEdition';
 
 // Paths that don't require authentication.
 // '/' (Landing page), '/pricing' (SaaS pricing), '/embed' (widget), and '/widget.js' are public.
@@ -37,6 +38,13 @@ function isTokenValid(token?: string): boolean {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Owner-only control-plane screens are absent from client installations.
+  // The API independently omits these routes in KODEWAVES_EDITION=client.
+  if (isHiddenInClientEdition(pathname, process.env.KODEWAVES_EDITION)) {
+    return new NextResponse(null, { status: 404 });
+  }
+
   const rawToken =
     request.cookies.get(OSS_TOKEN_COOKIE)?.value ||
     request.cookies.get(LEGACY_OSS_TOKEN_COOKIE)?.value ||

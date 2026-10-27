@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Download,
-  FileText,
-  Filter,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-} from "lucide-react";
+import { Download, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -22,9 +15,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { adminApi, AuditLogItem } from "@/lib/kodewavesApi";
 
 export default function AdminAuditLogsPage() {
+  const { company_name } = useClientBranding();
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -117,7 +112,7 @@ export default function AdminAuditLogsPage() {
             </Badge>
           </CardTitle>
           <CardDescription>
-            Records every high-privilege mutation performed within the Kodewaves sovereign control plane.
+            Records every high-privilege mutation performed within the {company_name} control plane.
           </CardDescription>
         </CardHeader>
         <CardContent>

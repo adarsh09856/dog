@@ -48,13 +48,13 @@ import {
     TEMPLATE_CATEGORIES,
 } from '@/constants/agentTemplates';
 import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
-import { useAuth } from '@/lib/auth';
 import { detailFromError } from '@/lib/apiError';
-import { configuredTemplateLanguage } from '@/lib/templateLanguage';
+import { useAuth } from '@/lib/auth';
 import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
 import { apiFetch } from '@/lib/kodewavesApi';
 import { type AvailableCatalogResponse,catalogApi } from '@/lib/kodewavesApi';
 import logger from '@/lib/logger';
+import { configuredTemplateLanguage } from '@/lib/templateLanguage';
 import { getRandomId } from '@/lib/utils';
 
 function getTemplateIcon(iconName: string) {
@@ -124,9 +124,9 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
         iconBg: 'bg-cyan-500 text-white',
     },
     slate: {
-        bg: 'bg-slate-50 dark:bg-slate-900/30',
-        text: 'text-slate-700 dark:text-slate-300',
-        border: 'border-slate-200 dark:border-slate-800',
+        bg: 'bg-muted/50',
+        text: 'text-muted-foreground',
+        border: 'border-border',
         iconBg: 'bg-slate-600 text-white',
     },
     orange: {
@@ -349,7 +349,7 @@ export default function CreateWorkflowPage() {
         <div className="min-h-screen bg-background">
             <div className="container mx-auto px-4 py-8 max-w-6xl">
                 {/* Hero Header */}
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-50/50 via-purple-50/30 to-pink-50/50 dark:from-indigo-950/20 dark:via-purple-900/10 dark:to-pink-950/20 border p-6 md:p-8 mb-8">
+                <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-background to-primary/5 p-6 md:p-8 mb-8">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
@@ -357,7 +357,7 @@ export default function CreateWorkflowPage() {
                                     <Sparkles className="w-3.5 h-3.5" />
                                     Agent Templates Gallery
                                 </Badge>
-                                <span className="text-xs text-muted-foreground">Kodewaves Platform</span>
+                                <span className="text-xs text-muted-foreground">Platform</span>
                             </div>
                             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
                                 Create Your Voice Agent

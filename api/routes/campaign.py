@@ -8,19 +8,16 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from api.constants import (
-    DEFAULT_CAMPAIGN_RETRY_CONFIG,
-    DEFAULT_ORG_CONCURRENCY_LIMIT,
-)
+from api.constants import DEFAULT_CAMPAIGN_RETRY_CONFIG
 from api.db import db_client
 from api.db.models import UserModel
-from api.enums import OrganizationConfigurationKey
 from api.schemas.campaign import (
     CampaignTrafficStatsResponse,
     TrafficSplitRequest,
     TrafficSplitResponse,
 )
 from api.services.auth.depends import get_user
+from api.services.call_concurrency import call_concurrency
 from api.services.campaign.runner import campaign_runner_service
 from api.services.campaign.source_sync import CampaignSourceSyncService
 from api.services.campaign.source_sync_factory import get_sync_service
@@ -35,6 +32,7 @@ from api.services.campaign.traffic_split import (
 )
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.reports import generate_campaign_report_csv
+from api.services.saas_entitlements import require_saas_feature
 from api.services.storage import storage_fs
 from api.services.telephony.outbound_readiness import (
     OutboundConfigurationNotFoundError,
@@ -43,7 +41,9 @@ from api.services.telephony.outbound_readiness import (
     resolve_outbound_configuration_id,
 )
 
-router = APIRouter(prefix="/campaign")
+router = APIRouter(
+    prefix="/campaign", dependencies=[Depends(require_saas_feature("campaigns"))]
+)
 
 
 class CampaignPreflightItem(BaseModel):
@@ -63,16 +63,7 @@ class CampaignPreflightResponse(BaseModel):
 
 async def _get_org_concurrent_limit(organization_id: int) -> int:
     """Get the concurrent call limit for an organization."""
-    try:
-        config = await db_client.get_configuration(
-            organization_id,
-            OrganizationConfigurationKey.CONCURRENT_CALL_LIMIT.value,
-        )
-        if config and config.value:
-            return int(config.value.get("value", DEFAULT_ORG_CONCURRENCY_LIMIT))
-    except Exception:
-        pass
-    return DEFAULT_ORG_CONCURRENCY_LIMIT
+    return await call_concurrency.get_org_concurrent_limit(organization_id)
 
 
 async def _get_from_numbers_count(

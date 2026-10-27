@@ -136,6 +136,10 @@ def test_trigger_route_executes_as_workflow_owner():
         patch("api.routes.public_agent.db_client") as mock_db,
         patch("api.routes.public_agent.call_concurrency") as mock_concurrency,
         patch(
+            "api.routes.public_agent.authorize_call_entitlement",
+            new=AsyncMock(),
+        ) as entitlement_check,
+        patch(
             "api.routes.public_agent.authorize_workflow_run_start",
             new=quota_mock,
         ),
@@ -178,6 +182,7 @@ def test_trigger_route_executes_as_workflow_owner():
         )
 
     assert response.status_code == 200
+    entitlement_check.assert_awaited_once_with("public_agent")
     quota_mock.assert_awaited_once_with(
         workflow_id=workflow.id,
         organization_id=workflow.organization_id,

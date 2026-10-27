@@ -1,7 +1,5 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
@@ -28,20 +26,24 @@ import {
   Wallet,
   Wrench,
 } from "lucide-react";
+import Link from "next/link";
+import React, { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { useAuth } from "@/lib/auth";
 import { overviewApi, OverviewStatsResponse } from "@/lib/kodewavesApi";
 
 export default function OverviewPage() {
+  const branding = useClientBranding();
   const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<OverviewStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     if (authLoading || !user) return;
     setLoadError(null);
     try {
@@ -54,12 +56,11 @@ export default function OverviewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authLoading, user]);
 
   useEffect(() => {
-    if (authLoading || !user) return;
     loadStats();
-  }, [authLoading, user]);
+  }, [loadStats]);
 
   const sections = [
     {
@@ -188,7 +189,7 @@ export default function OverviewPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-primary text-xs font-semibold tracking-wider uppercase">
                 <Sparkles className="h-4 w-4" />
-                Kodewaves Sovereign Voice AI Command Center
+                {branding.company_name} workspace
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -208,7 +209,7 @@ export default function OverviewPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-2">
               <div>
                 <CardTitle className="text-3xl font-bold tracking-tight">
-                  {user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}!` : "Welcome to Kodewaves"}
+                  {user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}!` : `Welcome to ${branding.company_name}`}
                 </CardTitle>
                 <CardDescription className="text-sm text-muted-foreground mt-1 max-w-2xl">
                   Enterprise conversational voice AI platform with sovereign telephony, direct BYOK model pools, and low-latency voice orchestration.
@@ -274,7 +275,7 @@ export default function OverviewPage() {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Calls Handled
               </span>
-              <div className="h-8 w-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <PhoneCall className="h-4 w-4" />
               </div>
             </div>
@@ -298,7 +299,7 @@ export default function OverviewPage() {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Success Rate
               </span>
-              <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <CheckCircle2 className="h-4 w-4" />
               </div>
             </div>
@@ -322,7 +323,7 @@ export default function OverviewPage() {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Voice Agents
               </span>
-              <div className="h-8 w-8 rounded-lg bg-violet-500/10 text-violet-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <Bot className="h-4 w-4" />
               </div>
             </div>

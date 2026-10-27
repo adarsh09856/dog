@@ -12,6 +12,7 @@ from api.db.models import (
     WorkflowRunModel,
 )
 from api.services.workflow.dto import WebhookNodeData
+from api.tasks import run_integrations
 from api.tasks.run_integrations import (
     _build_render_context,
     _build_webhook_payload,
@@ -23,6 +24,27 @@ from api.tasks.webhook_delivery import (
     _safe_webhook_url,
     deliver_webhook,
 )
+
+
+@pytest.mark.asyncio
+async def test_post_workflow_integrations_revalidate_voice_entitlement(monkeypatch):
+    from api.services.installation_license import InstallationFeatureError
+
+    gate = AsyncMock(side_effect=InstallationFeatureError("voice is not licensed"))
+    workflow_fetch = AsyncMock()
+    monkeypatch.setattr(run_integrations, "require_client_worker_features", gate)
+    monkeypatch.setattr(
+        run_integrations.db_client,
+        "get_workflow_run_with_context",
+        workflow_fetch,
+    )
+    monkeypatch.setattr(run_integrations, "log_failure", MagicMock())
+
+    with pytest.raises(InstallationFeatureError, match="voice is not licensed"):
+        await run_integrations.run_integrations_post_workflow_run(None, 17)
+
+    gate.assert_awaited_once_with("voice")
+    workflow_fetch.assert_not_awaited()
 
 # ---------------------------------------------------------------------------
 # Payload rendering (call_disposition injection)
@@ -545,6 +567,32 @@ async def test_deliver_webhook_success():
     db.mark_webhook_delivery_succeeded.assert_awaited_once_with(1, 1, 200)
     db.schedule_webhook_delivery_retry.assert_not_called()
     db.mark_webhook_delivery_dead_letter.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_deliver_webhook_is_dead_lettered_without_send_if_voice_is_unlicensed():
+    from api.services.installation_license import InstallationFeatureError
+
+    delivery = _fake_delivery(attempt_count=0)
+    db = _delivery_db(delivery)
+    httpx_mock = _mock_httpx()
+    gate = AsyncMock(side_effect=InstallationFeatureError("voice is not licensed"))
+
+    with (
+        patch("api.tasks.webhook_delivery.db_client", db),
+        patch("api.tasks.webhook_delivery.require_client_worker_features", gate),
+        patch("api.tasks.webhook_delivery.httpx.AsyncClient", httpx_mock),
+    ):
+        await deliver_webhook(None, delivery.id)
+
+    gate.assert_awaited_once_with("voice")
+    db.mark_webhook_delivery_dead_letter.assert_awaited_once_with(
+        delivery.id,
+        0,
+        "Blocked by client installation entitlement: voice is not licensed",
+        None,
+    )
+    httpx_mock.assert_not_called()
 
 
 @pytest.mark.asyncio

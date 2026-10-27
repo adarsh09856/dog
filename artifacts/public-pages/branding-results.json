@@ -1,0 +1,29 @@
+[
+  {
+    "width": 320,
+    "exactPrices": true,
+    "annualConfiguredAmount": true,
+    "brandRefresh": true,
+    "font": true,
+    "overflow": false,
+    "runtimeErrors": false
+  },
+  {
+    "width": 390,
+    "exactPrices": true,
+    "annualConfiguredAmount": true,
+    "brandRefresh": true,
+    "font": true,
+    "overflow": false,
+    "runtimeErrors": false
+  },
+  {
+    "width": 1440,
+    "exactPrices": true,
+    "annualConfiguredAmount": true,
+    "brandRefresh": true,
+    "font": true,
+    "overflow": false,
+    "runtimeErrors": false
+  }
+]

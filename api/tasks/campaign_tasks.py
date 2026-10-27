@@ -9,6 +9,7 @@ from api.services.campaign.campaign_event_publisher import (
     get_campaign_event_publisher,
 )
 from api.services.campaign.source_sync_factory import get_sync_service
+from api.services.client_worker_entitlements import require_client_worker_features
 
 
 async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
@@ -25,6 +26,7 @@ async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
     logger.info(f"Starting source sync for campaign {campaign_id}")
 
     try:
+        await require_client_worker_features("voice", "telephony", "campaigns")
         # Get campaign
         campaign = await db_client.get_campaign_by_id(campaign_id)
         if not campaign:
@@ -109,6 +111,7 @@ async def process_campaign_batch(
 
     failed_count = 0
     try:
+        await require_client_worker_features("voice", "telephony", "campaigns")
         # Process the batch
         processed_count = await campaign_call_dispatcher.process_batch(
             campaign_id=campaign_id, batch_size=batch_size

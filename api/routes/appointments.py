@@ -7,8 +7,13 @@ from pydantic import BaseModel, Field, field_validator
 from api.db import appointments as appointment_db
 from api.db.models import UserModel
 from api.services.auth.depends import get_user
+from api.services.saas_entitlements import require_saas_feature
 
-router = APIRouter(prefix="/appointments", tags=["appointments"])
+router = APIRouter(
+    prefix="/appointments",
+    tags=["appointments"],
+    dependencies=[Depends(require_saas_feature("appointments"))],
+)
 
 
 class AppointmentItem(BaseModel):

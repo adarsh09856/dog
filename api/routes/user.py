@@ -27,6 +27,7 @@ from api.schemas.workflow_configurations import (
     get_default_workflow_configurations,
 )
 from api.services.auth.depends import get_user
+from api.services.saas_entitlements import is_saas_feature_allowed
 from api.services.credentials.master_credential_service import master_credential_service
 from api.utils.common import normalize_local_ai_endpoint
 from api.services.configuration.ai_model_configuration import (
@@ -896,7 +897,8 @@ async def _resolve_tts_preview_creds(provider_alias: str, user, db_client) -> di
 
     provider = normalize_provider_name(provider_alias)
     byok_policy = await kodewaves_db_client.get_setting("byok_policy") or {}
-    if byok_policy.get("allow_user_byok", True):
+    plan_allows_byok = await is_saas_feature_allowed(user.selected_organization_id, "byok")
+    if byok_policy.get("allow_user_byok", True) and plan_allows_byok:
         configuration = await get_organization_ai_model_configuration_v2(user.selected_organization_id)
         if configuration and configuration.mode == "byok" and configuration.byok:
             pipeline = configuration.byok.pipeline

@@ -48,6 +48,7 @@ from api.services.configuration.registry import (
     SpeachesTTSConfiguration,
 )
 from api.services.credentials.master_credential_service import master_credential_service
+from api.services.saas_entitlements import is_saas_feature_allowed
 
 CredentialSource = Literal["user_key", "master_key", "local"]
 
@@ -342,6 +343,7 @@ async def apply_kodewaves_sovereign_resolution(
     # 1. Global Policies and Wallet Check
     byok_policy = await kodewaves_db_client.get_setting("byok_policy")
     allow_byok = byok_policy.get("allow_user_byok", True) if byok_policy else True
+    allow_byok = allow_byok and await is_saas_feature_allowed(organization_id, "byok")
 
     if not allow_byok:
         for layer in (effective.llm, effective.stt, effective.tts, effective.realtime):

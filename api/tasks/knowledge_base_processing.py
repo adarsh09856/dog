@@ -13,6 +13,7 @@ from loguru import logger
 
 from api.db import db_client
 from api.db.models import KnowledgeBaseChunkModel
+from api.services.client_worker_entitlements import require_client_worker_features
 from api.services.gen_ai import build_embedding_service
 from api.services.mps_service_key_client import mps_service_key_client
 from api.services.storage import storage_fs
@@ -65,6 +66,7 @@ async def process_knowledge_base_document(
     temp_file_path = None
 
     try:
+        await require_client_worker_features("knowledge_base")
         scoped_document = await db_client.get_document_by_id(document_id)
         if (scoped_document is None or scoped_document.organization_id != organization_id
                 or (scoped_document.custom_metadata or {}).get("s3_key") != s3_key):

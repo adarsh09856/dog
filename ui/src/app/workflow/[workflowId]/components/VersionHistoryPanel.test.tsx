@@ -49,6 +49,15 @@ const renderPanel = ({
 };
 
 describe("VersionHistoryPanel comparisons", () => {
+    it("uses shared theme surfaces for the history drawer", () => {
+        renderPanel({ versions: [makeVersion(2, "draft")] });
+
+        const drawer = screen.getByText("Version History").closest("div.fixed");
+        expect(drawer?.className).toContain("bg-card");
+        expect(drawer?.className).toContain("text-card-foreground");
+        expect(drawer?.className).toContain("border-border");
+    });
+
     it("compares a version without triggering the version-selection action", () => {
         const draft = makeVersion(2, "draft");
         const published = makeVersion(1, "published");

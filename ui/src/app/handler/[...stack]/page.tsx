@@ -1,11 +1,11 @@
-import { StackHandler, StackTheme } from "@stackframe/stack";
+import { StackHandler } from "@stackframe/stack";
 
 import { AuthEnterpriseCTA } from "@/components/auth/AuthEnterpriseCTA";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { getAuthProvider } from "@/lib/auth/config";
 
 import { BackButton } from "./BackButton";
-import { stackAuthDarkTheme } from "./stack-theme";
+import { BrandAwareStackTheme } from "./BrandAwareStackTheme";
 
 // Stack Auth serves every auth page from this one catch-all. We give the brand
 // split-screen shell to the user-facing FORM routes and render only the wide /
@@ -29,7 +29,7 @@ export default async function Handler(props: unknown) {
   if (authProvider === "local") {
     return (
       <AuthShell enterpriseSlot={<AuthEnterpriseCTA />}>
-        <div className="space-y-2 text-center text-zinc-200">
+        <div className="space-y-2 text-center text-foreground">
           <h1 className="text-xl font-semibold">Local Auth Mode</h1>
           <p className="text-sm text-muted-foreground">
             Stack Auth handler is disabled when using local authentication.
@@ -58,9 +58,9 @@ export default async function Handler(props: unknown) {
   const showBackButton = !new Set(["signin", "login"]).has(normalizedSegment);
 
   const handler = (
-    <StackTheme theme={stackAuthDarkTheme}>
+    <BrandAwareStackTheme>
       <StackHandler fullPage={!isAuthForm} app={app!} routeProps={props} />
-    </StackTheme>
+    </BrandAwareStackTheme>
   );
 
   if (isAuthForm) {

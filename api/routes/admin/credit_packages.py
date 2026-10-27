@@ -1,7 +1,7 @@
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from api.db.kodewaves_client import kodewaves_db_client
@@ -16,13 +16,21 @@ class CreditPackageItem(BaseModel):
     name: str
     minutes: int
     bonus_minutes: int = 0
-    price_cents: int = 0
-    price_inr: float = 0.0
-    price_usd: float = 0.0
-    currency: str = "INR"
+    price_cents: int = Field(default=0, ge=0)
+    price_inr: Optional[float] = Field(default=None, ge=0)
+    price_usd: Optional[float] = Field(default=None, ge=0)
+    currency: Literal["INR", "USD"] = "INR"
     is_popular: bool = False
     is_active: bool = True
     sort_order: int = 0
+
+
+def _configured_package_price_cents(package: CreditPackageItem) -> int:
+    """Use exact minor units; accept legacy same-currency major units only when omitted."""
+    if "price_cents" in package.model_fields_set:
+        return package.price_cents
+    legacy_amount = package.price_inr if package.currency == "INR" else package.price_usd
+    return round(legacy_amount * 100) if legacy_amount is not None else 0
 
 
 @router.get("", response_model=List[CreditPackageItem])
@@ -39,8 +47,8 @@ async def list_credit_packages(_user=Depends(get_superuser)):
                 minutes=r.minutes,
                 bonus_minutes=r.bonus_minutes,
                 price_cents=r.price_cents,
-                price_inr=float(r.price_cents / 100.0) if r.currency == "INR" else float(r.price_cents * 0.83),
-                price_usd=float(r.price_cents / 100.0) if r.currency == "USD" else float(r.price_cents / 8300.0),
+                price_inr=float(r.price_cents / 100.0) if r.currency == "INR" else None,
+                price_usd=float(r.price_cents / 100.0) if r.currency == "USD" else None,
                 currency=r.currency,
                 is_popular=bool(r.bonus_minutes > 0),
                 is_active=r.is_active,
@@ -53,9 +61,7 @@ async def list_credit_packages(_user=Depends(get_superuser)):
 @router.post("", response_model=Dict[str, Any])
 async def create_credit_package(pkg: CreditPackageItem, _user=Depends(get_superuser)):
     """Create or upsert a top-up credit package."""
-    cents = pkg.price_cents
-    if cents == 0 and pkg.price_inr > 0:
-        cents = int(pkg.price_inr * 100)
+    cents = _configured_package_price_cents(pkg)
 
     async with kodewaves_db_client.get_session() as session:
         record = CreditPackageModel(
@@ -75,9 +81,7 @@ async def create_credit_package(pkg: CreditPackageItem, _user=Depends(get_superu
 @router.put("/{package_id}", response_model=Dict[str, Any])
 async def update_credit_package(package_id: str, pkg: CreditPackageItem, _user=Depends(get_superuser)):
     """Update an existing credit package by ID."""
-    cents = pkg.price_cents
-    if cents == 0 and pkg.price_inr > 0:
-        cents = int(pkg.price_inr * 100)
+    cents = _configured_package_price_cents(pkg)
 
     async with kodewaves_db_client.get_session() as session:
         try:

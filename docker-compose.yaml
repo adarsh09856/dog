@@ -151,6 +151,12 @@ services:
       # Core application config
       ENVIRONMENT: "${ENVIRONMENT:-local}"
       LOG_LEVEL: "INFO"
+      KODEWAVES_EDITION: "${KODEWAVES_EDITION:-saas}"
+      # Client editions require an owner-signed license. The owner signing key
+      # must never be added here or shipped in client installation files.
+      KODEWAVES_LICENSE_TOKEN: "${KODEWAVES_LICENSE_TOKEN:-}"
+      KODEWAVES_LICENSE_PUBLIC_KEY: "${KODEWAVES_LICENSE_PUBLIC_KEY:-}"
+      KODEWAVES_INSTALLATION_ID: "${KODEWAVES_INSTALLATION_ID:-}"
 
       # Set to "false" in .env to disable public signup (invite-only installs).
       ENABLE_SIGNUP: "${ENABLE_SIGNUP:-true}"
@@ -310,11 +316,14 @@ services:
     build:
       context: .
       dockerfile: ui/Dockerfile
+      args:
+        KODEWAVES_EDITION: "${KODEWAVES_EDITION:-saas}"
     image: ${REGISTRY:-kodewaves}/kodewaves-ui:${VERSION:-v2.0.0}
     restart: unless-stopped
     environment:
       # Bind the Next.js standalone server to all interfaces
       HOSTNAME: "0.0.0.0"
+      KODEWAVES_EDITION: "${KODEWAVES_EDITION:-saas}"
 
       # Server-side URL (SSR, internal Docker network)
       BACKEND_URL: "${BACKEND_URL:-http://api:8000}"

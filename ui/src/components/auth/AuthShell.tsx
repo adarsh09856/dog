@@ -2,15 +2,16 @@
 // LEFT: centered card wrapping the auth form.
 // RIGHT: Kodewaves sovereign brand/value panel.
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
 
 const HIGHLIGHTS = [
-  "Speech-to-speech",
-  "Sovereign Infrastructure",
-  "Zero Cloud Dependency",
-  "BYOK & Private Telephony",
+  "Web and phone agents",
+  "Self-hosted deployment option",
+  "Provider and model choice",
+  "Bring your own keys",
 ];
 
 export function AuthShell({
@@ -28,15 +29,16 @@ export function AuthShell({
           <div className="w-full max-w-md space-y-6 rounded-2xl border border-border/60 bg-card p-6 shadow-lg sm:p-8">
             {/* Mobile-only wordmark (brand panel is hidden) */}
             <div className="lg:hidden">
-              <BrandLogo className="h-7" />
+              <Link href="/" aria-label="Back to home"><BrandLogo className="h-7" /></Link>
             </div>
             {children}
+            <Link href="/" className="block text-center text-xs text-muted-foreground hover:text-foreground">← Back to home</Link>
           </div>
         </div>
       </main>
 
       {/* Brand / value panel (RIGHT) — hidden on mobile */}
-      <aside className="relative hidden flex-col justify-between overflow-hidden border-l border-border/60 bg-zinc-950 p-10 lg:flex xl:p-14">
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-l border-border/60 bg-[oklch(0.18_0.025_245)] p-10 lg:flex xl:p-14">
         {/* Ambient depth: soft radial glow behind the content */}
         <div
           aria-hidden
@@ -45,12 +47,12 @@ export function AuthShell({
         />
 
         <div className="relative">
-          <BrandLogo inverse className="h-8" />
+          <Link href="/" aria-label="Back to home"><BrandLogo inverse className="h-8" /></Link>
         </div>
 
         <div className="relative max-w-md space-y-5">
           <h1 className="text-3xl font-semibold leading-tight tracking-tight text-zinc-50 xl:text-4xl">
-            The Sovereign Voice AI Platform.
+            Good conversations. Real work, done.
           </h1>
           <ul className="flex flex-wrap gap-2">
             {HIGHLIGHTS.map((point) => (
@@ -70,8 +72,8 @@ export function AuthShell({
             Enterprise Voice AI &amp; Private Infrastructure
           </h2>
           <p className="text-sm text-zinc-400">
-            Kodewaves delivers sovereign voice intelligence with ultra-low latency,
-            complete telemetry ownership, and telephony privacy.
+            Configure voice agents for web and phone calls with the models,
+            providers, and deployment controls available to your organization.
           </p>
           {enterpriseSlot}
         </div>

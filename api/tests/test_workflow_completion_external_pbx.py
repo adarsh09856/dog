@@ -31,6 +31,8 @@ def stub_completion_steps(monkeypatch):
         "report_completed_workflow_run_platform_usage",
         AsyncMock(),
     )
+    gate = AsyncMock()
+    monkeypatch.setattr(workflow_completion, "require_client_worker_features", gate)
     return write_back
 
 
@@ -38,7 +40,25 @@ def stub_completion_steps(monkeypatch):
 async def test_completion_job_writes_back_to_the_pbx(stub_completion_steps):
     await workflow_completion.process_workflow_completion(None, 11)
 
+    workflow_completion.require_client_worker_features.assert_awaited_once_with("telephony")
     stub_completion_steps.assert_awaited_once_with(11)
+
+
+@pytest.mark.asyncio
+async def test_revoked_telephony_entitlement_blocks_external_writeback(
+    monkeypatch, stub_completion_steps
+):
+    monkeypatch.setattr(
+        workflow_completion,
+        "require_client_worker_features",
+        AsyncMock(side_effect=RuntimeError("telephony entitlement is inactive")),
+    )
+
+    # Completion is best-effort, but a denied worker never contacts the PBX.
+    await workflow_completion.process_workflow_completion(None, 11)
+
+    stub_completion_steps.assert_not_awaited()
+    workflow_completion.report_completed_workflow_run_platform_usage.assert_awaited_once_with(11)
 
 
 @pytest.mark.asyncio

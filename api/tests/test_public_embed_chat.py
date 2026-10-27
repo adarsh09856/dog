@@ -8,6 +8,7 @@ events (raw exception text), usage, or run context fields.
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -176,6 +177,16 @@ def _quota(has_quota=True):
 
 @pytest.fixture(autouse=True)
 def _patch_db(monkeypatch):
+    # Keep catalog/settings reads local while exercising the real feature gate.
+    monkeypatch.setattr("api.services.saas_entitlements.KODEWAVES_EDITION", "saas")
+    monkeypatch.setattr(
+        "api.services.saas_entitlements.get_org_saas_plan",
+        AsyncMock(return_value=SimpleNamespace(has_widget_access=True)),
+    )
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.get_setting",
+        AsyncMock(return_value=None),
+    )
     async def _get_token(token):
         return {
             "chat": _CHAT_TOKEN,
@@ -905,3 +916,36 @@ def test_turn_credentials_rejects_inactive_token(monkeypatch):
         headers={"Origin": ORIGIN},
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.parametrize("path,method,body", [
+    ("/api/v1/public/embed/init", "post", {"token": "chat"}),
+    ("/api/v1/public/embed/chat/session-chat", "get", None),
+    ("/api/v1/public/embed/chat/session-chat/messages", "post", {"text": "Hello", "expected_revision": 2}),
+    ("/api/v1/public/embed/turn-credentials/session-chat", "get", None),
+])
+def test_owner_disabled_widgets_reject_new_and_existing_sessions(
+    monkeypatch, _patch_db, path, method, body
+):
+    async def disabled_settings(key, **kwargs):
+        assert key == "org_features_11"
+        return {"enable_widgets": False}
+
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.get_setting", disabled_settings
+    )
+    # Authorization must fail before loading conversation state or running a model.
+    load_state = AsyncMock(side_effect=AssertionError("Disabled widget loaded conversation"))
+    monkeypatch.setattr(
+        "api.services.workflow.embed_text_chat_service.db_client.get_workflow_run_text_session",
+        load_state,
+    )
+    kwargs = {"headers": {"Origin": ORIGIN}}
+    if body is not None:
+        kwargs["json"] = body
+    response = getattr(client, method)(path, **kwargs)
+
+    assert response.status_code == 403, response.text
+    assert "widgets" in response.json()["detail"]
+    assert _patch_db.created_runs == []
+    load_state.assert_not_awaited()
