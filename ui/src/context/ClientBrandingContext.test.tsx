@@ -1,9 +1,9 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ apiFetch: vi.fn() }));
+const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), pathname: "/admin/settings" }));
 vi.mock("@/lib/kodewavesApi", () => ({ apiFetch: mocks.apiFetch }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/admin/settings" }));
+vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light", setTheme: vi.fn() }),
 }));
@@ -34,6 +34,21 @@ function contrastRatio(first: string, second: string): number {
 describe("shared platform branding", () => {
   beforeEach(() => {
     mocks.apiFetch.mockReset();
+    mocks.pathname = "/admin/settings";
+  });
+
+  it("uses the configured brand in the superadmin panel title", async () => {
+    mocks.pathname = "/superadmin/runs";
+    const branding = { ...DEFAULT_BRANDING, company_name: "Acme Voice" };
+    mocks.apiFetch.mockResolvedValue(branding);
+
+    render(
+      <ClientBrandingProvider initialBranding={branding}>
+        <BrandLogo className="h-8" />
+      </ClientBrandingProvider>,
+    );
+
+    await waitFor(() => expect(document.title).toBe("Superadmin | Acme Voice"));
   });
 
   it("keeps a saved brand when an older refresh finishes afterward", async () => {

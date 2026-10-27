@@ -451,3 +451,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 - The packaged install guide said to keep the identity overlay on every Compose command after enrollment, but its API startup, administrator bootstrap, UI startup and health commands omitted it. Those commands now include both Compose files, as does the developer-side start guide; renewal instructions repeat the rule.
 - The package archive regression now checks that every Compose command in the post-enrollment startup/bootstrap section includes the overlay, while the pre-enrollment API image pull stays base-only. Installer archive and CI verifier suites passed **21 tests**; `git diff --check` passed. No real customer install was performed.
 - Updated the licensing guide to describe enrollment tooling as implemented while keeping customer-image onboarding, recovery and live rotation acceptance explicitly open.
+
+## 27 October 2026 — branded superadmin browser title
+
+- The shared title updater classified `/superadmin/...` as a generic workspace even though this panel shares the admin shell. It now renders the configured brand with a Superadmin section title.
+- `ClientBrandingContext.test.tsx` passed **4 tests** and changed-file ESLint passed. This is panel-source verification; cross-session visual browser review remains open.

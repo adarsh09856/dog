@@ -77,13 +77,15 @@ export function ClientBrandingProvider({
         ? ""
         : pathname === "/pricing"
           ? "Plans and pricing"
-          : pathname?.startsWith("/admin")
-            ? "Admin"
-            : pathname?.startsWith("/auth/signup")
-              ? "Create account"
-              : pathname?.startsWith("/auth/login")
-                ? "Sign in"
-                : "Workspace";
+          : pathname?.startsWith("/superadmin")
+            ? "Superadmin"
+            : pathname?.startsWith("/admin")
+              ? "Admin"
+              : pathname?.startsWith("/auth/signup")
+                ? "Create account"
+                : pathname?.startsWith("/auth/login")
+                  ? "Sign in"
+                  : "Workspace";
     const expectedTitle = section
       ? `${section} | ${branding.company_name}`
       : branding.company_name;
