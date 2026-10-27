@@ -20,6 +20,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import FastAPI
+from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -36,6 +37,8 @@ from api.db.kodewaves_models import (
     ClientIntegrityAlertModel,
 )
 from api.db.user_client import UserClient
+from api.db.client_user_management import list_workspace_users, set_workspace_user_active
+from api.db import db_client
 from api.routes.admin import client_installation_check
 from api.services.installation_identity import sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status_claims
@@ -250,6 +253,51 @@ async def test_enrolled_identity_replay_and_integrity_alert_persist(monkeypatch)
             assert alerts[0]["reason"] == "modified_file" and alerts[0]["component"] == finding["component"]
             _, later_status = await check(True)
             assert later_status["revoked"] is True
+    finally:
+        await engine.dispose()
+        if schema_created:
+            async with admin_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_client_user_changes_are_scoped_to_workspace(monkeypatch):
+    database_url = _disposable_database_url()
+    schema = f"client_tenants_{uuid.uuid4().hex}"
+    admin_engine = create_async_engine(database_url)
+    engine = create_async_engine(database_url, connect_args={"server_settings": {"search_path": schema}})
+    schema_created = False
+    try:
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE TABLE organizations (id INTEGER PRIMARY KEY)"))
+            await conn.execute(text("""CREATE TABLE users (
+                id INTEGER PRIMARY KEY, provider_id VARCHAR NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ, selected_organization_id INTEGER REFERENCES organizations(id),
+                is_superuser BOOLEAN, is_active BOOLEAN NOT NULL, email VARCHAR, password_hash VARCHAR
+            )"""))
+            await conn.execute(text("""CREATE TABLE organization_users (
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                organization_id INTEGER NOT NULL REFERENCES organizations(id),
+                PRIMARY KEY (user_id, organization_id)
+            )"""))
+            await conn.execute(text("INSERT INTO organizations (id) VALUES (1), (2)"))
+            await conn.execute(text("INSERT INTO users (id, provider_id, selected_organization_id, is_superuser, is_active) VALUES (1, 'one', 1, false, true), (2, 'two', 2, false, true), (3, 'shared', 1, false, true)"))
+            await conn.execute(text("INSERT INTO organization_users (user_id, organization_id) VALUES (1, 1), (2, 2), (3, 1), (3, 2)"))
+        monkeypatch.setattr(db_client, "async_session", async_sessionmaker(engine))
+        assert {user.id for user in await list_workspace_users(1)} == {1, 3}
+        with pytest.raises(HTTPException) as foreign:
+            await set_workspace_user_active(1, 2, active=False)
+        assert foreign.value.status_code == 404
+        with pytest.raises(HTTPException) as shared:
+            await set_workspace_user_active(1, 3, active=False)
+        assert shared.value.status_code == 409
+        assert (await set_workspace_user_active(1, 1, active=False)).is_active is False
+        async with engine.connect() as conn:
+            assert (await conn.execute(text("SELECT is_active FROM users WHERE id = 2"))).scalar_one() is True
     finally:
         await engine.dispose()
         if schema_created:
