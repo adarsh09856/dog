@@ -48,7 +48,12 @@ async def current_database_revisions(database_url: str) -> tuple[str, ...]:
             if table.scalar_one_or_none() is None:
                 return ()
             result = await connection.execute(text("SELECT version_num FROM alembic_version"))
-            return tuple(result.scalars().all())
+            revisions = tuple(result.scalars().all())
+            if not revisions:
+                raise SchemaCompatibilityError(
+                    "Database alembic_version table exists but contains no revision"
+                )
+            return revisions
     finally:
         await engine.dispose()
 

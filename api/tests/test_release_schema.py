@@ -106,3 +106,43 @@ async def test_database_revision_reader_uses_alembic_version_table(monkeypatch):
     assert await release_schema.current_database_revisions("postgresql+asyncpg://example") == ("root",)
     assert "to_regclass('alembic_version')" in statements[0]
     assert "version_num FROM alembic_version" in statements[1]
+
+
+@pytest.mark.asyncio
+async def test_database_revision_reader_rejects_existing_empty_version_table(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from api.services import release_schema
+
+    class Result:
+        def __init__(self, value=None, values=()):
+            self.value = value
+            self.values = values
+
+        def scalar_one_or_none(self):
+            return self.value
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return list(self.values)
+
+    class Connection:
+        async def execute(self, statement):
+            if "to_regclass" in str(statement):
+                return Result("alembic_version")
+            return Result(values=())
+
+    class Engine:
+        @asynccontextmanager
+        async def connect(self):
+            yield Connection()
+
+        async def dispose(self):
+            return None
+
+    monkeypatch.setattr(release_schema, "create_async_engine", lambda *_args, **_kwargs: Engine())
+
+    with pytest.raises(SchemaCompatibilityError, match="exists but contains no revision"):
+        await release_schema.current_database_revisions("postgresql+asyncpg://example")

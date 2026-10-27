@@ -335,3 +335,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - The client API image verifier now requires `api/services/release_schema.py` and imports its startup preflight during image inspection. This prevents publishing an image whose Docker entrypoint references a missing or unloadable schema gate.
 - `py -3.13 -m pytest --noconftest api/tests/test_client_package.py -q` — **42 passed**. Python compilation and `git diff --check` passed. A Docker-built API image has not yet been inspected in Linux CI.
+
+## 27 October 2026 — reject an empty Alembic version table
+
+- Root-cause check confirmed the DB reader returned `()` both when `alembic_version` was absent and when the table existed with zero rows. The latter now fails closed as an incomplete schema state instead of being treated as a fresh installation.
+- The new regression failed before the change and passed afterward. Release schema/integrity/startup suite: **43 passed, 2 skipped**; Python compilation, `bash -n`, and `git diff --check` passed. PostgreSQL-backed migration acceptance remains open.
