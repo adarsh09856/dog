@@ -531,6 +531,7 @@ async def search_chunks(
         # correlation id here.
         embedding_service = await build_embedding_service(
             db_client=db_client,
+            organization_id=user.selected_organization_id,
             provider=embeddings_provider,
             api_key=embeddings_api_key,
             model=embeddings_model,
@@ -576,6 +577,8 @@ async def search_chunks(
             total_results=len(chunks),
         )
 
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error(f"Error searching chunks: {exc}")
         raise HTTPException(status_code=500, detail="Failed to search chunks") from exc

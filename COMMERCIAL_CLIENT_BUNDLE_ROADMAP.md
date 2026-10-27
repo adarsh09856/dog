@@ -456,3 +456,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - The shared title updater classified `/superadmin/...` as a generic workspace even though this panel shares the admin shell. It now renders the configured brand with a Superadmin section title.
 - `ClientBrandingContext.test.tsx` passed **4 tests** and changed-file ESLint passed. This is panel-source verification; cross-session visual browser review remains open.
+
+## 27 October 2026 — apply BYOK policy to embeddings at use time
+
+- External embedding keys previously reached the shared embedding factory without an independent current-plan/global-policy check. Document ingestion, manual search and agent retrieval now pass their workspace to that factory, which denies an excluded key before constructing a provider. Managed Kodewaves embeddings remain separate; policy database failures do not authorize external keys.
+- Chunked document jobs now perform that check before sending the document for conversion; manual search preserves the 403 denial. Focused embedding, search, agent retrieval and ingestion regressions passed **17 tests** with synthetic credentials and mocked provider calls. Optional speech-provider imports logged missing local dependencies; no real provider was contacted. Live plan-downgrade and customer-install acceptance remain open.

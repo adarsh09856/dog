@@ -67,6 +67,8 @@ async def process_knowledge_base_document(
 
     try:
         await require_client_worker_features("knowledge_base")
+        if retrieval_mode not in ("chunked", "full_document"):
+            raise ValueError("Unknown knowledge base retrieval mode")
         scoped_document = await db_client.get_document_by_id(document_id)
         if (scoped_document is None or scoped_document.organization_id != organization_id
                 or (scoped_document.custom_metadata or {}).get("s3_key") != s3_key):
@@ -196,6 +198,31 @@ async def process_knowledge_base_document(
                     f"model={embeddings_model}"
                 )
 
+            if not embeddings_api_key:
+                error_message = (
+                    "API key not configured. Please set your API key in "
+                    "Model Configurations > Embedding to process documents."
+                )
+                logger.warning(f"Document {document_id}: {error_message}")
+                await db_client.update_document_status(
+                    document_id, "failed", error_message=error_message
+                )
+                return
+
+            # Check the current workspace entitlement before document conversion
+            # or an embedding provider is contacted.
+            embedding_service = await build_embedding_service(
+                db_client=db_client,
+                organization_id=organization_id,
+                provider=embeddings_provider,
+                api_key=embeddings_api_key,
+                model=embeddings_model,
+                base_url=embeddings_base_url,
+                endpoint=embeddings_endpoint,
+                api_version=embeddings_api_version,
+                resolve_correlation=True,
+            )
+
         logger.info(f"Delegating document processing to MPS (mode={retrieval_mode})")
         mps_response = await mps_service_key_client.process_document(
             file_path=temp_file_path,
@@ -223,30 +250,6 @@ async def process_knowledge_base_document(
                 f"Text length: {len(full_text)} chars"
             )
             return
-
-        if not embeddings_api_key:
-            error_message = (
-                "API key not configured. Please set your API key in "
-                "Model Configurations > Embedding to process documents."
-            )
-            logger.warning(f"Document {document_id}: {error_message}")
-            await db_client.update_document_status(
-                document_id, "failed", error_message=error_message
-            )
-            return
-
-        # Ingestion runs outside any workflow run, so resolve the MPS correlation
-        # id here.
-        embedding_service = await build_embedding_service(
-            db_client=db_client,
-            provider=embeddings_provider,
-            api_key=embeddings_api_key,
-            model=embeddings_model,
-            base_url=embeddings_base_url,
-            endpoint=embeddings_endpoint,
-            api_version=embeddings_api_version,
-            resolve_correlation=True,
-        )
 
         mps_chunks = mps_response.get("chunks", [])
         if not mps_chunks:
