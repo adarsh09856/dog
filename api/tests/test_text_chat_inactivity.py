@@ -271,6 +271,41 @@ async def test_completion_job_ignores_session_that_became_active(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_completion_job_checks_client_voice_entitlement_before_loading_run(monkeypatch):
+    gate = AsyncMock(side_effect=ValueError("voice entitlement revoked"))
+    get_organization_id = AsyncMock(return_value=7)
+    get_text_session = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        text_chat_inactivity,
+        "require_client_worker_features",
+        gate,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        text_chat_inactivity.db_client,
+        "get_organization_id_by_workflow_run_id",
+        get_organization_id,
+    )
+    monkeypatch.setattr(
+        text_chat_inactivity.db_client,
+        "get_workflow_run_text_session",
+        get_text_session,
+    )
+
+    with pytest.raises(ValueError, match="voice entitlement revoked"):
+        await text_chat_inactivity.complete_inactive_text_chat_session(
+            {},
+            run_id=10,
+            expected_revision=2,
+            completed_at_iso=datetime.now(UTC).isoformat(),
+        )
+
+    gate.assert_awaited_once_with("voice")
+    get_organization_id.assert_not_awaited()
+    get_text_session.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_completion_job_retries_post_run_enqueue_for_completed_session(
     monkeypatch,
 ):

@@ -290,3 +290,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - The final fixed-color scan found the superadmin access banner on the general account settings page still hard-coded to amber. It now uses the configured `primary` theme tokens for its surface, icon, badge, and action button. Remaining fixed colors in the inspected auth and workflow surfaces are deliberate dark-panel contrast, semantic status, or workflow-category accents.
 - The changed settings page passes scoped ESLint and `tsc --noEmit`; `git diff --check` passes. Browser verification against a saved brand remains open.
+
+## 27 October 2026 - queued text-chat completion entitlement
+
+- Worker audit found `complete_inactive_text_chat_session` reloaded a queued text-chat run and could execute completion integrations without checking whether the client installation's `voice` feature or owner approval had changed after enqueue. The job now revalidates both before looking up run/session data. A regression first failed because the worker reached the database without invoking the gate, then passed after the gate was added.
+- The focused regression plus the two neighboring completion tests passed **3/3**. A broader `--noconftest` file run passed 9 tests; its one DB-query test could not set up because disabling conftest removes its required `async_session` fixture. Python compilation and `git diff --check` passed. Database-backed inactivity query and deployed client worker acceptance remain open.
