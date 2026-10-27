@@ -31,7 +31,7 @@ export function ClientBrandingSettingsCard() {
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!branding) return;
+    if (!branding || saving) return;
     setSaving(true);
     setSaved(false);
     setError("");
@@ -60,7 +60,8 @@ export function ClientBrandingSettingsCard() {
         {loading ? <p className="text-sm text-muted-foreground">Loading branding…</p> : null}
         {!loading && !branding && error ? <Button type="button" variant="outline" onClick={loadBranding}>Retry</Button> : null}
         {branding ? (
-          <form onSubmit={save} className="grid gap-4 sm:grid-cols-2">
+          <form onSubmit={save} onChange={() => setSaved(false)} className="grid gap-4 sm:grid-cols-2">
+            <fieldset disabled={saving} className="contents">
             <div className="space-y-2"><Label htmlFor="brand-name">Display name</Label><Input id="brand-name" required maxLength={80} value={branding.company_name} onChange={(event) => setBranding({ ...branding, company_name: event.target.value })} /></div>
             <div className="space-y-2"><Label htmlFor="brand-logo">Logo URL or site path</Label><Input id="brand-logo" placeholder="https://example.com/logo.svg" value={branding.logo_url} onChange={(event) => setBranding({ ...branding, logo_url: event.target.value })} /></div>
             <div className="space-y-2"><Label htmlFor="brand-favicon">Browser icon URL or site path</Label><Input id="brand-favicon" value={branding.favicon_url || ""} onChange={(event) => setBranding({ ...branding, favicon_url: event.target.value })} /></div>
@@ -69,6 +70,7 @@ export function ClientBrandingSettingsCard() {
             <div className="space-y-2"><Label htmlFor="brand-color">Primary color</Label><Input id="brand-color" type="color" value={branding.primary_color} onChange={(event) => setBranding({ ...branding, primary_color: event.target.value })} /></div>
             <div className="space-y-2"><Label htmlFor="brand-font">Font</Label><select id="brand-font" value={branding.font} onChange={(event) => setBranding({ ...branding, font: event.target.value as ClientBranding["font"] })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="geist">Geist</option><option value="system">System</option></select></div>
             <div className="flex items-center gap-3 sm:col-span-2"><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save branding"}</Button>{saved && <p role="status" className="text-sm text-muted-foreground">Branding saved.</p>}</div>
+            </fieldset>
           </form>
         ) : null}
         {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}

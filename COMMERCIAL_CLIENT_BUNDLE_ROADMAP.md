@@ -457,6 +457,11 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 - The shared title updater classified `/superadmin/...` as a generic workspace even though this panel shares the admin shell. It now renders the configured brand with a Superadmin section title.
 - `ClientBrandingContext.test.tsx` passed **4 tests** and changed-file ESLint passed. This is panel-source verification; cross-session visual browser review remains open.
 
+## 27 October 2026 — protect branding edits while saving
+
+- The client branding form now disables its fields while a save is pending, preventing a returned server value from overwriting a newer local edit. Editing again clears the saved message.
+- The focused form suite passed **2 tests**, including a delayed save and subsequent edit; changed-file ESLint passed. Persisted cross-session browser acceptance remains open.
+
 ## 27 October 2026 — apply BYOK policy to embeddings at use time
 
 - External embedding keys previously reached the shared embedding factory without an independent current-plan/global-policy check. Document ingestion, manual search and agent retrieval now pass their workspace to that factory, which denies an excluded key before constructing a provider. Managed Kodewaves embeddings remain separate; policy database failures do not authorize external keys.
