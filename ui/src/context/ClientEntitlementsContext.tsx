@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -46,8 +47,10 @@ export function ClientEntitlementsProvider({ children }: { children: ReactNode }
   const [status, setStatus] = useState<FeatureStatus | null>(null);
   const [loading, setLoading] = useState(IS_CLIENT_EDITION);
   const [requestError, setRequestError] = useState("");
+  const requestRevision = useRef(0);
 
   const refresh = useCallback(async () => {
+    const revision = ++requestRevision.current;
     if (!IS_CLIENT_EDITION) {
       setLoading(false);
       return;
@@ -62,14 +65,16 @@ export function ClientEntitlementsProvider({ children }: { children: ReactNode }
     setLoading(true);
     setRequestError("");
     try {
-      setStatus(await apiFetch<FeatureStatus>("/installation/features"));
+      const next = await apiFetch<FeatureStatus>("/installation/features");
+      if (revision === requestRevision.current) setStatus(next);
     } catch (cause) {
+      if (revision !== requestRevision.current) return;
       setStatus(null);
       setRequestError(
         cause instanceof Error ? cause.message : "Could not load installation features.",
       );
     } finally {
-      setLoading(false);
+      if (revision === requestRevision.current) setLoading(false);
     }
   }, [authLoading, user]);
 
@@ -80,6 +85,7 @@ export function ClientEntitlementsProvider({ children }: { children: ReactNode }
     const timer = window.setInterval(refreshOnFocus, 60_000);
     window.addEventListener("focus", refreshOnFocus);
     return () => {
+      requestRevision.current += 1;
       window.clearInterval(timer);
       window.removeEventListener("focus", refreshOnFocus);
     };

@@ -399,3 +399,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - When the installation feature endpoint could not be reached, `valid` was unknown but the UI falsely said the requested feature was excluded. The workspace now displays the verification error with a Retry button; a verified license lacking the feature still shows the feature-specific explanation.
 - The two focused layout interaction tests passed and changed-file ESLint passed. These mock the entitlement context; live browser/network recovery acceptance remains open.
+
+## 27 October 2026 — discard stale entitlement refreshes
+
+- Focus, periodic and manual refreshes can overlap. An older successful response could previously overwrite a newer license denial in the client UI. Refreshes now use a request revision and invalidate pending results when the authenticated effect is replaced or unmounted; API enforcement remains the authority.
+- The focused context and layout suites passed **3 tests**, including a late valid response following a newer denial; changed-file ESLint passed. This uses mocked requests and does not replace a live multi-session acceptance check.
