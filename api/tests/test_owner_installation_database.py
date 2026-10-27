@@ -215,14 +215,15 @@ async def test_enrollment_and_signed_checks_reject_replays_and_bearer_only(owner
         enrollment_token=secret, public_key=client_public, nonce=fields["nonce"],
         issued_at=now, signature=sign_enrollment(client_private, **fields),
     )
+    http_request = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"), headers={})
     with pytest.raises(HTTPException) as bad_enrollment:
         await client_installation_check.enroll_client_installation(
-            request.model_copy(update={"enrollment_token": "x" * 43}), f"Bearer {token}"
+            http_request, request.model_copy(update={"enrollment_token": "x" * 43}), f"Bearer {token}"
         )
     assert bad_enrollment.value.status_code == 401
-    assert await client_installation_check.enroll_client_installation(request, f"Bearer {token}") == {"enrolled": True}
+    assert await client_installation_check.enroll_client_installation(http_request, request, f"Bearer {token}") == {"enrolled": True}
     with pytest.raises(HTTPException) as replay:
-        await client_installation_check.enroll_client_installation(request, f"Bearer {token}")
+        await client_installation_check.enroll_client_installation(http_request, request, f"Bearer {token}")
     assert replay.value.status_code == 401
 
     http_request = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"), headers={})
