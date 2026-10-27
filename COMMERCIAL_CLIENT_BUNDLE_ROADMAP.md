@@ -285,3 +285,8 @@ pm run test:client-release passed **2/2**; ESLint on the verifier and test passe
 
 - The custom agent builder now offers all 38 language codes accepted by the backend's `SPEECH_LANGUAGE_NAMES` prompt-generation rules. Its label and helper copy explicitly state that this setting does not constrain STT recognition or TTS voices; actual speech-language coverage remains model/provider/voice-specific and is shown in Models. Curated localized template greetings remain restricted to the 22 languages with localized template content.
 - Focused language and template tests passed **10/10**; `tsc --noEmit`, scoped ESLint and `git diff --check` passed. This is prompt-picker/source verification, not a claim that every speech provider supports all 38 languages. The other voice-flow chat remains active on its isolated branch; no integration or browser acceptance has been received.
+
+## 27 October 2026 - remaining account-settings theme override
+
+- The final fixed-color scan found the superadmin access banner on the general account settings page still hard-coded to amber. It now uses the configured `primary` theme tokens for its surface, icon, badge, and action button. Remaining fixed colors in the inspected auth and workflow surfaces are deliberate dark-panel contrast, semantic status, or workflow-category accents.
+- The changed settings page passes scoped ESLint and `tsc --noEmit`; `git diff --check` passes. Browser verification against a saved brand remains open.

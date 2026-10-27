@@ -81,16 +81,16 @@ export default function SettingsPage() {
 
         {/* Superadmin Quick Access Banner (Only rendered for Superadmins) */}
         {isSuper && (
-          <Card className="border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/20 shadow-sm">
+          <Card className="border-primary/40 bg-primary/5 shadow-sm">
             <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                   <ShieldCheck className="h-5 w-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm">Superadmin Access Active</span>
-                    <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400 text-[10px] uppercase font-bold">
+                    <Badge variant="outline" className="border-primary/40 text-primary text-[10px] uppercase font-bold">
                       Platform Admin
                     </Badge>
                   </div>
@@ -100,7 +100,7 @@ export default function SettingsPage() {
                 </div>
               </div>
               <Link href="/admin" className="shrink-0 w-full sm:w-auto">
-                <Button className="w-full sm:w-auto gap-2 text-xs bg-amber-600 hover:bg-amber-700 text-white font-medium shadow-sm">
+                <Button className="w-full sm:w-auto gap-2 text-xs font-medium shadow-sm">
                   Open Admin Control Plane <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
               </Link>
