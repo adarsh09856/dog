@@ -28,7 +28,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install release verification dependencies
-        run: python -m pip install cryptography 'sqlalchemy==2.0.43'
+        run: python -m pip install cryptography 'sqlalchemy==2.0.43' 'PyYAML==6.0.2'
       - name: Check release tool imports
         run: |
           python deploy/client/build_and_verify.py --help > /dev/null

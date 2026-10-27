@@ -17,6 +17,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+import yaml
 
 from validate_install import validate as validate_client_install
 
@@ -163,6 +164,16 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str, mani
     failures = [message for message in identity_preflight if not message.startswith("preflight passed;")]
     if failures:
         raise ValueError("Identity installer preflight failed: " + "; ".join(failures))
+    overlay_path = root / "deploy/client/docker-compose.identity.yaml"
+    overlay_services = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))["services"]
+    for name in ("api", "ui"):
+        mounts = overlay_services[name].get("volumes", [])
+        if not any(
+            isinstance(mount, dict) and mount.get("target") == "/run/kodewaves-identity/installation.key"
+            and mount.get("bind", {}).get("create_host_path") is False
+            for mount in mounts
+        ):
+            raise ValueError(f"{name.upper()} identity overlay must explicitly disable host path creation")
     identity_rendered = subprocess.run(
         [
             "docker", "compose", "--env-file", str(identity_env),
@@ -183,7 +194,10 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str, mani
         }
         if service.get("group_add") != [str(identity_gid)]:
             raise ValueError(f"Rendered {service_name.upper()} identity group does not match the key group")
-        if expected_mount not in service.get("volumes", []):
+        mounts = [mount for mount in service.get("volumes", []) if mount.get("target") == expected_mount["target"]]
+        if len(mounts) != 1 or any(
+            mounts[0].get(field) != expected_mount[field] for field in ("type", "source", "target", "read_only")
+        ) or mounts[0].get("bind") not in ({}, {"create_host_path": False}):
             mounts = [mount for mount in service.get("volumes", []) if mount.get("target") == expected_mount["target"]]
             raise ValueError(
                 f"Rendered {service_name.upper()} identity key mount is not read-only and non-creating: "
