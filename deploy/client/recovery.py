@@ -653,6 +653,7 @@ def _volume_tar_command(
         ]
     command = [
         "docker", "run", "--rm", "--pull=never", "--network=none", "--user=0:0",
+        "--memory=256m", "--cpus=0.25", "--pids-limit=64",
         "--entrypoint", "/bin/sh",
     ]
     for mount in mounts:
