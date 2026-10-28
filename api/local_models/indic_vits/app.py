@@ -535,10 +535,16 @@ def _load() -> None:
             )
             PIPER_MODELS[voice_id] = sherpa_onnx.OfflineTts(piper_cfg)
 
+    # Prime every regional speaker through the callback path before lifespan
+    # marks the service ready. Warming Tamil alone left other speakers' first
+    # calls paying lazy inference costs. Run serially on the existing worker;
+    # this adds startup time, not competing inference during active calls.
+    for voice_id, (_, language, _, _) in RASA_SPEAKERS.items():
+        _warm_streaming_voice(PREVIEWS[language], voice_id)
+
     if INDUS_ENDPOINT:
         # Indus owns Hindi female and Indian English. Avoid loading the
         # superseded English model into RAM alongside it.
-        _warm_streaming_voice(PREVIEWS["ta"], "TAM_F")
         return
     MELO_DIR.mkdir(parents=True, exist_ok=True)
     for filename, expected_hash in MELO_FILES.items():
@@ -558,7 +564,6 @@ def _load() -> None:
         raise RuntimeError("Unexpected Indian English model speaker inventory")
 
     # Warmup
-    _warm_streaming_voice(PREVIEWS["ta"], "TAM_F")
     if "HIN_M" in PIPER_MODELS:
         _warm_streaming_voice(PREVIEWS["hi"], "HIN_M")
     _warm_streaming_voice(PREVIEWS["en"], "ENG_IN")
