@@ -13,7 +13,7 @@ import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import httpx
@@ -30,6 +30,9 @@ from api.db.client_installations import (
     create_client_installation_record,
     issue_installation_enrollment,
     list_client_integrity_alerts,
+    record_client_installation_check,
+    renew_client_installation_record,
+    revoke_client_installation_record,
 )
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import (
@@ -256,6 +259,68 @@ async def test_enrolled_identity_replay_and_integrity_alert_persist(monkeypatch)
             assert alerts[0]["reason"] == "modified_file" and alerts[0]["component"] == finding["component"]
             _, later_status = await check(True)
             assert later_status["revoked"] is True
+    finally:
+        await engine.dispose()
+        if schema_created:
+            async with admin_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_renewal_handover_and_revocation_persist(monkeypatch):
+    database_url = _disposable_database_url()
+    schema = f"client_renewal_{uuid.uuid4().hex}"
+    admin_engine = create_async_engine(database_url)
+    engine = create_async_engine(database_url, connect_args={"server_settings": {"search_path": schema}})
+    schema_created = False
+    try:
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY)"))
+            await conn.execute(text("INSERT INTO users (id) VALUES (1)"))
+            await conn.run_sync(ClientInstallationModel.__table__.create)
+        monkeypatch.setattr(kodewaves_db_client, "async_session", async_sessionmaker(engine))
+
+        installation_id = "client-renewal-1"
+        old_fingerprint = hashlib.sha256(b"old-signed-token").hexdigest()
+        new_fingerprint = hashlib.sha256(b"new-signed-token").hexdigest()
+        initial_expiry = datetime.now(UTC) + timedelta(days=7)
+        extended_expiry = initial_expiry + timedelta(days=30)
+        await create_client_installation_record(
+            installation_id=installation_id, customer_id="buyer-1",
+            domains=["customer.example"], ip_ranges=[], features=["voice"],
+            limits={"max_concurrent_calls": 2}, expires_at=initial_expiry,
+            token_fingerprint=old_fingerprint, issued_by_user_id=1,
+        )
+
+        assert await renew_client_installation_record(
+            installation_id, old_fingerprint, new_fingerprint, extended_expiry, 1,
+        )
+        assert not await renew_client_installation_record(
+            installation_id, old_fingerprint, new_fingerprint, extended_expiry, 1,
+        )
+        old_status = await record_client_installation_check(
+            installation_id, old_fingerprint, integrity_ok=True,
+        )
+        new_status = await record_client_installation_check(
+            installation_id, new_fingerprint, integrity_ok=True,
+        )
+        assert old_status is not None and new_status is not None
+        assert old_status["expires_at"] <= int(initial_expiry.timestamp())
+        assert new_status["expires_at"] == int(extended_expiry.timestamp())
+
+        assert await revoke_client_installation_record(installation_id, 1)
+        old_status = await record_client_installation_check(
+            installation_id, old_fingerprint, integrity_ok=True,
+        )
+        new_status = await record_client_installation_check(
+            installation_id, new_fingerprint, integrity_ok=True,
+        )
+        assert old_status is not None and old_status["revoked_at"] is not None
+        assert new_status is not None and new_status["revoked_at"] is not None
     finally:
         await engine.dispose()
         if schema_created:
