@@ -63,6 +63,7 @@ INDIC_LANGUAGES = SCHEDULED_INDIAN_LANGUAGES
 LANGUAGES = AUTO_DETECT_LANGUAGES
 MODEL_DIR = Path(os.environ.get("INDIC_STT_MODEL_DIR", "/models/indicconformer"))
 PRELOAD = os.environ.get("INDIC_STT_LANGUAGES", "hi").strip().lower()
+PREWARM = os.environ.get("INDIC_STT_PREWARM_LANGUAGES", "").strip().lower()
 THREADS = max(1, int(os.environ.get("INDIC_STT_THREADS", "2")))
 LID_ENABLED = os.environ.get("INDIC_STT_AUTO_DETECT", "1").strip().lower() not in {"0", "false", "no"}
 LID_THREADS = max(1, int(os.environ.get("INDIC_STT_LID_THREADS", "2")))
@@ -170,13 +171,22 @@ async def startup() -> None:
     languages = LANGUAGES if PRELOAD == "all" else set(PRELOAD.split(","))
     if not languages or not languages <= LANGUAGES:
         raise RuntimeError("INDIC_STT_LANGUAGES contains an unsupported language")
+    # Installed languages and resident languages are different budgets. Allow
+    # regional deployments to choose their warm decoders without restricting
+    # the installed inventory or silently evicting one during startup.
+    if PREWARM:
+        warm_languages = list(dict.fromkeys(code.strip() for code in PREWARM.split(",")))
+        if not set(warm_languages) <= languages:
+            raise RuntimeError("INDIC_STT_PREWARM_LANGUAGES must contain installed languages")
+        if len(warm_languages) > _max_resident_models:
+            raise RuntimeError("INDIC_STT_PREWARM_LANGUAGES exceeds INDIC_STT_RESIDENT_MODELS")
+    else:
+        warm_languages = ["hi" if "hi" in languages else sorted(languages)[0]]
+        if "en" in languages and "en" not in warm_languages and _max_resident_models > 1:
+            warm_languages.append("en")
     await asyncio.to_thread(_download_models, languages)
-    # A small CPU host must not keep 22 recognizers resident simultaneously.
-    await asyncio.to_thread(_load, "hi" if "hi" in languages else sorted(languages)[0])
-    if "en" in languages and _max_resident_models > 1:
-        # Keep both main caller languages ready without first-call model loading.
-        await asyncio.to_thread(_load, "en")
-    warm_languages = [lang for lang in ("hi", "en") if lang in _loaded]
+    for lang in warm_languages:
+        await asyncio.to_thread(_load, lang)
     for lang in warm_languages:
         warmup_started = time.monotonic()
         await asyncio.to_thread(_warm_recognizer, lang)

@@ -323,6 +323,8 @@ services:
     restart: unless-stopped
     environment:
       INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-all}"
+      # Optional comma-separated startup languages, bounded by resident slots.
+      INDIC_STT_PREWARM_LANGUAGES: "${INDIC_STT_PREWARM_LANGUAGES:-}"
       INDIC_STT_THREADS: "${INDIC_STT_THREADS:-2}"
       INDIC_STT_AUTO_DETECT: "${INDIC_STT_AUTO_DETECT:-1}"
       INDIC_STT_LID_THREADS: "${INDIC_STT_LID_THREADS:-2}"
