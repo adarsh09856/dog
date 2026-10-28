@@ -165,6 +165,32 @@ def _extract_nested_volume(stream, target_root: Path, outer_name: str) -> None:
         raise ValueError(f"Unable to stage nested {outer_name} data") from exc
 
 
+def _nested_expanded_size(stream, outer_name: str) -> int:
+    total = 0
+    try:
+        with tarfile.open(fileobj=stream, mode="r|*") as nested:
+            count = 0
+            for member in nested:
+                count += 1
+                if count > MAX_ARCHIVE_MEMBERS * 100:
+                    raise ValueError(f"Nested {outer_name} archive has too many entries")
+                name = member.name
+                normalized = name[2:] if name.startswith("./") else name
+                if normalized in {"", "."} and member.isdir():
+                    continue
+                _validate_member_name(normalized)
+                if not (member.isfile() or member.isdir()):
+                    raise ValueError(f"Nested {outer_name} links/devices are unsupported")
+                if member.size < 0 or member.size > MAX_FILE_SIZE:
+                    raise ValueError(f"Nested {outer_name} entry has invalid size")
+                total += member.size
+                if total > MAX_ARCHIVE_SIZE:
+                    raise ValueError(f"Nested {outer_name} exceeds the expanded size limit")
+    except (OSError, tarfile.TarError) as exc:
+        raise ValueError(f"Invalid nested {outer_name} tar archive") from exc
+    return total
+
+
 def _env_value(content: bytes, key: str) -> str | None:
     try:
         lines = content.decode("utf-8").splitlines()
@@ -517,6 +543,20 @@ def restore_to_directory(archive_path: Path, destination: Path) -> dict[str, obj
             raise ValueError("Recovery archive exceeds the supported compressed size limit")
         with tarfile.open(fileobj=archive_file, mode="r:gz") as archive:
             summary, expected = _validate_archive_handle(archive)
+            volume_members = {
+                member.name: member
+                for member in archive.getmembers()
+                if member.name in {"volumes/postgres.tar", "volumes/minio.tar"}
+            }
+            expanded_size = 0
+            for name, member in volume_members.items():
+                stream = archive.extractfile(member)
+                if stream is None:
+                    raise ValueError(f"Unable to inspect nested volume snapshot: {name}")
+                expanded_size += _nested_expanded_size(stream, name)
+            required_space = sum(member.size for member in volume_members.values()) + expanded_size
+            if shutil.disk_usage(parent).free < required_space + max(16 * 1024 * 1024, required_space // 50):
+                raise ValueError("Insufficient free space for offline staged restore")
         archive_file.seek(0)
         destination.mkdir(mode=0o700)
         try:
@@ -558,6 +598,10 @@ def restore_to_directory(archive_path: Path, destination: Path) -> dict[str, obj
                             os.chown(target, member.uid, member.gid)
                     elif name.endswith(".tar"):
                         target.chmod(0o600)
+                        data_directory = target.parent / ("postgres-data" if name.endswith("postgres.tar") else "minio-data")
+                        data_directory.mkdir(mode=0o700)
+                        with target.open("rb") as nested_stream:
+                            _extract_nested_volume(nested_stream, data_directory, name)
                     else:
                         target.chmod(0o644)
             if seen != set(expected) | {"SHA256SUMS"}:

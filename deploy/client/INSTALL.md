@@ -175,10 +175,14 @@ python3 recovery.py restore /secure/backups/client-recovery.tar.gz \
 ```
 
 Staging is non-destructive and never modifies live Docker volumes. It validates
-checksums and paths, then writes the two inner volume tar files and preserved
-config into the new directory; it does not initialize a Compose stack or prove
-that services can start from those files. The maintenance flag is an operator
-attestation, not machine-verifiable proof that writers stopped. Exports with
+checksums and paths, writes the preserved config and original volume archives,
+and unpacks the volume contents into `volumes/postgres-data/` and
+`volumes/minio-data/` inside the new directory. On Linux, use an operator
+account with permission to preserve the archived file UID/GID (normally root).
+The tool checks available disk space before extraction. Staging does not
+initialize a Compose stack or prove that services can start from those files.
+The maintenance flag is an operator attestation, not machine-verifiable proof
+that writers stopped. Exports with
 Postgres tablespace symlinks are refused and require an owner-approved backup
 method. The archive contains installation secrets and customer data; protect it
 accordingly. Docker-volume restoration and a full service recovery exercise

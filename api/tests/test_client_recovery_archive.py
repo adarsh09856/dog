@@ -170,6 +170,8 @@ def test_create_and_stage_offline_recovery_archive(tmp_path):
     assert staged["docker_volumes_modified"] is False
     assert (destination / "volumes/postgres.tar").read_bytes() == inputs["postgres"].read_bytes()
     assert (destination / "volumes/minio.tar").read_bytes() == inputs["minio"].read_bytes()
+    assert (destination / "volumes/postgres-data/data/example").read_bytes() == b"postgres-cold-data"
+    assert (destination / "volumes/minio-data/data/example").read_bytes() == b"minio-cold-data"
     assert (destination / "config/.env").read_bytes() == inputs["env"].read_bytes()
     assert (destination / "config/installation.key").read_bytes() == b"k" * 32
 
