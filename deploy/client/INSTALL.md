@@ -140,6 +140,52 @@ jobs before relying on it. The package does not yet provide an accepted backup
 and restore procedure; obtain owner assistance rather than assuming copying
 live database files or rolling back an image is sufficient.
 
+The customer bundle includes `recovery.py` for **offline snapshot packaging,
+validation, and staging**. It does not stop services or access Docker volumes.
+First use an owner-approved process to export both data volumes after stopping
+the API, UI, and every database/object writer. Then package the already-cold
+exports with the installation config:
+
+```bash
+python3 recovery.py create \
+  --postgres-tar /secure/staging/postgres.tar \
+  --minio-tar /secure/staging/minio.tar \
+  --env-file .env \
+  --manifest ./client-release-manifest.json \
+  --release-public-key ./release-public-key.txt \
+  --identity-key /secure/identity/installation.key \
+  --confirm-stopped-writers \
+  --output /secure/backups/client-recovery.tar.gz
+```
+
+Omit `--identity-key` only when identity enrollment is not configured. The tool
+refuses symlinks, non-tar volume exports, mismatched installation/image
+identities, wrong identity-key group/mode, and existing output paths. Store the
+result encrypted and access-controlled. Validate it later with:
+
+```bash
+python3 recovery.py validate /secure/backups/client-recovery.tar.gz
+```
+
+For an offline staging check, extract to a **new** directory:
+
+```bash
+python3 recovery.py restore /secure/backups/client-recovery.tar.gz \
+  --destination /secure/staging/client-restore-check
+```
+
+Staging is non-destructive and never modifies live Docker volumes. It validates
+checksums and paths, then writes the two inner volume tar files and preserved
+config into the new directory; it does not initialize a Compose stack or prove
+that services can start from those files. The maintenance flag is an operator
+attestation, not machine-verifiable proof that writers stopped. Exports with
+Postgres tablespace symlinks are refused and require an owner-approved backup
+method. The archive contains installation secrets and customer data; protect it
+accordingly. Docker-volume restoration and a full service recovery exercise
+remain unverified. The archive checksums detect accidental damage; they do not
+authenticate the archive against a malicious rewrite, so keep backups in a
+trusted, access-controlled location and compare delivery hashes out of band.
+
 For an update, use the supplied matching API/UI digests and signed manifest,
 back up first, then recreate the services with Docker Compose. Before applying
 Alembic migrations, API startup checks the current database revision against

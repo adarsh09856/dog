@@ -21,7 +21,7 @@ def package_inputs(monkeypatch, tmp_path):
     root = tmp_path / "source"
     directory = root / "deploy/client"
     directory.mkdir(parents=True)
-    for name in ("INSTALL.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "Caddyfile", "validate_install.py", "enroll_identity.py", ".env.example"):
+    for name in ("INSTALL.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "Caddyfile", "validate_install.py", "recovery.py", "enroll_identity.py", ".env.example"):
         shutil.copy2(repository / "deploy/client" / name, directory / name)
     (directory / ".env").write_text("KODEWAVES_LICENSE_TOKEN=customer-secret")
     (root / "owner-tools").mkdir()
@@ -66,7 +66,7 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
     with tarfile.open(output, "r:gz") as archive:
         assert set(archive.getnames()) == {
             "README.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "Caddyfile", "validate_install.py", "enroll_identity.py",
-            ".env.example", "client-release-manifest.json", "release-public-key.txt", "SHA256SUMS",
+            "recovery.py", ".env.example", "client-release-manifest.json", "release-public-key.txt", "SHA256SUMS",
         }
         contents = {name: archive.extractfile(name).read() for name in archive.getnames()}
         assert archive.getmember(".env.example").mode == 0o600
@@ -110,6 +110,13 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
     )
     assert checked.returncode == 0, checked.stderr
     assert "Client installation inputs look valid" in checked.stdout
+    recovery_help = subprocess.run(
+        [sys.executable, "-I", "-S", "recovery.py", "--help"],
+        cwd=extracted, capture_output=True, text=True, check=False,
+    )
+    assert recovery_help.returncode == 0, recovery_help.stderr
+    assert "{validate,create,restore}" in recovery_help.stdout
+    assert "new offline directory" in recovery_help.stdout
 
 
 def test_customer_archive_is_reproducible_for_identical_release_inputs(package_inputs, monkeypatch):
