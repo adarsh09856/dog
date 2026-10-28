@@ -139,7 +139,11 @@ export default function PricingPage() {
 
         <section
           aria-label="Subscription plans"
-          className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+          className={`grid gap-4 ${planState === "ready" && plans.length === 1
+            ? "mx-auto max-w-xl"
+            : planState === "ready" && plans.length === 2
+              ? "mx-auto max-w-5xl md:grid-cols-2"
+              : "md:grid-cols-2 xl:grid-cols-3"}`}
         >
           {planState === "loading" && (
             <p
