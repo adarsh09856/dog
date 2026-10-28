@@ -76,7 +76,11 @@ class CallerLanguageContext:
         self._explicit_source_language: str | None = None
 
     def choose_language(self, language: str, source=None, *, text: str = "") -> None:
-        detected = getattr(source, "latest_detected_language", None)
+        # Prefer the language supported by the active TTS inventory while
+        # leaving the recognizer's raw language metadata untouched.
+        detected = getattr(source, "latest_tts_language", None)
+        if not detected:
+            detected = getattr(source, "latest_detected_language", None)
         code = str(detected or "").lower().replace("_", "-").split("-", 1)[0]
         spoken = SPEECH_LANGUAGE_NAMES.get(code)
         if not spoken:
@@ -160,6 +164,14 @@ class CallerLanguageContext:
                         f"The caller just spoke {language}. Answer in {answer_language}; "
                         "follow their latest language choice and do not repeat the greeting."
                     )
+
+        # Keep the synthesizer aligned with the language preference already
+        # applied to the LLM. A later detected language change clears it above.
+        if source is not None:
+            source.reply_language_override = {
+                "English": "en",
+                "Hindi": "hi",
+            }.get(self._explicit_preference)
 
         result = list(messages)
         for ordinal, (index, content) in enumerate(users):

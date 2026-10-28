@@ -152,6 +152,12 @@ class SpeachesLiveTTSService(SpeachesTTSService):
 
     def _resolve_speech_language(self):
         source = getattr(self, "_caller_language_source", None)
+        preferred = getattr(source, "reply_language_override", None)
+        if preferred is not None:
+            raw_preferred = getattr(preferred, "value", preferred)
+            preferred_code = normalize_language_code(raw_preferred)
+            if preferred_code in {"en", "hi"}:
+                return preferred_code
         # Auto STT may expose a best-effort language to the LLM even when the
         # detector confidence is too weak to choose a regional voice. In that
         # case let the gateway route unambiguous output scripts or retain the
