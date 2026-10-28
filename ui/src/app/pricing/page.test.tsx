@@ -92,6 +92,36 @@ describe("public pricing", () => {
     expect(screen.getByText(/Loading credit bundles/)).toBeTruthy();
   });
 
+  it("formats configured foreign-currency prices with international grouping", async () => {
+    mocks.getPublicPlans.mockResolvedValue([{
+      id: "enterprise",
+      name: "Enterprise",
+      code: "enterprise",
+      monthly_price_cents: 12345678,
+      annual_price_cents: 0,
+      currency: "USD",
+      included_minutes: 100,
+      max_agents: 10,
+      max_concurrent_calls: 5,
+      features: [],
+      is_active: true,
+    }]);
+    mocks.getPublicCreditOffers.mockResolvedValue([{
+      id: "bundle-large",
+      name: "Large bundle",
+      minutes: 5000,
+      bonus_minutes: 0,
+      price_cents: 12345678,
+      currency: "USD",
+      is_popular: false,
+    }]);
+
+    render(<PricingPage />);
+
+    expect(await screen.findAllByText("$123,456.78")).toHaveLength(2);
+    expect(screen.queryByText("$1,23,456.78")).toBeNull();
+  });
+
   it("shows an annual-only offer as annual and preserves that cycle into sign-in", async () => {
     mocks.getPublicPlans.mockResolvedValue([{
       id: "annual",

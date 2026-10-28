@@ -14,7 +14,10 @@ import {
 
 function money(cents: number, currency: string) {
   try {
-    return new Intl.NumberFormat("en-IN", {
+    // Preserve Indian digit grouping for INR; other configured currencies use
+    // the page's general English grouping instead of lakh/crore separators.
+    const locale = currency.toUpperCase() === "INR" ? "en-IN" : "en-US";
+    return new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
       maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
