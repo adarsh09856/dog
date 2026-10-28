@@ -402,10 +402,13 @@ def _verify_compose_runtime(
                 print("Client runtime smoke API status: " + api_status, file=sys.stderr)
                 if isinstance(exc, subprocess.CalledProcessError):
                     exc.stderr = (exc.stderr or "") + "\nAPI status: " + api_status
-            subprocess.run(
-                [*compose_command, "logs", "--no-color", "--tail", "100"],
+            logs = subprocess.run(
+                [*compose_command, "logs", "--no-color", "--tail", "30", "api"],
                 cwd=root, check=False, env=command_env, timeout=30,
+                capture_output=True, text=True,
             )
+            if isinstance(exc, subprocess.CalledProcessError) and logs.stdout:
+                exc.stderr = (exc.stderr or "") + "\nAPI startup log: " + logs.stdout[-800:]
         except Exception:  # noqa: BLE001 - preserve the failing smoke result
             pass
         raise
