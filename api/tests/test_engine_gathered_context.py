@@ -18,6 +18,30 @@ def _engine() -> PipecatEngine:
     return PipecatEngine(workflow=None, call_context_vars={})
 
 
+@pytest.mark.asyncio
+async def test_prepared_visits_share_contact_state_and_receive_uploaded_contact_data():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from pipecat.processors.aggregators.llm_context import LLMContext
+
+    engine = PipecatEngine(
+        workflow=SimpleNamespace(global_node_id=None),
+        context=LLMContext(),
+        call_context_vars={"customer_name": "Uploaded Caller", "customer_phone": "+919000000001"},
+        llm=SimpleNamespace(_update_settings=AsyncMock()),
+    )
+    node = SimpleNamespace(is_end=False, out_edges=[], tool_uuids=[], document_uuids=[],
+                           add_global_prompt=False, prompt="Help the caller.")
+    await engine._prepare_node(engine.active_agent, node, apply_settings=False)
+    llm = engine.active_agent.llm
+    assert llm._contact_conversation_state is engine._contact_conversation_state
+    assert llm._known_contact["customer_name"] == "Uploaded Caller"
+    assert "Uploaded Caller" in engine.active_agent.system_prompt
+    llm._contact_conversation_state["caller_name"] = "Corrected Caller"
+    await engine._prepare_node(engine.active_agent, node, apply_settings=False)
+    assert llm._contact_conversation_state["caller_name"] == "Corrected Caller"
+
+
 def test_recorded_values_land_on_the_engines_context():
     engine = _engine()
 

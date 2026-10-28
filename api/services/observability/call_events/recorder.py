@@ -20,6 +20,7 @@ import asyncio
 import functools
 import statistics
 import time
+import numpy as np
 from collections import OrderedDict
 from typing import Any
 
@@ -131,6 +132,7 @@ class CallEventRecorder:
         self._llm_text_chars = 0
         self._llm_first_text_seen = False
         self._tts_first_audio_seen = False
+        self._tts_first_non_silent_seen = False
         self._llm_chars_since_turn = 0
         self._refusals_since_turn = 0
         self._tts_started_since_turn = False
@@ -221,7 +223,7 @@ class CallEventRecorder:
         first_generated_audio = (
             isinstance(frame, TTSAudioRawFrame)
             and bool(frame.audio)
-            and not self._tts_first_audio_seen
+            and (not self._tts_first_audio_seen or not self._tts_first_non_silent_seen)
         )
         active_segment_audio = (
             isinstance(frame, TTSAudioRawFrame)
@@ -367,6 +369,16 @@ class CallEventRecorder:
                     "num_channels": frame.num_channels,
                     "bytes": len(frame.audio),
                 })
+            if not self._tts_first_non_silent_seen and frame.audio:
+                samples = np.frombuffer(frame.audio[:len(frame.audio) // 2 * 2], dtype="<i2")
+                if samples.size and float(np.sqrt(np.mean(samples.astype(np.float32) ** 2))) > 80.0:
+                    self._tts_first_non_silent_seen = True
+                    self._emit(ev.TTS_FIRST_NON_SILENT_AUDIO, detail={
+                        "sample_rate": frame.sample_rate,
+                        "num_channels": frame.num_channels,
+                        "bytes": len(frame.audio),
+                        "rms_threshold": 80,
+                    })
             context_id = str(getattr(frame, "context_id", None) or "")
             segment = self._tts_contexts.get(context_id)
             if segment is not None and frame.audio:
@@ -530,6 +542,7 @@ class CallEventRecorder:
         self._llm_chars_since_turn = 0
         self._llm_first_text_seen = False
         self._tts_first_audio_seen = False
+        self._tts_first_non_silent_seen = False
         self._refusals_since_turn = 0
         self._tts_started_since_turn = False
         self._bot_spoke_since_user_turn = False

@@ -430,7 +430,7 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_ENDPOINT: http://ollama:11434
-      OLLAMA_WARM_MODELS: "${OLLAMA_WARM_MODELS:-qwen3.5:2b}"
+      OLLAMA_WARM_MODELS: "${OLLAMA_WARM_MODELS:-qwen3.5:2b-q4_K_M}"
       OLLAMA_WARM_INTERVAL_SECONDS: "${OLLAMA_WARM_INTERVAL_SECONDS:-30}"
     command: ["python", "/app/warm_local_ollama.py"]
     volumes:

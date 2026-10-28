@@ -38,12 +38,20 @@ _BOOKING_REQUEST = re.compile(
     r"\b(?:book|schedule|make|set\s+up)\b.{0,45}\b(?:appointment|booking|consultation)\b"
     r"|\b(?:appointment|booking|consultation)\b.{0,30}\b(?:book|schedule)\b"
     r"|अपॉइंटमेंट.{0,24}(?:बुक|रख)|बुकिंग.{0,24}(?:कर|चाहत)|"
+    r"(?:बुक|बुकिंग)\s+(?:कर|करना|करनी|करने|करना\s+था|करनी\s+है)|"
     r"\b(?:appointment|booking)\s+(?:book|schedule)\s+kar(?:na|ni)?\b",
     re.IGNORECASE,
 )
 _CALLER_NAME = re.compile(
     r"\b(?:my name is|i'm|this is|mera naam)\s+[A-Za-z][A-Za-z .'-]{1,50}"
     r"|मेरा नाम\s*[^,।\d]{2,50}",
+    re.IGNORECASE,
+)
+_ROOM_BOOKING_REQUEST = re.compile(
+    r"\b(?:book|reserve|booking|reservation)\b.{0,45}\b(?:room|hotel)\b"
+    r"|\b(?:room|hotel)\b.{0,45}\b(?:book|reserve|booking|reservation)\b"
+    r"|(?:रूम|कमरा|कमरे|होटल).{0,45}(?:बुक|आरक्षण)"
+    r"|(?:बुक|आरक्षण).{0,45}(?:रूम|कमरा|कमरे|होटल)",
     re.IGNORECASE,
 )
 _EXISTING_OR_DECLINED_BOOKING = re.compile(
@@ -73,17 +81,43 @@ def first_booking_question(messages: list[dict], known_name: str | None = None) 
         for message in user_messages
     ):
         return None
-    if not _BOOKING_REQUEST.search(caller_text) or _CALLER_NAME.search(caller_text):
+    room_request = bool(_ROOM_BOOKING_REQUEST.search(caller_text))
+    if not (_BOOKING_REQUEST.search(caller_text) or room_request) or _CALLER_NAME.search(caller_text):
         return None
     if re.search(r"[\u0900-\u097f]", caller_text):
+        if room_request:
+            return "कमरे की बुकिंग के लिए आपका नाम क्या है?"
         return "ज़रूर। अपॉइंटमेंट किस नाम से बुक करूँ?"
     if re.search(r"\b(?:mujhe|mera|naam|karna|chahiye|haan)\b", caller_text, re.IGNORECASE):
+        if room_request:
+            return "Room booking ke liye aapka naam kya hai?"
         return "Bilkul. Appointment kis naam se book karun?"
+    if room_request:
+        return "What name should I use for the room booking?"
     return "Sure. What name should I use for the appointment?"
 
 
 def new_booking_requested(text: str) -> bool:
-    return bool(_BOOKING_REQUEST.search(text) and not _EXISTING_OR_DECLINED_BOOKING.search(text))
+    return bool(
+        _BOOKING_REQUEST.search(text)
+        and not _ROOM_BOOKING_REQUEST.search(text)
+        and not _EXISTING_OR_DECLINED_BOOKING.search(text)
+    )
+
+
+def room_booking_active(messages: list) -> bool:
+    """Remember an explicit room request until the caller asks for an appointment."""
+    for message in reversed(messages):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        text = message.get("content")
+        if not isinstance(text, str):
+            continue
+        if _ROOM_BOOKING_REQUEST.search(text):
+            return True
+        if re.search(r"\b(?:appointment|consultation)\b|अपॉइंटमेंट|नियुक्ति", text, re.I):
+            return False
+    return False
 
 
 def confirmed_booking_arguments(message: str) -> dict | None:
@@ -92,6 +126,8 @@ def confirmed_booking_arguments(message: str) -> dict | None:
     Other natural-language requests stay on the conversational path. A failed
     parse never authorizes a calendar write.
     """
+    if _ROOM_BOOKING_REQUEST.search(message):
+        return None
     message = message.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
     if (not (_CONFIRM.search(message) and _SAVE.search(message))
             or _NEGATE.search(message) or _EXISTING_OR_DECLINED_BOOKING.search(message)):

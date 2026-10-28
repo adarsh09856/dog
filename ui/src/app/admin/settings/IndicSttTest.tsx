@@ -77,7 +77,7 @@ export default function IndicSttTest() {
       <span className="text-xs text-muted-foreground" role="status">{status}</span>
     </div>
     <p className="text-xs text-muted-foreground">
-      IndicConformer uses the language you select for each test. Automatic language detection is not available in this local model.
+      This test uses the selected recognition language. Live calls can use automatic detection for the supported speech languages configured in Model Configurations.
     </p>
     <div className="space-y-1">
       <Label htmlFor="indic-stt-language">Recognition language</Label>

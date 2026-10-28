@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import io
+import logging
 import os
 import re
+import time
 import wave
 from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
@@ -26,8 +28,18 @@ MODEL_DIR = Path(os.environ.get("INDUS_MODEL_DIR", "/models/indus-pocket-tts"))
 MODEL: Any = None
 VOICE: Any = None
 _stream_speech: Any = None
-SYNTHESIS_LOCK = asyncio.Lock()
-SYNTHESIS_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="local-tts")
+WORKER_COUNT = max(1, min(2, int(os.environ.get("INDUS_WORKERS", "1"))))
+# Unlimited decoder batching can collect a whole queued utterance into one
+# expensive decode, delaying the first audio even though generation streams.
+# One latent per decode keeps playback incremental when a backlog develops.
+MAX_DECODER_FRAMES = max(1, min(8, int(os.environ.get("INDUS_DECODER_FRAMES", "1"))))
+MODEL_POOL: list[tuple[Any, Any]] = []
+AVAILABLE_MODELS: asyncio.Queue[int] = asyncio.Queue()
+SYNTHESIS_WORKERS = [
+    ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"local-tts-{index}")
+    for index in range(WORKER_COUNT)
+]
+LOGGER = logging.getLogger("uvicorn.error")
 
 
 def _prepare_speech_text(text: str) -> str:
@@ -48,19 +60,23 @@ def _load_model() -> None:
         raise RuntimeError("Indus TTS model package is missing speak.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    MODEL, VOICE = module.load(int8=True, threads=1)
+    for _ in range(WORKER_COUNT):
+        model, voice = module.load(int8=True, threads=1)
+        model.max_decoder_frames_per_call = MAX_DECODER_FRAMES
+        MODEL_POOL.append((model, voice))
+    MODEL, VOICE = MODEL_POOL[0]
     global _stream_speech
     _stream_speech = module.stream
 
 
-def _warm_model() -> None:
+def _warm_model(model, voice) -> None:
     """Run one short Hindi/English turn before the service reports ready.
 
     The first generation initializes model/runtime state and can be much slower
     than subsequent streamed requests. Pay that one-time cost during startup so
     a caller does not hear it as a delayed greeting.
     """
-    if MODEL is None or VOICE is None or _stream_speech is None:
+    if model is None or voice is None or _stream_speech is None:
         raise RuntimeError("Indus TTS cannot warm up before the model is loaded")
     # Exercise both text frontends before readiness. A tiny mixed greeting
     # left the first full English request paying several seconds of lazy
@@ -70,7 +86,7 @@ def _warm_model() -> None:
         "नमस्ते, मैं आपकी कैसे मदद कर सकती हूँ?",
         "ज़रूर, you can speak in Hindi or English.",
     ):
-        generator = iter(_stream_speech(MODEL, VOICE, _prepare_speech_text(text)))
+        generator = iter(_stream_speech(model, voice, _prepare_speech_text(text)))
         has_audio = False
         try:
             for chunk in generator:
@@ -88,10 +104,11 @@ def _warm_model() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await asyncio.to_thread(_load_model)
-    await asyncio.get_running_loop().run_in_executor(
-        SYNTHESIS_WORKER,
-        _warm_model,
-    )
+    for index, (model, voice) in enumerate(MODEL_POOL):
+        await asyncio.get_running_loop().run_in_executor(
+            SYNTHESIS_WORKERS[index], _warm_model, model, voice,
+        )
+        AVAILABLE_MODELS.put_nowait(index)
     yield
 
 
@@ -150,10 +167,17 @@ async def speech(request: SpeechRequest):
         raise HTTPException(status_code=503, detail="Local TTS model is loading")
 
     async def audio_chunks():
-        # A single autoregressive generator is kept on this one-CPU service so
-        # concurrent calls do not multiply latency or RAM use on small hosts.
-        async with SYNTHESIS_LOCK:
-            generator = iter(_stream_speech(MODEL, VOICE, _prepare_speech_text(request.input)))
+        # Each autoregressive generator owns a separate model instance. The
+        # upstream streaming API explicitly forbids concurrent use of one model.
+        queued_at = time.monotonic()
+        worker_index = await AVAILABLE_MODELS.get()
+        try:
+            started_at = time.monotonic()
+            first_pcm_ms = None
+            pcm_chunks = 0
+            model, voice = MODEL_POOL[worker_index]
+            worker = SYNTHESIS_WORKERS[worker_index]
+            generator = iter(_stream_speech(model, voice, _prepare_speech_text(request.input)))
             def take_next():
                 try:
                     return False, next(generator)
@@ -165,17 +189,41 @@ async def speech(request: SpeechRequest):
                 while True:
                     # Cancelling an await does not stop its worker thread.
                     # Serialize inference and cleanup on the same worker.
-                    finished, chunk = await loop.run_in_executor(SYNTHESIS_WORKER, take_next)
+                    finished, chunk = await loop.run_in_executor(worker, take_next)
                     if finished:
                         break
                     samples = chunk.detach().cpu().numpy().astype(np.float32, copy=False)
                     pcm = (np.clip(samples, -1.0, 1.0) * 32767.0).astype("<i2", copy=False)
                     if pcm.size:
+                        if first_pcm_ms is None:
+                            first_pcm_ms = round((time.monotonic() - queued_at) * 1000)
+                        pcm_chunks += 1
                         yield pcm.tobytes()
             finally:
                 close = getattr(generator, "close", None)
                 if close:
-                    await asyncio.shield(loop.run_in_executor(SYNTHESIS_WORKER, close))
+                    close_future = loop.run_in_executor(worker, close)
+                    try:
+                        await asyncio.shield(close_future)
+                    except asyncio.CancelledError:
+                        # Keep this model reserved until its generator really
+                        # closes; an interrupted call must not race a new one.
+                        await close_future
+                        raise
+        finally:
+            AVAILABLE_MODELS.put_nowait(worker_index)
+            if "started_at" in locals():
+                LOGGER.info(
+                    "indus_tts_request_trace chars=%s workers=%s queue_ms=%s first_pcm_ms=%s "
+                    "synthesis_ms=%s total_ms=%s pcm_chunks=%s",
+                    len(request.input),
+                    WORKER_COUNT,
+                    round((started_at - queued_at) * 1000),
+                    first_pcm_ms,
+                    round((time.monotonic() - started_at) * 1000),
+                    round((time.monotonic() - queued_at) * 1000),
+                    pcm_chunks,
+                )
 
     if request.response_format == "wav":
         pcm = b"".join([chunk async for chunk in audio_chunks()])

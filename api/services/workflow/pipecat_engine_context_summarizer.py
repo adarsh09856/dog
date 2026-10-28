@@ -104,10 +104,26 @@ class ContextSummarizationManager:
                 return
 
             config = self._config
+            # Pipecat's generic selector keeps the last N *messages*. When
+            # the cut falls immediately before an assistant message, that
+            # leaves the answer without the user turn that prompted it. Keep
+            # one more message in that case so the retained suffix starts at
+            # the matching caller turn. The bound remains N or N+1 messages.
+            messages_to_keep = config.min_messages_after_summary
+            summary_start = len(messages) - messages_to_keep
+            if (
+                0 < summary_start < len(messages)
+                and isinstance(messages[summary_start], dict)
+                and messages[summary_start].get("role") == "assistant"
+                and isinstance(messages[summary_start - 1], dict)
+                and messages[summary_start - 1].get("role") == "user"
+            ):
+                messages_to_keep += 1
+
             request_frame = LLMContextSummaryRequestFrame(
                 request_id=f"node-transition-{current_node.id}",
                 context=context,
-                min_messages_to_keep=config.min_messages_after_summary,
+                min_messages_to_keep=messages_to_keep,
                 target_context_tokens=config.target_context_tokens,
                 summarization_prompt=config.summary_prompt,
                 summarization_timeout=config.summarization_timeout,

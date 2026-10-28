@@ -778,9 +778,12 @@ class BaseOutputTransport(FrameProcessor):
             self._bot_speaking = False
             self._tts_audio_received = False
 
-            # Any remaining leftover here (e.g. from an interruption) is
-            # discarded rather than flushed, since it's no longer wanted.
-            self._audio_buffer = bytearray()
+            # Do not clear `_audio_buffer` here. This notification can follow a
+            # natural output-queue timeout while TTS is still synthesizing the
+            # next phrase; dropping the partial tail makes speech lose its last
+            # samples before the next phrase arrives. Explicit interruptions
+            # clear stale audio in `handle_interruptions`, while TTS completion
+            # flushes the remaining bytes before queuing TTSStoppedFrame.
 
             logger.debug(
                 f"Bot{f' [{self._destination}]' if self._destination else ''} stopped speaking"

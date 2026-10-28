@@ -114,3 +114,15 @@ async def test_unknown_configuration_keeps_the_strict_rule():
     """Never accept a destination on the strength of a provider we can't see."""
     assert await requires_e164_destinations(1, 1, db=_DB(None)) is True
     assert await requires_e164_destinations(1, 1, db=_DB(_Row("gone"))) is True
+
+@pytest.mark.parametrize(
+    "header",
+    ["Phone Number", "phone-number", "mobile_number", "Mobile Number", "\ufeffphone_number"],
+)
+def test_common_phone_headers_normalize_to_campaign_phone_field(header):
+    result = CampaignSourceSyncService.validate_source_data(
+        [header, "name"], [["1001", "Ada"]], require_e164=False
+    )
+
+    assert result.is_valid
+    assert result.headers == ["phone_number", "name"]

@@ -942,13 +942,19 @@ class CatalogService:
                                     local_stt.append({
                                         "value": installed_model["id"],
                                         "label": (
-                                            "IndicConformer CTC INT8 + Moonshine English (installed languages)"
+                                            "IndicConformer + Moonshine English + Anuvani auto-detection"
+                                            if installed_model.get("supports_auto_detect") is True
+                                            and "en-IN" in installed_model.get("languages", [])
+                                            else "IndicConformer CTC INT8 + Moonshine English (installed languages)"
                                             if "en-IN" in installed_model.get("languages", [])
+                                            else "IndicConformer + Anuvani auto-detection"
+                                            if installed_model.get("supports_auto_detect") is True
                                             else "IndicConformer CTC INT8 (installed languages)"
                                         ),
                                         "provider": "indicconformer",
                                         "languages": installed_model.get("languages", []),
-                                        "supports_auto_detect": False,
+                                        "supports_auto_detect": installed_model.get("supports_auto_detect") is True,
+                                        "auto_detect_languages": installed_model.get("auto_detect_languages", []),
                                     })
             except (aiohttp.ClientError, TimeoutError):
                 pass

@@ -97,6 +97,13 @@ class RawAudioTrack(AudioStreamTrack):
         self._start = time.time()
         # Queue of (bytes, future), broken into 10ms sub chunks as needed
         self._chunk_queue = deque()
+        self._bot_speaking = False
+        self._underrun_frames = 0
+        self._underrun_streak = 0
+        self._max_underrun_streak = 0
+        self._speech_started_at = None
+        self._speech_end_pending = False
+        self._speech_summary = None
 
     def add_audio_bytes(self, audio_bytes: bytes):
         """Add audio bytes to the buffer for transmission.
@@ -112,6 +119,13 @@ class RawAudioTrack(AudioStreamTrack):
         """
         if len(audio_bytes) % self._bytes_per_10ms != 0:
             raise ValueError("Audio bytes must be a multiple of 10ms size.")
+        if not self._bot_speaking:
+            self._bot_speaking = True
+            self._underrun_frames = 0
+            self._underrun_streak = 0
+            self._max_underrun_streak = 0
+            self._speech_started_at = time.monotonic()
+        self._speech_end_pending = False
         future = asyncio.get_running_loop().create_future()
 
         # Break input into 10ms chunks
@@ -153,6 +167,12 @@ class RawAudioTrack(AudioStreamTrack):
         if not self._chunk_queue:
             if self._auto_silence:
                 chunk = bytes(self._bytes_per_10ms)
+                if self._bot_speaking:
+                    self._underrun_frames += 1
+                    self._underrun_streak += 1
+                    self._max_underrun_streak = max(
+                        self._max_underrun_streak, self._underrun_streak
+                    )
             else:
                 while not self._chunk_queue:
                     await asyncio.sleep(0.005)
@@ -161,8 +181,11 @@ class RawAudioTrack(AudioStreamTrack):
                     future.set_result(True)
         else:
             chunk, future = self._chunk_queue.popleft()
+            self._underrun_streak = 0
             if future and not future.done():
                 future.set_result(True)
+        if self._speech_end_pending and not self._chunk_queue:
+            self._finish_speech_metrics()
 
         # Convert the byte data to an ndarray of int16 samples
         samples = np.frombuffer(chunk, dtype=np.int16)
@@ -174,6 +197,32 @@ class RawAudioTrack(AudioStreamTrack):
         frame.time_base = fractions.Fraction(1, self._sample_rate)
         self._timestamp += self._samples_per_10ms
         return frame
+
+    def mark_speech_end(self):
+        """Finish metrics only after queued playback audio has drained."""
+        self._speech_end_pending = True
+        if not self._chunk_queue:
+            self._finish_speech_metrics()
+
+    def _finish_speech_metrics(self):
+        if not self._bot_speaking:
+            return
+        self._speech_summary = (
+            self._underrun_frames,
+            self._max_underrun_streak,
+            round((time.monotonic() - self._speech_started_at) * 1000)
+            if self._speech_started_at is not None else 0,
+        )
+        logger.info(
+            "WebRTC speech queue underruns: silence_frames={} max_consecutive_10ms={} speech_ms={}",
+            self._underrun_frames,
+            self._max_underrun_streak,
+            round((time.monotonic() - self._speech_started_at) * 1000)
+            if self._speech_started_at is not None else 0,
+        )
+        self._bot_speaking = False
+        self._speech_started_at = None
+        self._speech_end_pending = False
 
 
 class RawVideoTrack(VideoStreamTrack):
@@ -986,6 +1035,15 @@ class SmallWebRTCOutputTransport(BaseOutputTransport):
             True if the audio frame was written successfully, False otherwise.
         """
         return await self._client.write_audio_frame(frame)
+
+    async def cleanup(self):
+        await super().cleanup()
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        track = self._client._audio_output_track
+        await super().process_frame(frame, direction)
+        if isinstance(frame, TTSStoppedFrame) and track and direction == FrameDirection.DOWNSTREAM:
+            track.mark_speech_end()
 
     async def write_video_frame(self, frame: OutputImageRawFrame) -> bool:
         """Write a video frame to the WebRTC connection.

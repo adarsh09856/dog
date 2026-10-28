@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -792,10 +793,9 @@ async def execute_text_chat_pending_turn(
     )
 
     try:
+        await engine.initialize()
         await wait_for_pipeline_worker_started(task, timeout=5.0, run_task=runner_task)
         pipeline_ready_at = time.monotonic()
-
-        await engine.initialize()
 
         current_node_id = base_checkpoint.get("current_node_id")
         target_node_id = current_node_id or workflow_graph.start_node_id
@@ -836,12 +836,18 @@ async def execute_text_chat_pending_turn(
                 booking_contact_question,
                 caller_name_followup_reply,
                 caller_phone_fragment_reply,
+                confirmed_staged_booking_arguments,
                 known_contact,
                 remember_explicit_caller_name,
             )
             from api.services.workflow.direct_caller_reply import direct_caller_reply, has_live_lookup_tools
 
-            booking_arguments = confirmed_booking_arguments(pending_user_message)
+            from api.services.workflow.confirmed_booking import room_booking_active
+
+            booking_arguments = (
+                None if room_booking_active(context.get_messages())
+                else confirmed_booking_arguments(pending_user_message)
+            )
             active_tools = getattr(context.tools, "standard_tools", [])
             has_booking_tool = any(
                 getattr(tool, "name", None) == "book_appointment"
@@ -868,6 +874,10 @@ async def execute_text_chat_pending_turn(
             fast_booking_question = booking_contact_question(
                 context.get_messages(), conversation_contact, contact_state,
             ) if has_booking_tool else None
+            if not booking_arguments and has_booking_tool:
+                booking_arguments = confirmed_staged_booking_arguments(
+                    context.get_messages(), contact_state, conversation_contact
+                )
             if direct_reply:
                 engine._contact_conversation_state.pop("pending_phone", None)
                 response_window.outputs.append(direct_reply)
@@ -958,9 +968,21 @@ async def execute_text_chat_pending_turn(
         assistant_text = "\n\n".join(capture_processor.completed_llm_text).strip() or None
     from api.services.configuration.language_normalizer import resolve_agent_speech_language
 
+    guard_language = resolve_agent_speech_language(user_config)
+    if guard_language not in {"hi", "en"}:
+        reply_choice = (getattr(engine, "_contact_conversation_state", None) or {}).get("reply_language")
+        if reply_choice == "Hindi":
+            guard_language = "hi"
+        elif reply_choice == "English":
+            guard_language = "en"
+        elif isinstance(pending_user_message, str):
+            if re.search(r"[\u0900-\u097f]", pending_user_message):
+                guard_language = "hi"
+            elif re.search(r"[A-Za-z]", pending_user_message):
+                guard_language = "en"
     verified_reply = guard_booking_reply(
         assistant_text, capture_processor.events,
-        language=resolve_agent_speech_language(user_config),
+        language=guard_language,
     )
     if verified_reply != assistant_text:
         logger.info(

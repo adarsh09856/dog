@@ -179,6 +179,18 @@ class TestBaseOutputTransportInterruptions(unittest.IsolatedAsyncioTestCase):
         finally:
             await transport.cancel(CancelFrame())
 
+    async def test_interruption_discards_partial_audio_buffer(self):
+        transport = await self._make_transport(mixer=None)
+        try:
+            sender = transport._media_senders[None]
+            sender._audio_buffer.extend(b"\x01\x02" * 10)
+
+            await transport.process_frame(InterruptionFrame(), FrameDirection.DOWNSTREAM)
+
+            self.assertEqual(sender._audio_buffer, bytearray())
+        finally:
+            await transport.cancel(CancelFrame())
+
     async def test_interruption_with_mixer_still_discards_queued_bot_audio(self):
         transport = await self._make_transport(mixer=_PassthroughMixer())
         try:
@@ -329,6 +341,20 @@ class TestBaseOutputTransportAudioBuffering(unittest.IsolatedAsyncioTestCase):
             pushed_types = [call.args[0].__class__ for call in transport.push_frame.call_args_list]
             self.assertIn(BotStartedSpeakingFrame, pushed_types)
             self.assertIn(BotStoppedSpeakingFrame, pushed_types)
+        finally:
+            await transport.cancel(CancelFrame())
+
+    async def test_natural_speaking_stop_preserves_partial_audio_buffer(self):
+        transport = await _make_transport(mixer=None)
+        try:
+            sender = transport._media_senders[None]
+            partial_audio = b"\x01\x02" * 10
+            sender._audio_buffer.extend(partial_audio)
+            sender._bot_speaking = True
+
+            await sender._bot_stopped_speaking()
+
+            self.assertEqual(sender._audio_buffer, bytearray(partial_audio))
         finally:
             await transport.cancel(CancelFrame())
 
