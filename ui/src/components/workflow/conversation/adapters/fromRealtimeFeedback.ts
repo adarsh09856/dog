@@ -46,6 +46,7 @@ function liveFeedbackItem(message: RealtimeFeedbackMessage, reasoningDurationMs?
             role: "assistant",
             text: message.text,
             final: message.final,
+            audioStatus: message.audioStatus,
             reasoningDurationMs,
         };
     }

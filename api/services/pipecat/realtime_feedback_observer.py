@@ -21,6 +21,9 @@ node changes.
 """
 
 import json
+import os
+import time
+import numpy as np
 from typing import TYPE_CHECKING, Awaitable, Callable, Optional
 
 from loguru import logger
@@ -59,16 +62,21 @@ from pipecat.frames.frames import (
     FunctionCallResultFrame,
     InterimTranscriptionFrame,
     InterruptionFrame,
+    LLMFullResponseStartFrame,
     LLMTextFrame,
     MetricsFrame,
+    OutputAudioRawFrame,
     StopFrame,
     TranscriptionFrame,
+    TTSAudioRawFrame,
+    TTSStartedFrame,
+    TTSStoppedFrame,
     TTSSpeakFrame,
     TTSTextFrame,
     UserMuteStartedFrame,
     UserMuteStoppedFrame,
 )
-from pipecat.metrics.metrics import TTFBMetricsData
+from pipecat.metrics.metrics import TTFATMetricsData, TTFBMetricsData
 from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.transports.base_output import BaseOutputTransport
@@ -98,6 +106,9 @@ class RealtimeFeedbackObserver(BaseObserver):
         logs_buffer: Optional["InMemoryLogsBuffer"] = None,
         selected_visit: Callable[[], str | None] | None = None,
         call_event_recorder: "CallEventRecorder | None" = None,
+        workflow_id: int | None = None,
+        workflow_run_id: int | None = None,
+        phone_pending: Callable[[], bool] | None = None,
     ):
         """
         Args:
@@ -111,8 +122,173 @@ class RealtimeFeedbackObserver(BaseObserver):
         self._logs_buffer = logs_buffer
         self._selected_visit = selected_visit
         self._call_event_recorder = call_event_recorder
+        self._workflow_id = workflow_id
+        self._workflow_run_id = workflow_run_id
+        self._phone_pending = phone_pending
+        self._trace_turn = 0
+        self._trace_turn_active = False
+        self._tts_audio_contexts: dict[str, dict[str, float | int | None]] = {}
+        self._output_audio_trace = self._empty_output_audio_trace()
         self._frames_seen: set[int] = set()
         self._preview_frames_seen: set[int] = set()
+        self._stage_text_seen = False
+        self._stage_audio_seen = False
+
+    @staticmethod
+    def _empty_output_audio_trace() -> dict[str, float | int | None]:
+        return {
+            "started_at": None,
+            "first_frame_at": None,
+            "first_speech_at": None,
+            "pending_silence_ms": 0.0,
+            "max_internal_silence_ms": 0.0,
+            "last_frame_at": None,
+            "frames": 0,
+            "bytes": 0,
+            "duration_ms": 0.0,
+            "max_gap_ms": 0.0,
+            "gaps_over_750ms": 0,
+        }
+
+    def _observe_voice_audio(self, data: FramePushed) -> None:
+        """Log numeric server-side audio timing when external event export is off."""
+        frame = data.frame
+        now = time.monotonic()
+        if isinstance(frame, TranscriptionFrame):
+            self._trace_turn += 1
+            self._trace_turn_active = True
+            self._output_audio_trace = self._empty_output_audio_trace()
+            self._output_audio_trace["started_at"] = now
+            return
+
+        if isinstance(frame, TTSStartedFrame):
+            context_id = str(getattr(frame, "context_id", None) or frame.id)
+            self._tts_audio_contexts[context_id] = {
+                "started_at": now,
+                "first_audio_at": None,
+                "last_audio_at": None,
+                "frames": 0,
+                "bytes": 0,
+                "duration_ms": 0.0,
+                "max_gap_ms": 0.0,
+                "gaps_over_750ms": 0,
+            }
+            return
+
+        if isinstance(frame, OutputAudioRawFrame) and isinstance(
+            data.source, BaseOutputTransport
+        ):
+            if not self._trace_turn_active:
+                return
+            stats = self._output_audio_trace
+            if stats["started_at"] is None:
+                stats["started_at"] = now
+            if stats["first_frame_at"] is None:
+                stats["first_frame_at"] = now
+            if stats["last_frame_at"] is not None:
+                gap_ms = (now - float(stats["last_frame_at"])) * 1000.0
+                stats["max_gap_ms"] = max(float(stats["max_gap_ms"]), gap_ms)
+                if gap_ms >= 750.0:
+                    stats["gaps_over_750ms"] = int(stats["gaps_over_750ms"]) + 1
+            stats["last_frame_at"] = now
+            audio = getattr(frame, "audio", b"") or b""
+            sample_rate = int(getattr(frame, "sample_rate", 0) or 0)
+            channels = int(getattr(frame, "num_channels", 1) or 1)
+            stats["frames"] = int(stats["frames"]) + 1
+            stats["bytes"] = int(stats["bytes"]) + len(audio)
+            if sample_rate > 0 and channels > 0:
+                duration_ms = len(audio) / (sample_rate * channels * 2) * 1000.0
+                stats["duration_ms"] = float(stats["duration_ms"]) + duration_ms
+                samples = np.frombuffer(audio[:len(audio) // 2 * 2], dtype="<i2")
+                speech = bool(samples.size) and float(
+                    np.sqrt(np.mean(samples.astype(np.float32) ** 2))
+                ) > 80.0
+                if speech:
+                    if stats["first_speech_at"] is None:
+                        stats["first_speech_at"] = now
+                    else:
+                        stats["max_internal_silence_ms"] = max(
+                            float(stats["max_internal_silence_ms"]),
+                            float(stats["pending_silence_ms"]),
+                        )
+                    stats["pending_silence_ms"] = 0.0
+                elif stats["first_speech_at"] is not None:
+                    stats["pending_silence_ms"] = float(stats["pending_silence_ms"]) + duration_ms
+            return
+
+        if isinstance(frame, TTSAudioRawFrame):
+            context_id = str(getattr(frame, "context_id", None) or "")
+            stats = self._tts_audio_contexts.get(context_id)
+            audio = getattr(frame, "audio", b"") or b""
+            if stats is None or not audio:
+                return
+            if stats["first_audio_at"] is None:
+                stats["first_audio_at"] = now
+            if stats["last_audio_at"] is not None:
+                gap_ms = (now - float(stats["last_audio_at"])) * 1000.0
+                stats["max_gap_ms"] = max(float(stats["max_gap_ms"]), gap_ms)
+                if gap_ms >= 750.0:
+                    stats["gaps_over_750ms"] = int(stats["gaps_over_750ms"]) + 1
+            stats["last_audio_at"] = now
+            sample_rate = int(getattr(frame, "sample_rate", 0) or 0)
+            channels = int(getattr(frame, "num_channels", 1) or 1)
+            stats["frames"] = int(stats["frames"]) + 1
+            stats["bytes"] = int(stats["bytes"]) + len(audio)
+            if sample_rate > 0 and channels > 0:
+                stats["duration_ms"] = float(stats["duration_ms"]) + (
+                    len(audio) / (sample_rate * channels * 2) * 1000.0
+                )
+            return
+
+        if isinstance(frame, TTSStoppedFrame):
+            context_id = str(getattr(frame, "context_id", None) or "")
+            stats = self._tts_audio_contexts.pop(context_id, None)
+            if stats is None:
+                return
+            started_at = float(stats["started_at"])
+            first_audio_at = stats["first_audio_at"]
+            logger.info(
+                "voice_tts_trace run={} workflow={} turn={} context={} first_pcm_ms={} wall_ms={} pcm_frames={} pcm_bytes={} audio_ms={} max_pcm_gap_ms={} gaps_over_750ms={} no_audio={}",
+                self._workflow_run_id,
+                self._workflow_id,
+                self._trace_turn,
+                context_id,
+                round((float(first_audio_at) - started_at) * 1000.0, 1)
+                if first_audio_at is not None else None,
+                round((now - started_at) * 1000.0, 1),
+                stats["frames"],
+                stats["bytes"],
+                round(float(stats["duration_ms"]), 1),
+                round(float(stats["max_gap_ms"]), 1),
+                stats["gaps_over_750ms"],
+                stats["frames"] == 0,
+            )
+            return
+
+        if isinstance(frame, BotStoppedSpeakingFrame) and isinstance(
+            data.source, BaseOutputTransport
+        ) and self._trace_turn_active:
+            stats = self._output_audio_trace
+            started_at = float(stats["started_at"] or now)
+            first_frame_at = stats["first_frame_at"]
+            first_speech_at = stats["first_speech_at"]
+            logger.info(
+                "voice_output_trace run={} workflow={} turn={} first_frame_ms={} wall_ms={} frames={} bytes={} audio_ms={} max_gap_ms={} gaps_over_750ms={} first_speech_frame_ms={} max_internal_silence_ms={}",
+                self._workflow_run_id,
+                self._workflow_id,
+                self._trace_turn,
+                round((float(first_frame_at) - started_at) * 1000.0, 1)
+                if first_frame_at is not None else None,
+                round((now - started_at) * 1000.0, 1),
+                stats["frames"],
+                stats["bytes"],
+                round(float(stats["duration_ms"]), 1),
+                round(float(stats["max_gap_ms"]), 1),
+                stats["gaps_over_750ms"],
+                round((float(first_speech_at) - started_at) * 1000.0, 1)
+                if first_speech_at is not None else None,
+                round(float(stats["max_internal_silence_ms"]), 1),
+            )
 
     async def log_speech(self, text: str):
         """Persist speech that is intentionally excluded from assistant context."""
@@ -192,6 +368,41 @@ class RealtimeFeedbackObserver(BaseObserver):
 
         self._frames_seen.add(frame.id)
 
+        if self._call_event_recorder is None:
+            self._observe_voice_audio(data)
+
+        # Keep basic stage evidence in the normal run log even when the
+        # organization has no optional external diagnostics destination.
+        stage = None
+        if isinstance(frame, TranscriptionFrame) and frame.text.strip():
+            stage = "stt_final"
+            self._stage_text_seen = False
+            self._stage_audio_seen = False
+        elif isinstance(frame, LLMFullResponseStartFrame):
+            self._stage_text_seen = False
+        elif isinstance(frame, LLMTextFrame) and frame.text.strip() and not self._stage_text_seen:
+            self._stage_text_seen = True
+            stage = "llm_first_text"
+        elif isinstance(frame, TTSAudioRawFrame) and frame.audio and not self._stage_audio_seen:
+            self._stage_audio_seen = True
+            stage = "tts_first_audio"
+        if stage:
+            try:
+                host_load_1m = round(os.getloadavg()[0], 2)
+            except (AttributeError, OSError):
+                host_load_1m = None
+            logger.info(
+                "voice_stage_trace run={} workflow={} stage={} host_load_1m={}",
+                self._workflow_run_id,
+                self._workflow_id,
+                stage,
+                host_load_1m,
+            )
+            await self._append_to_buffer({
+                "type": "rtf-speech-stage",
+                "payload": {"stage": stage, "monotonic_seconds": time.monotonic()},
+            })
+
         logger.trace(f"{self} Received Frame: {frame} Direction: {frame_direction}")
 
         if isinstance(frame, (EndFrame, CancelFrame, StopFrame, InterruptionFrame)):
@@ -227,9 +438,14 @@ class RealtimeFeedbackObserver(BaseObserver):
         # Handle user transcriptions (final) - WebSocket only
         # Complete turn text is persisted via register_turn_handlers
         elif isinstance(frame, TranscriptionFrame):
+            from api.services.pipecat.phone_transcript_display import phone_transcript_display
+
             await self._send_ws(
                 build_user_transcription_event(
-                    text=frame.text,
+                    text=phone_transcript_display(
+                        frame.text,
+                        awaiting_phone=bool(self._phone_pending and self._phone_pending()),
+                    ),
                     final=True,
                     user_id=frame.user_id,
                     timestamp=frame.timestamp,
@@ -247,7 +463,10 @@ class RealtimeFeedbackObserver(BaseObserver):
         # except for frames explicitly flagged persist_to_logs (e.g. recording
         # transcripts from play_audio) which bypass the aggregator path.
         elif isinstance(frame, TTSTextFrame):
-            message = build_bot_text_event(text=frame.text)
+            # TTS chunks may retain a trailing separator for the next synthesis
+            # request. UI transcript events join chunks with one space, so keep
+            # the synthesis frame untouched and trim only this display payload.
+            message = build_bot_text_event(text=frame.text.rstrip())
 
             if getattr(frame, "persist_to_logs", False):
                 await self._send_message(message)
@@ -282,8 +501,26 @@ class RealtimeFeedbackObserver(BaseObserver):
         # measurement is worse than a missing one.
         elif isinstance(frame, MetricsFrame):
             for metric_data in frame.data:
-                if isinstance(metric_data, TTFBMetricsData):
+                if isinstance(metric_data, TTFATMetricsData):
+                    if ttfb_kind(metric_data.processor) == "llm":
+                        # Text LLMs may send a role/reasoning header before any
+                        # answer. The UI's "first token" must measure the answer,
+                        # while retaining first-byte timing for diagnostics.
+                        event = build_ttfb_metric_event(
+                            ttfb_seconds=metric_data.ttfat,
+                            processor=metric_data.processor,
+                            model=metric_data.model,
+                            kind="llm",
+                        )
+                        event["payload"].update(
+                            measurement="first_answer_token",
+                            first_byte_seconds=metric_data.ttfb,
+                        )
+                        await self._send_message(event)
+                elif isinstance(metric_data, TTFBMetricsData):
                     kind = ttfb_kind(metric_data.processor)
+                    if kind == "llm" and getattr(data.source, "reports_ttfat", False):
+                        continue
                     if kind:
                         await self._send_message(
                             build_ttfb_metric_event(

@@ -8,6 +8,7 @@ interface MessageBubbleProps {
     role: "user" | "assistant";
     text: string;
     final?: boolean;
+    audioStatus?: "unconfirmed" | "partial";
     tone?: "default" | "muted";
     reasoningDurationMs?: number;
     responseLatencyMs?: number;
@@ -18,6 +19,7 @@ export function MessageBubble({
     role,
     text,
     final = true,
+    audioStatus,
     tone = "default",
     reasoningDurationMs,
     responseLatencyMs,
@@ -56,6 +58,11 @@ export function MessageBubble({
                             )}
                         >
                             speaking...
+                        </div>
+                    ) : null}
+                    {!isUser && final && audioStatus ? (
+                        <div className="mt-1 text-[10px] italic text-muted-foreground">
+                            {audioStatus === "unconfirmed" ? "Audio not confirmed" : "Audio partly confirmed"}
                         </div>
                     ) : null}
                 </div>

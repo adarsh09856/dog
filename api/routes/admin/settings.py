@@ -621,7 +621,7 @@ async def test_indic_stt(payload: Optional[Dict[str, Any]] = None, _user=Depends
     payload = payload or {}
     language = str(payload.get("language") or "").strip().lower().replace("_", "-").split("-", 1)[0]
     if language not in INDIC_STT_LANGUAGE_CODES:
-        raise HTTPException(status_code=400, detail="Choose one of the 22 supported IndicConformer languages")
+        raise HTTPException(status_code=400, detail="Choose an installed IndicConformer or English STT language")
     try:
         audio = decode_test_audio(payload.get("audio_base64"))
     except ValueError as exc:

@@ -205,7 +205,8 @@ def _resolve_turn_start_min_words(run_configs: dict) -> int:
 
 
 def _create_non_realtime_user_turn_start_strategies(
-    run_configs: dict, *, uses_external_turns: bool
+    run_configs: dict, *, uses_external_turns: bool,
+    local_segmented_stt: bool = False,
 ):
     """Return user turn start strategies for non-realtime pipelines."""
 
@@ -229,11 +230,18 @@ def _create_non_realtime_user_turn_start_strategies(
             )
         ]
 
+    if local_segmented_stt:
+        # This HTTP recognizer receives VAD-cut segments and may still be
+        # decoding one when a new raw VAD start fires. Interrupting on that
+        # raw start repeatedly cancels TTS before any usable transcript is
+        # ready. A final transcript remains a valid barge-in signal.
+        return [TranscriptionUserTurnStartStrategy(use_interim=False)]
     return [TranscriptionUserTurnStartStrategy(), VADUserTurnStartStrategy()]
 
 
 def _create_non_realtime_user_turn_stop_strategies(
-    run_configs: dict, *, uses_external_turns: bool
+    run_configs: dict, *, uses_external_turns: bool, phone_pending=None,
+    local_segmented_stt: bool = False,
 ):
     """Return user turn stop strategies for non-realtime pipelines."""
 
@@ -252,6 +260,15 @@ def _create_non_realtime_user_turn_stop_strategies(
             )
         ]
 
+    if phone_pending is not None:
+        from api.services.pipecat.contact_turn_stop import ContactAwareTurnStopStrategy
+
+        # Local segmented STT has already waited for VAD and drained its
+        # recognition queue before emitting a final transcript. Avoid another
+        # 600 ms fallback pause for ordinary speech; the contact-aware strategy
+        # retains its longer pause while a phone number is being dictated.
+        kwargs = {"user_speech_timeout": 0.2} if local_segmented_stt else {}
+        return [ContactAwareTurnStopStrategy(phone_pending=phone_pending, **kwargs)]
     return [SpeechTimeoutUserTurnStopStrategy()]
 
 
@@ -785,6 +802,8 @@ async def _run_pipeline_impl(
         # request, without adding diagnostic text to transcript history.
         if llm is not None and stt is not None:
             llm._caller_language_source = stt
+        if tts is not None and stt is not None:
+            tts._caller_language_source = stt
         inference_llm = None
 
     # Variable and disposition extraction may share this out-of-band LLM. A
@@ -990,10 +1009,9 @@ async def _run_pipeline_impl(
         get_parent_context=engine._get_otel_context,
     )
     user_mute_strategies = _create_user_mute_strategies(engine, answer_supervisor)
-    # Segmented local Whisper needs the full phrase for reliable language
-    # detection. A 200 ms pause splits ordinary Hinglish speech into tiny
-    # clips; the resulting fragments can be empty or misdetected. Preserve an
-    # explicit workflow override and keep the faster default for streaming STT.
+    # Segmented local STT needs a whole phrase for language detection and
+    # spoken numbers. Use longer endpointing only while collecting a phone
+    # number; ordinary turns keep the low-latency 200 ms default.
     local_segmented_stt = (
         not is_realtime
         and getattr(user_config.stt, "provider", None) in {
@@ -1009,8 +1027,19 @@ async def _run_pipeline_impl(
             None,
         }
     )
-    vad_stop_s = float(run_configs.get("vad_stop_secs", 0.5 if local_segmented_stt else 0.2))
-    user_vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=vad_stop_s))
+    vad_stop_s = float(run_configs.get("vad_stop_secs", 0.2))
+    vad_params = VADParams(stop_secs=vad_stop_s)
+    if local_segmented_stt and "vad_stop_secs" not in run_configs:
+        from api.services.pipecat.contact_vad import ContactAwareSileroVADAnalyzer
+
+        user_vad_analyzer = ContactAwareSileroVADAnalyzer(
+            params=vad_params,
+            phone_pending=lambda: bool(
+                getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+            ),
+        )
+    else:
+        user_vad_analyzer = SileroVADAnalyzer(params=vad_params)
 
     # Configure turn strategies based on STT provider, model, and workflow configuration
     if is_realtime:
@@ -1028,6 +1057,7 @@ async def _run_pipeline_impl(
         user_turn_start_strategies = _create_non_realtime_user_turn_start_strategies(
             run_configs,
             uses_external_turns=uses_external_turns,
+            local_segmented_stt=local_segmented_stt,
         )
         turn_start_strategy = run_configs.get(
             "turn_start_strategy", DEFAULT_TURN_START_STRATEGY
@@ -1044,6 +1074,10 @@ async def _run_pipeline_impl(
         user_turn_stop_strategies = _create_non_realtime_user_turn_stop_strategies(
             run_configs,
             uses_external_turns=uses_external_turns,
+            local_segmented_stt=local_segmented_stt,
+            phone_pending=lambda: bool(
+                getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+            ),
         )
         user_turn_strategies = UserTurnStrategies(
             start=user_turn_start_strategies,
@@ -1237,6 +1271,11 @@ async def _run_pipeline_impl(
         ws_sender=ws_sender,
         logs_buffer=in_memory_logs_buffer,
         selected_visit=lambda: engine.selected_visit_id,
+        workflow_id=workflow_id,
+        workflow_run_id=workflow_run_id,
+        phone_pending=lambda: bool(
+            getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+        ),
         call_event_recorder=call_events_session.recorder
         if call_events_session
         else None,
@@ -1267,6 +1306,7 @@ async def _run_pipeline_impl(
             on_agent_error=engine.handle_agent_error,
             use_draft=bool(workflow_run.extra.get("use_draft")),
             observers=[feedback_observer],
+            caller_language_source=stt,
         )
         engine.set_agent_factory(agent_factory)
         # The agent this call starts on. Its services were resolved above from

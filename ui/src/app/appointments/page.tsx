@@ -48,6 +48,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Appointment, appointmentsApi } from "@/lib/kodewavesApi";
+import { SavedContactSelector } from "@/components/SavedContactSelector";
 
 export default function AppointmentsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -272,6 +273,18 @@ export default function AppointmentsPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {!editingAppt?.id && <SavedContactSelector
+              value={editingAppt?.contact_id}
+              onSelect={(contact) => setEditingAppt(previous => previous ? {
+                ...previous,
+                contact_id: contact?.id ?? null,
+                ...(contact ? {
+                  customer_name: [contact.first_name, contact.last_name].filter(Boolean).join(" "),
+                  customer_phone: contact.phone,
+                  customer_email: contact.email ?? "",
+                } : {}),
+              } : null)}
+            />}
             <div className="space-y-1">
               <Label className="text-xs">Meeting Title</Label>
               <Input

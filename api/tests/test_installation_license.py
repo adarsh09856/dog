@@ -707,9 +707,6 @@ def test_openapi_data_routes_are_feature_mapped_or_explicitly_core():
         # Identity and tenant context are required by every licensed workspace.
         "/user/auth/user",
         "/organizations/context",
-        # The single-host API/UI deployment proxy is license-gated but is not
-        # itself a product feature endpoint.
-        "/api/{path}",
     }
     public_control_paths = {
         "/",
@@ -725,7 +722,9 @@ def test_openapi_data_routes_are_feature_mapped_or_explicitly_core():
         "/redoc",
     }
     unclassified = []
-    for path in app.openapi()["paths"]:
+    schema_paths = app.openapi()["paths"]
+    assert "/api/{path}" not in schema_paths
+    for path in schema_paths:
         normalized = path.removeprefix("/api/v1") or "/"
         if (
             is_owner_control_path(normalized)

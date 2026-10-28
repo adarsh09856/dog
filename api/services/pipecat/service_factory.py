@@ -569,15 +569,14 @@ def create_stt_service(
             endpoint = endpoint.rstrip("/")
             stt_v1 = endpoint if endpoint.endswith("/v1") else f"{endpoint}/v1"
             stt_language = str(language or "multi").lower().replace("_", "-").split("-", 1)[0]
-            if stt_language in ("multi", "auto", "default", "unknown"):
-                raise ValueError("IndicConformer needs one explicit installed language; automatic detection is not supported.")
+            auto_detect = stt_language in ("multi", "auto", "default", "unknown")
             return SpeachesSTTService(
                 base_url=stt_v1,
                 api_key="local-cpu-token",
                 settings=SpeachesSTTSettings(
                     model=stt_model,
-                    language=stt_language,
-                    prompt=_speaches_transcription_prompt(language, keyterms),
+                    language=None if auto_detect else stt_language,
+                    prompt=None if auto_detect else _speaches_transcription_prompt(language, keyterms),
                     temperature=0.0,
                 ),
                 sample_rate=audio_config.transport_in_sample_rate,
@@ -1061,6 +1060,7 @@ def create_tts_service(
                 api_key="local",
                 base_url=speaches_url.rstrip("/"),
                 sample_rate=24000,
+                speech_language=getattr(user_config.tts, "language", None),
                 settings=SpeachesTTSSettings(
                     model=selected_model,
                     voice=user_config.tts.voice,

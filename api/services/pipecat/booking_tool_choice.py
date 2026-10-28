@@ -1,12 +1,13 @@
 """Require the calendar action when a caller explicitly confirms a booking."""
 
 import re
+import time
 from loguru import logger
-from openai import AsyncOpenAI, DefaultAsyncHttpxClient
-from pipecat.frames.frames import LLMFullResponseEndFrame, LLMFullResponseStartFrame
+from openai import APIError, AsyncOpenAI, DefaultAsyncHttpxClient
 
 from pipecat.services.kodewaves.llm import KodewavesLLMService
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.utils.run_context import get_current_run_id
 
 _CONFIRMATION = re.compile(r"\b(confirm(?:ed)?|save|proceed|book it)\b|पुष्टि|पक्क[ाी]|सेव", re.IGNORECASE)
 _BOOKING = re.compile(r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", re.IGNORECASE)
@@ -15,9 +16,27 @@ _OPENING_GREETING = re.compile(
     r"^\s*(?:नमस्ते|नमस्कार|सुप्रभात|शुभ संध्या|namaste|hello|hi|good morning|good afternoon|good evening)",
     re.IGNORECASE,
 )
-_END_CALL_TOOLS = frozenset(
-    {"finish_call", "end_call", "close_conversation", "hang_up"}
+_OPENING_WORDS = (
+    "नमस्ते", "नमस्कार", "सुप्रभात", "शुभ संध्या", "namaste", "hello",
+    "hi", "good morning", "good afternoon", "good evening",
 )
+_GREETING_SEPARATORS = " \t\r\n!,.:;?।॥،؛"
+from api.services.workflow.direct_caller_reply import END_CALL_TOOL_NAMES as _END_CALL_TOOLS
+_LOCAL_CALLER_RESPONSE_GUARD = (
+    "Use a warm, constructive tone. Acknowledge what the caller has already told you, "
+    "then move the task forward with one clear next step. Avoid generic disclaimers "
+    "such as 'not verified' or 'not confirmed'; if an action fails, say briefly what "
+    "can happen next. Never claim a booking or other action succeeded unless its tool "
+    "returns success. Answer the latest caller message directly. Do not repeat the caller's words or "
+    "an earlier reply. Never invent service names. Remember their name and contact "
+    "details from the conversation; ask only for details that are missing or corrected. "
+    "For a booking, carry forward every date, service, and time the caller already "
+    "gave. Ask only for the next missing detail. If a date is ambiguous, ask one "
+    "short clarification about that date; do not restart the booking questions or "
+    "guess a year or time. After the date is clear, ask only for the time."
+)
+
+
 _EXPLICIT_END_REQUEST = re.compile(
     r"\b(?:goodbye|bye(?:\s+bye)?|hang\s*up|end\s+(?:the\s+)?call|disconnect|"
     r"that's\s+all|that\s+is\s+all|i(?:'m| am)\s+done|we(?:'re| are)\s+done)\b"
@@ -48,6 +67,30 @@ def _message_text(message: dict) -> str:
     if isinstance(content, list):
         return " ".join(part.get("text", "") for part in content if isinstance(part, dict))
     return ""
+
+
+_ROMAN_HINDI_WORDS = frozenset({
+    "aap", "aapka", "aapki", "apna", "apni", "batao", "bataiye", "hai",
+    "hain", "hume", "kal", "karna", "karni", "kya", "main", "mera",
+    "meri", "mujhe", "nahi", "nahin", "tha", "thi",
+})
+_ENGLISH_WORDS = frozenset({
+    "can", "could", "don't", "how", "i", "is", "my", "need", "please",
+    "should", "the", "want", "we", "what", "when", "where", "why", "would",
+    "you",
+})
+
+
+def _clearly_english_caller_text(text: str) -> bool:
+    """Avoid imposing English on Indic script or Romanized Hindi turns."""
+    if any(char.isalpha() and not char.isascii() for char in text):
+        return False
+    words = [word.casefold() for word in re.findall(r"[A-Za-z]+(?:'[A-Za-z]+)?", text)]
+    return (
+        len(words) >= 3
+        and not any(word in _ROMAN_HINDI_WORDS for word in words)
+        and any(word in _ENGLISH_WORDS for word in words)
+    )
 
 
 def _without_hidden_transition_guidance(content: str, hidden: set[str]) -> str:
@@ -113,6 +156,165 @@ def booking_tool_choice(params: dict) -> dict | None:
 
 
 class _BookingToolChoiceMixin:
+    async def get_chat_completions(self, context):
+        """Trace model first-output versus generation time without caller text."""
+        started = time.perf_counter()
+        stream = await super().get_chat_completions(context)
+        headers_ms = (time.perf_counter() - started) * 1000
+
+        async def traced_stream():
+            first_event_ms = None
+            first_output_ms = None
+            chunks = 0
+            prompt_tokens = None
+            cached_prompt_tokens = None
+            completion_tokens = None
+            finish_reason = None
+            complete = False
+            messages = []
+            try:
+                messages = context.get_messages() or []
+            except (AttributeError, TypeError):
+                pass
+            message_chars = sum(
+                len(message.get("content", ""))
+                for message in messages
+                if isinstance(message, dict)
+                and isinstance(message.get("content"), str)
+            )
+            system_prompt = getattr(
+                getattr(self, "_settings", None), "system_instruction", None
+            )
+            system_chars = len(system_prompt) if isinstance(system_prompt, str) else 0
+            tools = getattr(context, "tools", None)
+            tool_count = len(getattr(tools, "standard_tools", []) or [])
+            try:
+                async for chunk in stream:
+                    now = time.perf_counter()
+                    chunks += 1
+                    if first_event_ms is None:
+                        first_event_ms = (now - started) * 1000
+                    usage = getattr(chunk, "usage", None)
+                    if usage is not None:
+                        prompt_tokens = getattr(usage, "prompt_tokens", prompt_tokens)
+                        prompt_details = getattr(usage, "prompt_tokens_details", None)
+                        if isinstance(prompt_details, dict):
+                            cached_prompt_tokens = prompt_details.get(
+                                "cached_tokens", cached_prompt_tokens
+                            )
+                        elif prompt_details is not None:
+                            cached_prompt_tokens = getattr(
+                                prompt_details, "cached_tokens", cached_prompt_tokens
+                            )
+                        completion_tokens = getattr(
+                            usage, "completion_tokens", completion_tokens
+                        )
+                    choices = getattr(chunk, "choices", None) or []
+                    if choices:
+                        choice = choices[0]
+                        delta = getattr(choice, "delta", None)
+                        content = getattr(delta, "content", None) if delta else None
+                        tool_calls = getattr(delta, "tool_calls", None) if delta else None
+                        if first_output_ms is None and (content or tool_calls):
+                            first_output_ms = (now - started) * 1000
+                        finish_reason = getattr(choice, "finish_reason", None) or finish_reason
+                    yield chunk
+                complete = True
+            finally:
+                logger.info(
+                    "llm_stream_trace run={} model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} total_ms={} chunks={} prompt_tokens={} cached_prompt_tokens={} completion_tokens={} history_messages={} history_chars={} system_chars={} tools={} finish_reason={} complete={}",
+                    get_current_run_id(),
+                    getattr(getattr(self, "_settings", None), "model", None),
+                    getattr(self, "_usage_context", None) or "conversation_or_shared_inference",
+                    round(headers_ms, 1),
+                    round(first_event_ms, 1) if first_event_ms is not None else None,
+                    round(first_output_ms, 1) if first_output_ms is not None else None,
+                    round((time.perf_counter() - started) * 1000, 1),
+                    chunks,
+                    prompt_tokens,
+                    cached_prompt_tokens,
+                    completion_tokens,
+                    len(messages),
+                    message_chars,
+                    system_chars,
+                    tool_count,
+                    finish_reason,
+                    complete,
+                )
+                close = getattr(stream, "close", None)
+                if callable(close):
+                    await close()
+
+        return traced_stream()
+
+    async def _emit_direct_reply(self, text: str):
+        # OpenAI's process_frame owns the response start/end pair. Nested
+        # boundaries here leave aggregators waiting for an extra completion
+        # and can close a TTS context before the parent response finishes.
+        await self.start_ttfb_metrics()
+        await self.stop_ttfb_metrics()
+        await self._push_llm_text(text)
+
+    def can_speculate_caller_turn(self, text: str) -> bool:
+        """Keep confirmed-only contact/settings handling out of speculation."""
+        from api.services.pipecat.caller_language_context import standalone_language_request
+        from api.services.workflow.contact_context import (
+            caller_name_followup_reply,
+            caller_phone_fragment_reply,
+        )
+        from api.services.workflow.direct_caller_reply import direct_caller_reply
+
+        state = dict(getattr(self, "_contact_conversation_state", {}))
+        if standalone_language_request(text) or state.get("awaiting_phone"):
+            return False
+        if direct_caller_reply(text, has_lookup_tools=False):
+            return False
+        provider = getattr(self, "_contact_context_messages_provider", None)
+        messages = list(provider()) if callable(provider) else []
+        messages.append({"role": "user", "content": text})
+        if caller_phone_fragment_reply(messages, state) is not None:
+            return False
+        return caller_name_followup_reply(messages, state) is None
+
+    async def _run_or_defer_function_calls(self, function_calls, *, text_generated):
+        # A tool-only completion is valid silence while its registered handler
+        # runs. Distinguish it from a successful but empty model response.
+        if function_calls:
+            self._completion_has_tool_calls = True
+        return await super()._run_or_defer_function_calls(
+            function_calls, text_generated=text_generated,
+        )
+
+    async def _push_llm_text(self, text: str):
+        if getattr(self, "_strip_repeated_greeting", False) and not getattr(
+            self, "_opening_text_decided", False
+        ):
+            self._opening_text_buffer = getattr(self, "_opening_text_buffer", "") + text
+            buffered = self._opening_text_buffer
+            candidate = buffered.lstrip().casefold()
+            if any(word.startswith(candidate) for word in _OPENING_WORDS):
+                return  # Wait only while a streamed token could be a greeting.
+            for word in _OPENING_WORDS:
+                if candidate.startswith(word) and (
+                    len(candidate) == len(word) or candidate[len(word)] in _GREETING_SEPARATORS
+                ):
+                    # The greeting has already played. Keep the rest of this
+                    # chunk intact so transcript, TTS and recording agree.
+                    text = buffered.lstrip()[len(word):].lstrip(_GREETING_SEPARATORS)
+                    self._opening_text_buffer = ""
+                    self._opening_text_decided = bool(text)
+                    self._greeting_suppressed = True
+                    if not text:
+                        return
+                    break
+            else:
+                text = buffered
+                self._opening_text_buffer = ""
+                self._opening_text_decided = True
+        if text and text.strip():
+            self._completion_has_text = True
+        await super()._push_llm_text(text)
+
     def create_client(
         self,
         api_key=None,
@@ -139,29 +341,134 @@ class _BookingToolChoiceMixin:
         from api.services.workflow.confirmed_booking import confirmed_booking_arguments
         from pipecat.services.llm_service import FunctionCallFromLLM
 
-        messages = context.get_messages()
-        tools = getattr(context.tools, "standard_tools", [])
-        from api.services.workflow.confirmed_booking import first_booking_question
+        # Speculative responses are held and may be discarded if speech resumes.
+        # Keep deterministic shortcuts out of this pass because some of them
+        # update conversation state before the speculation gate can confirm it.
+        if getattr(getattr(self, "_speculation_gate", None), "is_speculating", False):
+            return await super()._process_context(context)
 
-        fast_booking_question = first_booking_question(messages)
-        if fast_booking_question and any(
-            getattr(tool, "name", None) == "book_appointment" for tool in tools
-        ):
-            # Small CPU models can take many seconds to ask this obvious
-            # question, and often repeat date/time details already supplied.
-            # Send it through the normal transcript and TTS path without an
-            # extra inference request.
-            await self.start_ttfb_metrics()
-            await self.push_frame(LLMFullResponseStartFrame())
-            await self._push_llm_text(fast_booking_question)
-            await self.push_frame(LLMFullResponseEndFrame())
+        messages = context.get_messages()
+        self._strip_repeated_greeting = False
+        self._opening_text_decided = False
+        self._opening_text_buffer = ""
+        self._greeting_suppressed = False
+        tools = getattr(context.tools, "standard_tools", [])
+        from api.services.workflow.contact_context import (
+            booking_contact_question,
+            caller_name_followup_reply,
+            caller_phone_fragment_reply,
+            remember_recent_caller_statements,
+            remember_explicit_caller_name,
+        )
+        from api.services.workflow.direct_caller_reply import direct_caller_reply
+
+        contact_state = getattr(self, "_contact_conversation_state", None)
+        if not isinstance(contact_state, dict):
+            contact_state = {}
+            self._contact_conversation_state = contact_state
+        remember_recent_caller_statements(messages, contact_state)
+
+        latest_user_text = (
+            _message_text(messages[-1])
+            if messages and isinstance(messages[-1], dict)
+            and messages[-1].get("role") == "user" else ""
+        )
+        from api.services.pipecat.caller_language_context import (
+            CallerLanguageContext,
+            standalone_language_request,
+        )
+
+        requested_language = standalone_language_request(latest_user_text)
+        if requested_language:
+            if not hasattr(self, "_caller_language_context"):
+                self._caller_language_context = CallerLanguageContext()
+            source = getattr(self, "_caller_language_source", None)
+            select_recognition = getattr(source, "select_caller_language", None)
+            if callable(select_recognition):
+                try:
+                    await select_recognition(requested_language)
+                except Exception:
+                    # The reply choice remains valid even when recognition
+                    # inventory is temporarily unavailable. Keep errors free
+                    # of endpoint credentials and caller text.
+                    logger.warning("Caller recognition-language switch unavailable")
+            self._caller_language_context.choose_language(
+                requested_language, source, text=latest_user_text
+            )
+            self._caller_language_context.apply(messages, source)
+            state = getattr(self, "_contact_conversation_state", None)
+            if not isinstance(state, dict):
+                state = {}
+                self._contact_conversation_state = state
+            state["reply_language"] = requested_language
+            await self._emit_direct_reply(
+                "Yes, we can continue in English."
+                if requested_language == "English"
+                else "ज़रूर, हम हिंदी में बात कर सकते हैं।"
+            )
             return
+        direct_reply = direct_caller_reply(
+            latest_user_text,
+            # Ending a call cannot retrieve an order. Other tools remain
+            # eligible for workflow routing and live lookups.
+            has_lookup_tools=any(
+                getattr(tool, "name", None) not in _END_CALL_TOOLS
+                for tool in tools
+            ),
+        )
+        if direct_reply:
+            state = getattr(self, "_contact_conversation_state", None)
+            if isinstance(state, dict):
+                state.pop("pending_phone", None)
+            await self._emit_direct_reply(direct_reply)
+            return
+
+        contact_state = getattr(self, "_contact_conversation_state", None)
+        if not isinstance(contact_state, dict):
+            contact_state = {}
+            self._contact_conversation_state = contact_state
+        known_name_reply = remember_explicit_caller_name(messages, contact_state)
+        if known_name_reply:
+            await self._emit_direct_reply(known_name_reply)
+            return
+        phone_fragment_reply = caller_phone_fragment_reply(messages, contact_state)
+        if phone_fragment_reply:
+            await self._emit_direct_reply(phone_fragment_reply)
+            return
+        booking_tool_available = any(
+            getattr(tool, "name", None) == "book_appointment" for tool in tools
+        )
+        known_phone = (getattr(self, "_known_contact", {}) or {}).get("customer_phone")
+        name_followup_reply = caller_name_followup_reply(
+            messages, contact_state,
+            booking_available=booking_tool_available,
+            known_phone=known_phone,
+        )
+        if name_followup_reply:
+            await self._emit_direct_reply(name_followup_reply)
+            return
+
+        known = getattr(self, "_known_contact", {})
+        contact_state = getattr(self, "_contact_conversation_state", None)
+        if contact_state:
+            if contact_state.get("caller_name"):
+                known = {**known, "customer_name": contact_state["caller_name"]}
+            if contact_state.get("caller_phone"):
+                known = {**known, "customer_phone": contact_state["caller_phone"]}
+        has_booking_tool = any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
         if (
             messages and isinstance(messages[-1], dict)
             and messages[-1].get("role") == "user"
             and any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
         ):
-            arguments = confirmed_booking_arguments(_message_text(messages[-1]))
+            from api.services.workflow.contact_context import confirmed_staged_booking_arguments
+            from api.services.workflow.confirmed_booking import room_booking_active
+
+            arguments = None if room_booking_active(messages) else confirmed_booking_arguments(_message_text(messages[-1]))
+            if not arguments:
+                arguments = confirmed_staged_booking_arguments(
+                    messages, contact_state if isinstance(contact_state, dict) else {}, known
+                )
             if arguments:
                 # Use the registered native handler so org ownership, caller
                 # consent, persistence and normal tool-result frames are shared
@@ -171,7 +478,61 @@ class _BookingToolChoiceMixin:
                     tool_call_id=f"confirmed_booking_{uuid4().hex}", arguments=arguments,
                 )])
                 return
-        await super()._process_context(context)
+        fast_booking_question = None
+        if has_booking_tool:
+            fast_booking_question = booking_contact_question(
+                messages, known, contact_state if contact_state is not None else {}
+            )
+        if fast_booking_question:
+            # Only ask for intake details after the strict complete-confirmation
+            # parser has had a chance to route a fully specified caller-approved
+            # booking to the registered tool. Incomplete requests still take
+            # this short path and avoid an unnecessary model round trip.
+            await self._emit_direct_reply(fast_booking_question)
+            return
+        self._completion_has_text = False
+        self._completion_has_tool_calls = False
+        try:
+            await super()._process_context(context)
+            if self._opening_text_buffer:
+                # A completion ending mid-word should not disappear.
+                remainder, self._opening_text_buffer = self._opening_text_buffer, ""
+                if remainder.strip().casefold() in _OPENING_WORDS:
+                    self._greeting_suppressed = True
+                else:
+                    await super()._push_llm_text(remainder)
+                    self._completion_has_text = bool(remainder.strip())
+            if not self._completion_has_text and not self._completion_has_tool_calls:
+                logger.warning("LLM completion returned no spoken text or executable tools")
+                await self._push_llm_text(self._completion_recovery_text(messages))
+        except (APIError, TimeoutError):
+            # Keep the original error observable upstream, but give a caller
+            # whose answer never started a normal transcript/TTS recovery.
+            # Never append this to a partial answer or retry an external action.
+            if not self._completion_has_text and not self._completion_has_tool_calls:
+                await self._push_llm_text(self._completion_recovery_text(messages))
+            raise
+
+    def _completion_recovery_text(self, messages):
+        source = getattr(self, "_caller_language_source", None)
+        settings = getattr(source, "_settings", None)
+        language = getattr(source, "latest_detected_language", None) or getattr(settings, "language", None)
+        language = getattr(language, "value", language)
+        language = str(language or "").lower().replace("_", "-").split("-", 1)[0]
+        recovery = {
+            "hi": "माफ़ कीजिए, जवाब देने में समस्या हुई। कृपया फिर से कोशिश करें।",
+            "kn": "ಕ್ಷಮಿಸಿ, ಉತ್ತರ ನೀಡಲು ಸಮಸ್ಯೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+            "ta": "மன்னிக்கவும், பதிலளிப்பதில் சிக்கல் ஏற்பட்டது. மீண்டும் முயற்சிக்கவும்.",
+            "te": "క్షమించండి, సమాధానం ఇవ్వడంలో సమస్య వచ్చింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+            "ml": "ക്ഷമിക്കണം, മറുപടി നൽകുന്നതിൽ പ്രശ്നമുണ്ടായി. ദയവായി വീണ്ടും ശ്രമിക്കുക.",
+            "mr": "क्षमस्व, उत्तर देताना समस्या आली. कृपया पुन्हा प्रयत्न करा.",
+            "en": "Sorry, I had trouble responding. Please try again.",
+        }
+        if language in recovery:
+            return recovery[language]
+        # Do not infer one of the several Devanagari languages from its script.
+        # English fallback is available in the unified local speech engine.
+        return recovery["en"]
 
     def build_chat_completion_params(self, params_from_context):
         params = super().build_chat_completion_params(params_from_context)
@@ -218,15 +579,18 @@ class _BookingToolChoiceMixin:
                 messages.insert(first_user, {"role": "system", "content": "/no_think"})
                 params["messages"] = messages
         if model.startswith(("qwen3:", "qwen3.5:")) and isinstance(messages, list):
-            # Suppress deep reasoning in local voice pipelines to prevent token starvation
+            # Keep Qwen reasoning concise across providers; Ollama's OpenAI
+            # endpoint accepts reasoning_effort, max_tokens, keep_alive, and
+            # stream usage. Native /api/chat options (think/num_ctx/num_thread)
+            # are not valid on this endpoint.
             params["reasoning_effort"] = "none"
             if getattr(self, "_kodewaves_local_ollama", False):
                 extra_body = params.get("extra_body")
                 params["extra_body"] = {
                     **(extra_body if isinstance(extra_body, dict) else {}),
-                    "think": False,
-                    "reasoning_effort": "none",
+                    "keep_alive": "8760h",
                 }
+                params["stream_options"] = {"include_usage": True}
 
         from api.services.workflow.tools.booking import caller_confirmed_booking
 
@@ -302,6 +666,7 @@ class _BookingToolChoiceMixin:
                 and opening is not None
                 and _OPENING_GREETING.search(_message_text(opening))
             ):
+                self._strip_repeated_greeting = model.startswith(("qwen2.5:", "qwen3:", "qwen3.5:"))
                 messages = [message for message in messages if message is not opening]
                 opening_note = {
                     "role": "system",
@@ -317,6 +682,33 @@ class _BookingToolChoiceMixin:
                 )
                 messages.insert(insert_at, opening_note)
                 params["messages"] = messages
+        if (
+            getattr(self, "_kodewaves_local_ollama", False)
+            and model.startswith(("qwen3:", "qwen3.5:"))
+            and isinstance(messages, list)
+            and any(
+                isinstance(message, dict) and message.get("role") == "user"
+                for message in messages
+            )
+        ):
+            # Keep this guidance in a fixed system-prefix position. Inserting it
+            # before the newest user message on every turn breaks Ollama's shared
+            # prompt prefix and forces the CPU model to re-evaluate conversation history.
+            if not any(
+                isinstance(message, dict)
+                and message.get("role") == "system"
+                and message.get("content") == _LOCAL_CALLER_RESPONSE_GUARD
+                for message in messages
+            ):
+                system_index = next((
+                    index for index, message in enumerate(messages)
+                    if isinstance(message, dict) and message.get("role") == "system"
+                ), None)
+                messages.insert(
+                    system_index + 1 if system_index is not None else 0,
+                    {"role": "system", "content": _LOCAL_CALLER_RESPONSE_GUARD},
+                )
+            params["messages"] = messages
         if isinstance(messages, list) and messages:
             latest_user = next((message for message in reversed(messages) if isinstance(message, dict) and message.get("role") == "user"), None)
             if latest_user and _CONFIRMATION.search(_message_text(latest_user)):
@@ -369,6 +761,15 @@ class _BookingToolChoiceMixin:
                 and isinstance(message.get("content"), str) else message
                 for message in params["messages"]
             ]
+        messages = params.get("messages")
+        if isinstance(messages, list) and getattr(self, "_kodewaves_local_ollama", False):
+            from api.services.pipecat.runtime_clock_context import CallerClockContext
+
+            if not hasattr(self, "_caller_clock_context"):
+                contact_state = getattr(self, "_contact_conversation_state", None)
+                state = contact_state.setdefault("_runtime_clock_context", {}) if isinstance(contact_state, dict) else None
+                self._caller_clock_context = CallerClockContext(state)
+            params["messages"] = self._caller_clock_context.apply(messages)
         # Preserve each recognized utterance's request-only language hint on
         # later turns. Removing old hints changes the prompt prefix and forces
         # CPU inference to reprocess conversation history unnecessarily.
@@ -384,6 +785,25 @@ class _BookingToolChoiceMixin:
             params["messages"] = self._caller_language_context.apply(
                 messages, getattr(self, "_caller_language_source", None)
             )
+        if getattr(self, "_kodewaves_local_ollama", False):
+            from api.services.workflow.contact_context import caller_state_instruction
+
+            messages = params.get("messages")
+            reminder = caller_state_instruction(
+                getattr(self, "_contact_conversation_state", None),
+                messages if isinstance(messages, list) else None,
+            )
+            if isinstance(messages, list):
+                from api.services.pipecat.caller_state_context import CallerStateContext
+
+                if not hasattr(self, "_caller_state_context"):
+                    self._caller_state_context = CallerStateContext()
+                params["messages"] = self._caller_state_context.apply(messages, reminder)
+        messages = params.get("messages")
+        if isinstance(messages, list) and not getattr(self, "_kodewaves_local_ollama", False):
+            from api.services.pipecat.runtime_clock_context import add_current_clock
+
+            params["messages"] = add_current_clock(messages)
         return params
 
 

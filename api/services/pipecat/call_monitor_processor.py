@@ -95,6 +95,8 @@ class CallMonitorProcessor(FrameProcessor):
         self.user_aggregator = None
         self.recognition_pending: Callable[[], bool] = lambda: False
         self._playbacks: set[str] = set()
+        self._idle_prompt_speech_ids: set[str] = set()
+        self._expect_idle_prompt = False
         self._active = False
         self._suspended = False
         self._closed = False
@@ -374,6 +376,25 @@ class CallMonitorProcessor(FrameProcessor):
         watch.awaiting_generation = True
         watch.from_user_turn = False
 
+    def expect_idle_prompt(self) -> None:
+        """Track fixed idle TTS without waiting for an LLM generation."""
+        if self._closed:
+            return
+        self._cancel_deadline()
+        self._response_watch = None
+        self._waiting_for_user = False
+        self._expect_idle_prompt = True
+
+    def skip_idle_prompt(self) -> None:
+        """Resume the idle window when no safe fixed-language prompt exists."""
+        if self._closed:
+            return
+        self._cancel_deadline()
+        self._response_watch = None
+        self._expect_idle_prompt = False
+        self._waiting_for_user = True
+        self._arm_idle()
+
     def _start_response(
         self, source: FrameProcessor, *, confirmed: bool
     ) -> _ResponseWatch:
@@ -406,6 +427,8 @@ class CallMonitorProcessor(FrameProcessor):
         self.cancel()
         self._unbind_user()
         self._playbacks.clear()
+        self._idle_prompt_speech_ids.clear()
+        self._expect_idle_prompt = False
         for source in self._sources:
             source.remove_event_handler("on_before_push_frame", self._watch_tool)
         self._sources.clear()
@@ -500,6 +523,12 @@ class CallMonitorProcessor(FrameProcessor):
         if self._closed:
             return
         self._playbacks.add(speech_id)
+        if self._expect_idle_prompt:
+            self._expect_idle_prompt = False
+            self._idle_prompt_speech_ids.add(speech_id)
+            self._waiting_for_user = False
+            self._cancel_deadline()
+            return
         self._waiting_for_user = False
         if self._deadline_kind == "idle":
             self._cancel_deadline()
@@ -516,6 +545,12 @@ class CallMonitorProcessor(FrameProcessor):
         if speech_id not in self._playbacks:
             return
         self._playbacks.remove(speech_id)
+        if speech_id in self._idle_prompt_speech_ids:
+            self._idle_prompt_speech_ids.remove(speech_id)
+            if outcome is PlaybackOutcome.PLAYED:
+                self._waiting_for_user = True
+            self._arm_idle()
+            return
         watch = self._response_watch
         if (
             outcome is PlaybackOutcome.SKIPPED
@@ -556,6 +591,8 @@ class CallMonitorProcessor(FrameProcessor):
         self._bot_speaking = False
         self._response_during_user_turn = False
         self._playbacks.clear()
+        self._idle_prompt_speech_ids.clear()
+        self._expect_idle_prompt = False
         if outcome is PlaybackOutcome.CLOSED:
             self.close()
         else:

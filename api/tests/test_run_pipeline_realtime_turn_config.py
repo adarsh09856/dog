@@ -158,6 +158,16 @@ def test_non_realtime_default_uses_transcription_fallback_and_vad_for_standard_s
     assert isinstance(strategies[1], VADUserTurnStartStrategy)
 
 
+def test_local_segmented_stt_waits_for_final_transcript_before_interrupting():
+    strategies = _create_non_realtime_user_turn_start_strategies(
+        {}, uses_external_turns=False, local_segmented_stt=True,
+    )
+
+    assert len(strategies) == 1
+    assert isinstance(strategies[0], TranscriptionUserTurnStartStrategy)
+    assert strategies[0]._use_interim is False
+
+
 def test_non_realtime_can_use_min_words_start_strategy():
     strategies = _create_non_realtime_user_turn_start_strategies(
         {"turn_start_strategy": "min_words", "turn_start_min_words": 4},

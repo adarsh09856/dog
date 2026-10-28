@@ -623,24 +623,26 @@ class KodewavesDBClient(BaseDBClient):
             raise ValueError("Wallet credit cannot be negative")
         async with self.get_session() as session:
             if reference_id or plan_assignment is not None:
-                # A wallet row lock cannot serialize first-time payments before
-                # the wallet exists. Lock by org so concurrent purchases and
-                # renewals use the last committed wallet and plan state.
+                # Serialize first-time purchases and plan renewals by org; a
+                # row lock alone cannot protect a wallet that does not exist.
                 await session.execute(
                     text("SELECT pg_advisory_xact_lock(492566, :org_id)"),
                     {"org_id": organization_id},
                 )
-            # Serialize credits per organization so a payment verification and
-            # webhook arriving together cannot both pass the ledger idempotency check.
+            # Create the wallet atomically before locking it. The advisory lock
+            # above also serializes payment replay checks and plan assignment.
+            await session.execute(
+                insert(OrganizationWalletModel).values(
+                    organization_id=organization_id,
+                    credit_balance_minutes=0,
+                    bonus_minutes=0,
+                ).on_conflict_do_nothing(index_elements=["organization_id"])
+            )
             stmt = select(OrganizationWalletModel).where(
                 OrganizationWalletModel.organization_id == organization_id
             ).with_for_update()
             result = await session.execute(stmt)
             wallet = result.scalar_one_or_none()
-
-            if not wallet:
-                wallet = OrganizationWalletModel(organization_id=organization_id, credit_balance_minutes=0)
-                session.add(wallet)
 
             # Idempotency check: avoid double crediting same payment reference
             if reference_id:
@@ -700,6 +702,36 @@ class KodewavesDBClient(BaseDBClient):
     # ------------------------------------------------------------------------
     # CRM & Contacts
     # ------------------------------------------------------------------------
+    async def import_contacts(self, organization_id: int, items: List[Dict[str, Any]]) -> int:
+        """Import one batch atomically after validating every referenced stage."""
+        prepared = []
+        for item in items:
+            values = dict(item)
+            if not str(values.get("phone") or "").strip():
+                continue
+            values["stage_id"] = uuid.UUID(values["stage_id"]) if values.get("stage_id") else None
+            fields = dict(values.get("custom_fields") or {})
+            if "notes" in values:
+                fields["notes"] = values.pop("notes") or ""
+            values["custom_fields"] = fields
+            prepared.append(values)
+        async with self.get_session() as session:
+            stages = {values["stage_id"] for values in prepared if values["stage_id"] is not None}
+            if stages:
+                owned = set((await session.execute(select(LeadStageModel.id).where(
+                    LeadStageModel.id.in_(stages),
+                    LeadStageModel.organization_id == organization_id,
+                ))).scalars().all())
+                if owned != stages:
+                    raise LookupError("Stage not found")
+            for values in prepared:
+                allowed = {key: values[key] for key in (
+                    "first_name", "last_name", "phone", "email", "company", "stage_id", "tags", "custom_fields"
+                ) if key in values}
+                session.add(ContactModel(organization_id=organization_id, **allowed))
+            await session.commit()
+        return len(prepared)
+
     async def save_contact(self, organization_id: int, values: Dict[str, Any], contact_id: str | None = None) -> ContactModel:
         """Save contact fields and validate stage ownership in the same transaction."""
         async with self.get_session() as session:

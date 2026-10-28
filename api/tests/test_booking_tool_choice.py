@@ -56,6 +56,91 @@ def test_detected_whisper_language_is_request_only_and_not_reused_for_idle_text(
     assert service.build_chat_completion_params(idle)['messages'][-1]['content'] == 'Are you still there?'
 
 
+def test_local_qwen_keeps_response_guard_in_reusable_prefix_without_mutating_history():
+    from copy import deepcopy
+    from api.services.pipecat.booking_tool_choice import _LOCAL_CALLER_RESPONSE_GUARD
+
+    service = BookingOpenAILLMService(
+        api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b")
+    )
+    service._kodewaves_local_ollama = True
+    request = _params(
+        {"role": "system", "content": "Ask callers which department they need."},
+        {"role": "assistant", "content": "नमस्ते। कैसे मदद करूँ?"},
+        {"role": "user", "content": "मुझे रूम बुक करना है"},
+        tools=[],
+    )
+    original = deepcopy(request["messages"])
+
+    prepared = service.build_chat_completion_params(request)
+
+    assert request["messages"] == original
+    guard_index = next(
+        i for i, message in enumerate(prepared["messages"])
+        if message.get("role") == "system"
+        and message.get("content") == _LOCAL_CALLER_RESPONSE_GUARD
+    )
+    assert guard_index == 1
+    guard = prepared["messages"][guard_index]["content"]
+    assert "warm, constructive tone" in guard
+    assert "Never claim a booking or other action succeeded" in guard
+    assert "not verified" in guard
+    assert "Answer the latest caller message directly" in guard
+    assert "Do not repeat the caller's words" in guard
+    assert "Never invent service names" in guard
+    assert "carry forward every date, service, and time" in guard
+    assert "do not restart the booking questions" in guard
+
+    followup = deepcopy(request)
+    followup["messages"].extend([
+        {"role": "assistant", "content": "नया पता क्या है?"},
+        {"role": "user", "content": "बेंगलुरु"},
+    ])
+    prepared_followup = service.build_chat_completion_params(followup)["messages"]
+    assert prepared_followup[:len(prepared["messages"])] == prepared["messages"]
+    assert sum(
+        message.get("role") == "system"
+        and message.get("content") == _LOCAL_CALLER_RESPONSE_GUARD
+        for message in prepared_followup
+    ) == 1
+    assert followup["messages"] == request["messages"] + [
+        {"role": "assistant", "content": "नया पता क्या है?"},
+        {"role": "user", "content": "बेंगलुरु"},
+    ]
+
+
+def test_local_qwen_gets_validated_caller_details_before_the_latest_turn():
+    from copy import deepcopy
+
+    service = BookingOpenAILLMService(
+        api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b")
+    )
+    service._kodewaves_local_ollama = True
+    service._contact_conversation_state = {
+        "caller_name": "आदर्श",
+        "caller_phone": "9538300941",
+    }
+    request = _params(
+        {"role": "system", "content": "Help the caller book a room."},
+        {"role": "assistant", "content": "Please tell me your number."},
+        {"role": "user", "content": "નાઇન ફાઇવ த்ரீ ஏஐட் த்ரீ டபுள் ஜીરோ"},
+        tools=[],
+    )
+    original = deepcopy(request["messages"])
+
+    messages = service.build_chat_completion_params(request)["messages"]
+
+    assert request["messages"] == original
+    latest_user = max(
+        index for index, message in enumerate(messages)
+        if message.get("role") == "user"
+    )
+    reminder = messages[latest_user - 1]
+    assert reminder["role"] == "system"
+    assert '"phone": "9538300941"' in reminder["content"]
+    assert "do not ask for them again" in reminder["content"]
+
+
 def test_real_request_builder_keeps_recognized_language_prefix_on_followup():
     service = BookingOpenAILLMService(
         api_key='test', settings=OpenAILLMSettings(model='qwen3.5:2b')
@@ -183,6 +268,34 @@ def test_follow_up_keeps_opening_out_of_prompt_and_preserves_prefix():
     assert first[:3] == follow_up[:3]
 
 
+def test_known_caller_details_do_not_mutate_cached_system_prefix():
+    service = BookingOpenAILLMService(
+        api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b")
+    )
+    stable_system = {"role": "system", "content": "Help the caller book a room."}
+    history = [
+        stable_system,
+        {"role": "user", "content": "I need a room."},
+        {"role": "assistant", "content": "What name should I use?"},
+        {"role": "user", "content": "My name is Adarsh."},
+        {"role": "assistant", "content": "Thanks. What date do you need?"},
+        {"role": "user", "content": "Tomorrow."},
+    ]
+
+    prepared = service.build_chat_completion_params(_params(*history))["messages"]
+
+    assert prepared[0] == stable_system
+    assert not any(
+        message.get("role") == "system"
+        and "Caller name explicitly provided:" in message.get("content", "")
+        for message in prepared
+    )
+    assert any(
+        "My name is Adarsh." in message.get("content", "")
+        for message in prepared if message.get("role") == "user"
+    )
+
+
 def test_first_caller_reply_preserves_configured_handoff_but_hides_unconfirmed_booking():
     service = BookingOpenAILLMService(
         api_key="test", settings=OpenAILLMSettings(model="qwen3:1.7b")
@@ -284,4 +397,106 @@ async def test_first_booking_question_skips_slow_model_and_uses_normal_speech_fr
 
     service._push_llm_text.assert_awaited_once_with("Sure. What name should I use for the appointment?")
     service.get_chat_completions.assert_not_awaited()
-    assert service.push_frame.await_count == 2
+    service.push_frame.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_hindi_order_topic_fragment_uses_fast_clarification_with_lookup_tools():
+    service = BookingOpenAILLMService(
+        api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b")
+    )
+    context = LLMContext(
+        messages=[
+            {"role": "assistant", "content": "नमस्ते। बताइए, मैं आपकी कैसे मदद करूँ?"},
+            {"role": "user", "content": "अः मुझे एक ऑर्डर के देकर बात कर"},
+        ],
+        tools=ToolsSchema(standard_tools=[FunctionSchema(
+            name="get_order_status", description="Look up order status",
+            properties={"order_id": {"type": "string"}}, required=["order_id"],
+        )]),
+    )
+    service.start_ttfb_metrics = AsyncMock()
+    service.push_frame = AsyncMock()
+    service._push_llm_text = AsyncMock()
+    service.get_chat_completions = AsyncMock()
+
+    await service._process_context(context)
+
+    service._push_llm_text.assert_awaited_once_with("ज़रूर, ऑर्डर में क्या मदद चाहिए?")
+    service.get_chat_completions.assert_not_awaited()
+    service.push_frame.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_short_hindi_name_after_combined_contact_question_advances_without_llm():
+    service = BookingOpenAILLMService(
+        api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b")
+    )
+    context = LLMContext(messages=[
+        {"role": "assistant", "content": "नया ऑर्डर बनाने के लिए कृपया अपना नाम और मोबाइल नंबर दें।"},
+        {"role": "user", "content": "राहुल"},
+    ])
+    service.start_ttfb_metrics = AsyncMock()
+    service.push_frame = AsyncMock()
+    service._push_llm_text = AsyncMock()
+    service.get_chat_completions = AsyncMock()
+
+    await service._process_context(context)
+
+    service._push_llm_text.assert_awaited_once_with(
+        "धन्यवाद, राहुल जी। अब कृपया मोबाइल नंबर बताइए।"
+    )
+    service.get_chat_completions.assert_not_awaited()
+    assert service._contact_conversation_state["caller_name"] == "राहुल"
+
+
+@pytest.mark.asyncio
+async def test_recognized_language_switch_is_applied_without_qwen_and_not_speculated():
+    service = BookingOpenAILLMService(api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b"))
+    text = "कन यूताार्क इन इंग्लिश"
+    service._caller_language_source = SimpleNamespace(latest_detected_language="hi", latest_detected_text=text)
+    service.start_ttfb_metrics = AsyncMock()
+    service.push_frame = AsyncMock()
+    service._push_llm_text = AsyncMock()
+    service.get_chat_completions = AsyncMock()
+    assert not service.can_speculate_caller_turn(text)
+    await service._process_context(LLMContext(messages=[{"role": "user", "content": text}]))
+    service._push_llm_text.assert_awaited_once_with("Yes, we can continue in English.")
+    service.get_chat_completions.assert_not_awaited()
+    assert service._contact_conversation_state["reply_language"] == "English"
+
+
+@pytest.mark.asyncio
+async def test_contact_question_is_confirmed_before_updating_shared_name_state():
+    service = BookingOpenAILLMService(api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b"))
+    messages = [{"role": "assistant", "content": "कृपया अपना नाम और संपर्क विवरण दें।"}]
+    state = {}
+    service._contact_conversation_state = state
+    service._contact_context_messages_provider = lambda: messages
+    text = "मेरा नाम आदर्श है मेरा नंबर है तो है"
+    assert not service.can_speculate_caller_turn(text)
+    assert state == {}
+    service.start_ttfb_metrics = AsyncMock()
+    service.push_frame = AsyncMock()
+    service._push_llm_text = AsyncMock()
+    service.get_chat_completions = AsyncMock()
+    await service._process_context(LLMContext(messages=[*messages, {"role": "user", "content": text}]))
+    assert state["caller_name"] == "आदर्श"
+    service.get_chat_completions.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stream_error_after_tool_dispatch_does_not_ask_caller_to_retry(monkeypatch):
+    from pipecat.services.openai.llm import OpenAILLMService
+
+    service = BookingOpenAILLMService(api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b"))
+    service._push_llm_text = AsyncMock()
+
+    async def tool_then_error(self, context):
+        self._completion_has_tool_calls = True
+        raise TimeoutError("synthetic stream failure after tool dispatch")
+
+    monkeypatch.setattr(OpenAILLMService, "_process_context", tool_then_error)
+    with pytest.raises(TimeoutError):
+        await service._process_context(LLMContext(messages=[{"role": "user", "content": "What are your hours?"}]))
+    service._push_llm_text.assert_not_awaited()

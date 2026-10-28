@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -136,6 +137,7 @@ def default_text_chat_checkpoint() -> dict[str, Any]:
         "messages": [],
         "gathered_context": {},
         "tool_state": {},
+        "contact_conversation_state": {},
     }
 
 
@@ -149,6 +151,10 @@ def normalize_text_chat_checkpoint(
     normalized["messages"] = list(normalized.get("messages") or [])
     normalized["gathered_context"] = dict(normalized.get("gathered_context") or {})
     normalized["tool_state"] = dict(normalized.get("tool_state") or {})
+    contact_state = dict(normalized.get("contact_conversation_state") or {})
+    if isinstance(contact_state.get("processed_user"), list):
+        contact_state["processed_user"] = tuple(contact_state["processed_user"])
+    normalized["contact_conversation_state"] = contact_state
     return normalized
 
 
@@ -231,10 +237,13 @@ class _ResponseWindowState:
 
     @property
     def frontier_is_idle(self) -> bool:
+        # Text chat has no audio playback to await. An LLMFullResponseEndFrame
+        # is the authoritative response boundary; the assistant context
+        # aggregator can miss or delay its stopped event, which must not leave
+        # a completed text response waiting for the full 60 second timeout.
         return (
             self.pending_context_requests == 0
             and self.active_llm_completions == 0
-            and self.active_assistant_segments == 0
             and not self.has_blocking_tool_calls
         )
 
@@ -258,6 +267,8 @@ class _TextChatCaptureProcessor(FrameProcessor):
         self._response_window = response_window
         self._context = context
         self._engine = engine
+        self._current_llm_text: list[str] = []
+        self.completed_llm_text: list[str] = []
 
     def _touch(self) -> None:
         self.last_activity_at = time.monotonic()
@@ -296,6 +307,17 @@ class _TextChatCaptureProcessor(FrameProcessor):
             playback.note_output()
         if isinstance(frame, TTSAudioRawFrame):
             playback.after_output(self, frame)
+
+        # Keep a fallback copy of streamed LLM text. The normal assistant
+        # aggregator callback remains the primary output path, but a missing
+        # turn-stopped event must not turn a completed model answer into an
+        # empty text-chat response.
+        if (
+            isinstance(frame, TextFrame)
+            and direction is FrameDirection.DOWNSTREAM
+            and self._response_window.active_llm_completions > 0
+        ):
+            self._current_llm_text.append(frame.text)
 
         if isinstance(frame, TTSSpeakFrame):
             append_to_context = (
@@ -336,6 +358,10 @@ class _TextChatCaptureProcessor(FrameProcessor):
             and direction is FrameDirection.DOWNSTREAM
         ):
             self._response_window.note_llm_end()
+            streamed_text = "".join(self._current_llm_text).strip()
+            self._current_llm_text.clear()
+            if streamed_text:
+                self.completed_llm_text.append(streamed_text)
             await self.push_frame(frame, direction)
             # Text chat has no TTS/output transport, so mixed text+tool responses
             # would otherwise leave function calls waiting forever on a
@@ -699,6 +725,7 @@ async def execute_text_chat_pending_turn(
     # generating a confirmation without another model request.
     engine.active_agent.user_config = user_config
     engine._gathered_context = dict(base_checkpoint["gathered_context"])
+    engine._contact_conversation_state = dict(base_checkpoint["contact_conversation_state"])
     capture_processor = _TextChatCaptureProcessor(response_window, context, engine)
     node_transition_events = capture_processor.events
 
@@ -766,10 +793,9 @@ async def execute_text_chat_pending_turn(
     )
 
     try:
+        await engine.initialize()
         await wait_for_pipeline_worker_started(task, timeout=5.0, run_task=runner_task)
         pipeline_ready_at = time.monotonic()
-
-        await engine.initialize()
 
         current_node_id = base_checkpoint.get("current_node_id")
         target_node_id = current_node_id or workflow_graph.start_node_id
@@ -806,16 +832,66 @@ async def execute_text_chat_pending_turn(
 
         if pending_user_message is not None:
             context.add_message({"role": "user", "content": pending_user_message})
-            from api.services.workflow.confirmed_booking import first_booking_question
+            from api.services.workflow.contact_context import (
+                booking_contact_question,
+                caller_name_followup_reply,
+                caller_phone_fragment_reply,
+                confirmed_staged_booking_arguments,
+                known_contact,
+                remember_explicit_caller_name,
+            )
+            from api.services.workflow.direct_caller_reply import direct_caller_reply, has_live_lookup_tools
 
-            booking_arguments = confirmed_booking_arguments(pending_user_message)
-            fast_booking_question = first_booking_question(context.get_messages())
+            from api.services.workflow.confirmed_booking import room_booking_active
+
+            booking_arguments = (
+                None if room_booking_active(context.get_messages())
+                else confirmed_booking_arguments(pending_user_message)
+            )
             active_tools = getattr(context.tools, "standard_tools", [])
             has_booking_tool = any(
                 getattr(tool, "name", None) == "book_appointment"
                 for tool in active_tools
             )
-            if booking_arguments and has_booking_tool:
+            direct_reply = direct_caller_reply(
+                pending_user_message, has_lookup_tools=has_live_lookup_tools(active_tools)
+            )
+            known_name_reply = remember_explicit_caller_name(
+                context.get_messages(), engine._contact_conversation_state
+            )
+            phone_fragment_reply = caller_phone_fragment_reply(
+                context.get_messages(), engine._contact_conversation_state
+            ) if not known_name_reply else None
+            name_followup_reply = caller_name_followup_reply(
+                context.get_messages(), engine._contact_conversation_state
+            ) if not known_name_reply and not phone_fragment_reply else None
+            conversation_contact = known_contact(initial_context)
+            contact_state = engine._contact_conversation_state
+            if contact_state.get("caller_name"):
+                conversation_contact["customer_name"] = contact_state["caller_name"]
+            if contact_state.get("caller_phone"):
+                conversation_contact["customer_phone"] = contact_state["caller_phone"]
+            fast_booking_question = booking_contact_question(
+                context.get_messages(), conversation_contact, contact_state,
+            ) if has_booking_tool else None
+            if not booking_arguments and has_booking_tool:
+                booking_arguments = confirmed_staged_booking_arguments(
+                    context.get_messages(), contact_state, conversation_contact
+                )
+            if direct_reply:
+                engine._contact_conversation_state.pop("pending_phone", None)
+                response_window.outputs.append(direct_reply)
+                context.add_message({"role": "assistant", "content": direct_reply})
+            elif known_name_reply:
+                response_window.outputs.append(known_name_reply)
+                context.add_message({"role": "assistant", "content": known_name_reply})
+            elif name_followup_reply:
+                response_window.outputs.append(name_followup_reply)
+                context.add_message({"role": "assistant", "content": name_followup_reply})
+            elif phone_fragment_reply:
+                response_window.outputs.append(phone_fragment_reply)
+                context.add_message({"role": "assistant", "content": phone_fragment_reply})
+            elif booking_arguments and has_booking_tool:
                 from api.services.workflow.tools.booking import execute_booking
 
                 booking_call_id = f"confirmed_booking_{uuid4().hex}"
@@ -888,11 +964,25 @@ async def execute_text_chat_pending_turn(
         if response_window.outputs
         else None
     )
+    if not assistant_text and capture_processor.completed_llm_text:
+        assistant_text = "\n\n".join(capture_processor.completed_llm_text).strip() or None
     from api.services.configuration.language_normalizer import resolve_agent_speech_language
 
+    guard_language = resolve_agent_speech_language(user_config)
+    if guard_language not in {"hi", "en"}:
+        reply_choice = (getattr(engine, "_contact_conversation_state", None) or {}).get("reply_language")
+        if reply_choice == "Hindi":
+            guard_language = "hi"
+        elif reply_choice == "English":
+            guard_language = "en"
+        elif isinstance(pending_user_message, str):
+            if re.search(r"[\u0900-\u097f]", pending_user_message):
+                guard_language = "hi"
+            elif re.search(r"[A-Za-z]", pending_user_message):
+                guard_language = "en"
     verified_reply = guard_booking_reply(
         assistant_text, capture_processor.events,
-        language=resolve_agent_speech_language(user_config),
+        language=guard_language,
     )
     if verified_reply != assistant_text:
         logger.info(
@@ -921,6 +1011,7 @@ async def execute_text_chat_pending_turn(
         "messages": encoded_messages,
         "gathered_context": encoded_gathered_context,
         "tool_state": encoded_tool_state,
+        "contact_conversation_state": jsonable_encoder(engine._contact_conversation_state),
     }
 
     trace_url = get_trace_url(trace_id, org_id=workflow.organization_id)

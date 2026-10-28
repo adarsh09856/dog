@@ -24,6 +24,7 @@ from api.services.catalog.local_inventory import (
 from api.services.catalog.gemini_voices import discover_indian_voices
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.configuration.registry import GEMINI_TTS_VOICES
+from api.services.configuration.stt_capabilities import stt_model_supports_auto_detect
 from api.services.configuration.options.google import GEMINI_38_INDIC_TTS_LANGUAGES
 from api.utils.common import normalize_local_ai_endpoint
 
@@ -875,6 +876,10 @@ class CatalogService:
                 "supports_streaming": m.supports_streaming,
                 "verification_status": m.status,
                 "languages": m.languages or [],
+                "supports_auto_detect": (
+                    (m.layer or m.category) == "stt"
+                    and stt_model_supports_auto_detect(prov, m.model_identifier)
+                ),
             }
 
             layer = m.layer or m.category
@@ -936,9 +941,45 @@ class CatalogService:
                                         and installed_model.get("id")):
                                     local_stt.append({
                                         "value": installed_model["id"],
-                                        "label": "IndicConformer CTC INT8 (installed languages)",
+                                        "label": (
+                                            "IndicConformer + Moonshine English + Anuvani auto-detection"
+                                            if installed_model.get("supports_auto_detect") is True
+                                            and "en-IN" in installed_model.get("languages", [])
+                                            else "IndicConformer CTC INT8 + Moonshine English (installed languages)"
+                                            if "en-IN" in installed_model.get("languages", [])
+                                            else "IndicConformer + Anuvani auto-detection"
+                                            if installed_model.get("supports_auto_detect") is True
+                                            else "IndicConformer CTC INT8 (installed languages)"
+                                        ),
                                         "provider": "indicconformer",
                                         "languages": installed_model.get("languages", []),
+                                        "supports_auto_detect": installed_model.get("supports_auto_detect") is True,
+                                        "auto_detect_languages": installed_model.get("auto_detect_languages", []),
+                                    })
+            except (aiohttp.ClientError, TimeoutError):
+                pass
+
+            # Advertise DhVaani only when its local checkpoint and licensed
+            # reference voices are loaded and reported by the serving engine.
+            try:
+                dhvaani_url = local_tts_api_base(local_ai_setting, "dhvaani-0.5")
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
+                    async with session.get(f"{dhvaani_url}/models") as resp:
+                        if resp.status == 200:
+                            for dhvaani_model in (await resp.json()).get("data", []):
+                                if (
+                                    isinstance(dhvaani_model, dict)
+                                    and dhvaani_model.get("id") == "dhvaani-0.5"
+                                    and dhvaani_model.get("task") == "text-to-speech"
+                                    and dhvaani_model.get("installed") is True
+                                ):
+                                    local_tts.append({
+                                        "value": dhvaani_model["id"],
+                                        "label": dhvaani_model.get("name") or "DhVaani 0.5 — Indian languages + English",
+                                        "provider": "speaches",
+                                        "languages": dhvaani_model.get("languages", []),
+                                        "voices": dhvaani_model.get("voices", []),
+                                        "streaming": dhvaani_model.get("streaming", False),
                                     })
             except (aiohttp.ClientError, TimeoutError):
                 pass
@@ -984,8 +1025,6 @@ class CatalogService:
                                         and installed_model.get("installed") is not False
                                         and installed_model.get("id")):
                                     model_id = installed_model["id"]
-                                    if "kokoro" in model_id.casefold():
-                                        continue
                                     local_tts.append({
                                         "value": model_id,
                                         "label": model_id.split("/")[-1] + " (Local CPU)",
@@ -993,6 +1032,8 @@ class CatalogService:
                                         # Keep the installed engine's real support
                                         # boundary visible to model configuration.
                                         "languages": installed_model.get("languages", []),
+                                        "voices": installed_model.get("voices", []),
+                                        "streaming": installed_model.get("streaming", False),
                                     })
             except Exception:
                 pass
@@ -1007,7 +1048,7 @@ class CatalogService:
                 if regional_model and regional_model.get("installed") is True:
                     local_tts.append({
                         "value": regional_model["id"],
-                        "label": regional_model.get("name") or "AI4Bharat VITS Rasa — 13 Indian languages (CPU)",
+                        "label": regional_model.get("name") or "Kodewaves Regional + Hindi + Indian English (CPU)",
                         "provider": "speaches",
                         "languages": regional_model.get("languages", []),
                         "voices": regional_model.get("voices", []),
@@ -1067,7 +1108,13 @@ class CatalogService:
         if cloud_llm:
             cloud_llm.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": True})
         if cloud_stt:
-            cloud_stt.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": True})
+            cloud_stt.insert(0, {
+                "value": "auto",
+                "label": "Auto model selection (language detection depends on that model)",
+                "provider": "auto",
+                "has_master_key": True,
+                "supports_auto_detect": False,
+            })
         if cloud_tts:
             cloud_tts.insert(0, {"value": "auto", "label": "Auto (Recommended - Best active engine)", "provider": "auto", "has_master_key": True})
         if cloud_s2s:

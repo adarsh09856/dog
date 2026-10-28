@@ -47,6 +47,7 @@ from api.services.configuration.registry import (
     SpeachesSTTConfiguration,
     SpeachesTTSConfiguration,
 )
+from api.services.configuration.stt_capabilities import stt_model_supports_auto_detect
 from api.services.credentials.master_credential_service import master_credential_service
 from api.services.saas_entitlements import is_saas_feature_allowed
 
@@ -252,6 +253,17 @@ async def _resolve_catalog_layer(effective: EffectiveAIModelConfiguration, layer
             continue
         voice = getattr(current, "voice", None)
         language = getattr(current, "language", None)
+        if (
+            layer == "stt"
+            and str(language or "").casefold() in {"auto", "multi", "unknown", "default"}
+            and not stt_model_supports_auto_detect(provider, model.model_identifier)
+        ):
+            if explicit:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Selected STT model '{model.model_identifier}' does not support automatic language detection. Choose a language or select a model that supports auto-detection.",
+                )
+            continue
         if layer == "llm":
             config = _build_master_llm(provider, model.model_identifier, creds["api_key"], creds.get("base_url"))
         elif layer == "stt":
@@ -297,20 +309,6 @@ async def _require_enabled_platform_model(layer: str, provider: str, model: str)
         for entry in models
     ):
         raise HTTPException(status_code=400, detail=f"Selected {layer.upper()} model '{model}' is disabled or unavailable.")
-
-
-def require_explicit_indic_stt_language(model: str, language: str | None) -> None:
-    """Reject a single-language Indic recognizer paired with auto detection."""
-    if model != "indicconformer-ctc-int8":
-        return
-    from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
-
-    code = LANGUAGE_NAME_TO_ISO.get(str(language or "auto").lower(), str(language or "auto").lower()).split("-", 1)[0]
-    if code in ("auto", "multi", "unknown", "default"):
-        raise HTTPException(
-            status_code=400,
-            detail="IndicConformer requires an explicit installed Indian language; automatic language detection is not available for this model",
-        )
 
 
 async def apply_kodewaves_sovereign_resolution(
@@ -497,6 +495,16 @@ async def apply_kodewaves_sovereign_resolution(
                 else normalize_stt_language(provider_name, raw_lang)
             )
 
+            if (
+                norm_lang in ("multi", "auto", "unknown")
+                and provider_name not in ("kodewaves", "dograh", "default")
+                and not stt_model_supports_auto_detect(provider_name, model)
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Selected STT model '{model}' does not support automatic language detection. Choose a language or select a model that supports auto-detection.",
+                )
+
             if hasattr(effective.stt, "language"):
                 effective.stt.language = norm_lang
 
@@ -511,21 +519,20 @@ async def apply_kodewaves_sovereign_resolution(
                 model_to_use = model if model and model != "default" else "indicconformer-ctc-int8"
                 if str(model_to_use).casefold().startswith(("systran/faster-whisper", "faster-whisper", "faster-distil-whisper")):
                     model_to_use = "indicconformer-ctc-int8"
-                if model_to_use == "indicconformer-ctc-int8" and norm_lang == "multi":
-                    require_explicit_indic_stt_language(model_to_use, norm_lang)
                 if model_to_use == "indicconformer-ctc-int8":
                     from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
                     from api.services.catalog.local_inventory import get_local_stt_models
 
                     selected_language = LANGUAGE_NAME_TO_ISO.get(norm_lang, norm_lang).split("-", 1)[0]
-                    require_explicit_indic_stt_language(model_to_use, selected_language)
                     try:
                         installed_models = await get_local_stt_models(indic_stt_v1_url)
                     except (aiohttp.ClientError, TimeoutError):
                         raise HTTPException(status_code=503, detail="Local Indic STT engine is unavailable")
                     manifest = installed_models.get(model_to_use) or {}
                     supported_languages = {str(code).casefold().split("-", 1)[0] for code in manifest.get("languages", [])}
-                    if selected_language not in supported_languages:
+                    if selected_language == "multi" and manifest.get("supports_auto_detect") is not True:
+                        raise HTTPException(status_code=400, detail="Self-hosted STT auto detection is not available on the installed engine")
+                    if selected_language != "multi" and selected_language not in supported_languages:
                         raise HTTPException(status_code=400, detail=f"Self-hosted IndicConformer does not have language '{selected_language}' installed")
                     norm_lang = selected_language
                 effective.stt = SpeachesSTTConfiguration(
@@ -634,6 +641,7 @@ async def apply_kodewaves_sovereign_resolution(
                         local_tts_api_base,
                         local_model_voice_ids,
                         local_model_voice_ids_for_language,
+                        validate_local_tts_speed,
                     )
                     inventory_url = local_tts_api_base(local_engine, selected_model)
                     try:
@@ -648,14 +656,14 @@ async def apply_kodewaves_sovereign_resolution(
                             status_code=400,
                             detail="Select a local TTS voice or a spoken language before starting the call",
                         )
-                    # The VITS selection is a preferred speaker for demos; live
-                    # speech chooses a matching installed speaker from the text.
-                    # STT language does not constrain which speaker can be saved.
-                    supported_voices = (
-                        local_model_voice_ids(installed_model)
-                        if selected_model == "indic-vits-rasa-13"
-                        else local_model_voice_ids_for_language(installed_model, tts_lang)
-                    )
+                    is_auto_lang = str(tts_lang).strip().casefold() in {"auto", "multi", "multilingual", "default"}
+                    if selected_model == "indic-vits-rasa-13" or is_auto_lang:
+                        # This multilingual model selects a matching installed voice
+                        # from the text at runtime; STT language does not restrict a
+                        # preferred/demo voice saved in the agent configuration.
+                        supported_voices = local_model_voice_ids(installed_model)
+                    else:
+                        supported_voices = local_model_voice_ids_for_language(installed_model, tts_lang)
                     if not supported_voices:
                         raise HTTPException(
                             status_code=400,
@@ -665,10 +673,31 @@ async def apply_kodewaves_sovereign_resolution(
                                 "model that supports this language."
                             ),
                         )
-                    if not voice_to_use and supported_voices:
+                    # Unified VITS uses the saved speaker as a gender/style
+                    # preference. Runtime text and language context select the
+                    # matching installed language; recognition must not cap
+                    # which preferred speaker the user can save.
+                    selection_voices = (
+                        local_model_voice_ids(installed_model)
+                        if selected_model == "indic-vits-rasa-13"
+                        else supported_voices
+                    )
+                    if voice_to_use and voice_to_use not in selection_voices:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Voice '{voice_to_use}' is not supported for language '{tts_lang}'. "
+                                f"Supported voices for this language: {', '.join(sorted(supported_voices))}"
+                            ),
+                        )
+                    if not voice_to_use:
                         voice_to_use = sorted(supported_voices)[0]
-                    if voice_to_use not in supported_voices:
-                        raise HTTPException(status_code=400, detail="Select a voice supported by the selected installed local TTS model")
+                    try:
+                        validate_local_tts_speed(
+                            installed_model, voice_to_use, getattr(effective.tts, "speed", 1.0)
+                        )
+                    except ValueError as exc:
+                        raise HTTPException(status_code=400, detail=str(exc)) from exc
                     local_tts_url = inventory_url
                 elif selected_model == "piper" or selected_model.startswith("piper/"):
                     voice_to_use = voice_to_use or get_default_piper_voice_for_language(tts_lang)

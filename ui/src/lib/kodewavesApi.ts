@@ -554,14 +554,14 @@ export interface Contact {
   phone: string;
   email?: string;
   company?: string;
-  stage_id?: string | number;
+  stage_id?: string | null;
   notes?: string;
   custom_fields?: Record<string, unknown>;
   created_at?: string;
 }
 
 export interface LeadStage {
-  id: string | number;
+  id: string;
   name: string;
   order?: number;
   order_index?: number;
@@ -570,6 +570,7 @@ export interface LeadStage {
 
 export interface Appointment {
   id: string | number;
+    contact_id?: string | null;
   title: string;
   customer_name?: string;
   customer_phone?: string;
@@ -832,6 +833,9 @@ export interface CatalogModelOption {
   has_master_key?: boolean;
   /** Languages advertised by the installed engine, when it reports them. */
   languages?: string[];
+  /** True only when this exact STT model has a supported auto-detect setting. */
+  supports_auto_detect?: boolean;
+  auto_detect_languages?: string[];
 }
 
 export interface AvailableCatalogResponse {

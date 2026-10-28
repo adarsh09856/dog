@@ -72,7 +72,29 @@ async def test_local_llm_preview_arrives_before_audio_without_entering_logs():
         frame, FrameDirection.DOWNSTREAM, destination=tts,
     ))
     assert messages == [{"type": "rtf-bot-text-preview", "payload": {"text": "Hello "}}]
-    assert logs.get_events() == []
+    assert not any(event.get("type") == "rtf-bot-text" for event in logs.get_events())
+
+
+@pytest.mark.asyncio
+async def test_tts_chunk_separator_is_trimmed_from_transcript_without_changing_synthesis_text():
+    messages = []
+
+    async def ws_sender(message):
+        messages.append(message)
+
+    observer = RealtimeFeedbackObserver(ws_sender=ws_sender)
+    output = BaseOutputTransport(TransportParams())
+    chunks = ["Hello there. ", "How can I help?"]
+    for text in chunks:
+        frame = TTSTextFrame(text, aggregated_by="sentence")
+        await observer.on_push_frame(
+            _frame_pushed(frame, FrameDirection.DOWNSTREAM, source=output)
+        )
+
+    transcript_chunks = [message["payload"]["text"] for message in messages]
+    assert transcript_chunks == ["Hello there.", "How can I help?"]
+    assert " ".join(transcript_chunks) == "Hello there. How can I help?"
+    assert chunks == ["Hello there. ", "How can I help?"]
 
 
 @pytest.mark.asyncio

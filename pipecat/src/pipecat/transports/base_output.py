@@ -444,7 +444,10 @@ class BaseOutputTransport(FrameProcessor):
             self._audio_buffer_cls: type[OutputAudioRawFrame] = OutputAudioRawFrame
 
             # This will be used to resample incoming audio to the output sample rate.
-            self._resampler = create_stream_resampler()
+            # Synthesis/network pauses are not stream boundaries. Completion
+            # drains this filter and interruption resets it explicitly; an
+            # inactivity timeout would silently discard still-unplayed speech.
+            self._resampler = create_stream_resampler(clear_after_secs=None)
 
             # The user can provide a single mixer, to be used by the default
             # destination, or a destination/mixer mapping.
@@ -574,6 +577,9 @@ class BaseOutputTransport(FrameProcessor):
             Args:
                 _: The start interruption frame (unused).
             """
+            # A later completion must not drain the interrupted filter tail.
+            self._resampler.reset()
+            self._audio_buffer = bytearray()
             # Cancel tasks.
             await self._cancel_clock_task()
             await self._cancel_video_task()
@@ -673,6 +679,10 @@ class BaseOutputTransport(FrameProcessor):
             Args:
                 frame: The TTS stopped frame to queue.
             """
+            # Resampling filters can retain an entire short phrase even when
+            # the transport byte buffer is empty. Drain them before the stop
+            # marker so those samples cannot be lost or enter a later phrase.
+            self._audio_buffer.extend(await self._resampler.flush())
             await self._enqueue_flushed_audio_buffer()
             await self._audio_queue.put(frame)
 
@@ -737,6 +747,18 @@ class BaseOutputTransport(FrameProcessor):
             if not self._audio_buffer:
                 return
 
+            while len(self._audio_buffer) >= self._audio_chunk_size:
+                frame = self._audio_buffer_cls(
+                    bytes(self._audio_buffer[: self._audio_chunk_size]),
+                    sample_rate=self._sample_rate,
+                    num_channels=self._params.audio_out_channels,
+                )
+                frame.transport_destination = self._destination
+                del self._audio_buffer[: self._audio_chunk_size]
+                await self._audio_queue.put(frame)
+            if not self._audio_buffer:
+                return
+
             padding = bytes(self._audio_chunk_size - len(self._audio_buffer))
             frame = self._audio_buffer_cls(
                 bytes(self._audio_buffer) + padding,
@@ -756,9 +778,12 @@ class BaseOutputTransport(FrameProcessor):
             self._bot_speaking = False
             self._tts_audio_received = False
 
-            # Any remaining leftover here (e.g. from an interruption) is
-            # discarded rather than flushed, since it's no longer wanted.
-            self._audio_buffer = bytearray()
+            # Do not clear `_audio_buffer` here. This notification can follow a
+            # natural output-queue timeout while TTS is still synthesizing the
+            # next phrase; dropping the partial tail makes speech lose its last
+            # samples before the next phrase arrives. Explicit interruptions
+            # clear stale audio in `handle_interruptions`, while TTS completion
+            # flushes the remaining bytes before queuing TTSStoppedFrame.
 
             logger.debug(
                 f"Bot{f' [{self._destination}]' if self._destination else ''} stopped speaking"

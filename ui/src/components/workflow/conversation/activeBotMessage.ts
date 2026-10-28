@@ -9,3 +9,20 @@ export function activeBotMessageIndex(messages: RealtimeFeedbackMessage[]): numb
     }
     return -1;
 }
+
+export function finalizeActiveBotMessage(
+    messages: RealtimeFeedbackMessage[], spokenText: string,
+): RealtimeFeedbackMessage[] {
+    const index = activeBotMessageIndex(messages);
+    if (index < 0) return messages;
+    const message = messages[index];
+    const normalized = (text: string) => text.replace(/\s+/g, ' ').trim();
+    const spoken = normalized(spokenText);
+    // Generated text remains useful when audio fails or the caller interrupts.
+    // Keep it visibly distinct from audio-confirmed text instead of deleting it.
+    const text = spoken.length > normalized(message.text).length ? spokenText : message.text;
+    const audioStatus = !spoken ? 'unconfirmed' : normalized(text) === spoken ? undefined : 'partial';
+    const updated = [...messages];
+    updated[index] = { ...message, text, final: true, audioStatus };
+    return updated;
+}

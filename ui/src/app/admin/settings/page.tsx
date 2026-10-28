@@ -35,7 +35,8 @@ import { adminApi, apiFetch, PlatformSettings } from "@/lib/kodewavesApi";
 import IndicSttTest from "./IndicSttTest";
 
 const POPULAR_OLLAMA_MODELS = [
-  { value: "qwen3.5:2b", label: "Qwen 3.5 2B (installed on this server)" },
+  { value: "qwen3.5:2b", label: "Qwen 3.5 2B (Ollama tag)" },
+  { value: "qwen3.5:2b-q4_K_M", label: "Qwen 3.5 2B Q4_K_M (Ollama tag)" },
 ];
 
 
@@ -80,7 +81,7 @@ export default function AdminSettingsPage() {
   // Ollama Model Manager state
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
-  const [pullModelName, setPullModelName] = useState("qwen3.5:2b");
+  const [pullModelName, setPullModelName] = useState("qwen3.5:2b-q4_K_M");
   const [customPullModel, setCustomPullModel] = useState("");
   const [isPulling, setIsPulling] = useState(false);
   const [pullStatusMessage, setPullStatusMessage] = useState<string | null>(null);
@@ -244,7 +245,7 @@ export default function AdminSettingsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Platform Settings & Sovereignty</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage platform identity, email delivery, local model services and payment settings.
+            Configure the platform name and public theme, email delivery, self-hosted model services, and payment settings.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -390,7 +391,8 @@ export default function AdminSettingsPage() {
                   Self-Hosted AI Engine (CPU Stack)
                 </CardTitle>
                 <CardDescription>
-                  Runs inference on the server hosting this deployment (for example, your VPS), not on each user computer. Current services: Ollama CPU and Indus Pocket TTS.
+                  Runs speech recognition, response generation, and speech synthesis on the Kodewaves server. Models and voices are discovered from configured services; actual inference hardware depends on the server runtime.
+                </CardDescription>
                 </CardDescription>
               </div>
               <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">
@@ -406,7 +408,7 @@ export default function AdminSettingsPage() {
                   Enable Sovereign Self-hosted AI Engine
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Allows opted-in tenants to use inference on the platform server. Access can be granted per user in User Management to control server load.
+                  Allows opted-in tenants to use inference on the Kodewaves server. Access can be granted per user in User Management to control server load.
                 </div>
               </div>
               <Switch
@@ -452,26 +454,27 @@ export default function AdminSettingsPage() {
                 <p className="text-[10px] text-muted-foreground">Internal Docker address for the server Ollama container; models use server CPU, RAM, and disk.</p>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs">Speaches TTS Endpoint (Compatibility)</Label>
+              <details className="space-y-1">
+                <summary className="cursor-pointer text-xs font-medium">Additional TTS server (advanced)</summary>
+                <Label className="text-xs">OpenAI-compatible TTS endpoint</Label>
                 <Input
                   value={settings.whisper_endpoint || ""}
                   onChange={(e) => setSettings({ ...settings, whisper_endpoint: e.target.value })}
-                  placeholder="http://whisper:8000/v1"
+                  placeholder="http://tts-service:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">Used for installed local TTS models. Self-hosted STT uses the IndicConformer endpoint below.</p>
-              </div>
+                <p className="text-[10px] text-muted-foreground">Optional additional speech server. This address does not install a model or configure speech recognition. Available models and voices come from the running server.</p>
+              </details>
 
               <div className="space-y-1">
-                <Label className="text-xs">Regional VITS TTS Endpoint</Label>
+                <Label className="text-xs">Combined Local TTS Endpoint</Label>
                 <Input
                   value={settings.indic_vits_tts_endpoint || ""}
                   onChange={(e) => setSettings({ ...settings, indic_vits_tts_endpoint: e.target.value })}
                   placeholder="http://indic-vits-tts:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">CPU voice service for its 13 installed regional languages. Hindi and English are not available in this model.</p>
+                <p className="text-[10px] text-muted-foreground">Shared endpoint for installed local voices. Supported languages and speakers are discovered from the running service and shown in Model Configuration.</p>
               </div>
 
               <div className="space-y-1">
@@ -692,7 +695,7 @@ export default function AdminSettingsPage() {
               Self-hosted Indian speech recognition
             </CardTitle>
             <CardDescription>
-              Test the installed CPU IndicConformer languages against real WAV audio. The selected language is used for recognition; this local model does not auto-detect languages.
+              Test a selected CPU IndicConformer language against WAV audio. Live calls can use automatic detection for the supported installed speech languages shown in Model Configurations.
             </CardDescription>
           </CardHeader>
           <CardContent>

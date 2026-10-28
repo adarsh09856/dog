@@ -358,7 +358,7 @@ export default function CRMPage() {
               <Label className="text-xs">Pipeline Stage</Label>
               <Select
                 value={String(editingContact?.stage_id || stages[0]?.id || 1)}
-                onValueChange={(val) => setEditingContact((prev) => prev ? { ...prev, stage_id: parseInt(val) } : null)}
+                onValueChange={(val) => setEditingContact((prev) => prev ? { ...prev, stage_id: val } : null)}
               >
                 <SelectTrigger>
                   <SelectValue />

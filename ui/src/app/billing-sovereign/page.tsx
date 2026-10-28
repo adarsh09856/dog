@@ -189,16 +189,22 @@ export default function SovereignBillingPage() {
     const sessionId = params.get("session_id");
     if (params.get("payment") !== "success" || !sessionId || handledStripeSession.current === sessionId) return;
     handledStripeSession.current = sessionId;
-    void paymentsApi.verifyPayment({ gateway: "stripe", order_id: sessionId })
-      .then(async (result) => {
+    let cancelled = false;
+    // A return URL is not payment proof: verify the provider receipt before
+    // showing success or refreshing the wallet. Keep the URL on failure so it
+    // can be retried after a temporary verification outage.
+    void paymentsApi.verifyPayment({ gateway: "stripe", order_id: sessionId, payment_id: sessionId })
+      .then(async (receipt) => {
+        if (cancelled) return;
+        if (!receipt.success) throw new Error("Payment has not been verified. Refresh before retrying payment.");
         window.history.replaceState({}, "", window.location.pathname);
         await fetchData();
-        alert(result.message);
+        alert(receipt.message);
       })
       .catch((err: unknown) => {
-        window.history.replaceState({}, "", window.location.pathname);
-        alert(err instanceof Error ? err.message : "Payment verification failed");
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Payment verification failed. Refresh before retrying payment.");
       });
+    return () => { cancelled = true; };
   }, [authLoading, fetchData, user]);
 
   const handleSubscribe = async (plan: SaaSPlan) => {

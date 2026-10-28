@@ -15,6 +15,7 @@ export interface RealtimeFeedbackMessage {
     type: RealtimeFeedbackMessageType;
     text: string;
     final?: boolean;
+    audioStatus?: "unconfirmed" | "partial";
     timestamp: string;
     functionName?: string;
     toolCallId?: string;
@@ -82,6 +83,7 @@ export interface ConversationMessageItem extends ConversationItemBase {
     role: "user" | "assistant";
     text: string;
     final?: boolean;
+    audioStatus?: "unconfirmed" | "partial";
     tone?: "default" | "muted";
 }
 

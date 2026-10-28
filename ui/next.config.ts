@@ -26,6 +26,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverSourceMaps: true,
+    webpackBuildWorker: true,
   },
   modularizeImports: {
     "lucide-react": {

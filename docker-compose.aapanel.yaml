@@ -161,6 +161,7 @@ services:
       INDIC_MIO_TTS_ENDPOINT: "${INDIC_MIO_TTS_ENDPOINT:-http://indic-mio-tts:8000/v1}"
       INDIC_PARLER_TTS_ENDPOINT: "${INDIC_PARLER_TTS_ENDPOINT:-http://indic-parler-tts:8000/v1}"
       INDIC_VITS_TTS_ENDPOINT: "${INDIC_VITS_TTS_ENDPOINT:-http://indic-vits-tts:8000/v1}"
+      INDUS_COMBINED_ENDPOINT: "${INDUS_COMBINED_ENDPOINT:-}"
       DHVAANI_TTS_ENDPOINT: "${DHVAANI_TTS_ENDPOINT:-http://dhvaani-tts:8000/v1}"
       ENABLE_LOCAL_AI_ENGINE: "${ENABLE_LOCAL_AI_ENGINE:-true}"
       KODEWAVES_DEFAULT_REGION: "${KODEWAVES_DEFAULT_REGION:-IN}"
@@ -274,6 +275,7 @@ services:
       - OLLAMA_NUM_PARALLEL=1
       - OLLAMA_MAX_QUEUE=${OLLAMA_MAX_QUEUE:-2}
       - LLAMA_ARG_SWA_FULL=${OLLAMA_SWA_FULL:-0}
+      - LLAMA_ARG_CHECKPOINT_MIN_SPACING_NT=${OLLAMA_CHECKPOINT_MIN_SPACING_NT:-64}
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 15s
@@ -299,7 +301,7 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_ENDPOINT: http://ollama:11434
-      OLLAMA_WARM_MODELS: "${OLLAMA_WARM_MODELS:-qwen3.5:2b}"
+      OLLAMA_WARM_MODELS: "${OLLAMA_WARM_MODELS:-qwen3.5:2b-q4_K_M}"
       OLLAMA_WARM_INTERVAL_SECONDS: "${OLLAMA_WARM_INTERVAL_SECONDS:-30}"
     command: ["python", "/app/warm_local_ollama.py"]
     volumes:
@@ -322,6 +324,9 @@ services:
     environment:
       INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-all}"
       INDIC_STT_THREADS: "${INDIC_STT_THREADS:-2}"
+      INDIC_STT_AUTO_DETECT: "${INDIC_STT_AUTO_DETECT:-1}"
+      INDIC_STT_LID_THREADS: "${INDIC_STT_LID_THREADS:-2}"
+      INDIC_STT_RESIDENT_MODELS: "${INDIC_STT_RESIDENT_MODELS:-4}"
     volumes:
       - kodewaves_indic_stt_models:/models
     healthcheck:
@@ -338,6 +343,38 @@ services:
     networks:
       - kodewaves-network
 
+  indus-tts:
+    build:
+      context: ./api/local_models/indus_tts
+    image: kodewaves-indus-tts:v1.0.0
+    container_name: kodewaves_indus_tts
+    restart: unless-stopped
+    profiles: ["indus"]
+    environment:
+      INDUS_MODEL_DIR: /models/indus-pocket-tts
+      INDUS_WORKERS: "${INDUS_WORKERS:-1}"
+      HF_HOME: /models/huggingface
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes:
+      - kodewaves_indus_tts_models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "${INDUS_CPU_LIMIT:-1.0}"
+          memory: 2048M
+    networks:
+      - kodewaves-network
+
+  # Small regional CPU voice model: 13 documented languages and 20 speakers.
+
   # Small regional CPU voice model: 13 documented languages and 20 speakers.
   indic-vits-tts:
     build:
@@ -348,6 +385,8 @@ services:
     profiles: ["local"]
     environment:
       INDIC_VITS_THREADS: "${INDIC_VITS_THREADS:-2}"
+      INDUS_TTS_ENDPOINT: "${INDUS_COMBINED_ENDPOINT:-}"
+      INDUS_GATEWAY_WORKERS: "${INDUS_WORKERS:-1}"
       HF_HOME: /models/huggingface
     volumes:
       - kodewaves_indic_vits_tts_models:/models
@@ -361,7 +400,7 @@ services:
       resources:
         limits:
           cpus: "${INDIC_VITS_CPU_LIMIT:-2.0}"
-          memory: 1024M
+          memory: "${INDIC_VITS_MEMORY_LIMIT:-1536M}"
     networks:
       - kodewaves-network
 
@@ -506,6 +545,7 @@ volumes:
   kodewaves_indic_stt_models:
   kodewaves_indic_mio_tts_models:
   kodewaves_indic_vits_tts_models:
+  kodewaves_indus_tts_models:
   kodewaves_dhvaani_tts_models:
 
 networks:

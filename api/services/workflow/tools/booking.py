@@ -41,12 +41,19 @@ def caller_phone_matches_booking(phone: str, messages: list) -> bool:
 
 def caller_confirmed_booking(messages: list) -> bool:
     """Read consent from the caller, rather than trusting an LLM boolean."""
+    from api.services.workflow.confirmed_booking import room_booking_active
+
+    if room_booking_active(messages):
+        return False
     dialogue = [m for m in messages if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
     caller_index = next((i for i in range(len(dialogue) - 1, -1, -1) if dialogue[i].get("role") == "user"), None)
     if caller_index is None:
         return False
     text = dialogue[caller_index].get("content")
-    if not isinstance(text, str) or re.search(r"\b(don't|do not|cancel|not|no|never|nahi|nahin|mat)\b|नहीं|मत\s", text, re.I):
+    if not isinstance(text, str) or re.search(
+        r"\b(don['’]t|do not|cancel(?:led|lation)?|not|no|never|nahi|nahin|mat)\b"
+        r"|नहीं|मत\s|रद्द|कैंसल|कॅन्सल", text, re.I,
+    ):
         return False
     recent = " ".join(str(m.get("content", "")) for m in dialogue[max(0, caller_index - 4):caller_index + 1])
     if not re.search(r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", recent, re.I):
@@ -81,7 +88,7 @@ def caller_confirmed_booking(messages: list) -> bool:
     confirmation_question = re.search(
         r"\b(confirm|sahi|theek)\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का"
         r"|\b(?:shall|should|may|can) I\b[^?]*\bbook\b|\bgo ahead and book\b"
-        r"|(?:बुक|कन्फर्म|कंफर्म)\s+कर\s*(?:दूँ|दूं|दें)|\bbook\s+kar\s+(?:du|doon|dun)\b", previous, re.I,
+        r"|(?:बुक(?:िंग)?|कन्फर्म|कंफर्म)\s+कर\s*(?:दूँ|दूं|दें)|\bbook\s+kar\s+(?:du|doon|dun)\b", previous, re.I,
     )
     return bool(booking_readback and confirmation_question)
 

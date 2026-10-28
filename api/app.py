@@ -1,5 +1,6 @@
 """Set up logging before importing anything else"""
 
+import asyncio
 import sentry_sdk
 
 from api.constants import (
@@ -62,6 +63,13 @@ async def lifespan(app: FastAPI):
     # normal entrypoint and launches Uvicorn directly.
     verify_release_before_startup()
     async with mcp_app.lifespan(app):
+        # PipelineWorker otherwise imports Pipecat's sentence tokenizer on
+        # the first caller turn. This cold import can outlast text chat's
+        # worker-readiness budget, so finish the cheap one-time warmup during
+        # service startup while readiness is already being established.
+        from pipecat.utils.prewarm import warm_deferred_imports
+        await asyncio.to_thread(warm_deferred_imports)
+
         # Refuse to start if telephony signature verification is bypassed in production
         import os
 
@@ -85,7 +93,6 @@ async def lifespan(app: FastAPI):
                 await session.commit()
         except Exception:
             pass
-
         # Pre-register all org-specific Langfuse exporters so they're ready
         # before any pipeline runs, without per-call DB lookups.
         await load_all_org_langfuse_credentials()
@@ -240,6 +247,7 @@ UI_INTERNAL_URL = os.getenv("UI_INTERNAL_URL", "http://ui:3010")
 @app.api_route(
     "/api/{path:path}",
     methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+    include_in_schema=False,
 )
 async def fallback_proxy_to_ui(request: Request, path: str):
     """Transparently forward Next.js internal API routes (such as /api/auth/session,

@@ -16,12 +16,12 @@ async def test_optional_first_clause_streams_before_sentence_without_losing_text
         emitted.extend([part.text async for part in aggregator.aggregate(character)])
     assert emitted == []  # punctuation needs whitespace lookahead
     emitted.extend([part.text async for part in aggregator.aggregate(" ")])
-    assert emitted == [first]
+    assert emitted == [first + " "]
     emitted.extend([part.text async for part in aggregator.aggregate(tail.lstrip())])
     final = await aggregator.flush()
     if final:
         emitted.append(final.text)
-    assert " ".join(emitted) == first + tail
+    assert "".join(emitted).strip() == (first + tail).strip()
 
 
 @pytest.mark.asyncio
@@ -32,7 +32,9 @@ async def test_first_clause_never_splits_numeric_commas_or_survives_interruption
     await aggregator.handle_interruption()
     assert await aggregator.flush() is None
     phrase = "This is the replacement answer, "
-    assert [part.text async for part in aggregator.aggregate(phrase)] == [phrase.strip()]
+    emitted = [part.text async for part in aggregator.aggregate(phrase)]
+    assert emitted == [phrase]
+    assert "".join(emitted).strip() == phrase.strip()
 
 
 @pytest.mark.asyncio
@@ -47,19 +49,19 @@ async def test_first_long_phrase_releases_before_sentence_ends(sentence):
         parts.extend([part.text async for part in aggregator.aggregate(word + " ")])
     assert parts and len(parts[0]) >= 48
     remaining = await aggregator.flush()
-    assert " ".join([*parts, remaining.text if remaining else ""]).strip() == sentence
+    assert "".join([*parts, remaining.text if remaining else ""]).strip() == sentence
 
 
 @pytest.mark.asyncio
 async def test_first_complete_indic_sentence_releases_early_and_later_chunks_stay_batched():
     aggregator = LocalSpeechAggregator(min_characters=48, first_chunk_characters=24)
     first = 'मैं आपके ऑर्डर की जानकारी नहीं देख सकता।'
-    assert [part.text async for part in aggregator.aggregate(first + ' अ')] == [first]
+    assert [part.text.strip() async for part in aggregator.aggregate(first + ' अ')] == [first]
     assert [part.text async for part in aggregator.aggregate('गला सवाल। फिर')] == []
     tail = await aggregator.flush()
     assert tail.text == 'अगला सवाल। फिर'
     # A new response gets the same low initial threshold.
-    assert [part.text async for part in aggregator.aggregate(first + ' अ')] == [first]
+    assert [part.text.strip() async for part in aggregator.aggregate(first + ' अ')] == [first]
     await aggregator.handle_interruption()
     assert await aggregator.flush() is None
 
@@ -72,10 +74,10 @@ async def test_short_adjacent_sentences_start_synthesis_before_response_ends():
             'Yes. I can help with your account. What'
         )
     ]
-    assert emitted == ['Yes. I can help with your account.']
+    assert [part.strip() for part in emitted] == ['Yes. I can help with your account.']
     tail = await aggregator.flush()
     if tail: emitted.append(tail.text)
-    assert emitted == ['Yes. I can help with your account.', 'What']
+    assert [part.strip() for part in emitted] == ['Yes. I can help with your account.', 'What']
     assert await aggregator.flush() is None
 
 
@@ -84,7 +86,7 @@ async def test_long_sentence_streams_before_response_ends():
     aggregator = LocalSpeechAggregator()
     sentence = 'Please tell me what happened when you tried to access your account.'
     emitted = [part.text async for part in aggregator.aggregate(sentence + ' Next')]
-    assert emitted == [sentence]
+    assert [part.strip() for part in emitted] == [sentence]
     assert (await aggregator.flush()).text == 'Next'
 
 
@@ -124,6 +126,7 @@ async def test_local_tts_releases_streaming_indus_sentence_early(monkeypatch, mo
     frames, _ = await run_test(service, frames_to_send=[
         LLMFullResponseStartFrame(), LLMTextFrame(text), LLMFullResponseEndFrame(),
     ])
-    assert calls == expected_calls
+    assert [call.strip() for call in calls] == expected_calls
+    assert "".join(calls).strip() == text
     assert [frame.text for frame in frames if isinstance(frame, TTSTextFrame)] == calls
     assert sum(len(frame.audio) for frame in frames if isinstance(frame, TTSAudioRawFrame)) == 3200 * len(expected_calls)

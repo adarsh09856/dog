@@ -126,9 +126,19 @@ def register_event_handlers(
             and not ready_state["initial_response_triggered"]
         ):
             ready_state["initial_response_triggered"] = True
+            startup_started = asyncio.get_running_loop().time()
+            logger.info("[run {}] Startup: client and pipeline ready", workflow_run_id)
 
             if answer_supervisor is not None:
                 answer_supervisor.arm()
+
+            # Agent attachment/start and pre-call data retrieval are
+            # independent. Start the agent before waiting for external data so
+            # their latencies overlap; keep set_node/opening below the fetch
+            # merge because greeting templates may use that data.
+            initial_agent_start_task = asyncio.create_task(
+                engine.start_initial_agent()
+            )
 
             asyncio.create_task(
                 _capture_call_event(
@@ -136,53 +146,70 @@ def register_event_handlers(
                 )
             )
 
-            # Wait for pre-call fetch if in progress, playing ringer meanwhile
-            if pre_call_fetch_task is not None:
-                if not pre_call_fetch_task.done():
-                    logger.info(
-                        "Pre-call fetch still in progress, playing ringer while waiting"
-                    )
-                    stop_ringer = asyncio.Event()
-                    sample_rate = audio_config.pipeline_sample_rate or 16000
-                    ringer_task = asyncio.create_task(
-                        play_audio_loop(
-                            stop_event=stop_ringer,
-                            sample_rate=sample_rate,
-                            queue_frame=transport.output().queue_frame,
+            try:
+                # Wait for pre-call fetch if in progress, playing ringer meanwhile
+                if pre_call_fetch_task is not None:
+                    if not pre_call_fetch_task.done():
+                        logger.info(
+                            "Pre-call fetch still in progress, playing ringer while waiting"
                         )
-                    )
-                    try:
-                        fetch_result = await asyncio.wait_for(pre_call_fetch_task, timeout=10.0)
-                    except asyncio.TimeoutError:
-                        logger.warning("Pre-call fetch timed out after 10s, continuing call without external context")
-                        fetch_result = None
-                    finally:
-                        stop_ringer.set()
-                        await ringer_task
-                else:
-                    fetch_result = pre_call_fetch_task.result()
-
-                if fetch_result:
-                    engine._call_context_vars = merge_external_initial_context(
-                        engine._call_context_vars, fetch_result
-                    )
-                    try:
-                        await db_client.update_workflow_run(
-                            workflow_run_id,
-                            initial_context={**engine._call_context_vars},
+                        stop_ringer = asyncio.Event()
+                        sample_rate = audio_config.pipeline_sample_rate or 16000
+                        ringer_task = asyncio.create_task(
+                            play_audio_loop(
+                                stop_event=stop_ringer,
+                                sample_rate=sample_rate,
+                                queue_frame=transport.output().queue_frame,
+                            )
                         )
-                    except Exception as e:
-                        logger.error(f"Failed to persist pre-call fetch context: {e}")
-                    logger.info(
-                        f"Pre-call fetch complete, merged keys: "
-                        f"{list(fetch_result.keys())}"
-                    )
+                        try:
+                            fetch_result = await asyncio.wait_for(
+                                pre_call_fetch_task, timeout=10.0
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                "Pre-call fetch timed out after 10s, continuing call "
+                                "without external context"
+                            )
+                            fetch_result = None
+                        finally:
+                            stop_ringer.set()
+                            await ringer_task
+                    else:
+                        fetch_result = pre_call_fetch_task.result()
 
-            # Attach and activate the agent this call starts on. On a split
-            # pipeline nothing can generate until this lands: an agent worker
-            # is inactive until told otherwise, and an inactive worker is
-            # handed no frames from the bus.
-            if not await engine.start_initial_agent():
+                    if fetch_result:
+                        engine._call_context_vars = merge_external_initial_context(
+                            engine._call_context_vars, fetch_result
+                        )
+                        try:
+                            await db_client.update_workflow_run(
+                                workflow_run_id,
+                                initial_context={**engine._call_context_vars},
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to persist pre-call fetch context: {e}")
+                        logger.info(
+                            f"Pre-call fetch complete, merged keys: "
+                            f"{list(fetch_result.keys())}"
+                        )
+
+                # Attach and activate the agent this call starts on. On a split
+                # pipeline nothing can generate until this lands: an agent worker
+                # is inactive until told otherwise, and an inactive worker is
+                # handed no frames from the bus.
+                agent_started = await initial_agent_start_task
+            except BaseException:
+                # Do not leave an attachment/start coroutine running if fetch,
+                # persistence, or caller cancellation exits this readiness path.
+                if not initial_agent_start_task.done():
+                    initial_agent_start_task.cancel()
+                await asyncio.gather(
+                    initial_agent_start_task, return_exceptions=True
+                )
+                raise
+
+            if not agent_started:
                 logger.error(
                     f"Initial agent never became ready for run {workflow_run_id}; "
                     "ending the call"
@@ -190,9 +217,19 @@ def register_event_handlers(
                 await engine.end_call_with_reason(EndTaskReason.PIPELINE_ERROR.value)
                 return
 
+            logger.info(
+                "[run {}] Startup: initial agent ready after {} ms",
+                workflow_run_id,
+                round((asyncio.get_running_loop().time() - startup_started) * 1000),
+            )
             # Set the start node now (after pre-call fetch data is merged)
             # so that render_template() has the complete _call_context_vars.
             await engine.set_node(engine.active_agent.workflow.start_node_id)
+            logger.info(
+                "[run {}] Startup: start node ready after {} ms",
+                workflow_run_id,
+                round((asyncio.get_running_loop().time() - startup_started) * 1000),
+            )
             if answer_supervisor is not None:
                 await engine.handle_answer_supervision()
                 return

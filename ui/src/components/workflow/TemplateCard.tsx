@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { detailFromError } from '@/lib/apiError';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
+import { detailFromError } from '@/lib/apiError';
 
 interface DuplicateWorkflowTemplateProps {
     id: number;
