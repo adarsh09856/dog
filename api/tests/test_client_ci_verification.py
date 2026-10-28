@@ -53,7 +53,11 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
             contents = env_file.read_text()
             assert "COMPOSE_PROFILES=direct-ingress" in contents
             assert "KODEWAVES_LICENSE_TOKEN=ci-payload.ci-signature" in contents
-            assert Path(contents.split("CLIENT_RELEASE_MANIFEST_FILE=", 1)[1].splitlines()[0]).is_file()
+            manifest_path = Path(contents.split("CLIENT_RELEASE_MANIFEST_FILE=", 1)[1].splitlines()[0])
+            config_manifest = json.loads(manifest_path.read_text())
+            assert config_manifest["ci_configuration_fixture"] is True
+            assert "signature" not in config_manifest
+            assert config_manifest["payload"]["images"]["api"]["kind"] == "registry_digest"
             if command[-3:] == ["config", "--format", "json"]:
                 if any(str(argument).endswith("docker-compose.identity.yaml") for argument in command):
                     assert "CLIENT_IDENTITY_KEY_FILE=" in contents
@@ -96,6 +100,7 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
     assert evidence["compose_config"] == "passed"
     assert evidence["custom_network_proxy_config"] == "passed"
     assert evidence["identity_overlay_config"] == "passed"
+    assert "Unsigned configuration fixture" in evidence["installer_manifest_scope"]
     assert evidence["protected_inventory"] == {
         "api": {"file_count": 2, "elapsed_ms": 840.5},
         "ui": {"file_count": 1, "elapsed_ms": 121.0},
@@ -173,11 +178,9 @@ def test_ci_rejects_writable_enrolled_identity_mount(verifier, monkeypatch, tmp_
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(verifier.subprocess, "run", run)
-    manifest = tmp_path / "manifest.json"
-    manifest.write_text("{}")
     with pytest.raises(ValueError, match="API identity key mount is not read-only"):
         verifier._verify_installer_config(
-            root, tmp_path, "registry.example.com/kodewaves/caddy@sha256:" + "b" * 64, manifest
+            root, tmp_path, "registry.example.com/kodewaves/caddy@sha256:" + "b" * 64
         )
 
 

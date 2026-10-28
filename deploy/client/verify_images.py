@@ -8,6 +8,8 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 
 
 def _run(*args: str) -> str:
@@ -116,6 +118,58 @@ def verify_caddyfile(image: str, caddyfile: str) -> None:
         "--entrypoint", "caddy", image,
         "validate", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile",
     ))
+
+
+def verify_startup_rejection(api_image: str, ui_image: str, manifest: Path) -> None:
+    """Require built verifiers to reject changed files and invalid signatures.
+
+    Run only after both images accepted this exact manifest. No customer license,
+    owner credentials, network, database or persistent volume is supplied.
+    """
+    with tempfile.TemporaryDirectory(prefix="kodewaves-image-tamper-") as temporary:
+        directory = Path(temporary)
+        changed = directory / "changed.json"
+        changed.write_text("{}\n", encoding="utf-8")
+        changed.chmod(0o644)
+        invalid_signed = json.loads(manifest.read_text(encoding="utf-8"))
+        image_metadata = invalid_signed["payload"]["images"]
+        invalid_signed["signature"] = "A" * 86
+        invalid_manifest = directory / "invalid-signature.json"
+        invalid_manifest.write_text(json.dumps(invalid_signed), encoding="utf-8")
+        invalid_manifest.chmod(0o644)
+        for component, image, entrypoint, arguments, protected, file_error, signature_error in (
+            ("api", api_image, "python", ["-m", "api.services.release_integrity"],
+             "/app/docs/docs.json", "Protected client release files differ from the signed manifest",
+             "Client release manifest is missing or invalid"),
+            ("ui", ui_image, "node", ["/app/verify-client-release.mjs"],
+             "/app/.next/server/app-paths-manifest.json",
+             "Client UI integrity check failed: .next/server/app-paths-manifest.json",
+             "Client release manifest signature is invalid"),
+        ):
+            for case in ("changed_file", "invalid_signature"):
+                selected_manifest = manifest if case == "changed_file" else invalid_manifest
+                command = [
+                    "docker", "run", "--rm", "--network", "none", "--read-only",
+                    "--cap-drop=ALL", "--security-opt=no-new-privileges:true",
+                    "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=32m,mode=1777",
+                    "--mount", f"type=bind,source={selected_manifest.resolve()},target=/app/client-release-manifest.json,readonly",
+                    "-e", "KODEWAVES_EDITION=client",
+                    "-e", "KODEWAVES_RELEASE_MANIFEST=/app/client-release-manifest.json",
+                    "-e", f"KODEWAVES_API_IMAGE={image_metadata['api']['reference']}",
+                    "-e", f"KODEWAVES_UI_IMAGE={image_metadata['ui']['reference']}",
+                ]
+                if case == "changed_file":
+                    command += ["--mount", f"type=bind,source={changed},target={protected},readonly"]
+                command += ["--entrypoint", entrypoint, image, *arguments]
+                result = subprocess.run(command, capture_output=True, text=True, timeout=90, check=False)
+                expected = file_error if case == "changed_file" else signature_error
+                detail = result.stdout + result.stderr
+                if result.returncode != 1 or expected not in detail:
+                    raise ValueError(
+                        f"{component.upper()} {case} startup rejection was not proved "
+                        f"(exit {result.returncode}): {detail[-4000:]}"
+                    )
+                print(f"Client {component.upper()} rejected {case} at startup")
 
 
 def main() -> int:

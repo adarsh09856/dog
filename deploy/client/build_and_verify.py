@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from verify_images import verify_api, verify_caddyfile, verify_ui
+from verify_images import verify_api, verify_caddyfile, verify_startup_rejection, verify_ui
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from api.services.release_schema import migration_compatibility
@@ -282,6 +282,7 @@ def main() -> int:
             check=True,
         )
         print("Signed release manifest matched the built API and UI images")
+        verify_startup_rejection(args.api_tag, args.ui_tag, manifest)
     if args.push:
         api_digest, ui_digest = image_refs["api"]["reference"], image_refs["ui"]["reference"]
         output = args.release_env_output.resolve()

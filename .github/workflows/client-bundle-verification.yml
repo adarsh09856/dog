@@ -54,6 +54,8 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://kodewaves_test:disposable_ci_password@127.0.0.1:5432/kodewaves_client_release_test
           REDIS_URL: redis://127.0.0.1:6379/15
         run: python -m pytest --noconftest api/tests/test_client_release_postgres_integration.py -q
+      - name: Verify installer and image-verification orchestration
+        run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py -q
 
   verify:
     if: github.event_name == 'workflow_dispatch'

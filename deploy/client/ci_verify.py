@@ -81,7 +81,7 @@ def _verify_manifest_evidence(
             raise ValueError(f"Signed {component.upper()} image ID does not match the inspected image")
 
 
-def _verify_installer_config(root: Path, directory: Path, caddy_image: str, manifest: Path) -> None:
+def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> None:
     """Run the real installer preflight and Compose interpolation with disposable values."""
     credential_key = base64.urlsafe_b64encode(b"x" * 32).rstrip(b"=").decode("ascii")
     values = {
@@ -93,7 +93,6 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str, mani
         "CLIENT_COTURN_IMAGE": "registry.example.com/kodewaves/coturn@sha256:" + "f" * 64,
         "CLIENT_CADDY_IMAGE": caddy_image,
         "COMPOSE_PROFILES": "direct-ingress",
-        "CLIENT_RELEASE_MANIFEST_FILE": str(manifest.resolve()),
         "KODEWAVES_INSTALLATION_ID": "ci-installation-123",
         "KODEWAVES_LICENSE_TOKEN": "ci-payload.ci-signature",
         "PUBLIC_HOST": "ci.customer.example.invalid",
@@ -107,6 +106,19 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str, mani
         "TELEPHONY_WS_TOKEN_SECRET": "w" * 40,
         "TURN_SECRET": "t" * 40,
     }
+    # The build's signed manifest deliberately uses local image IDs, which are
+    # not distributable registry digests. Use a separate, explicitly unsigned
+    # configuration fixture for Compose interpolation; never rewrite the signed
+    # build evidence or claim these example registry images were installed.
+    config_manifest = directory / "installer-config-only.json"
+    config_manifest.write_text(json.dumps({
+        "ci_configuration_fixture": True,
+        "payload": {"images": {
+            name: {"kind": "registry_digest", "reference": values[variable]}
+            for name, variable in (("api", "CLIENT_API_IMAGE"), ("ui", "CLIENT_UI_IMAGE"))
+        }},
+    }), encoding="utf-8")
+    values["CLIENT_RELEASE_MANIFEST_FILE"] = str(config_manifest.resolve())
     env_file = directory / "client-install-ci.env"
     env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8")
     compose_file = root / "deploy/client/docker-compose.client.yaml"
@@ -235,7 +247,7 @@ def verify(caddy_image: str, report: Path) -> None:
             "--inventory-metrics-output", str(inventory_metrics_file),
         ], cwd=root, check=True)
         inventory_metrics = _read_inventory_metrics(inventory_metrics_file)
-        _verify_installer_config(root, directory, caddy_image, manifest)
+        _verify_installer_config(root, directory, caddy_image)
         image_ids = {}
         for name, image in (("api", api_image), ("ui", ui_image)):
             inspected = subprocess.run(
@@ -251,8 +263,10 @@ def verify(caddy_image: str, report: Path) -> None:
             "status": "passed", "production_release": False,
             "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation and enrolled identity overlay",
             "installer_preflight": "passed", "compose_config": "passed",
+            "installer_manifest_scope": "Unsigned configuration fixture; signed build inventories and image IDs verified separately",
             "custom_network_proxy_config": "passed",
             "identity_overlay_config": "passed",
+            "startup_tamper_rejection": "passed",
             "protected_inventory": inventory_metrics,
             "not_verified": ["clean install", "upgrade/rollback", "live owner alerts", "browser audio", "telephone"],
             "image_ids": image_ids, "caddy_image": caddy_image,
