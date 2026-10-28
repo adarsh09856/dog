@@ -1,5 +1,11 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — disposable Docker volume round trip
+
+- On the VPS, a bounded network-disabled helper using an existing pinned PostgreSQL image exported and imported data across two uniquely named disposable volumes. Payload, mode `0640`, UID and GID `1234` matched after the round trip. A temporary Compose project rendered with `compose_client.py config --quiet`; no Compose services were started. Both temporary volumes and the harness directory were removed, and production containers remained running.
+- This validates the real volume transfer helper and configuration rendering only. It does not validate a complete client stack backup, restored database startup, identity enrollment, rollback, or customer data consistency. Those gates remain open.
+- Local `113ebfe4` serializes recovery operations and handles partial-stop rollback; 45 focused mocked tests passed. `4174c161` bounds helper containers to 256 MB memory, 0.25 CPU and 64 PIDs; 11 focused orchestration tests passed. No push, merge or deployment was made.
+
 ## 28 October 2026 — local Docker recovery orchestration and enrollment hardening
 
 - `cf7d3859` adds cold Docker volume export, unique staged restore volumes, persistent Compose selection, rollback state and the canonical `compose_client.py` wrapper. Review corrections cover output collision cleanup, source-volume existence, external consumers, partial stop, failed mapping writes and failed startup. Parent verification: 31 recovery-Docker/wrapper/installer tests passed; these mock Docker orchestration. Real volume export, startup and restore remain unverified because no local Docker daemon is available.
