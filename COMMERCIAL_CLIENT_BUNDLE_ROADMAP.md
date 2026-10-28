@@ -1,5 +1,12 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — local Docker setup checkpoint
+
+- Docker Desktop installation completed through winget. The Docker client exists at `C:\Program Files\Docker\Docker\resources\bin\docker.exe`, but its engine pipe was unavailable at the last check.
+- Windows DISM log records WSL feature installed and `Reboot required=yes` at 16:39:10. A Windows restart is required before further engine verification; do not repeat installer polling or start a second installation based on silence.
+- The previously absent user `.wslconfig` now caps WSL at 3 GB memory, 2 processors and 1 GB swap. Verify these limits and engine health after restart before starting containers. No image build or client-stack acceptance has run on this PC.
+- Resume: check Docker engine, use bounded sequential verification, diagnose the existing full-image failure, then accept signed installation, recovery and owner alerts. Voice integration still depends on the separate chat's handoff. Pushes and merges remain stopped.
+
 ## 28 October 2026 — public brand follow-up
 
 - Recovery Compose invocations now use the same shell-variable isolation as the client wrapper, including optional interpolation variables omitted from the selected environment file. Recovery, wrapper, package and installer archive tests passed 80 cases; real Docker recovery with this revision remains unverified.
