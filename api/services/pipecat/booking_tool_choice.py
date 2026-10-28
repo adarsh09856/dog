@@ -514,11 +514,23 @@ class _BookingToolChoiceMixin:
             raise
 
     def _completion_recovery_text(self, messages):
+        from api.services.configuration.language_normalizer import normalize_language_code
+        from api.services.pipecat.caller_language_context import _trusted_detected_language
+
         source = getattr(self, "_caller_language_source", None)
         settings = getattr(source, "_settings", None)
-        language = getattr(source, "latest_detected_language", None) or getattr(settings, "language", None)
+        # A recovery is spoken through the same TTS route as a normal reply.
+        # Honor an explicit caller choice and the confidence-filtered route;
+        # a weak raw detector label must not choose a different apology voice.
+        preference = getattr(source, "reply_language_override", None)
+        if not preference:
+            preference = getattr(
+                getattr(self, "_caller_language_context", None),
+                "_explicit_preference", None,
+            )
+        language = preference or _trusted_detected_language(source) or getattr(settings, "language", None)
         language = getattr(language, "value", language)
-        language = str(language or "").lower().replace("_", "-").split("-", 1)[0]
+        language = normalize_language_code(language)
         recovery = {
             "hi": "माफ़ कीजिए, जवाब देने में समस्या हुई। कृपया फिर से कोशिश करें।",
             "kn": "ಕ್ಷಮಿಸಿ, ಉತ್ತರ ನೀಡಲು ಸಮಸ್ಯೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
