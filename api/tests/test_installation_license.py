@@ -737,7 +737,7 @@ def test_openapi_data_routes_are_feature_mapped_or_explicitly_core():
         if required_feature_for_request(path) is None:
             unclassified.append(path)
 
-    assert unclassified == []
+    assert not unclassified, f"API routes missing client feature classification: {unclassified}"
 
 
 def test_status_and_health_paths_remain_available_without_license(monkeypatch):

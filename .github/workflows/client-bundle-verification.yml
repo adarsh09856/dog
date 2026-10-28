@@ -74,11 +74,17 @@ jobs:
           root = ET.parse(sys.argv[1]).getroot()
           failures = []
           for case in root.iter("testcase"):
-              if case.find("failure") is not None or case.find("error") is not None:
-                  failures.append(f"{case.attrib.get('classname', '')}::{case.attrib.get('name', '')}")
+              failed = case.find("failure") or case.find("error")
+              if failed is not None:
+                  name = case.attrib.get("name", "")
+                  details = ""
+                  if name == "test_openapi_data_routes_are_feature_mapped_or_explicitly_core":
+                      details = " ".join(failed.attrib.get("message", "").split())[:600]
+                  failures.append((f"{case.attrib.get('classname', '')}::{name}", details))
           if failures:
-              for failure in failures:
-                  print(f"::error title=Client licensing test failed::{failure}")
+              for test_name, details in failures:
+                  detail_suffix = f" {details}" if details else ""
+                  print(f"::error title=Client licensing test failed::{test_name}{detail_suffix}")
           else:
               print("::error title=Client licensing tests failed::See pytest report for collection/setup details")
           PY
