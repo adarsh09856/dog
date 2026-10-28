@@ -1,0 +1,90 @@
+name: Integration container build
+
+on:
+  push:
+    branches:
+      - codex/client-voice-integration
+    paths:
+      - ".github/workflows/integration-container-build.yml"
+      - "api/**"
+      - "ui/**"
+      - "pipecat/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/integration-container-build.yml"
+      - "api/**"
+      - "ui/**"
+      - "pipecat/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-container-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: api/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: kodewaves-api:integration-check
+          cache-from: type=gha,scope=integration-api
+          cache-to: type=gha,mode=max,scope=integration-api
+      - name: Import the built API without external services
+        run: |
+          docker run --rm --entrypoint python \
+            -e ENVIRONMENT=test \
+            -e DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:5432/kodewaves_unit_test \
+            -e REDIS_URL=redis://127.0.0.1:6379/15 \
+            kodewaves-api:integration-check \
+            -c "import api.app; print('API import passed')"
+
+  ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ui/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: kodewaves-ui:integration-check
+          cache-from: type=gha,scope=integration-ui
+          cache-to: type=gha,mode=max,scope=integration-ui
+      - name: Start the built UI container
+        run: docker run --detach --name kodewaves-ui-ci --publish 3010:3010 kodewaves-ui:integration-check
+      - name: Verify the UI serves a page
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3010/ --output /dev/null; then
+              echo "UI responded successfully"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs kodewaves-ui-ci
+          exit 1
+      - name: Remove the UI test container
+        if: always()
+        run: docker rm --force kodewaves-ui-ci || true
