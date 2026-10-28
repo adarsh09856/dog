@@ -519,7 +519,9 @@ def main() -> int:
             if isinstance(exc, subprocess.CalledProcessError):
                 output = exc.stderr or exc.stdout
                 if output:
-                    detail += f"\n{str(output)[-900:]}"
+                    # Reserve room for the diagnostic tail: long Compose
+                    # commands otherwise consume the annotation budget first.
+                    detail = detail[:280] + f"\n{str(output)[-900:]}"
             detail = detail[:1200]
             detail = re.sub(
                 r"(?i)(token|password|secret|api[_ -]?key|authorization)(\s*[:=]\s*)\S+",
