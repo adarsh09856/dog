@@ -1,5 +1,10 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — disposable PostgreSQL enrollment acceptance
+
+- The committed `test_enrolled_identity_replay_and_integrity_alert_persist` async integration case passed against an isolated temporary PostgreSQL 17 container on the VPS. It exercised no-proof rejection, enrollment, signed owner status, nonce replay rejection, IP binding and integrity-alert persistence. A small stdlib runner invoked the exact test function because the existing API image lacks pytest; this is not a full pytest-suite run.
+- The temporary database and runner used an internal network, tmpfs database storage, no published ports or production volumes, and resource limits of 384 MB, 0.25 CPU and 128 PIDs each. The agent confirmed cleanup and healthy production services afterward. Live owner enrollment, alert delivery and client installation still require acceptance.
+
 ## 28 October 2026 — disposable Docker volume round trip
 
 - On the VPS, a bounded network-disabled helper using an existing pinned PostgreSQL image exported and imported data across two uniquely named disposable volumes. Payload, mode `0640`, UID and GID `1234` matched after the round trip. A temporary Compose project rendered with `compose_client.py config --quiet`; no Compose services were started. Both temporary volumes and the harness directory were removed, and production containers remained running.
