@@ -112,9 +112,12 @@ def register_event_handlers(
         "pipeline_started": False,
         "client_connected": False,
         "initial_response_triggered": False,
+        "startup_scheduled": False,
+        "client_disconnected": False,
+        "startup_task": None,
     }
 
-    async def maybe_trigger_initial_response():
+    async def _run_initial_response():
         """Start the conversation after both pipeline_started and client_connected events.
 
         If a pre-call fetch is in progress, plays a ringer while waiting for the
@@ -123,9 +126,11 @@ def register_event_handlers(
         if (
             ready_state["pipeline_started"]
             and ready_state["client_connected"]
+            and not ready_state["client_disconnected"]
             and not ready_state["initial_response_triggered"]
         ):
             ready_state["initial_response_triggered"] = True
+            ready_state["startup_task"] = asyncio.current_task()
             startup_started = asyncio.get_running_loop().time()
             logger.info("[run {}] Startup: client and pipeline ready", workflow_run_id)
 
@@ -147,7 +152,9 @@ def register_event_handlers(
             )
 
             try:
-                # Wait for pre-call fetch if in progress, playing ringer meanwhile
+                # Keep the existing bounded startup wait. The fetch returns a
+                # complete context atomically; after the deadline it is ignored
+                # rather than merging a partial result into template variables.
                 if pre_call_fetch_task is not None:
                     if not pre_call_fetch_task.done():
                         logger.info(
@@ -199,7 +206,7 @@ def register_event_handlers(
                 # is inactive until told otherwise, and an inactive worker is
                 # handed no frames from the bus.
                 agent_started = await initial_agent_start_task
-            except BaseException:
+            except BaseException as exc:
                 # Do not leave an attachment/start coroutine running if fetch,
                 # persistence, or caller cancellation exits this readiness path.
                 if not initial_agent_start_task.done():
@@ -207,6 +214,10 @@ def register_event_handlers(
                 await asyncio.gather(
                     initial_agent_start_task, return_exceptions=True
                 )
+                if isinstance(exc, asyncio.CancelledError) and ready_state[
+                    "client_disconnected"
+                ]:
+                    return
                 raise
 
             if not agent_started:
@@ -240,6 +251,27 @@ def register_event_handlers(
                 generate_if_no_greeting=True,
             )
 
+    async def maybe_trigger_initial_response():
+        if (
+            ready_state["pipeline_started"]
+            and ready_state["client_connected"]
+            and not ready_state["client_disconnected"]
+            and not ready_state["startup_scheduled"]
+        ):
+            # Keep cancellation scoped to startup, not the long-lived transport
+            # event worker that invoked this callback.
+            ready_state["startup_scheduled"] = True
+            startup_task = asyncio.create_task(_run_initial_response())
+            ready_state["startup_task"] = startup_task
+            try:
+                await startup_task
+            except asyncio.CancelledError:
+                if not ready_state["client_disconnected"]:
+                    raise
+            finally:
+                if ready_state.get("startup_task") is startup_task:
+                    ready_state["startup_task"] = None
+
     @transport.event_handler("on_client_connected")
     async def on_client_connected(_transport, _participant):
         logger.debug("In on_client_connected callback handler")
@@ -249,6 +281,7 @@ def register_event_handlers(
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(_transport, _participant):
+        ready_state["client_disconnected"] = True
         call_disposed = engine.is_call_disposed()
 
         logger.debug(
@@ -257,6 +290,23 @@ def register_event_handlers(
 
         # Stop recordings
         await audio_buffer.stop_recording()
+
+        # A disconnect during startup must release the outstanding fetch and
+        # agent attachment. Normal startup still waits for the entire fetch.
+        if pre_call_fetch_task is not None and not pre_call_fetch_task.done():
+            pre_call_fetch_task.cancel()
+        startup_task = ready_state.get("startup_task")
+        current_task = asyncio.current_task()
+        if (
+            startup_task is not None
+            and startup_task is not current_task
+            and not startup_task.done()
+        ):
+            startup_task.cancel()
+        if pre_call_fetch_task is not None:
+            await asyncio.gather(pre_call_fetch_task, return_exceptions=True)
+        if startup_task is not None and startup_task is not current_task:
+            await asyncio.gather(startup_task, return_exceptions=True)
 
         # A disconnect right after a handoff is the external PBX taking the
         # customer leg, not the caller hanging up. The reason stays distinct
