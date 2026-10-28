@@ -100,3 +100,7 @@ This simulation writes Git objects only. It does not check out or merge files.
 - ui/src/components/workflow/TemplateCard.tsx
 - ui/src/components/workflow/conversation/activeBotMessage.ts
 - ui/src/lib/kodewavesApi.ts
+
+## Working tree snapshot
+
+On 28 October 2026 the client branch had 517 committed changed paths since the common ancestor, and the active production-integration checkout had 80 porcelain status entries. These counts are snapshots; recalculate after the voice owner hands off. The production VPS also has uncommitted files. Never use a committed-only merge as proof those changes are preserved.
