@@ -1,5 +1,10 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — isolated Compose recovery journey
+
+- A unique disposable VPS Compose project ran real PostgreSQL 17, MinIO and Redis with sleeping API/UI stand-ins, no published ports or production mounts. The agent seeded a database row and MinIO object, ran `create_docker_backup`, changed original data, ran `restore_to_docker_volumes` and confirmed the backed-up values, then ran `rollback_docker_restore` and confirmed the later original values. The exact temporary containers, volumes, network and code directory were removed; production services were not stopped or contacted.
+- This exercises the recovery commands with real database/object storage and synthetic application services. It does not establish successful recovery of a real signed client image, production data, identity owner checks, or live calls. The wrapper/recovery shared-lock concurrency fix remains pending.
+
 ## 28 October 2026 — disposable PostgreSQL enrollment acceptance
 
 - The committed `test_enrolled_identity_replay_and_integrity_alert_persist` async integration case passed against an isolated temporary PostgreSQL 17 container on the VPS. It exercised no-proof rejection, enrollment, signed owner status, nonce replay rejection, IP binding and integrity-alert persistence. A small stdlib runner invoked the exact test function because the existing API image lacks pytest; this is not a full pytest-suite run.
