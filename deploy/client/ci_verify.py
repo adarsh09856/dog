@@ -409,6 +409,13 @@ def _verify_compose_runtime(
             )
             if isinstance(exc, subprocess.CalledProcessError) and logs.stdout:
                 exc.stderr = (exc.stderr or "") + "\nAPI startup log: " + logs.stdout[-800:]
+            ui_logs = subprocess.run(
+                [*compose_command, "logs", "--no-color", "--tail", "20", "ui"],
+                cwd=root, check=False, env=command_env, timeout=30,
+                capture_output=True, text=True,
+            )
+            if isinstance(exc, subprocess.CalledProcessError) and ui_logs.stdout:
+                exc.stderr = (exc.stderr or "") + "\nUI startup log: " + ui_logs.stdout[-600:]
         except Exception:  # noqa: BLE001 - preserve the failing smoke result
             pass
         raise
