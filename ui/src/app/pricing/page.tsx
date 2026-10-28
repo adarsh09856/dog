@@ -325,6 +325,9 @@ export default function PricingPage() {
                     ? ` + ${pkg.bonus_minutes.toLocaleString()} bonus minutes`
                     : ""}
                 </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  One-time payment. Wallet minutes do not expire.
+                </p>
                 <Link
                   href={`/auth/login?credit_package=${encodeURIComponent(String(pkg.id))}`}
                   className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-cta-text"

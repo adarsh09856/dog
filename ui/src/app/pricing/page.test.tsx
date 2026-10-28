@@ -207,5 +207,6 @@ describe("public pricing", () => {
     const [link] = await screen.findAllByRole("link", { name: /Continue to wallet/ });
     expect(link.getAttribute("href")).toBe("/auth/login?credit_package=bundle-500");
     expect(screen.getAllByText("Popular")).toHaveLength(1);
+    expect(screen.getAllByText("One-time payment. Wallet minutes do not expire.")).toHaveLength(2);
   });
 });
