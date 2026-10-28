@@ -501,8 +501,18 @@ def main() -> int:
     except Exception as exc:
         if os.getenv("GITHUB_ACTIONS", "").lower() == "true":
             # Surface a bounded summary when private action logs aren't visible;
-            # never dump subprocess output or the process environment here.
-            detail = f"{type(exc).__name__}: {exc}"[:800]
+            # include only the failing subprocess output, never the environment.
+            detail = f"{type(exc).__name__}: {exc}"
+            if isinstance(exc, subprocess.CalledProcessError):
+                output = exc.stderr or exc.stdout
+                if output:
+                    detail += f"\n{str(output)[-900:]}"
+            detail = detail[:1200]
+            detail = re.sub(
+                r"(?i)(token|password|secret|api[_ -]?key|authorization)(\s*[:=]\s*)\S+",
+                r"\1\2[REDACTED]",
+                detail,
+            )
             detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
             print(f"::error title=Client image verification failed::{detail}", file=sys.stderr)
         raise

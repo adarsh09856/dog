@@ -1,6 +1,7 @@
 """CI signing material must stay disposable and never publish customer releases."""
 
 import json
+import re
 import subprocess
 import sys
 import urllib.error
@@ -395,6 +396,41 @@ def test_cli_emits_bounded_ci_annotation_on_failure(verifier, monkeypatch, tmp_p
         verifier.main()
 
     assert "::error title=Client image verification failed::ValueError: runtime smoke failed%0Alocal diagnostics" in capsys.readouterr().err
+
+
+def test_cli_reports_redacted_subprocess_diagnostics_in_ci(verifier, monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(sys, "argv", [
+        "ci_verify", "--caddy-image", "registry.example.com/ingress@sha256:" + "a" * 64,
+        "--report", str(tmp_path / "report.json"),
+    ])
+
+    def fail(_caddy_image, _report):
+        raise subprocess.CalledProcessError(
+            1, ["docker", "compose", "up"], stderr="api unhealthy\npassword=test-secret"
+        )
+
+    monkeypatch.setattr(verifier, "verify", fail)
+    with pytest.raises(subprocess.CalledProcessError):
+        verifier.main()
+
+    annotation = capsys.readouterr().err
+    assert "api unhealthy" in annotation
+    assert "password=[REDACTED]" in annotation
+    assert "test-secret" not in annotation
+    assert len(annotation) < 1400
+
+
+def test_owner_ci_installs_same_pipecat_extras_as_api_image():
+    root = Path(__file__).resolve().parents[2]
+    dockerfile = (root / "api" / "Dockerfile").read_text(encoding="utf-8")
+    workflow = (root / ".github" / "workflows" / "client-bundle-verification.yml").read_text(encoding="utf-8")
+    image_extras = re.search(r"uv pip install '/tmp/pipecat\[([^]]+)\]'", dockerfile)
+    ci_extras = re.search(r"pip install './pipecat\[([^]]+)\]'", workflow)
+
+    assert image_extras is not None
+    assert ci_extras is not None
+    assert ci_extras.group(1) == image_extras.group(1)
 
 
 @pytest.mark.parametrize("tamper", ["api_count", "ui_image", "edition"])
