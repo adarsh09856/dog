@@ -367,7 +367,7 @@ def test_runtime_smoke_preserves_compose_startup_diagnostics(verifier, monkeypat
             ui_image="kodewaves-ui:ci-check", manifest=tmp_path / "manifest.json",
         )
 
-    assert error.value.stderr == "api healthcheck failed"
+    assert "api healthcheck failed" in error.value.stderr
     down = next(
         command for command, _ in commands
         if command[:2] == ["docker", "compose"] and "down" in command
@@ -455,6 +455,54 @@ def test_cli_reports_redacted_subprocess_diagnostics_in_ci(verifier, monkeypatch
     assert "password=[REDACTED]" in annotation
     assert "test-secret" not in annotation
     assert len(annotation) < 1400
+
+
+def test_runtime_smoke_keeps_compose_failure_with_bounded_service_diagnostics(verifier, monkeypatch, tmp_path):
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text("{}", encoding="utf-8")
+
+    def run(command, **_kwargs):
+        if command[:2] == ["docker", "build"]:
+            return SimpleNamespace(returncode=0)
+        if command[:2] == ["docker", "compose"]:
+            if "up" in command:
+                raise subprocess.CalledProcessError(
+                    1, command, stderr="dependency failed: container ui is unhealthy"
+                )
+            if "ps" in command:
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout='{"Service":"api","Status":"healthy"}\n'
+                    '{"Service":"ui","Status":"unhealthy"}',
+                )
+            if "logs" in command:
+                service = command[-1]
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout=f"{service} startup diagnostic marker",
+                )
+            if "down" in command:
+                return SimpleNamespace(returncode=0)
+        if command[:3] == ["docker", "image", "rm"]:
+            return SimpleNamespace(returncode=0)
+        pytest.fail(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(verifier.subprocess, "run", run)
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        verifier._verify_compose_runtime(
+            tmp_path,
+            tmp_path,
+            api_image="kodewaves-client-api:test",
+            ui_image="kodewaves-client-ui:test",
+            manifest=manifest,
+        )
+
+    diagnostic = str(error.value.stderr)
+    assert "dependency failed: container ui is unhealthy" in diagnostic
+    assert '"Service":"api","Status":"healthy"' in diagnostic
+    assert '"Service":"ui","Status":"unhealthy"' in diagnostic
+    assert "API startup log: api startup diagnostic marker" in diagnostic
+    assert "UI startup log: ui startup diagnostic marker" in diagnostic
 
 
 def test_owner_ci_installs_same_pipecat_extras_as_api_image():

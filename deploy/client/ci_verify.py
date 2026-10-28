@@ -391,6 +391,12 @@ def _verify_compose_runtime(
         }
     except BaseException as exc:
         failure = exc
+        primary_output = ""
+        if isinstance(exc, subprocess.CalledProcessError):
+            primary_output = str(exc.stderr or exc.stdout or "").strip()
+        diagnostics: list[str] = []
+        if primary_output:
+            diagnostics.append("Failing Compose output: " + primary_output[-420:])
         try:
             status = subprocess.run(
                 [*compose_command, "ps", "--all", "--format", "json", "api", "ui"],
@@ -398,26 +404,30 @@ def _verify_compose_runtime(
                 capture_output=True, text=True,
             )
             if status.stdout:
-                api_status = status.stdout[-500:]
-                print("Client runtime smoke API status: " + api_status, file=sys.stderr)
-                if isinstance(exc, subprocess.CalledProcessError):
-                    exc.stderr = (exc.stderr or "") + "\nAPI status: " + api_status
+                service_status = status.stdout.strip()[-260:]
+                diagnostics.append("Compose service state: " + service_status)
+                print("Client runtime smoke service state: " + service_status, file=sys.stderr)
             logs = subprocess.run(
                 [*compose_command, "logs", "--no-color", "--tail", "30", "api"],
                 cwd=root, check=False, env=command_env, timeout=30,
                 capture_output=True, text=True,
             )
-            if isinstance(exc, subprocess.CalledProcessError) and logs.stdout:
-                exc.stderr = (exc.stderr or "") + "\nAPI startup log: " + logs.stdout[-800:]
+            if logs.stdout:
+                diagnostics.append("API startup log: " + logs.stdout.strip()[-360:])
             ui_logs = subprocess.run(
                 [*compose_command, "logs", "--no-color", "--tail", "20", "ui"],
                 cwd=root, check=False, env=command_env, timeout=30,
                 capture_output=True, text=True,
             )
-            if isinstance(exc, subprocess.CalledProcessError) and ui_logs.stdout:
-                exc.stderr = (exc.stderr or "") + "\nUI startup log: " + ui_logs.stdout[-600:]
+            if ui_logs.stdout:
+                diagnostics.append("UI startup log: " + ui_logs.stdout.strip()[-300:])
         except Exception:  # noqa: BLE001 - preserve the failing smoke result
-            pass
+            diagnostics.append("Additional Compose diagnostics were unavailable")
+        if diagnostics and isinstance(exc, subprocess.CalledProcessError):
+            # Keep the original failing command output first, followed by
+            # bounded state/log tails. The CI annotation can then retain the
+            # cause instead of showing only logs gathered during diagnosis.
+            exc.stderr = "\n".join(diagnostics)
         raise
     finally:
         cleanup_errors: list[str] = []
@@ -529,9 +539,10 @@ def main() -> int:
             if isinstance(exc, subprocess.CalledProcessError):
                 output = exc.stderr or exc.stdout
                 if output:
-                    # Reserve room for the diagnostic tail: long Compose
-                    # commands otherwise consume the annotation budget first.
-                    detail = detail[:280] + f"\n{str(output)[-900:]}"
+                    # The full command often contains long temporary paths.
+                    # Preserve its failure reason and the curated runtime
+                    # diagnostics instead of truncating that reason away.
+                    detail = f"{type(exc).__name__} (exit code {exc.returncode})\n{str(output)[:1050]}"
             detail = detail[:1200]
             detail = re.sub(
                 r"(?i)(token|password|secret|api[_ -]?key|authorization)(\s*[:=]\s*)\S+",
