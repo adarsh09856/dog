@@ -62,7 +62,28 @@ jobs:
       - name: Verify client startup failure handling
         run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_client_startup_entrypoint.py -q
       - name: Verify signed license and feature boundaries
-        run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_installation_license.py -q
+        run: |
+          set +e
+          ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_installation_license.py -q --junitxml="$RUNNER_TEMP/client-license-tests.xml"
+          test_status=$?
+          if [ "$test_status" -ne 0 ]; then
+            python - "$RUNNER_TEMP/client-license-tests.xml" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(sys.argv[1]).getroot()
+          failures = []
+          for case in root.iter("testcase"):
+              if case.find("failure") is not None or case.find("error") is not None:
+                  failures.append(f"{case.attrib.get('classname', '')}::{case.attrib.get('name', '')}")
+          if failures:
+              for failure in failures:
+                  print(f"::error title=Client licensing test failed::{failure}")
+          else:
+              print("::error title=Client licensing tests failed::See pytest report for collection/setup details")
+          PY
+          fi
+          exit "$test_status"
       - name: Verify signed owner status and worker entitlements
         run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_owner_installation_status.py api/tests/test_client_worker_entitlements.py -q
 
