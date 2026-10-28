@@ -8,6 +8,27 @@ Give every authorized operator one assistant that can explain the platform, find
 
 AI coverage is a requirement of every module. A screen alone, a model reply, an action proposal or a successful HTTP response does not prove completion. An operation is complete when its intended business state is verified and the user can see what happened.
 
+## Business setup that adapts to the customer
+
+The industry rows below are examples, not a fixed product menu. A customer describes how the business works in ordinary language, and Kodewaves builds a reviewable workspace from reusable capabilities. The customer must be able to change that setup later without editing application code.
+
+1. Discover the business: locations, teams, customers, products/services, operating hours, languages, channels, existing systems, consent rules and the outcome the customer wants. Import samples only after the customer selects their source and scope.
+2. Map the actual journey: where requests arrive, what information is needed, who decides, which records change, what must be sent, and what counts as done. Draw the journey in the UI; mark missing integrations or human steps instead of inventing automation.
+3. Assemble reusable objects: contacts, custom fields, pipelines, forms, inboxes, calendars, products, inventory, tickets, tasks, documents, reports, agents and workflows. Use versioned schemas and migrations so changing a template does not erase customer data.
+4. Configure authority: roles, branches, record scope, approval thresholds, budgets, quiet hours and retention. The assistant derives its allowed actions from this saved policy, never from a prompt alone.
+5. Connect channels and systems through supported adapters, validate credentials without showing secrets, then run a real sample through each direction. Unsupported provider operations remain visible as manual steps.
+6. Preview the resulting workspace and agent behavior with representative data. The customer approves activation; Kodewaves publishes a version and keeps a rollback point.
+7. Operate continuously: show work in one task inbox, surface exceptions, suggest improvements using actual outcomes, and let staff correct the process. Each suggested change returns to preview and approval.
+
+This produces a practical starting workspace for a small single-location business and scales to multiple teams, branches, companies and industry-specific records. A template speeds setup but never silently changes permissions, price, external recipients or record ownership. A new business type is supported by configuring and extending the same capability/action contract; it does not require a new assistant with separate rules.
+
+### Ease-of-use acceptance
+
+- A new workspace owner can describe a real journey, see the proposed records/steps, connect the available systems, test it and publish without touching code or a server.
+- Daily operators can ask what needs attention, complete a task, correct a record and hand off an exception from the same task view; every result links to the actual record.
+- An administrator can change hours, staff, forms, stages, messages and approved automations in the panel; the AI and public channels then use the saved version.
+- An unsupported action or missing integration is explained with the exact manual next step. The assistant does not claim a task is complete before its business result is verified.
+
 ## What exists and what must be built
 
 The current source has workflow authoring/catalog MCP tools (`api/mcp_server/server.py`), API-key authentication (`api/mcp_server/auth.py`), workflow MCP tool execution, text workflow testing, CRM, appointments, forms, widgets, campaigns, knowledge, billing, organization and owner routes. Source presence does not establish accepted customer journeys. The registered authoring MCP tools do not provide complete platform control today. There is no verified platform-wide assistant covering all of these operations.
@@ -107,6 +128,20 @@ For voice, preserve a complete user turn, reconcile partial/final STT, generate 
 Measure endpoint detection, final transcription, model first token, first audio, tool wait, playback completion and total task time independently. Target 1–1.5 seconds from speech end to first useful audio for the hardware/models and loads that pass measurement. A slow external booking or payment is shown as a running operation; a quick acknowledgement is not counted as task completion. Cache public metadata/catalogs with invalidation and never replay a cached business answer or action for a different customer.
 
 ## Delivery order
+
+### Starting point and old-work carryover
+
+The new adaptive-business work starts after an evidence-backed baseline of the existing platform. Keep one release ledger with a commit, build identity, test evidence, owner and status for each item. Existing code is the base, not disposable work. Do not restart the public theme, licensing or voice implementations just because this plan adds AI control.
+
+| Existing work | Current evidence | Remaining acceptance before calling it complete |
+|---|---|---|
+| Public pages, brand and pricing | Redesign and shared branding/pricing source tests exist | Live public/login/workspace/admin save and second-session propagation, responsive/accessibility review, actual catalog and checkout terms |
+| Owner control, plans and billing | Owner route isolation, plan gates and disposable PostgreSQL tests exist | Live two-tenant owner/member journeys, payment gateway/webhook recovery, limits at runtime and worker/call admission |
+| Client bundle, signed licensing and integrity | Source verifier, installer preflight and prior Docker image verification exist; latest negative-tamper image run is in progress | Clean HTTPS install, owner enrollment, domain/IP and renewal/revocation paths, alert delivery, upgrade/rollback and recovery on a built customer stack |
+| Voice and agent flow | Separate chat owns self-hosted STT/LLM/TTS changes | Consolidated handoff, browser audio across representative agents/languages and measured latency, then authorized inbound/outbound phone tests |
+| Combined release | Isolated branches and roadmap exist; merge is stopped | Reconcile both finished revisions in a dedicated integration checkout, resolve conflicts, run full regression and staging acceptance before any production release |
+
+These are independent evidence gates. A green source test or a completed design document does not close a live journey. While the voice owner works, this checkout can finish bundle and UI acceptance that does not modify its branch. The new action inventory can begin from current routes and domain services, but production activation of AI actions waits for the corresponding role, entitlement and task-execution gates.
 
 | Phase | Deliverable | Exit gate |
 |---|---|---|
