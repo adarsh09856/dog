@@ -11,6 +11,7 @@ new offline directory; it never writes Docker volumes or modifies an install.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import io
 import json
@@ -46,6 +47,42 @@ HASH_CHUNK_SIZE = 1024 * 1024
 MAX_DOCKER_TIMEOUT = 3600
 RECOVERY_OVERRIDE = "docker-compose.recovery.yaml"
 RECOVERY_STATE_DIR = ".client-recovery-state"
+RECOVERY_LOCK_FILE = ".client-recovery-operation.lock"
+
+
+@contextmanager
+def _recovery_operation_lock(compose_dir: Path):
+    """Serialize backup/restore/rollback across processes without stale locks."""
+    compose_dir = compose_dir.resolve(strict=True)
+    lock_path = compose_dir / RECOVERY_LOCK_FILE
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(lock_path, flags, 0o600)
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            if os.fstat(descriptor).st_size == 0:
+                os.write(descriptor, b"\0")
+                os.lseek(descriptor, 0, os.SEEK_SET)
+            msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
 
 
 def _validate_member_name(name: str) -> None:
@@ -629,7 +666,7 @@ def _restart_services(compose_command: list[str], compose_dir: Path, services: l
         _run([*compose_command, "start", *services], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
 
 
-def create_docker_backup(
+def _create_docker_backup_locked(
     *, compose_dir: Path, env_file: Path, output: Path,
     release_public_key: Path, confirm_maintenance: bool,
 ) -> dict[str, object]:
@@ -700,6 +737,17 @@ def create_docker_backup(
     return {**backup_result, "services_restarted": running}
 
 
+def create_docker_backup(
+    *, compose_dir: Path, env_file: Path, output: Path,
+    release_public_key: Path, confirm_maintenance: bool,
+) -> dict[str, object]:
+    with _recovery_operation_lock(compose_dir):
+        return _create_docker_backup_locked(
+            compose_dir=compose_dir, env_file=env_file, output=output,
+            release_public_key=release_public_key, confirm_maintenance=confirm_maintenance,
+        )
+
+
 def _write_private(path: Path, content: bytes, *, mode: int = 0o600) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags, mode)
@@ -752,7 +800,7 @@ def _switch_compose_up(
     )
 
 
-def restore_to_docker_volumes(
+def _restore_to_docker_volumes_locked(
     *, archive_path: Path, compose_dir: Path, env_file: Path,
     confirm_maintenance: bool,
 ) -> dict[str, object]:
@@ -883,7 +931,18 @@ def restore_to_docker_volumes(
             pass
 
 
-def rollback_docker_restore(*, compose_dir: Path, env_file: Path, confirm_maintenance: bool) -> dict[str, object]:
+def restore_to_docker_volumes(
+    *, archive_path: Path, compose_dir: Path, env_file: Path,
+    confirm_maintenance: bool,
+) -> dict[str, object]:
+    with _recovery_operation_lock(compose_dir):
+        return _restore_to_docker_volumes_locked(
+            archive_path=archive_path, compose_dir=compose_dir, env_file=env_file,
+            confirm_maintenance=confirm_maintenance,
+        )
+
+
+def _rollback_docker_restore_locked(*, compose_dir: Path, env_file: Path, confirm_maintenance: bool) -> dict[str, object]:
     """Switch Compose back to the original volumes without deleting either set."""
     if not confirm_maintenance:
         raise ValueError("Docker rollback requires --confirm-maintenance because client services will stop")
@@ -909,9 +968,9 @@ def rollback_docker_restore(*, compose_dir: Path, env_file: Path, confirm_mainte
     command, model, _env = _compose_context(compose_dir, env_file)
     running = _running_services(command, compose_dir, set(model.get("services", {})))
     original_running = list(state.get("running_services", []))
-    if running:
-        _run([*command, "stop"], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
     try:
+        if running:
+            _run([*command, "stop"], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
         if state.get("original_override_exists"):
             _atomic_write(current_override, original_override, mode=0o600)
         else:
@@ -936,6 +995,13 @@ def rollback_docker_restore(*, compose_dir: Path, env_file: Path, confirm_mainte
         "restored_volumes_preserved": state["new_volumes"],
         "rollback_state": str(rolled_back_dir),
     }
+
+
+def rollback_docker_restore(*, compose_dir: Path, env_file: Path, confirm_maintenance: bool) -> dict[str, object]:
+    with _recovery_operation_lock(compose_dir):
+        return _rollback_docker_restore_locked(
+            compose_dir=compose_dir, env_file=env_file, confirm_maintenance=confirm_maintenance,
+        )
 
 
 def _validate_archive_handle(archive: tarfile.TarFile) -> tuple[dict[str, object], dict[str, str]]:

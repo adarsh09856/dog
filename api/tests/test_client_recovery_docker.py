@@ -4,6 +4,8 @@ import json
 import os
 import sys
 import tarfile
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -308,3 +310,79 @@ def test_restore_failure_restores_old_selection_and_retains_original_volumes(mon
     else:
         assert len(cleanup_events) == 1
         assert set(cleanup_events[0][1:]) == set(created)
+
+
+@pytest.mark.parametrize("failure_point", ["partial_stop", "original_up"])
+def test_rollback_failure_reinstates_restored_selection_and_restarts_partial_project(monkeypatch, tmp_path, failure_point):
+    compose_dir = tmp_path / "client"
+    compose_dir.mkdir()
+    env_file, manifest, release_key = _installation(compose_dir)
+    for name in ("docker-compose.client.yaml", "docker-compose.identity.yaml", recovery.RECOVERY_OVERRIDE):
+        (compose_dir / name).write_text("{}\n", encoding="utf-8")
+    archive = _make_archive(tmp_path, env_file, manifest, release_key, compose_dir / "inputs/installation.key")
+    running = ["api", "postgres", "minio"]
+    monkeypatch.setattr(recovery, "_compose_context", lambda *_: (["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)))
+    monkeypatch.setattr(recovery, "_running_services", lambda *_: list(running))
+    monkeypatch.setattr(recovery, "_docker_volume_exists", lambda *_: False)
+    monkeypatch.setattr(recovery, "_create_volume", lambda *_: None)
+    monkeypatch.setattr(recovery, "_volume_tar_command", lambda **_kwargs: None)
+    monkeypatch.setattr(recovery, "_run", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(recovery, "_switch_compose_up", lambda *_args, **_kwargs: None)
+    restored = recovery.restore_to_docker_volumes(
+        archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+        confirm_maintenance=True,
+    )
+    prior_override = (compose_dir / recovery.RECOVERY_OVERRIDE).read_bytes()
+    events: list[object] = []
+    stop_calls = 0
+    switch_calls = 0
+
+    def run(command, **_kwargs):
+        nonlocal stop_calls
+        events.append(command)
+        if command[-1] == "stop":
+            stop_calls += 1
+            if failure_point == "partial_stop" and stop_calls == 1:
+                raise RuntimeError("injected partial stop")
+        return ""
+
+    def switch(_dir, _env, services, **_kwargs):
+        nonlocal switch_calls
+        switch_calls += 1
+        events.append(["up", *services])
+        if failure_point == "original_up" and switch_calls == 1:
+            raise RuntimeError("injected old stack startup failure")
+
+    monkeypatch.setattr(recovery, "_run", run)
+    monkeypatch.setattr(recovery, "_switch_compose_up", switch)
+
+    with pytest.raises(RuntimeError, match="Rollback failed"):
+        recovery.rollback_docker_restore(
+            compose_dir=compose_dir, env_file=env_file, confirm_maintenance=True,
+        )
+
+    assert (compose_dir / recovery.RECOVERY_OVERRIDE).read_bytes() == prior_override
+    assert ["up", *running] in events
+    state = json.loads((compose_dir / recovery.RECOVERY_STATE_DIR / "state.json").read_text())
+    assert state["status"] == "active"
+    assert restored["new_volumes"] == state["new_volumes"]
+
+
+def test_recovery_operation_lock_serializes_concurrent_operations(tmp_path):
+    compose_dir = tmp_path / "client"
+    compose_dir.mkdir()
+    entered_second = threading.Event()
+
+    def second_operation():
+        with recovery._recovery_operation_lock(compose_dir):
+            entered_second.set()
+
+    with recovery._recovery_operation_lock(compose_dir):
+        worker = threading.Thread(target=second_operation)
+        worker.start()
+        time.sleep(0.05)
+        assert not entered_second.is_set()
+    worker.join(timeout=2)
+
+    assert entered_second.is_set()
+    assert not worker.is_alive()
