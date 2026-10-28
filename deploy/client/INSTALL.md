@@ -32,8 +32,12 @@ inspection; the application images use their own baked verification keys.
    globally routable public IPv4 address. This installer does not configure IPv6 TURN.
 4. Generate fresh credentials for every secret placeholder. The credential
    encryption key must contain 32 random bytes encoded as URL-safe Base64:
-   `python3 -c 'import secrets; print(secrets.token_urlsafe(32))'`.
+   `python3 -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())'`.
    Generate each other password or signing-secret placeholder independently.
+   Preserve the encryption key's exact text, including its trailing `=`, in
+   backups and updates. For an existing installation, do not add or remove
+   padding: the current API derives a different encryption key for unpadded
+   input, and changing that text can make saved provider credentials unreadable.
 5. The bundled Caddy proxy is enabled by `COMPOSE_PROFILES=direct-ingress` and
    obtains HTTPS certificates. Keep `CLIENT_CADDY_IPV4` and
    `FORWARDED_ALLOW_IPS` aligned. If an existing proxy handles HTTPS, clear
