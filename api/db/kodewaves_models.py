@@ -225,6 +225,7 @@ class SaaSPlanModel(Base):
     has_appointments_access = Column(Boolean, default=True, nullable=False)
     has_forms_access = Column(Boolean, default=True, nullable=False)
     has_widget_access = Column(Boolean, default=True, nullable=False)
+    has_campaigns_access = Column(Boolean, default=True, nullable=False)
     allow_user_byok = Column(Boolean, default=False, nullable=False)               # Admin per-plan BYOK control
     is_default = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)

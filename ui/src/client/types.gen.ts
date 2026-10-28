@@ -6403,6 +6403,10 @@ export type PlanItem = {
      */
     has_widget_access?: boolean;
     /**
+     * Has Campaigns Access
+     */
+    has_campaigns_access?: boolean;
+    /**
      * Allow User Byok
      */
     allow_user_byok?: boolean;

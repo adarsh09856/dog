@@ -398,7 +398,7 @@ async def test_public_plan_preserves_exact_price_and_actual_feature_grants(monke
         monthly_price_cents=2999, annual_price_cents=29900, currency="USD",
         included_monthly_minutes=100, max_agents=5, max_concurrent_calls=2, allow_user_byok=False,
         has_crm_access=True, has_appointments_access=False, has_forms_access=False,
-        has_widget_access=True, is_active=True,
+        has_widget_access=True, has_campaigns_access=True, is_active=True,
     )
     monkeypatch.setattr(billing_sovereign, "list_active_plans", AsyncMock(return_value=[record]))
     result = (await billing_sovereign.list_public_plans())[0]
@@ -409,4 +409,4 @@ async def test_public_plan_preserves_exact_price_and_actual_feature_grants(monke
     assert result.monthly_price_usd == 29.99
     assert result.max_agents == 5
     assert result.overage_rate_per_minute is None
-    assert result.features == ["CRM access", "Web widgets"]
+    assert result.features == ["CRM access", "Web widgets", "Campaigns"]

@@ -13,6 +13,7 @@ FEATURE_COLUMNS = {
     "appointments": "has_appointments_access",
     "forms": "has_forms_access",
     "widgets": "has_widget_access",
+    "campaigns": "has_campaigns_access",
     "byok": "allow_user_byok",
 }
 
@@ -114,6 +115,7 @@ async def test_owner_feature_disabled_denies_call_before_slot_admission(monkeypa
         ("appointments", "/appointments", "has_appointments_access"),
         ("forms", "/forms", "has_forms_access"),
         ("widgets", "/widgets", "has_widget_access"),
+        ("campaign", "/campaign/", "has_campaigns_access"),
         ("workflow_embed", "/workflow/42/embed-token", "has_widget_access"),
     ],
 )

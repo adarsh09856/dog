@@ -27,7 +27,8 @@ async def test_plan_write_preserves_zero_minutes_and_resource_quotas(monkeypatch
 
     monkeypatch.setattr(saas_plan_catalog.kodewaves_db_client, "get_session", get_session)
     payload = plans.PlanItem(name="Restricted", code="restricted", included_minutes=0,
-                             max_agents=0, max_concurrent_calls=0, is_public=False)
+                             max_agents=0, max_concurrent_calls=0, is_public=False,
+                             has_campaigns_access=False)
     if operation == "create":
         await plans.upsert_plan(payload, _user=SimpleNamespace(id=1))
     else:
@@ -37,6 +38,7 @@ async def test_plan_write_preserves_zero_minutes_and_resource_quotas(monkeypatch
     assert record.max_agents == 0
     assert record.max_concurrent_calls == 0
     assert record.is_public is False
+    assert record.has_campaigns_access is False
     session.commit.assert_awaited_once()
 
 

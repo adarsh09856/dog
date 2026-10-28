@@ -58,7 +58,7 @@ _PLAN_FEATURE_COLUMNS = {
     "forms": "has_forms_access",
     "widgets": "has_widget_access",
     "byok": "allow_user_byok",
-    "campaigns": None,
+    "campaigns": "has_campaigns_access",
 }
 
 

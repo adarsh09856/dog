@@ -26,6 +26,7 @@ class PlanItem(BaseModel):
     has_appointments_access: bool = True
     has_forms_access: bool = True
     has_widget_access: bool = True
+    has_campaigns_access: bool = True
     allow_user_byok: bool = False
     is_default: bool = False
     is_active: bool = True
@@ -55,6 +56,7 @@ def _plan_values(plan: PlanItem) -> dict:
         "has_crm_access": plan.has_crm_access,
         "has_appointments_access": plan.has_appointments_access,
         "has_forms_access": plan.has_forms_access, "has_widget_access": plan.has_widget_access,
+        "has_campaigns_access": plan.has_campaigns_access,
         "allow_user_byok": plan.allow_user_byok,
         "is_default": plan.is_default, "is_active": plan.is_active,
         "is_public": plan.is_public,
@@ -76,6 +78,7 @@ async def list_plans(_user=Depends(get_superuser)):
             max_concurrent_calls=r.max_concurrent_calls,
             has_crm_access=r.has_crm_access, has_appointments_access=r.has_appointments_access,
             has_forms_access=r.has_forms_access, has_widget_access=r.has_widget_access,
+            has_campaigns_access=r.has_campaigns_access,
             allow_user_byok=r.allow_user_byok, is_default=r.is_default,
             is_active=r.is_active, is_public=r.is_public,
         ) for r in records

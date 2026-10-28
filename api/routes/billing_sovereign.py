@@ -184,6 +184,7 @@ async def list_public_plans():
                 (r.has_appointments_access, "Appointment tools"),
                 (r.has_forms_access, "Forms"),
                 (r.has_widget_access, "Web widgets"),
+                (r.has_campaigns_access, "Campaigns"),
                 (r.allow_user_byok, "Bring your own provider keys"),
             ) if enabled],
             is_active=r.is_active,

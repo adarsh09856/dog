@@ -133,6 +133,7 @@ export default function AdminPlansPage() {
                 has_appointments_access: true,
                 has_forms_access: true,
                 has_widget_access: true,
+                has_campaigns_access: true,
                 allow_user_byok: false,
                 is_active: true,
                 is_public: true,
@@ -360,6 +361,7 @@ export default function AdminPlansPage() {
               ["has_appointments_access", "Appointments access"],
               ["has_forms_access", "Forms access"],
               ["has_widget_access", "Widget access"],
+              ["has_campaigns_access", "Campaigns access"],
             ] as const).map(([field, label]) => (
               <div key={field} className="flex items-center justify-between gap-3">
                 <Label htmlFor={`plan-${field}`} className="text-xs">{label}</Label>

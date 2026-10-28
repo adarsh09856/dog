@@ -140,6 +140,7 @@ export interface SaaSPlan {
   has_appointments_access?: boolean;
   has_forms_access?: boolean;
   has_widget_access?: boolean;
+  has_campaigns_access?: boolean;
   is_default?: boolean;
   overage_rate_per_minute: number | null;
   max_concurrent_calls: number;

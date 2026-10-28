@@ -34,12 +34,14 @@ describe("owner plan configuration", () => {
     fireEvent.change(screen.getByLabelText("Max Concurrent Voice Calls"), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("switch", { name: "CRM access" }));
     fireEvent.click(screen.getByRole("switch", { name: "Widget access" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Campaigns access" }));
     fireEvent.click(screen.getByRole("switch", { name: "Show in public pricing and self-service checkout" }));
     fireEvent.click(screen.getByRole("switch", { name: "Default fallback plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Save Plan" }));
     await waitFor(() => expect(mocks.createPlan).toHaveBeenCalledWith(expect.objectContaining({
       included_minutes: 0, max_agents: 0, max_concurrent_calls: 0,
       has_crm_access: false, has_widget_access: false, is_default: true,
+      has_campaigns_access: false,
       is_public: false,
     })));
   });
