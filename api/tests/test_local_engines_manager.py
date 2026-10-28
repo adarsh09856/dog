@@ -1,10 +1,12 @@
 import os
+import re
 import sys
 import pytest
 from unittest.mock import AsyncMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import api.routes.admin.settings as admin_settings
 from api.routes.admin.settings import router
 from api.services.auth.depends import get_superuser
 
@@ -23,7 +25,7 @@ client = TestClient(app)
 
 
 def test_docker_compose_local_profiles_and_limits():
-    """Verify that both compose files gate local engines behind 'local' profile and set Part 6 RAM limits."""
+    """Verify current local inference services are opt-in and resource-bounded."""
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     compose_files = [
         os.path.join(repo_root, "docker-compose.yaml"),
@@ -35,15 +37,27 @@ def test_docker_compose_local_profiles_and_limits():
         with open(cpath, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Local engines must have profile local
-        assert 'profiles: ["local"]' in content or "profiles:\n      - local" in content, f"{cpath} missing profile local"
-        # Piper must have 768M limit and 512M floor
-        assert "768M" in content, f"{cpath} missing Piper 768M limit"
-        assert "512M" in content, f"{cpath} missing Piper 512M reservation"
-        # Whisper must have 1536M limit and 768M floor
-        assert "1536M" in content, f"{cpath} missing Whisper 1536M limit"
-        # Ollama must have 4096M limit
-        assert "4096M" in content, f"{cpath} missing Ollama 4096M limit"
+        def service_block(name):
+            match = re.search(
+                rf"(?ms)^  {re.escape(name)}:\n(.*?)(?=^  [\w.-]+:\n|^volumes:\n|\Z)",
+                content,
+            )
+            assert match is not None, f"{cpath} missing {name} service"
+            return match.group(1)
+
+        # Keep the default local LLM and streaming TTS services opt-in and bounded.
+        ollama = service_block("ollama")
+        assert 'profiles: ["local"]' in ollama or "profiles:\n      - local" in ollama
+        assert "OLLAMA_NUM_PARALLEL=1" in ollama
+        assert "OLLAMA_MAX_LOADED_MODELS" in ollama
+        assert "memory: 4096M" in ollama
+
+        indic_vits = service_block("indic-vits-tts")
+        assert 'profiles: ["local"]' in indic_vits or "profiles:\n      - local" in indic_vits
+        assert "memory: 1024M" in indic_vits
+
+        if re.search(r"(?m)^  indic-stt:\n", content):
+            assert "memory: 2048M" in service_block("indic-stt")
 
 
 def test_piper_all_voices_endpoint():
@@ -64,15 +78,29 @@ def test_piper_all_voices_endpoint():
     assert all("hi" in v["language"].lower() or "hindi" in v["language_name"].lower() for v in hi_voices)
 
 
-def test_whisper_models_endpoint():
-    """Verify /whisper/models returns known Faster-Whisper tiers with offline status when engine not running."""
-    resp = client.get("/api/v1/admin/settings/whisper/models")
+def test_indic_stt_models_endpoint(monkeypatch):
+    """Verify the active local IndicConformer inventory is exposed to admins."""
+    async def fake_get_setting(_key):
+        return {"indic_stt_endpoint": "http://indic-stt:8000/v1"}
+
+    async def fake_inventory(endpoint):
+        return {
+            "model": {"id": "indicconformer-ctc-int8"},
+            "languages": ["en", "hi", "ta"],
+            "endpoint": endpoint,
+        }
+
+    monkeypatch.setattr(admin_settings.kodewaves_db_client, "get_setting", fake_get_setting)
+    monkeypatch.setattr(admin_settings, "_get_indic_stt_inventory", fake_inventory)
+    resp = client.get("/api/v1/admin/settings/indic-stt/models")
     assert resp.status_code == 200
     data = resp.json()
-    assert "models" in data
-    model_ids = [m["id"] for m in data["models"]]
-    assert "Systran/faster-whisper-tiny" in model_ids
-    assert "Systran/faster-whisper-base" in model_ids
+    assert data == {
+        "model": "indicconformer-ctc-int8",
+        "languages": ["en", "hi", "ta"],
+        "endpoint": "http://indic-stt:8000/v1",
+        "status": "online",
+    }
 
 
 def test_deploy_script_profile_handling():
