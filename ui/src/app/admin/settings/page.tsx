@@ -393,7 +393,6 @@ export default function AdminSettingsPage() {
                 <CardDescription>
                   Runs speech recognition, response generation, and speech synthesis on the Kodewaves server. Models and voices are discovered from configured services; actual inference hardware depends on the server runtime.
                 </CardDescription>
-                </CardDescription>
               </div>
               <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">
                 {settings.enable_local_ai_engine ? "Engine Active" : "Disabled Globally"}
