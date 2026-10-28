@@ -392,6 +392,16 @@ def _verify_compose_runtime(
     except BaseException as exc:
         failure = exc
         try:
+            status = subprocess.run(
+                [*compose_command, "ps", "--all", "--format", "json", "api"],
+                cwd=root, check=False, env=command_env, timeout=30,
+                capture_output=True, text=True,
+            )
+            if status.stdout:
+                api_status = status.stdout[-500:]
+                print("Client runtime smoke API status: " + api_status, file=sys.stderr)
+                if isinstance(exc, subprocess.CalledProcessError):
+                    exc.stderr = (exc.stderr or "") + "\nAPI status: " + api_status
             subprocess.run(
                 [*compose_command, "logs", "--no-color", "--tail", "100"],
                 cwd=root, check=False, env=command_env, timeout=30,
