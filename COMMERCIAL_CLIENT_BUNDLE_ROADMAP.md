@@ -1,5 +1,11 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — built client-image and startup-tamper gate
+
+- [GitHub Actions run 40630042494](https://github.com/adarsh09856/dog/actions/runs/40630042494) succeeded at commit `b6cd7e2e`: both `verify` and `owner-postgres` jobs passed. The downloaded evidence artifact `client-image-verification-b6cd7e2e9d8f14286cc9629053ac2eb0043c6628` reports API image ID `sha256:4fd512af7c5ce807209731608eef9ef8d77ab9a005a27387c5b2e48d27991264`, UI image ID `sha256:1350ce1f34c731d4deb4da9cee95c32503fa171ca6f39fd3acdeec84c2f7ef17`, and signed manifest hash `5c0314d83babf7cf92b0fb7ce11b250f33f5a834e21b496f6207a14185a8e556`.
+- The built-image gate verified client source/route exclusions, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation with custom proxy network, enrolled identity overlay configuration, and both images rejecting a changed protected file and invalid signature at startup. The installer portion uses an explicitly unsigned configuration fixture because the signed build manifest contains local image IDs rather than publishable registry digests; the signed build evidence itself was verified separately.
+- This was a disposable CI build, not a production release or installed customer stack. Clean HTTPS installation, registry publication, owner enrollment and alert delivery, live license renewal/revocation, upgrade/rollback, browser audio and telephone acceptance remain open. The prior run 40629384096 reached the tamper gate but failed on a Docker Hub Caddy shorthand mismatch; commit `b6cd7e2e` normalized that reference before rerun.
+
 Platform expansion now includes the [AI control plan](AI_PLATFORM_CONTROL_PLAN.md): one contextual assistant across permitted public, workspace and owner operations, backed by authorized domain actions and durable task execution. These planned capabilities extend the product roadmap; existing commercial release and voice acceptance gates remain open until their own evidence is recorded.
 
 ## 27 October 2026 - disposable owner PostgreSQL gate
