@@ -1,4 +1,8 @@
+"use client";
+
 import React from "react";
+
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { cn } from "@/lib/utils";
 
 // Sovereign Kodewaves brand lockup and mark. Fully vector-based (SVG).
@@ -12,7 +16,12 @@ export function BrandLogo({
   inverse?: boolean;
   mark?: boolean;
 }) {
-  const icon = (
+  const branding = useClientBranding();
+  const icon = branding.logo_url ? (
+    // Customer-managed logos may use an approved HTTPS host outside Next image optimization.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={branding.logo_url} alt="" className={cn("h-full w-auto max-w-full object-contain", className)} />
+  ) : (
     <svg
       viewBox="0 0 32 32"
       fill="none"
@@ -21,9 +30,8 @@ export function BrandLogo({
     >
       <defs>
         <linearGradient id="kodewaves-brand-gradient" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#0ea5e9" />
-          <stop offset="50%" stopColor="#6366f1" />
-          <stop offset="100%" stopColor="#8b5cf6" />
+          <stop offset="0%" stopColor="var(--primary)" />
+          <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.7" />
         </linearGradient>
       </defs>
       <rect width="32" height="32" rx="8" fill="url(#kodewaves-brand-gradient)" />
@@ -41,17 +49,17 @@ export function BrandLogo({
   }
 
   return (
-    <div className={cn("inline-flex items-center gap-2.5 select-none", className)}>
-      <div className="h-full aspect-square flex items-center justify-center">
+    <div className={cn("inline-flex min-w-0 max-w-full items-center gap-2.5 select-none", className)}>
+      <div className="h-full aspect-square shrink-0 flex items-center justify-center">
         {icon}
       </div>
       <span
         className={cn(
-          "font-bold tracking-tight text-lg font-sans leading-none",
+          "truncate font-bold tracking-tight text-lg font-sans leading-none",
           inverse ? "text-white" : "text-foreground"
         )}
       >
-        Kodewaves
+        {branding.company_name}
       </span>
     </div>
   );

@@ -5,9 +5,16 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select
 
 from api.db.kodewaves_client import kodewaves_db_client
-from api.db.kodewaves_models import CreditPackageModel, OrganizationWalletModel, WalletLedgerModel
+from api.db.public_pricing import list_active_plans, list_active_credit_packages
+from api.db.kodewaves_models import (
+    CreditPackageModel,
+    OrganizationWalletModel,
+    SaaSPlanModel,
+    WalletLedgerModel,
+)
 from api.db.models import UserModel
 from api.services.auth.depends import get_user
+from api.services.saas_entitlements import active_plan_code, get_org_saas_plan
 
 router = APIRouter(prefix="/billing-sovereign", tags=["billing-sovereign"])
 
@@ -18,6 +25,10 @@ class WalletResponse(BaseModel):
     bonus_minutes: int
     total_available_minutes: int
     is_frozen: bool
+    plan_code: Optional[str] = None
+    plan_name: Optional[str] = None
+    included_minutes: Optional[int] = None
+    plan_expires_at: Optional[str] = None
 
 
 class LedgerItem(BaseModel):
@@ -38,6 +49,7 @@ class CreditPackagePublicItem(BaseModel):
     bonus_minutes: int
     price_cents: int
     currency: str
+    is_popular: bool = False
 
 
 @router.get("/wallet", response_model=WalletResponse)
@@ -48,12 +60,27 @@ async def get_wallet(user: UserModel = Depends(get_user)):
         raise HTTPException(status_code=400, detail="Organization required")
 
     wallet = await kodewaves_db_client.get_or_create_wallet(org_id)
+    assigned_plan = await kodewaves_db_client.get_setting(f"org_plan_{org_id}") or {}
+    assigned_code = active_plan_code(assigned_plan)
+    active_plan = await get_org_saas_plan(org_id)
+    plan_code = active_plan.code if active_plan else None
+    plan_name = active_plan.name if active_plan else None
+    included_minutes = active_plan.included_monthly_minutes if active_plan else None
+    plan_expires_at = (
+        assigned_plan.get("expires_at")
+        if assigned_code and active_plan and assigned_code == active_plan.code
+        else None
+    )
     return WalletResponse(
         organization_id=org_id,
         credit_balance_minutes=wallet.credit_balance_minutes,
         bonus_minutes=wallet.bonus_minutes,
         total_available_minutes=wallet.credit_balance_minutes + wallet.bonus_minutes,
         is_frozen=wallet.is_frozen,
+        plan_code=plan_code,
+        plan_name=plan_name,
+        included_minutes=included_minutes,
+        plan_expires_at=plan_expires_at,
     )
 
 
@@ -90,38 +117,13 @@ async def get_ledger(limit: int = 50, user: UserModel = Depends(get_user)):
 
 @router.get("/packages", response_model=List[CreditPackagePublicItem])
 async def list_available_packages(_user=Depends(get_user)):
-    """List purchasable minute top-up bundles."""
-    async with kodewaves_db_client.get_session() as session:
-        stmt = select(CreditPackageModel).where(CreditPackageModel.is_active == True).order_by(CreditPackageModel.sort_order)
-        result = await session.execute(stmt)
-        records = result.scalars().all()
-
-        # Seed default packages if empty
-        if not records:
-            defaults = [
-                CreditPackageModel(name="Starter 100 Minutes", minutes=100, bonus_minutes=0, price_cents=499, currency="INR", sort_order=1),
-                CreditPackageModel(name="Growth 500 Minutes", minutes=500, bonus_minutes=50, price_cents=1999, currency="INR", sort_order=2),
-                CreditPackageModel(name="Scale 2,000 Minutes", minutes=2000, bonus_minutes=300, price_cents=6999, currency="INR", sort_order=3),
-            ]
-            for p in defaults:
-                session.add(p)
-            await session.commit()
-
-            stmt = select(CreditPackageModel).where(CreditPackageModel.is_active == True).order_by(CreditPackageModel.sort_order)
-            result = await session.execute(stmt)
-            records = result.scalars().all()
-
-        return [
-            CreditPackagePublicItem(
-                id=str(r.id),
-                name=r.name,
-                minutes=r.minutes,
-                bonus_minutes=r.bonus_minutes,
-                price_cents=r.price_cents,
-                currency=r.currency,
-            )
-            for r in records
-        ]
+    """List configured credit bundles without inventing offers on a read."""
+    records = await list_active_credit_packages()
+    return [CreditPackagePublicItem(
+        id=str(r.id), name=r.name, minutes=r.minutes,
+        bonus_minutes=r.bonus_minutes, price_cents=r.price_cents, currency=r.currency,
+        is_popular=r.is_popular,
+    ) for r in records]
 
 
 class SaaSPlanPublicItem(BaseModel):
@@ -129,121 +131,75 @@ class SaaSPlanPublicItem(BaseModel):
     name: str
     code: str
     description: Optional[str] = None
-    monthly_price_inr: int
-    monthly_price_usd: int
+    monthly_price_inr: Optional[float] = None
+    monthly_price_usd: Optional[float] = None
     included_minutes: int
-    overage_rate_per_minute: float
+    overage_rate_per_minute: Optional[float] = None
+    monthly_price_cents: int = 0
+    annual_price_cents: int = 0
+    currency: str = "INR"
+    max_agents: int
     max_concurrent_calls: int
     allow_user_byok: bool
     features: List[str] = []
     is_active: bool
 
 
-def _public_plan_prices(price_cents: int, currency: str) -> tuple[int, int]:
-    """Convert stored minor units to whole-unit display prices."""
+def _legacy_plan_prices(price_cents: int, currency: str) -> tuple[float | None, float | None]:
+    """Expose the stored amount only in its configured currency; never estimate FX."""
     amount = max(0, int(price_cents or 0))
-    if str(currency or "INR").upper() == "USD":
-        return round(amount * 0.83), round(amount / 100)
-    return round(amount / 100), round(amount / 8300)
+    normalized_currency = str(currency or "").upper()
+    if normalized_currency == "INR":
+        return amount / 100, None
+    if normalized_currency == "USD":
+        return None, amount / 100
+    return None, None
+
+
+def _requires_paid_checkout(plan_code: str, plan: SaaSPlanModel | None) -> bool:
+    return bool(
+        plan
+        and (plan.monthly_price_cents > 0 or plan.annual_price_cents > 0)
+    )
 
 
 @router.get("/public/plans", response_model=List[SaaSPlanPublicItem])
 async def list_public_plans():
-    """Retrieve public SaaS plans without authentication."""
-    async with kodewaves_db_client.get_session() as session:
-        from api.db.kodewaves_models import SaaSPlanModel
-        stmt = select(SaaSPlanModel).where(SaaSPlanModel.is_active == True)
-        result = await session.execute(stmt)
-        records = result.scalars().all()
-
-        if not records:
-            defaults = [
-                SaaSPlanModel(
-                    name="Starter", code="starter", description="Ideal for testing voice workflows and prototypes.",
-                    monthly_price_cents=1499, included_monthly_minutes=100, max_concurrent_calls=2, allow_user_byok=True
-                ),
-                SaaSPlanModel(
-                    name="Professional", code="pro", description="For growing teams running outbound campaigns and customer service.",
-                    monthly_price_cents=4999, included_monthly_minutes=500, max_concurrent_calls=8, allow_user_byok=True
-                ),
-                SaaSPlanModel(
-                    name="Scale / Business", code="scale", description="High concurrency voice agents with dedicated infrastructure.",
-                    monthly_price_cents=14999, included_monthly_minutes=2000, max_concurrent_calls=25, allow_user_byok=True
-                ),
-                SaaSPlanModel(
-                    name="Sovereign Enterprise", code="enterprise", description="Zero third-party cloud bills. 100% On-Premise / Private VPS.",
-                    monthly_price_cents=34999, included_monthly_minutes=10000, max_concurrent_calls=100, allow_user_byok=True
-                ),
-            ]
-            for p in defaults:
-                session.add(p)
-            await session.commit()
-            result = await session.execute(stmt)
-            records = result.scalars().all()
-
-        feature_map = {
-            "starter": ["Available cloud and self-hosted model providers", "WebRTC Web Widget", "Visual Node Workflow Builder"],
-            "pro": ["Outbound call campaigns", "Twilio and Exotel telephony options", "CRM and appointment tools", "Priority support"],
-            "scale": ["Direct CRM and webhook integrations", "Advanced campaign controls", "Dedicated account support"],
-            "enterprise": ["Local CPU AI engine option", "White-label branding", "Custom telecom integrations"],
-        }
-
-        overage_map = {"starter": 1.20, "pro": 0.95, "scale": 0.75, "enterprise": 0.55}
-
-        return [
-            SaaSPlanPublicItem(
-                id=str(r.id),
-                name=r.name,
-                code=r.code,
-                description=r.description,
-                monthly_price_inr=_public_plan_prices(r.monthly_price_cents, r.currency)[0],
-                monthly_price_usd=_public_plan_prices(r.monthly_price_cents, r.currency)[1],
-                included_minutes=r.included_monthly_minutes,
-                overage_rate_per_minute=overage_map.get(r.code, 1.0),
-                max_concurrent_calls=r.max_concurrent_calls,
-                allow_user_byok=r.allow_user_byok,
-                features=[
-                    f"{r.included_monthly_minutes:,} Included Voice Minutes",
-                    f"{r.max_concurrent_calls:,} Concurrent Channels",
-                    *feature_map.get(r.code, ["All standard voice features"]),
-                ],
-                is_active=r.is_active,
-            )
-            for r in records
-        ]
+    """Return configured active plans and exact stored prices; never seed on read."""
+    records = await list_active_plans()
+    return [
+        SaaSPlanPublicItem(
+            id=str(r.id), name=r.name, code=r.code, description=r.description,
+            monthly_price_inr=_legacy_plan_prices(r.monthly_price_cents, r.currency)[0],
+            monthly_price_usd=_legacy_plan_prices(r.monthly_price_cents, r.currency)[1],
+            monthly_price_cents=r.monthly_price_cents,
+            annual_price_cents=r.annual_price_cents,
+            currency=r.currency,
+            included_minutes=r.included_monthly_minutes,
+            max_agents=r.max_agents,
+            max_concurrent_calls=r.max_concurrent_calls,
+            allow_user_byok=r.allow_user_byok,
+            features=[label for enabled, label in (
+                (r.has_crm_access, "CRM access"),
+                (r.has_appointments_access, "Appointment tools"),
+                (r.has_forms_access, "Forms"),
+                (r.has_widget_access, "Web widgets"),
+                (r.allow_user_byok, "Bring your own provider keys"),
+            ) if enabled],
+            is_active=r.is_active,
+        ) for r in records
+    ]
 
 
 @router.get("/public/packages", response_model=List[CreditPackagePublicItem])
 async def list_public_packages():
-    """Retrieve public credit top-up bundles without authentication."""
-    async with kodewaves_db_client.get_session() as session:
-        stmt = select(CreditPackageModel).where(CreditPackageModel.is_active == True).order_by(CreditPackageModel.sort_order)
-        result = await session.execute(stmt)
-        records = result.scalars().all()
-
-        if not records:
-            defaults = [
-                CreditPackageModel(name="Starter 100 Minutes", minutes=100, bonus_minutes=0, price_cents=499, currency="INR", sort_order=1),
-                CreditPackageModel(name="Growth 500 Minutes", minutes=500, bonus_minutes=50, price_cents=1999, currency="INR", sort_order=2),
-                CreditPackageModel(name="Scale 2,000 Minutes", minutes=2000, bonus_minutes=300, price_cents=6999, currency="INR", sort_order=3),
-            ]
-            for p in defaults:
-                session.add(p)
-            await session.commit()
-            result = await session.execute(stmt)
-            records = result.scalars().all()
-
-        return [
-            CreditPackagePublicItem(
-                id=str(r.id),
-                name=r.name,
-                minutes=r.minutes,
-                bonus_minutes=r.bonus_minutes,
-                price_cents=r.price_cents,
-                currency=r.currency,
-            )
-            for r in records
-        ]
+    """Return configured active credit bundles without creating sample offers."""
+    records = await list_active_credit_packages()
+    return [CreditPackagePublicItem(
+        id=str(r.id), name=r.name, minutes=r.minutes,
+        bonus_minutes=r.bonus_minutes, price_cents=r.price_cents, currency=r.currency,
+        is_popular=r.is_popular,
+    ) for r in records]
 
 
 @router.get("/plans", response_model=List[SaaSPlanPublicItem])
@@ -268,8 +224,10 @@ async def subscribe_to_plan(req: SubscribePlanRequest, user: UserModel = Depends
     import uuid
 
     target_code = req.plan_code
+    if not req.plan_id and not target_code:
+        raise HTTPException(status_code=422, detail="Plan ID or code is required")
     async with kodewaves_db_client.get_session() as session:
-        query = select(SaaSPlanModel)
+        query = select(SaaSPlanModel).where(SaaSPlanModel.is_public.is_(True))
         if req.plan_id:
             try:
                 p_uuid = uuid.UUID(str(req.plan_id))
@@ -283,15 +241,13 @@ async def subscribe_to_plan(req: SubscribePlanRequest, user: UserModel = Depends
 
         result = await session.execute(query)
         plan = result.scalar_one_or_none()
-        if not plan:
-            # Fallback to starter plan
-            plan_res = await session.execute(select(SaaSPlanModel).where(SaaSPlanModel.code == "starter"))
-            plan = plan_res.scalar_one_or_none()
+        if not plan or not plan.is_active or not plan.is_public:
+            raise HTTPException(status_code=404, detail="Active plan not found")
 
-        plan_code = plan.code if plan else "starter"
+        plan_code = plan.code
 
         # Security check: Paid tiers require payment checkout
-        if plan_code != "starter" and (plan and plan.monthly_price_cents > 0):
+        if _requires_paid_checkout(plan_code, plan):
             raise HTTPException(
                 status_code=402,
                 detail=f"Plan '{plan.name}' requires payment verification. Please complete subscription checkout via /payments/create-order.",
@@ -308,7 +264,7 @@ async def subscribe_to_plan(req: SubscribePlanRequest, user: UserModel = Depends
                 "wallet_balance_minutes": wallet.credit_balance_minutes,
             }
 
-        minutes = plan.included_monthly_minutes if plan else 100
+        minutes = plan.included_monthly_minutes
 
         # Save plan assignment in org settings
         await kodewaves_db_client.set_setting(

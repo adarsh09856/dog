@@ -1,0 +1,16 @@
+# Owner control plane only. Combine with a SaaS Compose stack, never a client
+# installation. The mounted directory contains license signing keys only.
+services:
+  api:
+    environment:
+      KODEWAVES_EDITION: saas
+      KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE: /run/kodewaves-owner-keys/current.key
+      KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES: "${KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES:-}"
+      KODEWAVES_OWNER_TRUSTED_PROXY_CIDRS: "${KODEWAVES_OWNER_TRUSTED_PROXY_CIDRS:-}"
+    volumes:
+      - type: bind
+        source: "${KODEWAVES_OWNER_KEYS_DIR:?Set an absolute owner license key directory outside the repository}"
+        target: /run/kodewaves-owner-keys
+        read_only: true
+        bind:
+          create_host_path: false

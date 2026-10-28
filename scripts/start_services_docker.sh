@@ -21,7 +21,12 @@ export GOMP_SPINCOUNT=0
 export KMP_AFFINITY=disabled
 
 ARQ_WORKERS=${ARQ_WORKERS:-1}
-if [[ -z "$FASTAPI_WORKERS" || "$FASTAPI_WORKERS" == "auto" || "$FASTAPI_WORKERS" == "1" ]] 2>/dev/null; then
+if [[ "${KODEWAVES_EDITION:-saas}" == "client" ]]; then
+  # The client Compose topology exposes only port 8000 and has no nginx
+  # dispatcher, so additional uvicorn listeners would waste memory and remain
+  # unreachable. Scale the single async listener through its event loop.
+  FASTAPI_WORKERS=1
+elif [[ -z "$FASTAPI_WORKERS" || "$FASTAPI_WORKERS" == "auto" || "$FASTAPI_WORKERS" == "1" ]] 2>/dev/null; then
   CPU_CORES=$(nproc 2>/dev/null || echo 1)
   if [ "$CPU_CORES" -gt 4 ]; then
     FASTAPI_WORKERS=4
@@ -49,8 +54,9 @@ fi
 ### 2) Run migrations & seed platform catalog
 ###############################################################################
 
+python -m api.services.release_schema
 alembic -c "$BASE_DIR/api/alembic.ini" upgrade head
-python -m scripts.seed_platform || echo "Platform seed completed or already initialized."
+python -m scripts.seed_platform
 
 ###############################################################################
 ### 3) Signal handling — forward TERM/INT to children for clean docker stop

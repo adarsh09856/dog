@@ -3,6 +3,9 @@ api/.env
 **/.env.*
 !**/.env.example
 !**/.env.test.example
+# Owner-side signing tools and private key material never enter image build contexts.
+owner-tools/
+**/license-private-key*
 .git
 .github
 .claude

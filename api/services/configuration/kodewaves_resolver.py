@@ -49,6 +49,7 @@ from api.services.configuration.registry import (
 )
 from api.services.configuration.stt_capabilities import stt_model_supports_auto_detect
 from api.services.credentials.master_credential_service import master_credential_service
+from api.services.saas_entitlements import is_saas_feature_allowed
 
 CredentialSource = Literal["user_key", "master_key", "local"]
 
@@ -310,20 +311,6 @@ async def _require_enabled_platform_model(layer: str, provider: str, model: str)
         raise HTTPException(status_code=400, detail=f"Selected {layer.upper()} model '{model}' is disabled or unavailable.")
 
 
-def require_explicit_indic_stt_language(model: str, language: str | None) -> None:
-    """Reject a single-language Indic recognizer paired with auto detection."""
-    if model != "indicconformer-ctc-int8":
-        return
-    from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
-
-    code = LANGUAGE_NAME_TO_ISO.get(str(language or "auto").lower(), str(language or "auto").lower()).split("-", 1)[0]
-    if code in ("auto", "multi", "unknown", "default"):
-        raise HTTPException(
-            status_code=400,
-            detail="Self-hosted STT requires an explicit installed language; automatic language detection is not available for this model",
-        )
-
-
 async def apply_kodewaves_sovereign_resolution(
     effective: EffectiveAIModelConfiguration,
     organization_id: Optional[int] = None,
@@ -354,6 +341,7 @@ async def apply_kodewaves_sovereign_resolution(
     # 1. Global Policies and Wallet Check
     byok_policy = await kodewaves_db_client.get_setting("byok_policy")
     allow_byok = byok_policy.get("allow_user_byok", True) if byok_policy else True
+    allow_byok = allow_byok and await is_saas_feature_allowed(organization_id, "byok")
 
     if not allow_byok:
         for layer in (effective.llm, effective.stt, effective.tts, effective.realtime):
@@ -531,21 +519,20 @@ async def apply_kodewaves_sovereign_resolution(
                 model_to_use = model if model and model != "default" else "indicconformer-ctc-int8"
                 if str(model_to_use).casefold().startswith(("systran/faster-whisper", "faster-whisper", "faster-distil-whisper")):
                     model_to_use = "indicconformer-ctc-int8"
-                if model_to_use == "indicconformer-ctc-int8" and norm_lang == "multi":
-                    require_explicit_indic_stt_language(model_to_use, norm_lang)
                 if model_to_use == "indicconformer-ctc-int8":
                     from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
                     from api.services.catalog.local_inventory import get_local_stt_models
 
                     selected_language = LANGUAGE_NAME_TO_ISO.get(norm_lang, norm_lang).split("-", 1)[0]
-                    require_explicit_indic_stt_language(model_to_use, selected_language)
                     try:
                         installed_models = await get_local_stt_models(indic_stt_v1_url)
                     except (aiohttp.ClientError, TimeoutError):
                         raise HTTPException(status_code=503, detail="Local Indic STT engine is unavailable")
                     manifest = installed_models.get(model_to_use) or {}
                     supported_languages = {str(code).casefold().split("-", 1)[0] for code in manifest.get("languages", [])}
-                    if selected_language not in supported_languages:
+                    if selected_language == "multi" and manifest.get("supports_auto_detect") is not True:
+                        raise HTTPException(status_code=400, detail="Self-hosted STT auto detection is not available on the installed engine")
+                    if selected_language != "multi" and selected_language not in supported_languages:
                         raise HTTPException(status_code=400, detail=f"Self-hosted IndicConformer does not have language '{selected_language}' installed")
                     norm_lang = selected_language
                 effective.stt = SpeachesSTTConfiguration(

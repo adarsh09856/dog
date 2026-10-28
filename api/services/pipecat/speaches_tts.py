@@ -2,8 +2,10 @@
 
 import asyncio
 import os
+import time
 from contextlib import aclosing, suppress
 
+from loguru import logger
 from openai import BadRequestError, DefaultAsyncHttpxClient
 
 from api.services.configuration.language_normalizer import normalize_language_code
@@ -106,6 +108,33 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         for buffered in pending:
             yield buffered
 
+    async def _trace_phrase(self, frames, text: str, context_id: str):
+        """Measure each phrase without logging caller or assistant text."""
+        started = time.monotonic()
+        first_pcm_ms = None
+        pcm_bytes = 0
+        pcm_frames = 0
+        try:
+            async for frame in frames:
+                if isinstance(frame, TTSAudioRawFrame):
+                    if first_pcm_ms is None:
+                        first_pcm_ms = round((time.monotonic() - started) * 1000)
+                    pcm_bytes += len(frame.audio)
+                    pcm_frames += 1
+                yield frame
+        finally:
+            logger.info(
+                "local_tts_phrase_trace context={} chars={} language={} first_pcm_ms={} "
+                "wall_ms={} pcm_frames={} pcm_bytes={}",
+                context_id,
+                len(text),
+                self._request_speech_language(),
+                first_pcm_ms,
+                round((time.monotonic() - started) * 1000),
+                pcm_frames,
+                pcm_bytes,
+            )
+
     async def _stop_turn_keepalive(self):
         task, self._turn_keepalive = self._turn_keepalive, None
         if task:
@@ -123,14 +152,27 @@ class SpeachesLiveTTSService(SpeachesTTSService):
 
     def _resolve_speech_language(self):
         source = getattr(self, "_caller_language_source", None)
+        # Auto STT may expose a best-effort language to the LLM even when the
+        # detector confidence is too weak to choose a regional voice. In that
+        # case let the gateway route unambiguous output scripts or retain the
+        # configured bilingual voice instead of cold-loading a guessed voice.
+        if source is not None and hasattr(source, "latest_tts_language"):
+            detected_for_tts = source.latest_tts_language
+        else:
+            detected_for_tts = getattr(source, "latest_detected_language", None)
         for value in (
-            getattr(source, "latest_detected_language", None),
+            detected_for_tts,
             getattr(getattr(source, "_settings", None), "language", None),
             self._speech_language,
         ):
             if value is None:
                 continue
-            code = normalize_language_code(getattr(value, "value", value))
+            raw_value = getattr(value, "value", value)
+            if str(raw_value).strip().casefold() in {
+                "", "auto", "multi", "multilingual", "unknown", "default", "none",
+            }:
+                continue
+            code = normalize_language_code(raw_value)
             if code not in {"", "auto", "multi", "multilingual", "unknown", "default", "none"}:
                 return code
         return None
@@ -190,7 +232,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             )
             async with aclosing(generator) as frames:
                 output = self._buffer_initial_pcm(frames) if buffer_initial else frames
-                async for frame in output:
+                traced = output if isinstance(self, SpeachesCachingTTSService) else self._trace_phrase(output, text, context_id)
+                async for frame in traced:
                     yield frame
         finally:
             keepalive.cancel()
@@ -286,5 +329,5 @@ class SpeachesCachingTTSService(SpeachesLiveTTSService):
             # so the nested base method will not buffer twice.
             buffer_initial = self._claim_initial_pcm_buffer(context_id)
             output = self._buffer_initial_pcm(frames) if buffer_initial else frames
-            async for frame in output:
+            async for frame in self._trace_phrase(output, text, context_id):
                 yield frame

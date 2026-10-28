@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from pipecat.frames.frames import (
     ErrorFrame,
+    LLMTextFrame,
     MetricsFrame,
     TranscriptionFrame,
     TTSSpeakFrame,
@@ -36,14 +37,42 @@ class _FakeAggregator:
         return decorator
 
 
-def _frame_pushed(frame, direction, *, source=None):
+def _frame_pushed(frame, direction, *, source=None, destination=None):
     return FramePushed(
         source=source or SimpleNamespace(),
-        destination=SimpleNamespace(),
+        destination=destination or SimpleNamespace(),
         frame=frame,
         direction=direction,
         timestamp=0,
     )
+
+
+@pytest.mark.asyncio
+async def test_local_llm_preview_arrives_before_audio_without_entering_logs():
+    from api.services.pipecat.speaches_tts import SpeachesLiveTTSService
+    from pipecat.services.speaches.tts import SpeachesTTSSettings
+
+    messages = []
+    logs = InMemoryLogsBuffer(workflow_run_id=1)
+
+    async def ws_sender(message):
+        messages.append(message)
+
+    observer = RealtimeFeedbackObserver(ws_sender=ws_sender, logs_buffer=logs)
+    tts = SpeachesLiveTTSService(
+        api_key="test", sample_rate=24000,
+        settings=SpeachesTTSSettings(model="indus-pocket-tts", voice="Inaya"),
+    )
+    frame = LLMTextFrame("Hello ")
+    await observer.on_push_frame(_frame_pushed(frame, FrameDirection.DOWNSTREAM))
+    await observer.on_push_frame(_frame_pushed(
+        frame, FrameDirection.DOWNSTREAM, destination=tts,
+    ))
+    await observer.on_push_frame(_frame_pushed(
+        frame, FrameDirection.DOWNSTREAM, destination=tts,
+    ))
+    assert messages == [{"type": "rtf-bot-text-preview", "payload": {"text": "Hello "}}]
+    assert logs.get_events() == []
 
 
 @pytest.mark.asyncio

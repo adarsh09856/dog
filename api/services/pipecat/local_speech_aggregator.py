@@ -1,11 +1,97 @@
 """Avoid separate CPU synthesis requests for tiny adjacent sentences."""
 
 import re
+import unicodedata
+
+from api.utils.spoken_digits import REGIONAL_SPOKEN_DIGITS
 
 from pipecat.utils.text.base_text_aggregator import (
     Aggregation, AggregationType, BaseTextAggregator,
 )
 from pipecat.utils.text.simple_text_aggregator import SimpleTextAggregator
+
+
+_NUMBER_AND_DATE_WORDS = frozenset({
+    "zero", "oh", "one", "two", "three", "four", "five", "six", "seven",
+    "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen",
+    "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+    "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+    "hundred", "thousand", "double", "triple", "first", "second", "third",
+    "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
+    "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth",
+    "sixteenth", "seventeenth", "eighteenth", "nineteenth", "twentieth",
+    "thirtieth", "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+    "शून्य", "जीरो", "ज़ीरो", "एक", "दो", "तीन", "चार", "पांच", "पाँच",
+    "छह", "सात", "आठ", "नौ", "दस", "ग्यारह", "बारह", "बीस", "तीस",
+    # Hindi cardinal forms from Unicode CLDR rbnf/hi.xml. Day and year words
+    # must remain attached to their month/scale, just like English numbers.
+    "तेरह", "चौदह", "पन्द्रह", "पंद्रह", "सोलह", "सत्रह", "अठारह", "उन्नीस",
+    "इक्कीस", "बाईस", "तेईस", "चौबीस", "पच्चीस", "छब्बीस", "सत्ताईस",
+    "अट्ठाईस", "अट्ठाइस", "अठाईस", "उनतीस", "इकतीस", "बत्तीस", "तैंतीस",
+    "चौंतीस", "पैंतीस", "छत्तीस", "सैंतीस", "अड़तीस", "उनतालीस", "चालीस",
+    "इकतालीस", "बयालीस", "तैंतालीस", "चौवालीस", "पैंतालीस", "छियालीस",
+    "सैंतालीस", "अड़तालीस", "उनचास", "पचास", "इक्यावन", "बावन", "तिरेपन",
+    "चौवन", "पचपन", "छप्पन", "सत्तावन", "अट्ठावन", "उनसठ", "साठ", "इकसठ",
+    "बासठ", "तिरेसठ", "चौंसठ", "पैंसठ", "छियासठ", "सड़सठ", "अड़सठ",
+    "उनहत्तर", "सत्तर", "इकहत्तर", "बहत्तर", "तिहत्तर", "चौहत्तर", "पचहत्तर",
+    "छिहत्तर", "सतहत्तर", "अठहत्तर", "उनासी", "अस्सी", "इक्यासी", "बयासी",
+    "तिरासी", "चौरासी", "पचासी", "छियासी", "सत्तासी", "अट्ठासी", "नवासी",
+    "नब्बे", "इक्यानबे", "बानबे", "तिरानबे", "चौरानबे", "पंचानबे", "छियानबे",
+    "सत्तानबे", "अट्ठानबे", "निन्यानबे", "सौ", "हज़ार", "हजार", "लाख", "करोड़",
+    "डबल", "ट्रिपल", "वन", "ओन", "टू", "थ्री", "फोर", "फाइव", "सिक्स",
+    "सेवन", "एट", "ऐट", "आइट", "नाइन", "नाईन", "ट्वेंटी", "सेवन",
+    "जनवरी", "फरवरी", "मार्च", "अप्रैल", "मई", "जून", "जुलाई", "अगस्त",
+    "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर",
+})
+
+
+def _number_or_date_word(word: str) -> bool:
+    word = unicodedata.normalize("NFC", word.casefold().strip(".,!?।॥:;()[]{}\"'"))
+    if any(char.isdecimal() for char in word):
+        return True
+    # Hyphenated English numbers such as twenty-seven are one spoken group.
+    return bool(word) and all(
+        part in _NUMBER_AND_DATE_WORDS or part in REGIONAL_SPOKEN_DIGITS
+        for part in word.split("-")
+    )
+
+
+def _safe_number_boundary(text: str, previous_end: int, following_start: int) -> bool:
+    previous = text[:previous_end].rstrip().rsplit(None, 2)
+    after_connector = (
+        len(previous) >= 2
+        and previous[-1].casefold() in {"and", "और"}
+        and _number_or_date_word(previous[-2])
+    )
+    if not previous or not (_number_or_date_word(previous[-1]) or after_connector):
+        return True
+    following = text[following_start:].lstrip()
+    next_word = re.match(r"\S+", following)
+    # A streamed token may still be an unfinished word. Wait for its
+    # terminating whitespace before deciding whether the number ended.
+    if not next_word or next_word.end() == len(following):
+        return False
+    if _number_or_date_word(next_word.group()):
+        return False
+    if next_word.group().casefold() in {"and", "और"}:
+        remainder = following[next_word.end():].lstrip()
+        after_connector = re.match(r"\S+", remainder)
+        if not after_connector or after_connector.end() == len(remainder):
+            return False
+        if _number_or_date_word(after_connector.group()):
+            return False
+    return True
+
+
+def _phrase_boundary(text: str, minimum: int) -> tuple[int, int] | None:
+    """Avoid ending a synthesis request in the middle of a number or date."""
+    for boundary in re.finditer(r"\s", text[minimum:]):
+        start = minimum + boundary.start()
+        end = minimum + boundary.end()
+        if _safe_number_boundary(text, start, end):
+            return start, end
+    return None
 
 
 class LocalSpeechAggregator(BaseTextAggregator):
@@ -72,6 +158,8 @@ class LocalSpeechAggregator(BaseTextAggregator):
                 first = self._join(self._pending, buffered[:boundary.end()])
                 if len(first) < self._first_clause_characters:
                     continue
+                if not _safe_number_boundary(buffered, boundary.end(), boundary.end()):
+                    continue
                 tail = buffered[boundary.end():]
                 await self._sentences.reset()
                 self._pending = ""
@@ -94,10 +182,9 @@ class LocalSpeechAggregator(BaseTextAggregator):
             # Release as soon as the *first* suitable space arrives. Waiting
             # for the entire lookahead window added avoidable generation time.
             if len(buffered) > minimum and not buffered.rstrip().endswith((".", "?", "!", "।", "॥")):
-                boundary = re.search(r"\s", buffered[minimum:minimum + 17])
+                boundary = _phrase_boundary(buffered, minimum)
                 if boundary:
-                    split_at = minimum + boundary.start()
-                    split_end = minimum + boundary.end()
+                    split_at, split_end = boundary
                     # Keep the separating whitespace on the emitted phrase.
                     # The next synthesis request passes through the sentence
                     # aggregator, which trims leading whitespace.
@@ -124,10 +211,9 @@ class LocalSpeechAggregator(BaseTextAggregator):
                 combined += " "
             minimum = self._streaming_phrase_characters
             if len(combined) > minimum and not combined.rstrip().endswith((".", "?", "!", "।", "॥")):
-                boundary = re.search(r"\s", combined[minimum:minimum + 17])
+                boundary = _phrase_boundary(combined, minimum)
                 if boundary:
-                    split_at = minimum + boundary.start()
-                    split_end = minimum + boundary.end()
+                    split_at, split_end = boundary
                     first, tail = combined[:split_end], combined[split_end:]
                     await self._sentences.reset()
                     self._pending = ""

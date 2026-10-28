@@ -138,6 +138,10 @@ def test_initiate_call_executes_as_workflow_owner_for_shared_org_workflow():
         patch("api.routes.telephony.db_client") as mock_db,
         patch("api.routes.telephony.call_concurrency") as mock_concurrency,
         patch(
+            "api.routes.telephony.authorize_call_entitlement",
+            new=AsyncMock(),
+        ) as entitlement_check,
+        patch(
             "api.routes.telephony.authorize_workflow_run_start",
             new=quota_mock,
         ),
@@ -203,6 +207,7 @@ def test_initiate_call_executes_as_workflow_owner_for_shared_org_workflow():
         timeout=0,
     )
     mock_concurrency.bind_workflow_run.assert_awaited_once_with(slot, 501)
+    entitlement_check.assert_awaited_once_with("telephony_outbound")
 
     initiate_kwargs = provider.initiate_call.await_args.kwargs
     assert initiate_kwargs["workflow_id"] == workflow.id

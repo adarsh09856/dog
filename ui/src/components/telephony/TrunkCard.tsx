@@ -302,7 +302,7 @@ export function TrunkCard({
           <DialogHeader>
             <DialogTitle>{editing ? "Edit trunk" : "Add trunk"}</DialogTitle>
             <DialogDescription>
-              Kodewaves provisions this trunk with {configuration.provider} and dials
+              The platform provisions this trunk with {configuration.provider} and dials
               your carrier over it.
             </DialogDescription>
           </DialogHeader>

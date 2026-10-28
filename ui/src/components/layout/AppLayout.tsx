@@ -5,11 +5,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React, { ReactNode } from "react";
 
+import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { useAppConfig } from "@/context/AppConfigContext";
+import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
 import { LeadFormsProvider } from "@/context/LeadFormsContext";
 import { useAuth } from "@/lib/auth";
+import { requiredFeatureForUiPath } from "@/lib/clientEntitlements";
 
 import { AppSidebar } from "./AppSidebar";
 
@@ -22,7 +25,7 @@ function AppHeader() {
         <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Open menu" className="md:hidden">
           <Menu className="h-5 w-5" />
         </Button>
-        <Link href="/" className="text-lg font-bold md:hidden">Kodewaves</Link>
+        <Link href="/" className="md:hidden" aria-label="Home"><BrandLogo className="h-6" /></Link>
       </div>
     </header>
   );
@@ -91,6 +94,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({
 }) => {
   const pathname = usePathname();
   const { isAuthenticated } = useAuth();
+  const entitlements = useClientEntitlements();
+  const requiredFeature = requiredFeatureForUiPath(pathname);
 
   // Public marketing & embedding routes: Never render sidebar or internal app chrome
   const isPublicOrMarketing =
@@ -136,7 +141,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({
 
               {/* Optional sticky tabs */}
               {stickyTabs && (
-                <div className="sticky top-[var(--event-banner-h,0px)] z-40 bg-[#2a2e39] border-b border-gray-700">
+                <div className="sticky top-[var(--event-banner-h,0px)] z-40 bg-background border-b border-border text-foreground">
                   <div className="container mx-auto px-4">
                     <div className="flex items-center justify-center py-2">
                       {stickyTabs}
@@ -147,7 +152,31 @@ const AppLayout: React.FC<AppLayoutProps> = ({
 
               {/* Main content area */}
               <main className="app-surface flex-1">
-                {children}
+                {entitlements.isClientEdition && requiredFeature && entitlements.loading ? (
+                  <div className="container mx-auto px-4 py-12" role="status" aria-live="polite">
+                    Checking installation access…
+                  </div>
+                ) : entitlements.isClientEdition && requiredFeature && !entitlements.hasFeature(requiredFeature) ? (
+                  <section className="container mx-auto max-w-2xl px-4 py-16">
+                    <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+                      <h1 className="text-xl font-semibold">{entitlements.valid === true ? "Feature unavailable" : "Installation access unavailable"}</h1>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {entitlements.valid !== true
+                          ? entitlements.message || "The installation license could not be verified."
+                          : `This installation does not include the ${requiredFeature.replaceAll("_", " ")} feature.`}
+                        {" "}{entitlements.valid === true ? "Contact your platform owner to update the license." : "Try again or contact your platform owner."}
+                      </p>
+                      {entitlements.valid !== true && (
+                        <Button type="button" variant="outline" className="mt-5 mr-4" onClick={() => void entitlements.refresh()}>
+                          Retry
+                        </Button>
+                      )}
+                      <Link href="/settings" className="mt-5 inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline">
+                        View installation status
+                      </Link>
+                    </div>
+                  </section>
+                ) : children}
               </main>
             </SidebarInset>
           </div>

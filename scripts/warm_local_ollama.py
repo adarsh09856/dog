@@ -15,10 +15,11 @@ import urllib.request
 BASE_URL = os.getenv("OLLAMA_ENDPOINT", "http://ollama:11434").rstrip("/")
 MODELS = tuple(
     name.strip()
-    for name in os.getenv("OLLAMA_WARM_MODELS", "qwen3.5:2b").split(",")
+    for name in os.getenv("OLLAMA_WARM_MODELS", "qwen3.5:2b-q4_K_M").split(",")
     if name.strip()
 )
 INTERVAL_SECONDS = max(5, int(os.getenv("OLLAMA_WARM_INTERVAL_SECONDS", "30")))
+WARMUP_PROMPT = "Reply briefly in Hindi. Caller: नमस्ते, मुझे एक कमरा बुक करना है।"
 
 
 def _request(path: str, payload: dict | None = None) -> dict:
@@ -40,6 +41,25 @@ def _model_names(path: str, collection: str) -> set[str]:
     }
 
 
+def _warm_model(model: str) -> None:
+    """Load the model and exercise one bounded inference before a caller does."""
+    _request(
+        "/api/generate",
+        {
+            "model": model,
+            "prompt": WARMUP_PROMPT,
+            "stream": False,
+            "keep_alive": -1,
+            "think": False,
+            "options": {
+                "num_ctx": 4096,
+                "num_predict": 2,
+                "temperature": 0,
+            },
+        },
+    )
+
+
 def keep_models_warm() -> None:
     last_status: dict[str, str] = {}
     while True:
@@ -56,10 +76,7 @@ def keep_models_warm() -> None:
                         # when OLLAMA_MAX_LOADED_MODELS is one.
                         status = "deferred"
                     else:
-                        _request(
-                            "/api/generate",
-                            {"model": model, "prompt": "", "stream": False, "keep_alive": -1},
-                        )
+                        _warm_model(model)
                         loaded.add(model)
                         status = "warmed"
                 if last_status.get(model) != status:

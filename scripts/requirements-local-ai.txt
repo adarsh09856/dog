@@ -1,0 +1,8 @@
+# Local HTTP inference runner. PyAV 19 removes metadata_errors used by
+# faster-whisper 1.2.1; pin the compatible audio decoder explicitly.
+piper-tts==1.8.0
+faster-whisper==1.2.1
+av==16.0.1
+fastapi==0.135.3
+uvicorn==0.35.0
+python-multipart==0.0.27

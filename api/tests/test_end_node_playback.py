@@ -49,7 +49,9 @@ async def transition_to_end(engine):
     transition = await engine._create_transition_func("move_to_end_call", "end")
     result = AsyncMock()
     await transition(SimpleNamespace(arguments={}, result_callback=result))
-    assert result.await_args.args == ({"status": "done"},)
+    assert result.await_args.args[0]["status"] == "done"
+    assert result.await_args.args[0]["action"] == "workflow_node_transition"
+    assert "does not create a booking" in result.await_args.args[0]["message"]
     return result.await_args.kwargs["properties"].on_context_updated
 
 
@@ -113,6 +115,25 @@ async def test_caller_hangup_can_cancel_while_goodbye_is_pending(engine):
     finally:
         finishing.cancel()
         await asyncio.gather(finishing, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_end_transition_is_blocked_without_explicit_caller_farewell(engine):
+    transition = await engine._create_transition_func(
+        "finish_call", "end", require_explicit_end=True
+    )
+    result = AsyncMock()
+    context = LLMContext(messages=[{"role": "user", "content": "Hello, are you listening?"}])
+
+    await transition(SimpleNamespace(
+        arguments={}, result_callback=result, context=context,
+    ))
+
+    assert result.await_args.args[0]["status"] == "not_transitioned"
+    assert result.await_args.args[0]["action"] == "workflow_transition_blocked"
+    engine.set_node.assert_not_awaited()
+    engine._perform_variable_extraction_if_needed.assert_not_awaited()
+    assert not engine._mute_pipeline
 
 
 @pytest.mark.asyncio

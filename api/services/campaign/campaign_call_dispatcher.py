@@ -12,6 +12,7 @@ from api.enums import WorkflowRunState
 from api.services.call_concurrency import (
     CallConcurrencyLimitError,
     CallConcurrencySlot,
+    authorize_call_entitlement,
     call_concurrency,
 )
 from api.services.call_concurrency.rate_limiter import rate_limiter
@@ -21,6 +22,7 @@ from api.services.campaign.errors import (
     ConcurrentSlotAcquisitionError,
 )
 from api.services.campaign.traffic_split import campaign_split, pick_variant
+from api.services.installation_license import InstallationLicenseError
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.workflow.initial_context import merge_external_initial_context
 from api.services.workflow.run_creation import prepare_workflow_run_inputs
@@ -115,7 +117,12 @@ class CampaignCallDispatcher:
                         )
                     )
                     processed_run_ids.add(queued_run.id)
-                except (ConcurrentSlotAcquisitionError, CampaignRateLimitTimeout):
+                except (
+                    CallConcurrencyLimitError,
+                    ConcurrentSlotAcquisitionError,
+                    CampaignRateLimitTimeout,
+                    InstallationLicenseError,
+                ):
                     # Capacity contention is temporary, not a failed contact.
                     return
                 except asyncio.CancelledError:
@@ -279,6 +286,12 @@ class CampaignCallDispatcher:
                 campaign.organization_id,
                 campaign.rate_limit_per_second,
                 scope_key=f"campaign:{campaign.id}",
+            )
+            # Setup and rate-limit waits can outlive an owner revocation or
+            # entitlement change. Revalidate directly before starting a PSTN
+            # call; an unstarted row is returned to the queue for later retry.
+            await authorize_call_entitlement(
+                f"campaign:{campaign.id}", organization_id=campaign.organization_id
             )
             # No long wait or DB operation between rate admission and dialing.
             attempted = True

@@ -66,6 +66,8 @@ def test_stack_mode_keeps_current_user_route_available(monkeypatch):
         email="user@example.com",
         selected_organization_id=42,
         provider_id="stack-user-1",
+        is_superuser=False,
+        has_local_ai_access=True,
     )
     client = TestClient(app)
 
@@ -78,4 +80,6 @@ def test_stack_mode_keeps_current_user_route_available(monkeypatch):
         "name": None,
         "organization_id": 42,
         "provider_id": "stack-user-1",
+        "is_superuser": False,
+        "has_local_ai_access": True,
     }

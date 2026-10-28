@@ -9,6 +9,8 @@ from api.services.campaign.campaign_event_publisher import (
     get_campaign_event_publisher,
 )
 from api.services.campaign.source_sync_factory import get_sync_service
+from api.services.client_worker_entitlements import require_client_worker_features
+from api.services.saas_entitlements import enforce_saas_feature
 
 
 async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
@@ -25,10 +27,14 @@ async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
     logger.info(f"Starting source sync for campaign {campaign_id}")
 
     try:
+        await require_client_worker_features("voice", "telephony", "campaigns")
         # Get campaign
         campaign = await db_client.get_campaign_by_id(campaign_id)
         if not campaign:
             raise ValueError(f"Campaign {campaign_id} not found")
+        # A queued sync may run after an owner disables the campaign feature.
+        # Check again before reading contacts from the configured source.
+        await enforce_saas_feature(campaign.organization_id, "campaigns")
 
         # Get appropriate sync service
         sync_service = get_sync_service(campaign.source_type)
@@ -109,6 +115,14 @@ async def process_campaign_batch(
 
     failed_count = 0
     try:
+        await require_client_worker_features("voice", "telephony", "campaigns")
+        campaign = await db_client.get_campaign_by_id(campaign_id)
+        if not campaign:
+            raise ValueError(f"Campaign {campaign_id} not found")
+        # A queued batch can outlive the workspace's campaign grant. Check
+        # before the dispatcher initializes a provider or claims contacts.
+        if campaign.state == "running":
+            await enforce_saas_feature(campaign.organization_id, "campaigns")
         # Process the batch
         processed_count = await campaign_call_dispatcher.process_batch(
             campaign_id=campaign_id, batch_size=batch_size
@@ -131,21 +145,22 @@ async def process_campaign_batch(
     except Exception as e:
         logger.error(f"Error processing batch for campaign {campaign_id}: {e}")
 
-        # Publish batch failed event
-        publisher = await get_campaign_event_publisher()
-        await publisher.publish_batch_failed(
-            campaign_id=campaign_id,
-            error=str(e),
-            processed_count=0,
-        )
-
-        # Update campaign state to failed
-        await db_client.update_campaign(campaign_id=campaign_id, state="failed")
+        # Preserve a pause or stop that raced with this batch failure.
+        await db_client.fail_running_campaign(campaign_id)
         await db_client.append_campaign_log(
             campaign_id=campaign_id,
             level="error",
             event="batch_failed",
             message=f"Batch processing failed: {e}",
             details={"error": str(e)},
+        )
+
+        # The orchestrator clears its in-progress marker on this event, so
+        # publish only after the authoritative state and audit log are saved.
+        publisher = await get_campaign_event_publisher()
+        await publisher.publish_batch_failed(
+            campaign_id=campaign_id,
+            error=str(e),
+            processed_count=0,
         )
         raise

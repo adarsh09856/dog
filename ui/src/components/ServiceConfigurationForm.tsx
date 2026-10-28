@@ -653,7 +653,7 @@ export function ServiceConfigurationForm({
                             </span>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                            Leave blank to use Kodewaves Sovereign Platform Managed keys. Enter an API key only if you wish to use your own personal provider account (BYOK).
+                            Leave blank to use platform-managed provider keys. Enter an API key only if you wish to use your own personal provider account (BYOK).
                         </p>
                         {renderFieldDescription("api_key", providerSchema)}
                         {apiKeys[service].map((key, index) => (

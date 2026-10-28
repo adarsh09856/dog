@@ -138,3 +138,24 @@ export const INDIAN_TEMPLATE_LANGUAGES = [
     { code: 'te', name: 'Telugu' },
     { code: 'ur', name: 'Urdu' },
 ] as const;
+
+// Keep this list aligned with api/services/configuration/language_normalizer.py
+// SPEECH_LANGUAGE_NAMES: the workflow generator accepts these language codes.
+// The available speech models and voices are a separate runtime capability.
+const WORKFLOW_GENERATION_LANGUAGE_CODES = [
+    'ar', 'as', 'bn', 'brx', 'de', 'doi', 'en', 'es', 'fr', 'gu', 'hi', 'id',
+    'it', 'ja', 'kn', 'kok', 'ko', 'ks', 'mai', 'ml', 'mni', 'mr', 'ne', 'nl',
+    'or', 'pa', 'pt', 'ru', 'sa', 'sat', 'sd', 'ta', 'te', 'th', 'tr', 'ur',
+    'vi', 'zh',
+] as const;
+
+export const WORKFLOW_GENERATION_LANGUAGES = WORKFLOW_GENERATION_LANGUAGE_CODES
+    .map((code) => ({
+        code,
+        name: LANGUAGE_DISPLAY_NAMES[code]
+            ?? LANGUAGE_DISPLAY_NAMES[`${code}-IN`]
+            ?? (code === 'zh' ? LANGUAGE_DISPLAY_NAMES['zh-CN'] : undefined)
+            ?? INDIAN_TEMPLATE_LANGUAGES.find((item) => item.code === code)?.name
+            ?? code.toUpperCase(),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));

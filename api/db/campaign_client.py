@@ -18,6 +18,7 @@ from api.db.models import (
 from api.enums import WorkflowRunState
 from api.schemas.campaign import TrafficSplitRequest
 from api.schemas.workflow import WorkflowRunResponseSchema
+from api.services.client_creation_limits import enforce_client_creation_limit
 from api.services.workflow.run_usage_response import format_public_cost_info
 from api.utils.recording_artifacts import get_recording_storage_key
 
@@ -429,6 +430,9 @@ class CampaignClient(BaseDBClient):
     ) -> CampaignModel:
         """Create a new campaign"""
         async with self.async_session() as session:
+            await enforce_client_creation_limit(
+                session, limit_name="max_campaigns", model=CampaignModel
+            )
             # Build orchestrator_metadata with max_concurrency if provided
             orchestrator_metadata = {}
             if traffic_split is not None:
@@ -886,6 +890,19 @@ class CampaignClient(BaseDBClient):
                 raise e
             await session.refresh(campaign)
         return campaign
+
+    async def fail_running_campaign(self, campaign_id: int) -> bool:
+        """Fail a batch only if the campaign has not been paused or stopped."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                update(CampaignModel)
+                .where(CampaignModel.id == campaign_id, CampaignModel.state == "running")
+                .values(state="failed", updated_at=datetime.now(UTC))
+                .returning(CampaignModel.id)
+            )
+            changed = result.scalar_one_or_none() is not None
+            await session.commit()
+            return changed
 
     async def delete_campaign(self, campaign_id: int, organization_id: int) -> bool:
         """Delete campaign by ID for organization"""

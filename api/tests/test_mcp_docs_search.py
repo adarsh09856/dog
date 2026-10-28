@@ -218,12 +218,30 @@ def test_score_page_uses_llm_hint_and_aliases():
     assert section.slug == "troubleshooting-webrtc-connectivity"
 
 
-def test_resolve_docs_root_honors_env_override(tmp_path: Path):
+def test_resolve_docs_root_honors_env_override(monkeypatch, tmp_path: Path):
     docs = tmp_path / "custom_docs"
     docs.mkdir()
     (docs / "docs.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(docs_search_module, "KODEWAVES_EDITION", "saas")
     with patch.dict(os.environ, {"KODEWAVES_DOCS_PATH": str(docs)}):
         assert _resolve_docs_root() == docs.resolve()
+
+
+def test_client_docs_search_ignores_unverified_path_override(monkeypatch, tmp_path: Path):
+    docs = tmp_path / "custom_docs"
+    docs.mkdir()
+    (docs / "docs.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(docs_search_module, "KODEWAVES_EDITION", "client", raising=False)
+    monkeypatch.setenv("KODEWAVES_DOCS_PATH", str(docs))
+    looked_up = []
+    monkeypatch.setattr(
+        docs_search_module,
+        "_coerce_docs_root",
+        lambda candidate: looked_up.append(candidate) or None,
+    )
+
+    assert _resolve_docs_root() is None
+    assert looked_up == [Path("/app/docs")]
 
 
 @pytest.mark.asyncio

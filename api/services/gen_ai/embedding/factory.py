@@ -8,6 +8,7 @@ path does.
 
 from typing import Optional
 
+from fastapi import HTTPException
 from loguru import logger
 
 from api.db.db_client import DBClient
@@ -56,6 +57,7 @@ async def resolve_embedding_correlation_id(
 async def build_embedding_service(
     *,
     db_client: DBClient,
+    organization_id: int | None,
     provider: Optional[str],
     api_key: Optional[str],
     model: Optional[str],
@@ -75,6 +77,22 @@ async def build_embedding_service(
             (for calls made outside a workflow run: ingestion, manual search).
     """
     from api.services.configuration.registry import ServiceProviders
+
+    # External embedding credentials come from the workspace configuration.
+    # Check at use time so queued ingestion and active retrieval honor a plan
+    # downgrade without blocking unrelated voice requests.
+    if (
+        provider not in (ServiceProviders.KODEWAVES.value, ServiceProviders.DOGRAH.value)
+        and api_key
+    ):
+        from api.db.kodewaves_client import kodewaves_db_client
+        from api.services.saas_entitlements import is_saas_feature_allowed
+
+        if organization_id is None:
+            raise HTTPException(status_code=403, detail="A workspace is required to use a provider key.")
+        policy = await kodewaves_db_client.get_setting("byok_policy", raise_on_error=True)
+        if (policy and not policy.get("allow_user_byok", True)) or not await is_saas_feature_allowed(organization_id, "byok"):
+            raise HTTPException(status_code=403, detail="User-provided model keys are disabled by your administrator.")
 
     model_id = model or DEFAULT_EMBEDDING_MODEL
 

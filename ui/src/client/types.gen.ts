@@ -2568,15 +2568,15 @@ export type CreditPackageItem = {
     /**
      * Price Inr
      */
-    price_inr?: number;
+    price_inr?: number | null;
     /**
      * Price Usd
      */
-    price_usd?: number;
+    price_usd?: number | null;
     /**
      * Currency
      */
-    currency?: string;
+    currency?: 'INR' | 'USD';
     /**
      * Is Popular
      */
@@ -2619,6 +2619,10 @@ export type CreditPackagePublicItem = {
      * Currency
      */
     currency: string;
+    /**
+     * Is Popular
+     */
+    is_popular?: boolean;
 };
 
 /**

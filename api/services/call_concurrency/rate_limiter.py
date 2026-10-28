@@ -135,6 +135,7 @@ class RateLimiter:
         *,
         scope_key: str | None = None,
         scope_max_concurrent: int | None = None,
+        fleet_max_concurrent: int | None = None,
     ) -> Optional[ConcurrentSlotAcquisition]:
         """
         Try to acquire a concurrent call slot.
@@ -145,8 +146,9 @@ class RateLimiter:
         also registered in a secondary counter (``concurrent_calls:<scope_key>``,
         e.g. ``campaign:<id>``) and acquisition additionally requires that
         counter to be below ``scope_max_concurrent``. Both counters are
-        updated atomically. The scope-scoped slot must be released with the
-        same ``scope_key``.
+        updated atomically. ``fleet_max_concurrent`` adds an atomic fleet-wide
+        cap, including calls from other organizations. The scope-scoped slot
+        must be released with the same ``scope_key``.
 
         Every successful acquisition is also mirrored into the fleet-wide set
         (FLEET_CONCURRENT_KEY) in the same atomic script — see
@@ -172,6 +174,7 @@ class RateLimiter:
         local slot_id = ARGV[4]
         local scope_max_concurrent = tonumber(ARGV[5])
         local fleet_member = ARGV[6]
+        local fleet_max_concurrent = tonumber(ARGV[7])
 
         -- Remove stale entries (older than the stale-call timeout)
         redis.call('ZREMRANGEBYSCORE', key, 0, stale_cutoff)
@@ -180,6 +183,11 @@ class RateLimiter:
         local current_count = redis.call('ZCARD', key)
 
         if current_count >= max_concurrent then
+            return nil
+        end
+
+        redis.call('ZREMRANGEBYSCORE', fleet_key, 0, stale_cutoff)
+        if fleet_max_concurrent >= 0 and redis.call('ZCARD', fleet_key) >= fleet_max_concurrent then
             return nil
         end
 
@@ -197,7 +205,6 @@ class RateLimiter:
 
         -- Mirror the slot into the fleet-wide set (autoscaling signal); stale
         -- members are pruned here since no other write path touches this key.
-        redis.call('ZREMRANGEBYSCORE', fleet_key, 0, stale_cutoff)
         redis.call('ZADD', fleet_key, now, fleet_member)
         redis.call('EXPIRE', fleet_key, 3600)
         return {slot_id, current_count + 1}
@@ -219,6 +226,7 @@ class RateLimiter:
                 slot_id,
                 scope_max_concurrent if scope_max_concurrent is not None else 0,
                 f"{organization_id}:{slot_id}",
+                fleet_max_concurrent if fleet_max_concurrent is not None else -1,
             )
             if not result:
                 return None

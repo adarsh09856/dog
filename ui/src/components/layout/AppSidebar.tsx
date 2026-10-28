@@ -59,17 +59,20 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppConfig } from "@/context/AppConfigContext";
+import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
 import { useLeadForms } from "@/context/LeadFormsContext";
 import { useTelephonyConfigWarnings } from "@/context/TelephonyConfigWarningsContext";
 import { useLatestReleaseVersion } from "@/hooks/useLatestReleaseVersion";
 import type { LocalUser } from "@/lib/auth";
 import { useAuth } from "@/lib/auth";
+import type { ClientFeature } from "@/lib/clientEntitlements";
 import { cn } from "@/lib/utils";
 
 type SidebarNavItem = {
   title: string;
   url: string;
   icon: LucideIcon;
+  feature?: ClientFeature;
   showsTelephonyWarning?: boolean;
 };
 
@@ -87,6 +90,7 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Overview",
         url: "/overview",
         icon: Home,
+        feature: "voice",
       },
     ],
   },
@@ -97,37 +101,44 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Voice Agents",
         url: "/workflow",
         icon: Workflow,
+        feature: "voice",
       },
       {
         title: "Campaigns",
         url: "/campaigns",
         icon: Megaphone,
+        feature: "campaigns",
       },
       {
         title: "Models",
         url: "/model-configurations",
         icon: Brain,
+        feature: "voice",
       },
       {
         title: "Telephony",
         url: "/telephony-configurations",
         icon: Phone,
+        feature: "telephony",
         showsTelephonyWarning: true,
       },
       {
         title: "Tools",
         url: "/tools",
         icon: Wrench,
+        feature: "voice",
       },
       {
         title: "Files",
         url: "/files",
         icon: Database,
+        feature: "knowledge_base",
       },
       {
         title: "Recordings",
         url: "/recordings",
         icon: AudioLines,
+        feature: "voice",
       },
     ],
   },
@@ -138,26 +149,31 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "CRM Leads",
         url: "/crm",
         icon: UserCheck,
+        feature: "crm",
       },
       {
         title: "Appointments",
         url: "/appointments",
         icon: Calendar,
+        feature: "appointments",
       },
       {
         title: "Voice Forms",
         url: "/forms",
         icon: LayoutList,
+        feature: "forms",
       },
       {
         title: "Web Widgets",
         url: "/widgets",
         icon: Globe,
+        feature: "widgets",
       },
       {
         title: "Prompt Templates",
         url: "/prompt-templates",
         icon: Sparkles,
+        feature: "voice",
       },
     ],
   },
@@ -168,16 +184,19 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Agent Runs",
         url: "/usage",
         icon: TrendingUp,
+        feature: "voice",
       },
       {
         title: "Sovereign Wallet",
         url: "/billing-sovereign",
         icon: CircleDollarSign,
+        feature: "billing",
       },
       {
         title: "Reports",
         url: "/reports",
         icon: FileText,
+        feature: "voice",
       }
     ],
   },
@@ -188,8 +207,9 @@ export function AppSidebar() {
   const router = useRouter();
   const { state, isMobile, setOpenMobile } = useSidebar();
   const { provider, logout, user } = useAuth();
+  const { hasFeature, isClientEdition } = useClientEntitlements();
   const { config } = useAppConfig();
-  const canAccessAdmin = user?.is_superuser === true;
+  const canAccessAdmin = !isClientEdition && user?.is_superuser === true;
   const { openHireExpert } = useLeadForms();
   const {
     telnyxMissingWebhookPublicKeyCount,
@@ -288,7 +308,7 @@ export function AppSidebar() {
           <Icon
             className={cn(
               "h-4 w-4 shrink-0",
-              isItemActive && "text-cta drop-shadow-[0_0_6px_rgba(240,170,70,0.8)]"
+              isItemActive && "text-cta-text drop-shadow-[0_0_6px_rgba(240,170,70,0.8)]"
             )}
           />
           <span
@@ -469,7 +489,10 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent className={cn("notranslate", isCollapsed && "px-0")} translate="no">
-        {NAV_SECTIONS.map((section, index) => (
+        {NAV_SECTIONS.map((section) => ({
+          ...section,
+          items: section.items.filter((item) => !item.feature || hasFeature(item.feature)),
+        })).filter((section) => section.items.length > 0).map((section, index) => (
           <SidebarGroup
             key={section.label ?? "overview"}
             className={index === 0 ? "mt-2" : "mt-6"}
@@ -499,7 +522,7 @@ export function AppSidebar() {
           <SidebarGroup className="mt-6">
             <SidebarGroupLabel
               className={cn(
-                "notranslate text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400",
+                "notranslate text-xs font-semibold uppercase tracking-wider text-primary",
                 isCollapsed && "hidden"
               )}
               translate="no"
@@ -547,7 +570,7 @@ export function AppSidebar() {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {canAccessAdmin && (
-                    <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-purple-600 dark:text-purple-400 font-medium">
+                    <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-primary font-medium">
                       <ShieldCheck className="mr-2 h-4 w-4" />
                       Sovereign Admin
                     </DropdownMenuItem>
@@ -590,7 +613,7 @@ export function AppSidebar() {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {canAccessAdmin && (
-                    <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-purple-600 dark:text-purple-400 font-medium">
+                    <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-primary font-medium">
                       <ShieldCheck className="mr-2 h-4 w-4" />
                       Sovereign Admin
                     </DropdownMenuItem>

@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.constants import ENABLE_SIGNUP
@@ -108,10 +110,11 @@ async def login(request: LoginRequest):
     user = await db_client.get_user_by_email(email)
     if not user or not user.password_hash:
         raise HTTPException(status_code=401, detail="Invalid email or password")
-
     # Verify password
     if not verify_password(request.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account suspended")
 
     # Create JWT token
     token = create_jwt_token(user.id, user.email)
@@ -139,7 +142,7 @@ async def login(request: LoginRequest):
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user(user: UserModel = Depends(get_user)):
+async def get_current_user(user: Annotated[UserModel, Depends(get_user)]):
     return UserResponse(
         id=user.id,
         email=user.email,

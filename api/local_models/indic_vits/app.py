@@ -45,11 +45,12 @@ SAMPLE_RATE = 24_000
 
 
 class _StreamingEdgeSilenceTrimmer:
-    """Keep natural pauses inside speech, but shorten padding at request edges."""
+    """Keep short speech pauses while bounding silence inside streamed clips."""
 
     _frame_bytes = SAMPLE_RATE // 100 * 2  # 10 ms of mono PCM16
     _leading_bytes = SAMPLE_RATE * 2 // 25  # 40 ms
     _trailing_bytes = SAMPLE_RATE * 2 // 10  # 100 ms
+    _internal_bytes = SAMPLE_RATE * 2 // 5  # 200 ms
 
     def __init__(self):
         self._remainder = b""
@@ -67,7 +68,11 @@ class _StreamingEdgeSilenceTrimmer:
             voiced = float(np.sqrt(np.mean(samples * samples))) > 80.0
             if voiced:
                 if self._pending:
-                    output.extend(self._pending)
+                    # The bilingual model can emit a long silent interval
+                    # between words. Keep a natural pause without sending
+                    # seconds of silence to the caller.
+                    keep = self._internal_bytes if self._started else self._leading_bytes
+                    output.extend(self._pending[-keep:])
                     self._pending.clear()
                 output.extend(frame)
                 self._started = True
@@ -160,6 +165,9 @@ PIPER_MODELS: dict[str, sherpa_onnx.OfflineTts] = {}
 MELO_MODEL: sherpa_onnx.OfflineTts | None = None
 WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="indic-vits")
 LOCK = asyncio.Lock()
+INDUS_GATEWAY_WORKERS = max(1, min(2, int(os.environ.get("INDUS_GATEWAY_WORKERS", "1"))))
+INDUS_WORKER = ThreadPoolExecutor(max_workers=INDUS_GATEWAY_WORKERS, thread_name_prefix="indus-gateway")
+INDUS_GATE = asyncio.Semaphore(INDUS_GATEWAY_WORKERS)
 
 
 def get_active_speakers() -> dict[str, tuple[int | None, str, str, str]]:
@@ -342,6 +350,16 @@ def _generate(text: str, voice: str, speed: float, callback=None, context_langua
     return b"".join(chunks)
 
 
+def _warm_streaming_voice(text: str, voice: str) -> None:
+    """Prime the exact callback path used by streamed call audio.
+
+    A non-streaming startup synthesis initializes the model but leaves its first
+    callback-driven generation cold. That showed up as multi-second first PCM
+    on a regional language after the service was already marked healthy.
+    """
+    _generate(text, voice, 1.0, callback=lambda _samples, _progress: 1)
+
+
 def _generate_one(text: str, effective_voice: str, speed: float, callback=None) -> bytes:
     if INDUS_ENDPOINT and effective_voice in {"HIN_F", "ENG_IN"}:
         if not INDUS_READY:
@@ -416,7 +434,7 @@ def _generate_one(text: str, effective_voice: str, speed: float, callback=None) 
         return _pcm(audio.samples)
 
 
-async def stream_pcm(request, context_language: str | None = None):
+async def stream_pcm(request, context_language: str | None = None, indus_only: bool = False):
     """Forward native sentence callbacks while synthesis is still running."""
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue()
@@ -425,10 +443,7 @@ async def stream_pcm(request, context_language: str | None = None):
     # Indus adds about 100-200 ms before each independent phrase and about
     # 340 ms after it. Repeated synthesis requests expose that padding as a
     # stop/start gap even when the next clip was synthesized in time.
-    trimmer = (
-        _StreamingEdgeSilenceTrimmer()
-        if INDUS_READY and request.voice in {"HIN_F", "ENG_IN"} else None
-    )
+    trimmer = _StreamingEdgeSilenceTrimmer() if indus_only else None
 
     def callback(samples, _progress):
         nonlocal emitted
@@ -439,9 +454,11 @@ async def stream_pcm(request, context_language: str | None = None):
         loop.call_soon_threadsafe(queue.put_nowait, chunk)
         return 1
 
-    async with LOCK:
+    gate = INDUS_GATE if indus_only else LOCK
+    worker = INDUS_WORKER if indus_only else WORKER
+    async with gate:
         future = loop.run_in_executor(
-            WORKER, _generate, request.input, request.voice, request.speed, callback, context_language)
+            worker, _generate, request.input, request.voice, request.speed, callback, context_language)
         # The generation future completes on WORKER's thread. asyncio.Queue is
         # not thread-safe, so enqueue its sentinel through the event loop just
         # like audio chunks. A direct put_nowait can fail to wake queue.get(),
@@ -467,7 +484,13 @@ async def stream_pcm(request, context_language: str | None = None):
         finally:
             stopped.set()
             if not future.done():
-                await asyncio.shield(future)
+                try:
+                    await asyncio.shield(future)
+                except asyncio.CancelledError:
+                    # A canceled stream must finish its upstream request before
+                    # another turn can claim this gateway inference slot.
+                    await future
+                    raise
 
 
 def _load() -> None:
@@ -515,7 +538,7 @@ def _load() -> None:
     if INDUS_ENDPOINT:
         # Indus owns Hindi female and Indian English. Avoid loading the
         # superseded English model into RAM alongside it.
-        _generate(PREVIEWS["ta"], "TAM_F", 1.0)
+        _warm_streaming_voice(PREVIEWS["ta"], "TAM_F")
         return
     MELO_DIR.mkdir(parents=True, exist_ok=True)
     for filename, expected_hash in MELO_FILES.items():
@@ -535,10 +558,10 @@ def _load() -> None:
         raise RuntimeError("Unexpected Indian English model speaker inventory")
 
     # Warmup
-    _generate(PREVIEWS["ta"], "TAM_F", 1.0)
+    _warm_streaming_voice(PREVIEWS["ta"], "TAM_F")
     if "HIN_M" in PIPER_MODELS:
-        _generate(PREVIEWS["hi"], "HIN_M", 1.0)
-    _generate(PREVIEWS["en"], "ENG_IN", 1.0)
+        _warm_streaming_voice(PREVIEWS["hi"], "HIN_M")
+    _warm_streaming_voice(PREVIEWS["en"], "ENG_IN")
 
 
 @asynccontextmanager
@@ -635,13 +658,18 @@ async def speech(
             raise ValueError("Indus Inaya supports fixed speed 1.0")
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    indus_only = INDUS_READY and bool(segments) and all(
+        voice in {"HIN_F", "ENG_IN"} for voice, _ in segments
+    )
 
     if request.response_format == "pcm":
-        return StreamingResponse(stream_pcm(request, context_language), media_type="audio/pcm")
+        return StreamingResponse(stream_pcm(request, context_language, indus_only), media_type="audio/pcm")
 
-    async with LOCK:
+    gate = INDUS_GATE if indus_only else LOCK
+    worker = INDUS_WORKER if indus_only else WORKER
+    async with gate:
         future = asyncio.get_running_loop().run_in_executor(
-            WORKER, _generate, request.input, request.voice, request.speed, None, context_language)
+            worker, _generate, request.input, request.voice, request.speed, None, context_language)
         try:
             pcm = await asyncio.shield(future)
         except asyncio.CancelledError:

@@ -25,6 +25,7 @@ from typing import Any
 import yaml
 from fastapi import HTTPException
 
+from api.constants import KODEWAVES_EDITION
 from api.mcp_server.auth import authenticate_mcp_request
 from api.mcp_server.tracing import traced_tool
 
@@ -191,6 +192,11 @@ def _coerce_docs_root(candidate: Path) -> Path | None:
 
 def _resolve_docs_root() -> Path | None:
     """Return the path to the on-disk docs tree, or None if not found."""
+    if KODEWAVES_EDITION == "client":
+        # Client documentation is part of the signed runtime inventory. Do not
+        # let an environment override redirect reads to unsigned host content.
+        return _coerce_docs_root(Path("/app/docs"))
+
     override = os.environ.get("KODEWAVES_DOCS_PATH") or os.environ.get("DOGRAH_DOCS_PATH")
     if override:
         resolved = _coerce_docs_root(Path(override))

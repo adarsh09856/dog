@@ -3,14 +3,16 @@ from datetime import datetime, timezone
 
 from loguru import logger
 from pydantic import ValidationError
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
 
 from api.db.base_client import BaseDBClient
 from api.db.models import UserConfigurationModel, UserModel
+from api.db.owner_account_lock import lock_owner_account_mutation
 from api.enums import UserConfigurationKey
 from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
+from api.services.client_creation_limits import enforce_client_creation_limit
 
 
 class UserClient(BaseDBClient):
@@ -27,6 +29,15 @@ class UserClient(BaseDBClient):
 
             if user is not None:
                 return user, False
+
+            existing_after_lock = await enforce_client_creation_limit(
+                session,
+                limit_name="max_seats",
+                model=UserModel,
+                existing_query=select(UserModel).where(UserModel.provider_id == provider_id),
+            )
+            if existing_after_lock is not None:
+                return existing_after_lock, False
 
             # Use PostgreSQL's INSERT ... ON CONFLICT DO NOTHING
             # This is atomic and handles race conditions at the database level
@@ -217,6 +228,11 @@ class UserClient(BaseDBClient):
         is automatically granted superuser status.
         """
         async with self.async_session() as session:
+            await enforce_client_creation_limit(session, limit_name="max_seats", model=UserModel)
+            # Serialize user creation with owner promotions, demotions, and
+            # deletions. Without this transaction lock, two concurrent first
+            # signups can both observe an empty user table and both become owners.
+            await lock_owner_account_mutation(session)
             if is_superuser is None:
                 count_res = await session.execute(select(func.count(UserModel.id)))
                 user_count = count_res.scalar_one_or_none() or 0

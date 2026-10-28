@@ -16,11 +16,11 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { TemplateSelectorModal } from '@/components/workflow/TemplateSelectorModal';
+import { detailFromError } from '@/lib/apiError';
 import { useAuth } from '@/lib/auth';
+import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
 import logger from '@/lib/logger';
 import { getRandomId } from '@/lib/utils';
-import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
-import { detailFromError } from '@/lib/apiError';
 
 export function CreateWorkflowButton() {
     const router = useRouter();
@@ -81,7 +81,7 @@ export function CreateWorkflowButton() {
                         onClick={() => setIsTemplateModalOpen(true)}
                         className="cursor-pointer py-2.5 px-3 rounded-md"
                     >
-                        <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mr-3 shrink-0">
+                        <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center mr-3 shrink-0">
                             <Sparkles className="w-4 h-4" />
                         </div>
                         <div className="flex-1">

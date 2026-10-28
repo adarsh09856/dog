@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Activity,
   AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
@@ -33,9 +32,9 @@ export default function AdminDashboardPage() {
       const data = await adminApi.getStats();
       setStats(data);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to load admin stats:", err);
-      setError(err.message || "Failed to load live metrics from database");
+      setError(err instanceof Error ? err.message : "Failed to load live metrics from database");
       // ZERO fake/demo numbers - stats remain null if error, genuine zero-states if empty
     } finally {
       setLoading(false);
@@ -48,6 +47,19 @@ export default function AdminDashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const connectionLabel = loading
+    ? "Checking database"
+    : error
+      ? "Database unavailable"
+      : stats
+        ? "Database connected"
+        : "No telemetry available";
+  const connectionClass = error
+    ? "bg-destructive/10 text-destructive border-destructive/20"
+    : loading
+      ? "bg-muted text-muted-foreground border-border"
+      : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -59,9 +71,9 @@ export default function AdminDashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Live DB Connection
+          <Badge variant="outline" className={`px-3 py-1 text-xs gap-1.5 ${connectionClass}`}>
+            <span className={`h-2 w-2 rounded-full ${error ? "bg-destructive" : loading ? "bg-muted-foreground" : "bg-emerald-500 animate-pulse"}`} />
+            {connectionLabel}
           </Badge>
           <Button variant="outline" size="sm" onClick={fetchStats} disabled={loading} className="gap-2">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -144,10 +156,10 @@ export default function AdminDashboardPage() {
         <Card className="border-border/60">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Configured Model Margin</CardTitle>
-            <TrendingUp className="h-4 w-4 text-indigo-500" />
+            <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-extrabold text-indigo-500">
+            <div className="text-3xl font-extrabold text-primary">
               {stats?.gross_margin_percent?.toFixed(1) ?? "—"}%
             </div>
             <p className="text-xs text-muted-foreground mt-1">

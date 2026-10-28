@@ -1,5 +1,6 @@
 import { client } from '@/client/client.gen';
 import type { HttpMethod } from '@/client/core/types.gen';
+
 import { detailFromError } from './apiError';
 
 /** Shared SDK transport keeps every panel on the current backend and auth session. */
@@ -43,16 +44,30 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
 // ADMIN TYPES & APIS
 // ---------------------------------------------------------------------------
 
+export interface ProviderLayerVerification {
+  verified?: boolean;
+  model?: string;
+  voice?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
+export interface ProviderDiscoveryResult {
+  discovered_count?: number;
+  [key: string]: unknown;
+}
+
 export interface MasterCredential {
   id?: number;
   provider: string;
-  category: 'llm' | 'stt' | 'tts' | 'sts' | 'telecom';
+  category: 'llm' | 'stt' | 'tts' | 'sts' | 'realtime' | 'telecom';
   display_name: string;
   api_key_masked?: string;
   api_key?: string;
   api_secret?: string;
   credentials?: Record<string, string | undefined>;
-  extra_config?: Record<string, any>;
+  extra_config?: Record<string, unknown>;
+  has_credentials?: boolean;
   is_active: boolean;
   status: 'active' | 'degraded' | 'error' | 'untested';
   last_tested_at?: string;
@@ -97,6 +112,7 @@ export interface AdminUserItem {
   organization_name?: string;
   wallet_balance_minutes?: number;
   plan_name?: string;
+  plan_code?: string | null;
   total_calls?: number;
   organization?: {
     id: number;
@@ -112,10 +128,20 @@ export interface SaaSPlan {
   name: string;
   code: string;
   description?: string;
-  monthly_price_inr: number;
-  monthly_price_usd: number;
+  monthly_price_cents: number;
+  annual_price_cents: number;
+  currency: string;
+  /** Legacy same-currency display fields; the other currency is null, never FX-estimated. */
+  monthly_price_inr?: number | null;
+  monthly_price_usd?: number | null;
   included_minutes: number;
-  overage_rate_per_minute: number;
+  max_agents?: number;
+  has_crm_access?: boolean;
+  has_appointments_access?: boolean;
+  has_forms_access?: boolean;
+  has_widget_access?: boolean;
+  is_default?: boolean;
+  overage_rate_per_minute: number | null;
   max_concurrent_calls: number;
   allow_user_byok: boolean;
   features?: string[];
@@ -127,8 +153,11 @@ export interface CreditPackage {
   id: string | number;
   name: string;
   minutes: number;
-  price_inr: number;
-  price_usd: number;
+  price_cents: number;
+  currency: string;
+  /** Legacy same-currency fields; the other currency is null, never FX-estimated. */
+  price_inr?: number | null;
+  price_usd?: number | null;
   bonus_minutes: number;
   is_popular: boolean;
   is_active: boolean;
@@ -141,23 +170,26 @@ export interface PublicCreditPackage {
   bonus_minutes: number;
   price_cents: number;
   currency: string;
+  is_popular?: boolean;
+}
+
+export interface PublicSaaSPlan extends Omit<SaaSPlan, "overage_rate_per_minute"> {
+  monthly_price_cents: number;
+  annual_price_cents: number;
+  currency: string;
+  max_agents: number;
+  overage_rate_per_minute: number | null;
 }
 
 export function normalizePublicCreditPackage(pkg: PublicCreditPackage): CreditPackage {
-  const amount = Number(pkg.price_cents || 0) / 100;
-  const isInr = pkg.currency?.toUpperCase() === 'INR';
-  const isUsd = pkg.currency?.toUpperCase() === 'USD';
-  const priceInr = isInr ? amount : isUsd ? amount * 83 : amount;
-  const priceUsd = isUsd ? amount : isInr ? amount / 83 : amount;
-
   return {
     id: pkg.id,
     name: pkg.name,
     minutes: Number(pkg.minutes || 0),
     bonus_minutes: Number(pkg.bonus_minutes || 0),
-    price_inr: priceInr,
-    price_usd: priceUsd,
-    is_popular: Number(pkg.bonus_minutes || 0) > 0,
+    price_cents: Number(pkg.price_cents || 0),
+    currency: pkg.currency,
+    is_popular: pkg.is_popular === true,
     is_active: true,
   };
 }
@@ -226,6 +258,9 @@ export interface FlaggedViolation {
 
 export interface PlatformSettings {
   company_name: string;
+  tagline?: string;
+  favicon_url?: string;
+  font?: "geist" | "system";
   logo_url?: string;
   support_email?: string;
   primary_color?: string;
@@ -254,7 +289,7 @@ export interface AuditLogItem {
   user_email?: string;
   action: string;
   target_resource: string;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   ip_address?: string;
   created_at?: string;
 }
@@ -277,11 +312,11 @@ export const adminApi = {
       method: 'DELETE',
     }),
   discoverProvider: (provider: string) =>
-    apiFetch<Record<string, any>>(`/admin/master-keys/${provider}/discover`, {
+    apiFetch<ProviderDiscoveryResult>(`/admin/master-keys/${provider}/discover`, {
       method: 'POST',
     }),
   verifyProvider: (provider: string) =>
-    apiFetch<{ provider: string; layers: Record<string, any> }>(`/admin/master-keys/${provider}/verify`, {
+    apiFetch<{ provider: string; layers: Record<string, ProviderLayerVerification> }>(`/admin/master-keys/${provider}/verify`, {
       method: 'POST',
     }),
 
@@ -327,7 +362,7 @@ export const adminApi = {
     }),
   updateUser: (
     userId: number,
-    data: Record<string, any>
+    data: Record<string, unknown>
   ) =>
     apiFetch<{ message: string }>(`/admin/users/${userId}`, {
       method: 'PATCH',
@@ -437,11 +472,11 @@ export const adminApi = {
       body: JSON.stringify({ recipient_email }),
     }),
   getOllamaModels: () =>
-    apiFetch<{ models: Array<{ name: string; size: number; modified_at: string; details?: any }>; endpoint: string; status: string }>(
+    apiFetch<{ models: Array<{ name: string; size: number; modified_at: string; details?: Record<string, unknown> }>; endpoint: string; status: string }>(
       '/admin/settings/ollama/models'
     ),
   pullOllamaModel: (model: string) =>
-    apiFetch<{ success: boolean; model: string; result: any }>('/admin/settings/ollama/pull', {
+    apiFetch<{ success: boolean; model: string; result: unknown }>('/admin/settings/ollama/pull', {
       method: 'POST',
       body: JSON.stringify({ model }),
     }),
@@ -520,7 +555,7 @@ export interface Contact {
   company?: string;
   stage_id?: string | number;
   notes?: string;
-  custom_fields?: Record<string, any>;
+  custom_fields?: Record<string, unknown>;
   created_at?: string;
 }
 
@@ -533,8 +568,8 @@ export interface LeadStage {
 }
 
 export interface Appointment {
+  contact_id?: string | null;
   id: string | number;
-    contact_id?: string | null;
   title: string;
   customer_name?: string;
   customer_phone?: string;
@@ -558,7 +593,7 @@ export interface DynamicForm {
     required: boolean;
     options?: string[];
   }>;
-  fields_schema?: any[];
+  fields_schema?: unknown[];
   is_active: boolean;
   submission_count: number;
   created_at: string;
@@ -594,20 +629,24 @@ export interface PromptTemplate {
 }
 
 export interface SovereignWallet {
-  balance_minutes: number;
-  total_credited_minutes: number;
-  total_consumed_minutes: number;
-  low_balance_threshold: number;
+  credit_balance_minutes: number;
+  bonus_minutes: number;
+  total_available_minutes: number;
+  is_frozen: boolean;
+  plan_code?: string | null;
   plan_name?: string;
-  plan_minutes?: number;
+  included_minutes?: number | null;
+  plan_expires_at?: string | null;
 }
 
 export interface WalletLedgerItem {
-  id: number;
+  id: number | string;
+  amount_minutes?: number;
   delta_minutes: number;
   balance_after: number;
   reason: string;
   reference_id?: string;
+  notes?: string;
   created_at: string;
 }
 
@@ -671,7 +710,7 @@ export const formsApi = {
       method: 'DELETE',
     }),
   getSubmissions: (formId: string | number) =>
-    apiFetch<Array<{ id: number | string; data: Record<string, any>; created_at: string }>>(`/forms/${formId}/submissions`),
+    apiFetch<Array<{ id: number | string; data: Record<string, unknown>; created_at: string }>>(`/forms/${formId}/submissions`),
 };
 
 export const widgetsApi = {
@@ -719,7 +758,8 @@ export const sovereignBillingApi = {
 };
 
 export const publicApi = {
-  getPublicPlans: () => apiFetch<SaaSPlan[]>('/billing-sovereign/public/plans'),
+  getPublicPlans: () => apiFetch<PublicSaaSPlan[]>('/billing-sovereign/public/plans', { signal: AbortSignal.timeout(5000) }),
+  getPublicCreditOffers: () => apiFetch<PublicCreditPackage[]>('/billing-sovereign/public/packages', { signal: AbortSignal.timeout(5000) }),
   getPublicCreditPackages: async () => {
     const packages = await apiFetch<PublicCreditPackage[]>('/billing-sovereign/public/packages');
     return packages.map(normalizePublicCreditPackage);
@@ -750,13 +790,13 @@ export interface CreateOrderResult {
   gateway: string;
   key_id?: string;
   checkout_url?: string;
-  notes?: Record<string, any>;
+  notes?: Record<string, unknown>;
 }
 
 export interface VerifyPaymentPayload {
   gateway: string;
   order_id: string;
-  payment_id: string;
+  payment_id?: string;
   signature?: string;
   package_id?: string;
   plan_id?: string;
@@ -786,13 +826,14 @@ export const paymentsApi = {
 };
 
 export interface CatalogModelOption {
+  auto_detect_languages?: string[];
+  supports_auto_detect?: boolean;
   value: string;
   label: string;
   provider?: string;
+  has_master_key?: boolean;
   /** Languages advertised by the installed engine, when it reports them. */
   languages?: string[];
-  /** True only when this exact STT model has a supported auto-detect setting. */
-  supports_auto_detect?: boolean;
 }
 
 export interface AvailableCatalogResponse {
@@ -850,5 +891,4 @@ export interface OverviewStatsResponse {
 export const overviewApi = {
   getStats: () => apiFetch<OverviewStatsResponse>('/organizations/overview/stats'),
 };
-
 

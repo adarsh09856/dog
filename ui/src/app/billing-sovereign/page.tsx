@@ -3,26 +3,18 @@
 import {
   ArrowDownRight,
   ArrowUpRight,
-  CheckCircle2,
   Clock,
   Coins,
   CreditCard,
-  Flame,
-  HelpCircle,
-  KeyRound,
   Layers,
   Loader2,
   Lock,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Unlock,
   Zap,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
-import { startConfiguredCheckout } from "@/lib/billing/checkout";
-import { paymentsApi } from "@/lib/kodewavesApi";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,24 +28,66 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useClientBranding } from "@/context/ClientBrandingContext";
+import { useAuth } from "@/lib/auth";
 import {
-  CreditPackage,
+  paymentsApi,
+  publicApi,
+  PublicCreditPackage,
   SaaSPlan,
   sovereignBillingApi,
   SovereignWallet,
   WalletLedgerItem,
 } from "@/lib/kodewavesApi";
 
+function loadRazorpayCheckout() {
+  if (window.Razorpay) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    const script = existing ?? document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(Boolean(window.Razorpay));
+    script.onerror = () => resolve(false);
+    if (!existing) document.body.appendChild(script);
+  });
+}
+
+function formatMoney(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+}
+
+function formatMinorUnits(amount: number, currency: string) {
+  return formatMoney(amount / 100, currency);
+}
+
 export default function SovereignBillingPage() {
   const { user, loading: authLoading } = useAuth();
+  const branding = useClientBranding();
   const [wallet, setWallet] = useState<SovereignWallet | null>(null);
   const [ledger, setLedger] = useState<WalletLedgerItem[]>([]);
   const [plans, setPlans] = useState<SaaSPlan[]>([]);
+  const [creditPackages, setCreditPackages] = useState<PublicCreditPackage[]>([]);
+  const [creditPackagesLoading, setCreditPackagesLoading] = useState(true);
+  const [creditPackagesError, setCreditPackagesError] = useState<string | null>(null);
+  const [selectedCreditPackage, setSelectedCreditPackage] = useState<string | null>(null);
+  const [purchasingPackageId, setPurchasingPackageId] = useState<string | null>(null);
+  const [billingCycles, setBillingCycles] = useState<Record<string, "monthly" | "annual">>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [subscribingId, setSubscribingId] = useState<number | string | null>(null);
+  const handledStripeSession = useRef<string | null>(null);
+  const appliedPricingSelection = useRef(false);
+  const appliedCreditSelection = useRef(false);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (authLoading || !user) return;
     setLoadError(null);
     setLoading(true);
@@ -72,52 +106,206 @@ export default function SovereignBillingPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
     if (authLoading || !user) return;
-    fetchData();
+    let active = true;
+    setCreditPackagesLoading(true);
+    setCreditPackagesError(null);
+    void publicApi.getPublicCreditOffers().then(
+      (offers) => {
+        if (!active) return;
+        setCreditPackages(offers);
+      },
+      () => {
+        if (!active) return;
+        setCreditPackages([]);
+        setCreditPackagesError("Credit bundles could not be loaded. Refresh the page to try again.");
+      },
+    ).finally(() => {
+      if (active) setCreditPackagesLoading(false);
+    });
+    return () => { active = false; };
   }, [authLoading, user]);
 
+  useEffect(() => {
+    if (appliedCreditSelection.current || typeof window === "undefined") return;
+    const requestedPackage = new URLSearchParams(window.location.search).get("credit_package");
+    if (!requestedPackage || !/^[a-zA-Z0-9_-]{1,80}$/.test(requestedPackage)) return;
+    appliedCreditSelection.current = true;
+    setSelectedCreditPackage(requestedPackage);
+  }, []);
+
+  useEffect(() => {
+    if (loading || appliedPricingSelection.current || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const requestedCode = params.get("plan");
+    if (!requestedCode) return;
+    appliedPricingSelection.current = true;
+    const plan = plans.find((item) => item.code === requestedCode);
+    const requestedCycle = params.get("billing_cycle");
+    if (!plan || (requestedCycle !== "monthly" && requestedCycle !== "annual")) return;
+    const cycleIsAvailable = requestedCycle === "monthly"
+      ? plan.monthly_price_cents > 0
+      : plan.annual_price_cents > 0;
+    const fallbackCycle = plan.monthly_price_cents > 0 ? "monthly" : "annual";
+    setBillingCycles((current) => ({
+      ...current,
+      [String(plan.id)]: cycleIsAvailable ? requestedCycle : fallbackCycle,
+    }));
+  }, [loading, plans]);
+
+  useEffect(() => {
+    if (authLoading || !user || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    if (params.get("payment") !== "success" || !sessionId || handledStripeSession.current === sessionId) return;
+    handledStripeSession.current = sessionId;
+    void paymentsApi.verifyPayment({ gateway: "stripe", order_id: sessionId })
+      .then(async (result) => {
+        window.history.replaceState({}, "", window.location.pathname);
+        await fetchData();
+        alert(result.message);
+      })
+      .catch((err: unknown) => {
+        window.history.replaceState({}, "", window.location.pathname);
+        alert(err instanceof Error ? err.message : "Payment verification failed");
+      });
+  }, [authLoading, fetchData, user]);
+
   const handleSubscribe = async (plan: SaaSPlan) => {
-    if (!confirm(`Subscribe to ${plan.name} for ₹${plan.monthly_price_inr.toLocaleString()} / month?`)) return;
+    const selectedCycle = billingCycles[String(plan.id)] ?? (plan.monthly_price_cents > 0 ? "monthly" : "annual");
+    const billingCycle = selectedCycle === "monthly" && plan.monthly_price_cents > 0
+      ? "monthly"
+      : plan.annual_price_cents > 0 ? "annual" : plan.monthly_price_cents > 0 ? "monthly" : null;
+    if (!billingCycle) {
+      setSubscribingId(plan.id);
+      try {
+        await sovereignBillingApi.subscribe(plan.id);
+        alert(`Successfully activated ${plan.name}.`);
+        await fetchData();
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : "Failed to activate plan");
+      } finally {
+        setSubscribingId(null);
+      }
+      return;
+    }
+    const price = billingCycle === "annual" ? plan.annual_price_cents : plan.monthly_price_cents;
+    const accessDays = billingCycle === "annual" ? 365 : 30;
+    const renewal = wallet?.plan_code === plan.code;
+    const termNotice = renewal
+      ? "Renewing adds this term after your current expiry."
+      : "This plan starts immediately and replaces your current plan. Unused time on a different plan is not carried over.";
+    if (!confirm(`Pay ${formatMinorUnits(price, plan.currency)} once for ${accessDays} days of ${plan.name} access? ${termNotice} It will not renew automatically. Included minutes are credited once and do not replenish monthly.`)) return;
     setSubscribingId(plan.id);
     try {
-      if (plan.monthly_price_inr > 0 || plan.monthly_price_usd > 0) {
-        const result = await startConfiguredCheckout({ plan_id: String(plan.id), billing_cycle: "monthly" });
-        if (result.redirected) return;
-        alert(result.receipt.message);
-      } else {
-        const result = await sovereignBillingApi.subscribe(plan.id);
-        alert(result.message);
+      const config = await paymentsApi.getConfig();
+      if (config.razorpay_enabled && config.razorpay_key_id) {
+        const checkoutReady = await loadRazorpayCheckout();
+        if (!checkoutReady || !window.Razorpay) throw new Error("Razorpay checkout could not be loaded. Please retry.");
+        const order = await paymentsApi.createOrder({ plan_code: plan.code, gateway: "razorpay", billing_cycle: billingCycle });
+        new window.Razorpay({
+          key: order.key_id || config.razorpay_key_id,
+          amount: order.amount,
+          currency: order.currency,
+          name: branding.company_name,
+          description: `${plan.name} ${billingCycle} plan`,
+          order_id: order.order_id,
+          handler: async (result) => {
+            try {
+              const verified = await paymentsApi.verifyPayment({
+                gateway: "razorpay",
+                order_id: order.order_id,
+                payment_id: result.razorpay_payment_id,
+                signature: result.razorpay_signature,
+                plan_code: plan.code,
+              });
+              alert(verified.message);
+              await fetchData();
+            } catch (err: unknown) {
+              alert(err instanceof Error ? err.message : "Payment verification failed");
+            } finally {
+              setSubscribingId(null);
+            }
+          },
+          modal: { ondismiss: () => setSubscribingId(null) },
+        }).open();
+        return;
       }
-      await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to update subscription");
-    } finally {
+      if (config.stripe_enabled) {
+        const order = await paymentsApi.createOrder({ plan_code: plan.code, gateway: "stripe", billing_cycle: billingCycle });
+        const checkoutUrl = new URL(order.checkout_url ?? "");
+        if (checkoutUrl.protocol !== "https:") throw new Error("Stripe returned an invalid checkout URL");
+        window.location.assign(checkoutUrl.href);
+        return;
+      }
+      throw new Error("Payments are not configured for this platform. Contact the administrator.");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to update subscription");
       setSubscribingId(null);
     }
   };
 
-  useEffect(() => {
-    if (authLoading || !user) return;
-    const params = new URLSearchParams(window.location.search);
-    const session = params.get("session_id");
-    if (params.get("payment") !== "success" || !session) return;
-    let cancelled = false;
-    // A return URL is not payment proof: fetch the provider receipt through
-    // the authenticated backend before showing success or updating the wallet.
-    paymentsApi.verifyPayment({ gateway: "stripe", order_id: session, payment_id: session })
-      .then(async (receipt) => {
-        if (cancelled) return;
-        if (!receipt.success) throw new Error("Payment has not been verified.");
-        window.history.replaceState(null, "", window.location.pathname);
-        await fetchData();
-      }).catch((error) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Payment verification failed. Refresh before retrying payment.");
-      });
-    return () => { cancelled = true; };
-  }, [authLoading, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  const handleCreditPackagePurchase = async (pkg: PublicCreditPackage) => {
+    const packageId = String(pkg.id);
+    if (wallet?.is_frozen) return;
+    const totalMinutes = pkg.minutes + pkg.bonus_minutes;
+    if (!confirm(`Buy ${pkg.name} for ${formatMinorUnits(pkg.price_cents, pkg.currency)}? This is a one-time payment for ${totalMinutes.toLocaleString()} wallet minutes. Provider and carrier charges may apply separately.`)) return;
+    setPurchasingPackageId(packageId);
+    try {
+      const config = await paymentsApi.getConfig();
+      if (config.razorpay_enabled && config.razorpay_key_id) {
+        const checkoutReady = await loadRazorpayCheckout();
+        if (!checkoutReady || !window.Razorpay) throw new Error("Razorpay checkout could not be loaded. Please retry.");
+        const order = await paymentsApi.createOrder({ package_id: packageId, gateway: "razorpay" });
+        new window.Razorpay({
+          key: order.key_id || config.razorpay_key_id,
+          amount: order.amount,
+          currency: order.currency,
+          name: branding.company_name,
+          description: `${pkg.name} credit bundle`,
+          order_id: order.order_id,
+          handler: async (result) => {
+            try {
+              const verified = await paymentsApi.verifyPayment({
+                gateway: "razorpay",
+                order_id: order.order_id,
+                payment_id: result.razorpay_payment_id,
+                signature: result.razorpay_signature,
+                package_id: packageId,
+              });
+              alert(verified.message);
+              setSelectedCreditPackage(null);
+              await fetchData();
+            } catch (err: unknown) {
+              alert(err instanceof Error ? err.message : "Payment verification failed");
+            } finally {
+              setPurchasingPackageId(null);
+            }
+          },
+          modal: { ondismiss: () => setPurchasingPackageId(null) },
+        }).open();
+        return;
+      }
+      if (config.stripe_enabled) {
+        const order = await paymentsApi.createOrder({ package_id: packageId, gateway: "stripe" });
+        const checkoutUrl = new URL(order.checkout_url ?? "");
+        if (checkoutUrl.protocol !== "https:") throw new Error("Stripe returned an invalid checkout URL");
+        window.location.assign(checkoutUrl.href);
+        return;
+      }
+      throw new Error("Payments are not configured for this platform. Contact the administrator.");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Credit bundle checkout failed");
+      setPurchasingPackageId(null);
+    }
+  };
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
@@ -125,14 +313,14 @@ export default function SovereignBillingPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Sovereign Billing & Minute Wallet</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Billing & Minute Wallet</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Monitor voice call minutes, review consumption ledgers, and manage your organization subscription.
+            Monitor voice minutes, review transactions, and manage your organization’s plan access.
           </p>
         </div>
         <div className="flex items-center gap-3">
           <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
-            <ShieldCheck className="h-3.5 w-3.5" /> Direct Local Wallet (100% Sovereign Cloud)
+            <ShieldCheck className="h-3.5 w-3.5" /> Organization Wallet
           </Badge>
           <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="gap-2">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -150,40 +338,40 @@ export default function SovereignBillingPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
-              {((wallet as any)?.total_available_minutes ?? (wallet as any)?.balance_minutes ?? (wallet as any)?.credit_balance_minutes ?? 0).toFixed(1)} <span className="text-sm font-semibold">mins</span>
+              {(wallet?.total_available_minutes ?? ((wallet?.credit_balance_minutes ?? 0) + (wallet?.bonus_minutes ?? 0))).toFixed(1)} <span className="text-sm font-semibold">mins</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Active voice sessions deduct from this balance per minute
+              Platform-managed voice usage uses these minutes. Calls using only local models or your own provider keys do not use platform minutes.
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-border/60">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Active Subscription Tier</CardTitle>
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Current Plan Assignment</CardTitle>
             <Zap className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-extrabold capitalize">
-              {(wallet as any)?.plan_name || "Starter"}
+              {wallet?.plan_name || "No plan selected"}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Includes {(wallet as any)?.plan_minutes ?? (wallet as any)?.included_minutes ?? 500} minutes / month
+              {wallet?.included_minutes != null ? `${wallet.included_minutes.toLocaleString()} minutes per payment${wallet.plan_expires_at ? ` · access through ${new Date(wallet.plan_expires_at).toLocaleDateString()}` : " · no expiry recorded"}` : "No active plan assignment"}
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-border/60">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Total Minutes Delivered</CardTitle>
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Wallet Status</CardTitle>
             <Coins className="h-5 w-5 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-extrabold text-amber-500">
-              {((wallet as any)?.total_consumed_minutes ?? 0).toFixed(1)} <span className="text-sm font-semibold">mins</span>
+            <div className={`text-3xl font-extrabold ${wallet?.is_frozen ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
+              {!wallet ? "Loading" : wallet.is_frozen ? "Frozen" : "Active"}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Lifetime completed call audio time
+              {!wallet ? "Checking organization wallet…" : wallet.is_frozen ? "Wallet transactions are currently paused" : "Organization wallet can receive and use credits"}
             </p>
           </CardContent>
         </Card>
@@ -193,7 +381,7 @@ export default function SovereignBillingPage() {
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="plans" className="gap-2">
             <CreditCard className="h-4 w-4" />
-            Subscription Plans
+            Plan Options
           </TabsTrigger>
           <TabsTrigger value="ledger" className="gap-2">
             <Layers className="h-4 w-4" />
@@ -205,7 +393,13 @@ export default function SovereignBillingPage() {
         <TabsContent value="plans" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-3">
             {plans.map((p) => {
-              const isCurrent = wallet?.plan_name?.toLowerCase() === p.code.toLowerCase() || wallet?.plan_name?.toLowerCase() === p.name.toLowerCase();
+              const isCurrent = wallet?.plan_code === p.code;
+              const selectedCycle = billingCycles[String(p.id)] ?? (p.monthly_price_cents > 0 ? "monthly" : "annual");
+              const selectedPrice = selectedCycle === "annual" && p.annual_price_cents > 0
+                ? p.annual_price_cents
+                : p.monthly_price_cents;
+              const selectedAccessDays = selectedCycle === "annual" && p.annual_price_cents > 0 ? 365 : 30;
+              const isPaidPlan = p.monthly_price_cents > 0 || p.annual_price_cents > 0;
               return (
                 <Card
                   key={p.id}
@@ -222,19 +416,39 @@ export default function SovereignBillingPage() {
                         </Badge>
                       )}
                     </div>
-                    <CardDescription>{p.description || "Production Voice AI agent tier"}</CardDescription>
+                    <CardDescription>{p.description || "Voice AI agent plan"}</CardDescription>
                     <div className="pt-4">
                       <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-extrabold">₹{p.monthly_price_inr.toLocaleString()}</span>
-                        <span className="text-xs text-muted-foreground">/ month</span>
+                        <span className="text-3xl font-extrabold">{isPaidPlan ? formatMinorUnits(selectedPrice, p.currency) : "Free"}</span>
+                        {isPaidPlan ? <span className="text-xs text-muted-foreground">· one-time payment for {selectedAccessDays} days</span> : null}
                       </div>
-                      <div className="text-xs text-muted-foreground">(${p.monthly_price_usd} USD)</div>
+                      {p.monthly_price_cents > 0 && p.annual_price_cents > 0 ? (
+                        <div className="mt-3 inline-flex rounded-lg border border-border p-1" role="group" aria-label={`${p.name} billing cycle`}>
+                          <button
+                            type="button"
+                            aria-pressed={selectedCycle === "monthly"}
+                            className={`rounded-md px-3 py-1.5 text-xs ${selectedCycle === "monthly" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                            onClick={() => setBillingCycles((current) => ({ ...current, [String(p.id)]: "monthly" }))}
+                          >
+                            Monthly
+                          </button>
+                          <button
+                            type="button"
+                            aria-pressed={selectedCycle === "annual"}
+                            className={`rounded-md px-3 py-1.5 text-xs ${selectedCycle === "annual" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                            onClick={() => setBillingCycles((current) => ({ ...current, [String(p.id)]: "annual" }))}
+                          >
+                            Annual
+                          </button>
+                        </div>
+                      ) : null}
+                      <p className="mt-2 text-xs text-muted-foreground">{isPaidPlan ? `No automatic renewal. Access lasts ${selectedAccessDays} days. Included minutes are credited once per payment.` : "No automatic renewal. Included minutes are credited once on activation."}</p>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2 text-xs">
                       <div className="flex items-center justify-between py-1 border-b border-border/40">
-                        <span className="text-muted-foreground">Included Monthly Minutes:</span>
+                        <span className="text-muted-foreground">{isPaidPlan ? "Minutes per payment:" : "One-time trial minutes:"}</span>
                         <span className="font-bold text-foreground font-mono">{p.included_minutes.toLocaleString()} mins</span>
                       </div>
                       <div className="flex items-center justify-between py-1 border-b border-border/40">
@@ -243,12 +457,12 @@ export default function SovereignBillingPage() {
                       </div>
                       <div className="flex items-center justify-between py-1 border-b border-border/40">
                         <span className="text-muted-foreground">Overage Rate:</span>
-                        <span className="font-bold text-foreground font-mono">₹{(p.overage_rate_per_minute ?? 0).toFixed(2)}/min</span>
+                        <span className="font-bold text-foreground font-mono">{p.overage_rate_per_minute == null ? "Not configured" : `${formatMoney(p.overage_rate_per_minute, p.currency)}/min`}</span>
                       </div>
                       <div className="flex items-center justify-between py-1">
                         <span className="text-muted-foreground">BYOK Key Policy:</span>
                         {p.allow_user_byok ? (
-                          <Badge variant="outline" className="text-[10px] text-indigo-500 border-indigo-500/30 gap-1">
+                          <Badge variant="outline" className="text-[10px] text-primary border-primary/30 gap-1">
                             <Unlock className="h-3 w-3" /> BYOK Allowed
                           </Badge>
                         ) : (
@@ -262,17 +476,62 @@ export default function SovereignBillingPage() {
                     <Button
                       className="w-full mt-4"
                       variant={isCurrent ? "outline" : "default"}
-                      disabled={isCurrent || subscribingId === p.id}
+                      disabled={(isCurrent && !isPaidPlan) || subscribingId !== null}
                       onClick={() => handleSubscribe(p)}
                     >
                       {subscribingId === p.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      {isCurrent ? "Active Plan" : "Upgrade Plan"}
+                      {isCurrent ? (isPaidPlan ? "Renew Plan" : "Active Plan") : "Choose Plan"}
                     </Button>
                   </CardContent>
                 </Card>
               );
             })}
           </div>
+
+          <section aria-labelledby="credit-bundles-heading" className="space-y-4">
+            <div>
+              <h2 id="credit-bundles-heading" className="text-xl font-semibold">Credit bundles</h2>
+              <p className="mt-1 text-sm text-muted-foreground">One-time wallet top-ups. Provider and carrier costs may be billed separately.</p>
+            </div>
+            {selectedCreditPackage && (
+              <p role="status" className="rounded-md border border-primary/40 bg-primary/5 p-3 text-sm">
+                You selected a bundle from public pricing. Review it below and confirm before checkout.
+              </p>
+            )}
+            {creditPackagesError && <p role="alert" className="text-sm text-destructive">{creditPackagesError}</p>}
+            {creditPackagesLoading ? (
+              <p role="status" className="text-sm text-muted-foreground">Loading credit bundles…</p>
+            ) : creditPackages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No credit bundles are currently published.</p>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {creditPackages.map((pkg) => {
+                  const packageId = String(pkg.id);
+                  const selected = selectedCreditPackage === packageId;
+                  const totalMinutes = pkg.minutes + pkg.bonus_minutes;
+                  return (
+                    <Card key={packageId} id={`credit-package-${packageId}`} className={`flex flex-col border-border/60 ${selected ? "border-primary ring-1 ring-primary" : ""}`}>
+                      <CardHeader>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <CardTitle className="text-base">{pkg.name}</CardTitle>
+                          {pkg.is_popular && <Badge variant="secondary">Popular</Badge>}
+                        </div>
+                        <CardDescription>{pkg.minutes.toLocaleString()} minutes{pkg.bonus_minutes > 0 ? ` + ${pkg.bonus_minutes.toLocaleString()} bonus` : ""} · one-time</CardDescription>
+                        <p className="pt-2 text-2xl font-bold">{formatMinorUnits(pkg.price_cents, pkg.currency)}</p>
+                      </CardHeader>
+                      <CardContent className="mt-auto space-y-3">
+                        <p className="text-xs text-muted-foreground">Adds {totalMinutes.toLocaleString()} wallet minutes. No expiry is applied to the wallet credit.</p>
+                        <Button className="w-full" variant={selected ? "default" : "outline"} disabled={Boolean(wallet?.is_frozen) || purchasingPackageId !== null} onClick={() => handleCreditPackagePurchase(pkg)}>
+                          {purchasingPackageId === packageId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          {purchasingPackageId === packageId ? "Opening checkout…" : selected ? "Continue to payment" : "Buy bundle"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </TabsContent>
 
         {/* LEDGER TAB */}
@@ -305,8 +564,8 @@ export default function SovereignBillingPage() {
                       </TableRow>
                     ) : (
                       ledger.map((item) => {
-                        const delta = (item as any).amount_minutes ?? item.delta_minutes ?? 0;
-                        const bal = (item as any).balance_after ?? 0;
+                        const delta = item.amount_minutes ?? item.delta_minutes ?? 0;
+                        const bal = item.balance_after;
                         return (
                           <TableRow key={item.id} className="hover:bg-muted/20">
                             <TableCell className="text-xs font-mono text-muted-foreground">

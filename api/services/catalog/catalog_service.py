@@ -942,13 +942,44 @@ class CatalogService:
                                     local_stt.append({
                                         "value": installed_model["id"],
                                         "label": (
-                                            "IndicConformer CTC INT8 + Moonshine English (installed languages)"
+                                            "IndicConformer + Moonshine English + Anuvani auto-detection"
+                                            if installed_model.get("supports_auto_detect") is True
+                                            and "en-IN" in installed_model.get("languages", [])
+                                            else "IndicConformer CTC INT8 + Moonshine English (installed languages)"
                                             if "en-IN" in installed_model.get("languages", [])
+                                            else "IndicConformer + Anuvani auto-detection"
+                                            if installed_model.get("supports_auto_detect") is True
                                             else "IndicConformer CTC INT8 (installed languages)"
                                         ),
                                         "provider": "indicconformer",
                                         "languages": installed_model.get("languages", []),
-                                        "supports_auto_detect": False,
+                                        "supports_auto_detect": installed_model.get("supports_auto_detect") is True,
+                                        "auto_detect_languages": installed_model.get("auto_detect_languages", []),
+                                    })
+            except (aiohttp.ClientError, TimeoutError):
+                pass
+
+            # Advertise DhVaani only when its local checkpoint and licensed
+            # reference voices are loaded and reported by the serving engine.
+            try:
+                dhvaani_url = local_tts_api_base(local_ai_setting, "dhvaani-0.5")
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
+                    async with session.get(f"{dhvaani_url}/models") as resp:
+                        if resp.status == 200:
+                            for dhvaani_model in (await resp.json()).get("data", []):
+                                if (
+                                    isinstance(dhvaani_model, dict)
+                                    and dhvaani_model.get("id") == "dhvaani-0.5"
+                                    and dhvaani_model.get("task") == "text-to-speech"
+                                    and dhvaani_model.get("installed") is True
+                                ):
+                                    local_tts.append({
+                                        "value": dhvaani_model["id"],
+                                        "label": dhvaani_model.get("name") or "DhVaani 0.5 — Indian languages + English",
+                                        "provider": "speaches",
+                                        "languages": dhvaani_model.get("languages", []),
+                                        "voices": dhvaani_model.get("voices", []),
+                                        "streaming": dhvaani_model.get("streaming", False),
                                     })
             except (aiohttp.ClientError, TimeoutError):
                 pass

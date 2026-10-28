@@ -1,5 +1,19 @@
+import { readFileSync } from "node:fs";
+
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
+
+import { buildLucideModularizeImports } from "./scripts/lucide-modularize-imports";
+
+const lucideModularizeImports = buildLucideModularizeImports(
+  [
+    `${process.cwd()}/src`,
+    `${process.cwd()}/node_modules/@stackframe/stack/dist/esm`,
+    `${process.cwd()}/node_modules/@stackframe/stack-ui/dist/esm`,
+  ],
+  readFileSync(require.resolve("lucide-react/dist/esm/lucide-react.js"), "utf8"),
+);
+const isClientEdition = process.env.KODEWAVES_EDITION === "client";
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -12,9 +26,15 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverSourceMaps: true,
-    webpackBuildWorker: true,
   },
+  modularizeImports: {
+    "lucide-react": {
+      transform: lucideModularizeImports,
+    },
+  },
+  transpilePackages: ["@stackframe/stack", "@stackframe/stack-ui"],
   async rewrites() {
+    if (isClientEdition) return [];
     return [
       {
         source: "/ingest/static/:path*",
@@ -59,7 +79,7 @@ const nextConfig: NextConfig = {
   skipTrailingSlashRedirect: true,
 };
 
-export default withSentryConfig(nextConfig, {
+export default isClientEdition ? nextConfig : withSentryConfig(nextConfig, {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 

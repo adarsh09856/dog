@@ -11,5 +11,6 @@ elif [[ -f "$BASE_DIR/.env" ]]; then
 fi
 
 cd "$BASE_DIR"
+python -m api.services.release_integrity
 alembic -c "$BASE_DIR/api/alembic.ini" upgrade head
 python -m scripts.seed_platform

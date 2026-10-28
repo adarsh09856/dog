@@ -8,6 +8,10 @@ from sqlalchemy.orm import load_only, selectinload
 
 from api.db.base_client import BaseDBClient
 from api.db.models import WorkflowDefinitionModel, WorkflowModel, WorkflowRunModel
+from api.services.client_creation_limits import (
+    enforce_client_creation_limit,
+    enforce_saas_creation_limit,
+)
 
 
 class WorkflowClient(BaseDBClient):
@@ -71,6 +75,15 @@ class WorkflowClient(BaseDBClient):
     ) -> WorkflowModel:
         async with self.async_session() as session:
             try:
+                await enforce_client_creation_limit(
+                    session, limit_name="max_agents", model=WorkflowModel
+                )
+                await enforce_saas_creation_limit(
+                    session,
+                    organization_id=organization_id,
+                    limit_name="max_agents",
+                    model=WorkflowModel,
+                )
                 new_workflow = WorkflowModel(
                     name=name,
                     workflow_definition=workflow_definition,  # Keep for backwards compatibility

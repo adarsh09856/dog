@@ -1,18 +1,15 @@
 "use client";
 
 import {
-  AlertTriangle,
   CheckCircle2,
   Clock,
   Cpu,
   HardDrive,
   Layers,
-  PhoneCall,
   PhoneOff,
   Radio,
   RefreshCw,
   ShieldAlert,
-  Zap,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -32,7 +29,6 @@ import { adminApi, LiveCallItem, SystemResources } from "@/lib/kodewavesApi";
 export default function AdminMonitoringPage() {
   const [calls, setCalls] = useState<LiveCallItem[]>([]);
   const [resources, setResources] = useState<SystemResources | null>(null);
-  const [loading, setLoading] = useState(true);
   const [killingId, setKillingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -55,7 +51,6 @@ export default function AdminMonitoringPage() {
       setError(failures.join(' ') || null);
     } finally {
       inFlight.current = false;
-      if (mounted.current) setLoading(false);
     }
   }, []);
 
@@ -67,13 +62,13 @@ export default function AdminMonitoringPage() {
   }, [fetchCalls]);
 
   const handleKillCall = async (runId: number) => {
-    if (!confirm(`Mark run #${runId} ended in Kodewaves? This does not hang up the carrier call.`)) return;
+    if (!confirm(`Mark run #${runId} ended in the platform? This does not hang up the carrier call.`)) return;
     setKillingId(runId);
     try {
       await adminApi.killCall(runId, "Admin emergency kill switch triggered");
       await fetchCalls();
-    } catch (err: any) {
-      alert(err.message || "Failed to terminate call");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to terminate call");
     } finally {
       setKillingId(null);
     }
@@ -144,10 +139,10 @@ export default function AdminMonitoringPage() {
         <Card className="border-border/60">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Host / Container Memory</CardTitle>
-            <Cpu className="h-4 w-4 text-indigo-500" />
+            <Cpu className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-extrabold text-indigo-500">
+            <div className="text-2xl font-extrabold text-primary">
               {resources ? `${resources.memory_percent}%` : "Unavailable"}
             </div>
             <p className="text-xs text-muted-foreground mt-1">

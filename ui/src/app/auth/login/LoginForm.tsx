@@ -10,6 +10,7 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getPostAuthDestination } from "@/lib/pricingSelection";
 
 export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
   const [email, setEmail] = useState("");
@@ -42,7 +43,7 @@ export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
         localStorage.setItem("kodewaves_auth_token", res.data.token);
       }
 
-      window.location.href = "/after-sign-in";
+      window.location.href = getPostAuthDestination(window.location.search);
     } catch {
       toast.error("An error occurred. Please try again.");
     } finally {
@@ -64,6 +65,7 @@ export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
+            autoComplete="email"
             type="email"
             placeholder="you@example.com"
             value={email}
@@ -75,6 +77,7 @@ export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
           <Label htmlFor="password">Password</Label>
           <Input
             id="password"
+            autoComplete="current-password"
             type="password"
             placeholder="Enter your password"
             value={password}

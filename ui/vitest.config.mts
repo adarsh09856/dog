@@ -12,6 +12,10 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Keep the full UI suite below the per-test timeout on developer/CI hosts
+    // with many reported CPUs but limited memory bandwidth. High fork counts
+    // made module imports contend until otherwise-fast tests timed out.
+    maxWorkers: 2,
     // Expose afterEach etc. globally so @testing-library/react auto-registers
     // its DOM cleanup between tests.
     globals: true,

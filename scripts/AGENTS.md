@@ -55,6 +55,6 @@ This directory now has a shared deployment model for OSS Docker installs. If you
 | -------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | `start_services_dev.sh`    | Local dev shell    | `uvicorn --reload`, exits after launching, restart by re-running, single arq worker, waits for `/api/v1/health` before exiting. |
 | `start_services.sh`        | VM production      | Multi-port uvicorn behind nginx, `sudo nginx -t && systemctl reload`, writes `run/active_band` for `rolling_update.sh`.         |
-| `start_services_docker.sh` | Docker image `CMD` | PID 1: traps SIGTERM, uvicorn `--workers $FASTAPI_WORKERS`, `wait -n` so a dying child tears the container down.                |
+| `start_services_docker.sh` | Docker image `CMD` | PID 1: traps SIGTERM, runs ARQ/campaign services and uvicorn listeners, `wait -n` so a dying child tears the container down. The client Compose topology pins one reachable listener; the OSS Docker path may auto-size listeners behind nginx. |
 
 If you find yourself adding nginx/sudo logic to the dev script, or `--reload` to the production/Docker scripts, stop — you probably want a different file.

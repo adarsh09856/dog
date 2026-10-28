@@ -108,6 +108,7 @@ class RealtimeFeedbackObserver(BaseObserver):
         call_event_recorder: "CallEventRecorder | None" = None,
         workflow_id: int | None = None,
         workflow_run_id: int | None = None,
+        phone_pending: Callable[[], bool] | None = None,
     ):
         """
         Args:
@@ -123,6 +124,7 @@ class RealtimeFeedbackObserver(BaseObserver):
         self._call_event_recorder = call_event_recorder
         self._workflow_id = workflow_id
         self._workflow_run_id = workflow_run_id
+        self._phone_pending = phone_pending
         self._trace_turn = 0
         self._trace_turn_active = False
         self._tts_audio_contexts: dict[str, dict[str, float | int | None]] = {}
@@ -436,9 +438,14 @@ class RealtimeFeedbackObserver(BaseObserver):
         # Handle user transcriptions (final) - WebSocket only
         # Complete turn text is persisted via register_turn_handlers
         elif isinstance(frame, TranscriptionFrame):
+            from api.services.pipecat.phone_transcript_display import phone_transcript_display
+
             await self._send_ws(
                 build_user_transcription_event(
-                    text=frame.text,
+                    text=phone_transcript_display(
+                        frame.text,
+                        awaiting_phone=bool(self._phone_pending and self._phone_pending()),
+                    ),
                     final=True,
                     user_id=frame.user_id,
                     timestamp=frame.timestamp,

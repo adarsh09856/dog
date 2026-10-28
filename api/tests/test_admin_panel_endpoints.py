@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from api.routes.admin.monitoring import router as monitoring_router
 from api.routes.admin.settings import router as settings_router
 from api.services.auth.depends import get_superuser
+from api.schemas.organization_preferences import OrganizationPreferences
 
 
 async def mock_superuser():
@@ -23,11 +24,38 @@ app.include_router(settings_router, prefix="/api/v1/admin")
 app.dependency_overrides[get_superuser] = mock_superuser
 
 
+def test_workspace_region_defaults_to_india_and_normalizes_codes():
+    assert OrganizationPreferences().region == "IN"
+    assert OrganizationPreferences(region=" gb ").region == "GB"
+    with pytest.raises(ValueError):
+        OrganizationPreferences(region="IND")
+
+
+def test_workspace_timezone_defaults_to_india_and_rejects_invalid_zones(monkeypatch):
+    monkeypatch.delenv("KODEWAVES_DEFAULT_TIMEZONE", raising=False)
+    assert OrganizationPreferences().timezone == "Asia/Kolkata"
+    assert OrganizationPreferences(timezone=None).timezone == "Asia/Kolkata"
+    assert OrganizationPreferences(timezone="Asia/Calcutta").timezone == "Asia/Calcutta"
+    assert OrganizationPreferences(timezone="Europe/London").timezone == "Europe/London"
+    with pytest.raises(ValueError, match="valid IANA timezone"):
+        OrganizationPreferences(timezone="invalid/timezone")
+    monkeypatch.setenv("KODEWAVES_DEFAULT_TIMEZONE", "Asia/Dubai")
+    assert OrganizationPreferences().timezone == "Asia/Dubai"
+
+
 def test_admin_monitoring_stats_and_system_resources():
     client = TestClient(app)
+    with patch(
+        "api.routes.admin.monitoring.call_concurrency.get_fleet_active_calls",
+        new=AsyncMock(return_value=0),
+    ), patch(
+        "api.routes.admin.monitoring.db_client.count_ready_campaign_dials",
+        new=AsyncMock(return_value=0),
+    ):
+        response = client.get("/api/v1/admin/monitoring/stats")
+        res_response = client.get("/api/v1/admin/monitoring/system-resources")
 
     # 1. Test /monitoring/stats
-    response = client.get("/api/v1/admin/monitoring/stats")
     assert response.status_code == 200
     data = response.json()
     assert "total_calls" in data
@@ -43,7 +71,6 @@ def test_admin_monitoring_stats_and_system_resources():
     assert data["disk_free_gb"] > 0
 
     # 2. Test /monitoring/system-resources
-    res_response = client.get("/api/v1/admin/monitoring/system-resources")
     assert res_response.status_code == 200
     res_data = res_response.json()
     assert "active_concurrency" in res_data

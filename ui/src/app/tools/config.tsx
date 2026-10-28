@@ -1,11 +1,11 @@
 "use client";
 
-import { ArrowLeftRight, Calendar, Calculator, Cog, Globe, type LucideIcon, PhoneForwarded, PhoneOff, Puzzle } from "lucide-react";
+import { ArrowLeftRight, Calculator, Calendar, Cog, Globe, type LucideIcon, PhoneForwarded, PhoneOff, Puzzle } from "lucide-react";
 import { type ReactNode } from "react";
 
 import type {
-    CalculatorToolDefinition,
     BookAppointmentToolDefinition,
+    CalculatorToolDefinition,
     ContextDestinationMappingConfig,
     ContextDestinationRoute,
     ContextDestinationRule,
@@ -142,7 +142,7 @@ export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
     {
         value: "transfer_agent",
         label: "Transfer To Agent",
-        description: "Hand the live call to another Kodewaves agent, without dropping the caller",
+        description: "Hand the live call to another platform agent, without dropping the caller",
         icon: ArrowLeftRight,
         iconName: "arrow-left-right",
         iconColor: "#0EA5E9",

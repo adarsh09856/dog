@@ -106,7 +106,7 @@ services:
       PUBLIC_HOST: "${PUBLIC_HOST:-your-domain.com}"
       BACKEND_API_ENDPOINT: "${PUBLIC_BASE_URL:-https://your-domain.com}"
       FORWARDED_ALLOW_IPS: "*"
-      
+
       # Database and Cache
       DATABASE_URL: "postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/postgres"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-redis_secure_pass}@redis:6379"
@@ -301,7 +301,7 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_ENDPOINT: http://ollama:11434
-      OLLAMA_WARM_MODELS: "${OLLAMA_WARM_MODELS:-qwen3.5:2b}"
+      OLLAMA_WARM_MODELS: "${OLLAMA_WARM_MODELS:-qwen3.5:2b-q4_K_M}"
       OLLAMA_WARM_INTERVAL_SECONDS: "${OLLAMA_WARM_INTERVAL_SECONDS:-30}"
     command: ["python", "/app/warm_local_ollama.py"]
     volumes:
@@ -324,6 +324,9 @@ services:
     environment:
       INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-all}"
       INDIC_STT_THREADS: "${INDIC_STT_THREADS:-2}"
+      INDIC_STT_AUTO_DETECT: "${INDIC_STT_AUTO_DETECT:-1}"
+      INDIC_STT_LID_THREADS: "${INDIC_STT_LID_THREADS:-2}"
+      INDIC_STT_RESIDENT_MODELS: "${INDIC_STT_RESIDENT_MODELS:-4}"
     volumes:
       - kodewaves_indic_stt_models:/models
     healthcheck:
@@ -350,6 +353,7 @@ services:
     profiles: ["indus"]
     environment:
       INDUS_MODEL_DIR: /models/indus-pocket-tts
+      INDUS_WORKERS: "${INDUS_WORKERS:-1}"
       HF_HOME: /models/huggingface
       OMP_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
@@ -365,7 +369,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
+          cpus: "${INDUS_CPU_LIMIT:-1.0}"
           memory: 2048M
     networks:
       - kodewaves-network
@@ -381,6 +385,7 @@ services:
     environment:
       INDIC_VITS_THREADS: "${INDIC_VITS_THREADS:-2}"
       INDUS_TTS_ENDPOINT: "${INDUS_COMBINED_ENDPOINT:-}"
+      INDUS_GATEWAY_WORKERS: "${INDUS_WORKERS:-1}"
       HF_HOME: /models/huggingface
     volumes:
       - kodewaves_indic_vits_tts_models:/models

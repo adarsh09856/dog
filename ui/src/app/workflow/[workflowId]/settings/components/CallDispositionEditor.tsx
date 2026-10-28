@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { createUuid } from "@/lib/uuid";
 import type { CallDispositionOption } from "@/types/workflow-configurations";
 
@@ -128,6 +129,7 @@ export function CallDispositionEditor({
     onChange: (rows: CallDispositionRow[]) => void;
     defaultDispositions?: CallDispositionOption[];
 }) {
+    const { company_name } = useClientBranding();
     const enabled = rows.length > 0;
     const rememberedRows = useRef<CallDispositionRow[]>(rows);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -177,8 +179,8 @@ export function CallDispositionEditor({
                     </Label>
                     <p className="text-xs text-muted-foreground">
                         {enabled
-                            ? `${rows.length} outcome${rows.length === 1 ? "" : "s"} configured. Kodewaves will classify the completed conversation into one of them.`
-                            : "Disabled. Kodewaves will keep the disposition recorded by the call-ending event."}
+                            ? `${rows.length} outcome${rows.length === 1 ? "" : "s"} configured. ${company_name} will classify the completed conversation into one of them.`
+                            : "Disabled. The platform keeps the disposition recorded by the call-ending event."}
                     </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">

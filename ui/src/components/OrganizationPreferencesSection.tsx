@@ -304,7 +304,7 @@ export function OrganizationPreferencesSection() {
             </Label>
             <p className="text-xs text-muted-foreground">
               Report call outcomes using your own disposition codes instead of
-              Kodewaves&apos;s. Applies to webhooks, run filters, reports, and
+              the platform’s. Applies to webhooks, run filters, reports, and
               external PBX write-backs. Configuration is preserved when this is
               disabled.
             </p>

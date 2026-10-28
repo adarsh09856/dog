@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Cpu,
   Edit,
-  Globe,
   Key,
   Layers,
   Loader2,
@@ -48,14 +47,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/lib/auth";
 import {
   adminApi,
-  catalogApi,
   type AvailableCatalogResponse,
+  catalogApi,
   MasterCredential,
   ModelCatalogEntry,
 } from "@/lib/kodewavesApi";
-import { useAuth } from "@/lib/auth";
 
 export interface ProviderMeta {
   provider: string;
@@ -63,6 +62,20 @@ export interface ProviderMeta {
   categories: ("llm" | "stt" | "tts" | "realtime" | "telecom")[];
   region: string;
   description: string;
+}
+
+type ProviderCategory = ProviderMeta["categories"][number];
+const PROVIDER_CATEGORY_FILTERS: Array<{ id: "all" | ProviderCategory; label: string }> = [
+  { id: "all", label: "All Providers" },
+  { id: "llm", label: "LLM (Reasoning)" },
+  { id: "stt", label: "STT (Speech-to-Text)" },
+  { id: "tts", label: "TTS (Voice Studio)" },
+  { id: "realtime", label: "Realtime (Live Audio)" },
+  { id: "telecom", label: "Telecom (SIP Trunks)" },
+];
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }
 
 const DEFAULT_PROVIDERS: ProviderMeta[] = [
@@ -185,7 +198,7 @@ export default function MasterKeysAndModelsPage() {
   const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string; latency_ms?: number }>>({});
 
   // Filters
-  const [providerCategoryFilter, setProviderCategoryFilter] = useState<string>("all");
+  const [providerCategoryFilter, setProviderCategoryFilter] = useState<"all" | ProviderCategory>("all");
   const [catalogCategoryFilter, setCatalogCategoryFilter] = useState<string>("all");
   const [catalogSearch, setCatalogSearch] = useState<string>("");
 
@@ -230,10 +243,10 @@ export default function MasterKeysAndModelsPage() {
     try {
       const res = await adminApi.testMasterKey(provider);
       setTestResult((prev) => ({ ...prev, [provider]: res }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTestResult((prev) => ({
         ...prev,
-        [provider]: { success: false, message: err.message || "Failed to reach provider" },
+        [provider]: { success: false, message: errorMessage(err, "Failed to reach provider") },
       }));
     } finally {
       setTestingProvider(null);
@@ -248,12 +261,12 @@ export default function MasterKeysAndModelsPage() {
     try {
       const res = await adminApi.verifyProvider(provider);
       const layersSummary = Object.entries(res.layers || {})
-        .map(([k, v]: [string, any]) => `${k.toUpperCase()}: ${v.verified ? "VERIFIED (" + (v.model || v.voice || "") + ")" : "FAILED - " + (v.error || "")}`)
+        .map(([k, v]) => `${k.toUpperCase()}: ${v.verified ? "VERIFIED (" + (v.model || v.voice || "") + ")" : "FAILED - " + (v.error || "")}`)
         .join("\n");
       alert(`Capability Verification for ${provider.toUpperCase()}:\n\n${layersSummary}`);
       await fetchData();
-    } catch (err: any) {
-      alert(`Verification failed for ${provider}: ${err.message || err}`);
+    } catch (err: unknown) {
+      alert(`Verification failed for ${provider}: ${errorMessage(err, "Unable to verify provider")}`);
     } finally {
       setVerifyingProvider(null);
     }
@@ -265,8 +278,8 @@ export default function MasterKeysAndModelsPage() {
       const res = await adminApi.discoverProvider(provider);
       alert(`Discovery completed for ${provider.toUpperCase()}:\nDiscovered ${res.discovered_count ?? 0} active models/voices across supported layers.`);
       await fetchData();
-    } catch (err: any) {
-      alert(`Discovery failed for ${provider}: ${err.message || err}`);
+    } catch (err: unknown) {
+      alert(`Discovery failed for ${provider}: ${errorMessage(err, "Unable to discover provider models")}`);
     } finally {
       setDiscoveringProvider(null);
     }
@@ -278,7 +291,7 @@ export default function MasterKeysAndModelsPage() {
     try {
       await adminApi.saveMasterKey({
         provider: selectedKey.provider,
-        category: (selectedKey.category as any) || "llm",
+        category: selectedKey.category || "llm",
         display_name: selectedKey.display_name || selectedKey.provider,
         credentials: {
           api_key: keyInput || undefined,
@@ -292,8 +305,8 @@ export default function MasterKeysAndModelsPage() {
       setKeyInput("");
       setSecretInput("");
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to save key");
+    } catch (err: unknown) {
+      alert(errorMessage(err, "Failed to save key"));
     } finally {
       setSavingKey(false);
     }
@@ -311,8 +324,8 @@ export default function MasterKeysAndModelsPage() {
       setModelModalOpen(false);
       setEditingModel(null);
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to save model");
+    } catch (err: unknown) {
+      alert(errorMessage(err, "Failed to save model"));
     } finally {
       setSavingModel(false);
     }
@@ -323,8 +336,8 @@ export default function MasterKeysAndModelsPage() {
     try {
       await adminApi.deleteModel(id);
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete model");
+    } catch (err: unknown) {
+      alert(errorMessage(err, "Failed to delete model"));
     }
   };
 
@@ -406,10 +419,10 @@ export default function MasterKeysAndModelsPage() {
                 <div className="p-4 rounded-lg border border-border/70 bg-card space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm flex items-center gap-1.5">
-                      <Cpu className="h-4 w-4 text-indigo-500" />
+                      <Cpu className="h-4 w-4 text-primary" />
                       Ollama Local Reasoning (LLM)
                     </span>
-                    <Badge variant="outline" className="text-[10px] text-indigo-600 dark:text-indigo-400 border-indigo-500/30">
+                    <Badge variant="outline" className="text-[10px] text-primary border-primary/30">
                       LLM (CPU Native)
                     </Badge>
                   </div>
@@ -446,14 +459,7 @@ export default function MasterKeysAndModelsPage() {
 
               {/* Master Keys Category Filter Tabs */}
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                {[
-                  { id: "all", label: "All Providers" },
-                  { id: "llm", label: "LLM (Reasoning)" },
-                  { id: "stt", label: "STT (Speech-to-Text)" },
-                  { id: "tts", label: "TTS (Voice Studio)" },
-                  { id: "realtime", label: "Realtime (Live Audio)" },
-                  { id: "telecom", label: "Telecom (SIP Trunks)" },
-                ].map((f) => (
+                {PROVIDER_CATEGORY_FILTERS.map((f) => (
                   <Button
                     key={f.id}
                     type="button"
@@ -471,7 +477,7 @@ export default function MasterKeysAndModelsPage() {
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {DEFAULT_PROVIDERS.filter((item) => {
                   if (providerCategoryFilter === "all") return true;
-                  return item.categories.includes(providerCategoryFilter as any);
+                  return item.categories.includes(providerCategoryFilter);
                 }).map((item) => {
                   const saved = keys.find((k) => k.provider.toLowerCase() === item.provider.toLowerCase());
                   const isTested = testResult[item.provider];
@@ -502,7 +508,7 @@ export default function MasterKeysAndModelsPage() {
                                   ? "border-purple-500/40 text-purple-600 dark:text-purple-400 bg-purple-500/5"
                                   : cat === "telecom"
                                   ? "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/5"
-                                  : "border-indigo-500/40 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5"
+                                  : "border-primary/40 text-primary bg-primary/5"
                               }`}
                             >
                               {cat}
@@ -523,7 +529,7 @@ export default function MasterKeysAndModelsPage() {
                         })()}
 
                         <div className="pt-0.5">
-                          {saved?.api_key_masked || (saved as any)?.has_credentials ? (
+                          {saved?.api_key_masked || saved?.has_credentials ? (
                             <span className="text-emerald-500 flex items-center gap-1 font-mono text-[11px]">
                               <CheckCircle2 className="h-3.5 w-3.5" />
                               {saved?.api_key_masked || "•••••••• (configured)"}
@@ -562,20 +568,20 @@ export default function MasterKeysAndModelsPage() {
                           size="sm"
                           className="h-7 text-xs px-2 gap-1"
                           onClick={() => {
-                            setSelectedKey(saved || { provider: item.provider, display_name: item.name, category: item.categories[0] as any, is_active: true });
+                            setSelectedKey(saved || { provider: item.provider, display_name: item.name, category: item.categories[0], is_active: true });
                             setKeyInput("");
                             setSecretInput("");
                           }}
                         >
                           <Edit className="h-3 w-3" />
-                          {saved?.api_key_masked || (saved as any)?.has_credentials ? "Update" : "Configure"}
+                          {saved?.api_key_masked || saved?.has_credentials ? "Update" : "Configure"}
                         </Button>
                         <div className="flex items-center gap-1">
                           <Button
                             variant="outline"
                             size="sm"
                             className="h-7 text-[11px] px-2"
-                            disabled={(!saved?.api_key_masked && !(saved as any)?.has_credentials) || verifyingProvider === item.provider}
+                            disabled={(!saved?.api_key_masked && !saved?.has_credentials) || verifyingProvider === item.provider}
                             onClick={() => handleVerify(item.provider)}
                             title="Verify all layers"
                           >
@@ -585,7 +591,7 @@ export default function MasterKeysAndModelsPage() {
                             variant="outline"
                             size="sm"
                             className="h-7 text-[11px] px-2"
-                            disabled={(!saved?.api_key_masked && !(saved as any)?.has_credentials) || discoveringProvider === item.provider}
+                            disabled={(!saved?.api_key_masked && !saved?.has_credentials) || discoveringProvider === item.provider}
                             onClick={() => handleDiscover(item.provider)}
                             title="Discover models & voices"
                           >
@@ -595,7 +601,7 @@ export default function MasterKeysAndModelsPage() {
                             variant="secondary"
                             size="sm"
                             className="h-7 text-xs px-2 gap-1"
-                            disabled={(!saved?.api_key_masked && !(saved as any)?.has_credentials) || isTesting}
+                            disabled={(!saved?.api_key_masked && !saved?.has_credentials) || isTesting}
                             onClick={() => handleTestKey(item.provider)}
                           >
                             {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
@@ -732,7 +738,7 @@ export default function MasterKeysAndModelsPage() {
                           <TableCell className="text-xs font-medium">{m.display_name}</TableCell>
                           <TableCell className="text-xs font-mono text-muted-foreground">{m.model_id}</TableCell>
                           <TableCell className="text-xs text-right font-mono">₹{m.cost_per_minute.toFixed(2)}</TableCell>
-                          <TableCell className="text-xs text-right font-mono text-indigo-500 font-semibold">
+                          <TableCell className="text-xs text-right font-mono text-primary font-semibold">
                             +{m.markup_margin_percent}%
                           </TableCell>
                           <TableCell className="text-xs text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
@@ -789,7 +795,7 @@ export default function MasterKeysAndModelsPage() {
           <DialogHeader>
             <DialogTitle>Configure {selectedKey?.display_name || selectedKey?.provider} Key</DialogTitle>
             <DialogDescription>
-              Stored with AES-256 Fernet encryption on the Kodewaves sovereign host.
+              Stored with AES-256 Fernet encryption on the platform host.
             </DialogDescription>
           </DialogHeader>
 
@@ -876,7 +882,7 @@ export default function MasterKeysAndModelsPage() {
               <Label className="text-xs">Category</Label>
               <Select
                 value={editingModel?.category || "llm"}
-                onValueChange={(val: any) => setEditingModel((prev) => prev ? { ...prev, category: val } : null)}
+                onValueChange={(val) => setEditingModel((prev) => prev ? { ...prev, category: val as ModelCatalogEntry["category"] } : null)}
               >
                 <SelectTrigger>
                   <SelectValue />

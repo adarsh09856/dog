@@ -3,6 +3,7 @@ Tests for WP1: Truth Layer Catalog, Visibility Formula, and Dynamic Resolution.
 """
 
 import pytest
+import importlib
 from unittest.mock import AsyncMock, patch
 
 from api.services.catalog.normalize import normalize_provider_name
@@ -70,6 +71,7 @@ async def test_catalog_visibility_with_google_key():
             self.recommended = rec
             self.status = status
             self.supports_tools = True
+            self.languages = []
             self.supports_streaming = True
 
     with patch("api.db.kodewaves_client.kodewaves_db_client.list_master_credentials", new_callable=AsyncMock) as mock_creds, \
@@ -104,3 +106,154 @@ async def test_catalog_visibility_with_google_key():
         # Check TTS
         tts_ids = [m["value"] for m in manifest["cloud_tts_models"]]
         assert "gemini-3.1-flash-tts-preview" in tts_ids
+
+
+@pytest.mark.asyncio
+async def test_local_tts_catalog_preserves_installed_language_support(monkeypatch):
+    """The model page must show the real language coverage advertised by a local TTS."""
+    catalog_service.invalidate_cache()
+
+    class Response:
+        status = 200
+
+        def __init__(self, url):
+            self.url = url
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def json(self):
+            if self.url.endswith("/api/tags"):
+                return {"models": []}
+            if self.url.endswith("/voices"):
+                return {"voices": []}
+            return {"data": []}
+
+    class Session:
+        def __init__(self, **_):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        def get(self, url):
+            return Response(url)
+
+    local_settings = {
+        "enable_local_ai_engine": True,
+        "local_ai_access_policy": "public",
+    }
+    catalog_module = importlib.import_module("api.services.catalog.catalog_service")
+    monkeypatch.setattr(catalog_module.aiohttp, "ClientSession", Session)
+    monkeypatch.setattr(catalog_module, "get_local_tts_models", AsyncMock(return_value={
+        "indic-vits-rasa-13": {
+            "id": "indic-vits-rasa-13",
+            "name": "Regional VITS",
+            "installed": True,
+            "languages": ["kn-IN", "ta-IN"],
+            "voices": [{"id": "KAN_F", "languages": ["kn-IN"]}],
+        },
+    }))
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.list_master_credentials",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.get_org_ai_policy",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.list_models",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.get_setting",
+        AsyncMock(side_effect=lambda key: local_settings if key == "local_ai" else {}),
+    )
+    manifest = await catalog_service.get_available_catalog(organization_id=983621, user_has_local_ai=True)
+
+    model = next(item for item in manifest["local_tts_models"] if item["value"] == "indic-vits-rasa-13")
+    assert model["languages"] == ["kn-IN", "ta-IN"]
+    assert all(item["value"] != "indus-pocket-tts" for item in manifest["local_tts_models"])
+    catalog_service.invalidate_cache()
+
+
+@pytest.mark.asyncio
+async def test_local_stt_catalog_hides_faster_whisper_but_keeps_indicconformer(monkeypatch):
+    catalog_service.invalidate_cache()
+
+    class Response:
+        status = 200
+
+        def __init__(self, url):
+            self.url = url
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def json(self):
+            if self.url.endswith("/api/tags"):
+                return {"models": []}
+            if "indic-stt:" in self.url:
+                return {"data": [{
+                    "id": "indicconformer-ctc-int8",
+                    "task": "automatic-speech-recognition",
+                    "installed": True,
+                    "languages": ["hi-IN", "ta-IN"],
+                }]}
+            if "whisper:" in self.url:
+                return {"data": [{
+                    "id": "Systran/faster-whisper-small",
+                    "task": "automatic-speech-recognition",
+                    "installed": True,
+                }]}
+            return {"data": []}
+
+    class Session:
+        def __init__(self, **_):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        def get(self, url):
+            return Response(url)
+
+    local_settings = {"enable_local_ai_engine": True, "local_ai_access_policy": "public"}
+    catalog_module = importlib.import_module("api.services.catalog.catalog_service")
+    monkeypatch.setattr(catalog_module.aiohttp, "ClientSession", Session)
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.list_master_credentials",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.get_org_ai_policy",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.list_models",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "api.db.kodewaves_client.kodewaves_db_client.get_setting",
+        AsyncMock(side_effect=lambda key: local_settings if key == "local_ai" else {}),
+    )
+    monkeypatch.setenv("INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1")
+    monkeypatch.setenv("WHISPER_ENDPOINT", "http://whisper:8000/v1")
+
+    manifest = await catalog_service.get_available_catalog(organization_id=983622, user_has_local_ai=True)
+
+    assert [item["value"] for item in manifest["local_stt_models"]] == ["indicconformer-ctc-int8"]
+    catalog_service.invalidate_cache()

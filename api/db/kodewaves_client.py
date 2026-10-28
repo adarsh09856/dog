@@ -1,9 +1,9 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
-from sqlalchemy import delete, desc, or_, select, update
+from sqlalchemy import delete, desc, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 
@@ -33,6 +33,37 @@ from api.db.kodewaves_models import (
     WebsiteWidgetModel,
     GlobalPlatformSettingModel,
 )
+
+
+def _materialize_paid_plan_assignment(
+    requested: Dict[str, Any], previous: Any
+) -> Dict[str, Any]:
+    """Compute the purchased term while the organization's wallet lock is held."""
+    assignment = dict(requested)
+    term_days = int(assignment.pop("_term_days"))
+    if term_days not in {30, 365}:
+        raise ValueError("Paid plan term must be 30 or 365 days")
+    assignment.pop("expires_at", None)
+    now = datetime.now(UTC)
+    start = now
+    previous_expiry = (
+        previous.get("expires_at")
+        if isinstance(previous, dict)
+        and previous.get("plan_code") == assignment.get("plan_code")
+        else None
+    )
+    if previous_expiry:
+        try:
+            parsed = datetime.fromisoformat(str(previous_expiry).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            if parsed > start:
+                start = parsed
+        except (TypeError, ValueError):
+            pass
+    assignment["updated_at"] = now.isoformat()
+    assignment["expires_at"] = (start + timedelta(days=term_days)).isoformat()
+    return assignment
 
 
 class KodewavesDBClient(BaseDBClient):
@@ -586,31 +617,37 @@ class KodewavesDBClient(BaseDBClient):
         reason: str = "credit_purchase",
         reference_id: Optional[str] = None,
         notes: Optional[str] = None,
+        plan_assignment: Optional[Dict[str, Any]] = None,
     ) -> OrganizationWalletModel:
-        if minutes <= 0:
-            raise ValueError("Minute credits must be positive")
+        if minutes < 0:
+            raise ValueError("Wallet credit cannot be negative")
         async with self.get_session() as session:
-            # An upsert also serializes first-time wallet creation: a SELECT
-            # FOR UPDATE alone cannot lock a row that does not exist yet.
-            await session.execute(
-                insert(OrganizationWalletModel).values(
-                    organization_id=organization_id,
-                    credit_balance_minutes=0,
-                    bonus_minutes=0,
-                ).on_conflict_do_nothing(index_elements=["organization_id"])
-            )
+            if reference_id or plan_assignment is not None:
+                # A wallet row lock cannot serialize first-time payments before
+                # the wallet exists. Lock by org so concurrent purchases and
+                # renewals use the last committed wallet and plan state.
+                await session.execute(
+                    text("SELECT pg_advisory_xact_lock(492566, :org_id)"),
+                    {"org_id": organization_id},
+                )
+            # Serialize credits per organization so a payment verification and
+            # webhook arriving together cannot both pass the ledger idempotency check.
             stmt = select(OrganizationWalletModel).where(
                 OrganizationWalletModel.organization_id == organization_id
             ).with_for_update()
             result = await session.execute(stmt)
             wallet = result.scalar_one_or_none()
 
+            if not wallet:
+                wallet = OrganizationWalletModel(organization_id=organization_id, credit_balance_minutes=0)
+                session.add(wallet)
+
             # Idempotency check: avoid double crediting same payment reference
             if reference_id:
                 check_stmt = select(WalletLedgerModel).where(
                     WalletLedgerModel.organization_id == organization_id,
                     WalletLedgerModel.reference_id == str(reference_id),
-                    WalletLedgerModel.amount_minutes > 0,
+                    WalletLedgerModel.amount_minutes >= 0,
                 )
                 existing = await session.execute(check_stmt)
                 if existing.scalar_one_or_none() is not None:
@@ -631,13 +668,35 @@ class KodewavesDBClient(BaseDBClient):
             )
             session.add(ledger_entry)
 
+            # Paid plan assignment and its minutes share the same transaction.
+            # A duplicate payment reference returns above, so replayed webhooks
+            # cannot extend the plan term without a new captured payment.
+            if plan_assignment is not None:
+                key = f"org_plan_{organization_id}"
+                setting_result = await session.execute(
+                    select(GlobalPlatformSettingModel).where(
+                        GlobalPlatformSettingModel.key == key
+                    )
+                )
+                setting = setting_result.scalar_one_or_none()
+                previous_value = setting.value if setting is not None else None
+                assignment = _materialize_paid_plan_assignment(
+                    plan_assignment, previous_value
+                )
+                if setting is None:
+                    setting = GlobalPlatformSettingModel(
+                        key=key, value=assignment, category="plan"
+                    )
+                    session.add(setting)
+                else:
+                    setting.value = assignment
+                    setting.category = "plan"
+                    setting.updated_at = datetime.now(UTC)
+
             await session.commit()
             await session.refresh(wallet)
             return wallet
 
-    # ------------------------------------------------------------------------
-    # CRM & Contacts
-    # ------------------------------------------------------------------------
     async def import_contacts(self, organization_id: int, items: List[Dict[str, Any]]) -> int:
         """Import one batch atomically after validating every referenced stage."""
         prepared = []
@@ -668,6 +727,9 @@ class KodewavesDBClient(BaseDBClient):
             await session.commit()
         return len(prepared)
 
+    # ------------------------------------------------------------------------
+    # CRM & Contacts
+    # ------------------------------------------------------------------------
     async def save_contact(self, organization_id: int, values: Dict[str, Any], contact_id: str | None = None) -> ContactModel:
         """Save contact fields and validate stage ownership in the same transaction."""
         async with self.get_session() as session:
@@ -739,7 +801,14 @@ class KodewavesDBClient(BaseDBClient):
     # ------------------------------------------------------------------------
     # Platform Settings
     # ------------------------------------------------------------------------
-    async def get_setting(self, key: str) -> Optional[Dict[str, Any]]:
+    async def get_settings_map(self) -> Dict[str, Any]:
+        async with self.get_session() as session:
+            result = await session.execute(select(GlobalPlatformSettingModel))
+            return {record.key: record.value for record in result.scalars().all()}
+
+    async def get_setting(
+        self, key: str, *, raise_on_error: bool = False
+    ) -> Optional[Dict[str, Any]]:
         try:
             async with self.get_session() as session:
                 stmt = select(GlobalPlatformSettingModel).where(GlobalPlatformSettingModel.key == key)
@@ -747,7 +816,33 @@ class KodewavesDBClient(BaseDBClient):
                 setting = result.scalar_one_or_none()
                 return setting.value if setting else None
         except Exception:
+            if raise_on_error:
+                raise
             return None
+
+    async def get_active_saas_plan(self, code: str) -> Optional[SaaSPlanModel]:
+        """Fetch one active plan by its stable catalog code."""
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(SaaSPlanModel).where(
+                    SaaSPlanModel.code == code,
+                    SaaSPlanModel.is_active.is_(True),
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def get_default_saas_plan(self) -> Optional[SaaSPlanModel]:
+        """Fetch the configured active default plan, if one exists."""
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(SaaSPlanModel)
+                .where(
+                    SaaSPlanModel.is_active.is_(True),
+                    SaaSPlanModel.is_default.is_(True),
+                )
+                .order_by(SaaSPlanModel.created_at.asc())
+            )
+            return result.scalars().first()
 
     async def set_setting(self, key: str, value: Dict[str, Any], category: str = "general") -> GlobalPlatformSettingModel:
         async with self.get_session() as session:

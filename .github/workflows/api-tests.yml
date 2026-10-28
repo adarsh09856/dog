@@ -7,6 +7,9 @@ on:
       - "api/**"
       - "pipecat/**"
       - "scripts/**"
+      - "deploy/client/**"
+      - "owner-tools/**"
+      - ".github/workflows/client-bundle-verification.yml"
       - ".github/workflows/api-tests.yml"
 
 concurrency:
@@ -49,6 +52,7 @@ jobs:
     env:
       # api/conftest.py creates test_db via the postgres admin DB.
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test_db
+      KODEWAVES_CLIENT_RELEASE_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/kodewaves_client_release_test
       REDIS_URL: redis://localhost:6379/0
       ENABLE_AWS_S3: "false"
       # MINIO is not actually contacted by tests, but storage.py constructs
@@ -86,6 +90,22 @@ jobs:
       - name: Install ts_validator npm deps
         working-directory: api/mcp_server/ts_validator
         run: npm install
+
+      - name: Create disposable client release test database
+        run: |
+          python - <<'PY'
+          import asyncio
+          import asyncpg
+
+          async def main():
+              connection = await asyncpg.connect("postgresql://postgres:postgres@127.0.0.1:5432/postgres")
+              try:
+                  await connection.execute('CREATE DATABASE "kodewaves_client_release_test"')
+              finally:
+                  await connection.close()
+
+          asyncio.run(main())
+          PY
 
       - name: Run pytest
         working-directory: api

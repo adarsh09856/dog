@@ -7,6 +7,7 @@ from api.services.telephony.external_pbx_writeback import (
 from api.services.workflow_run_billing import (
     report_completed_workflow_run_platform_usage,
 )
+from api.services.client_worker_entitlements import require_client_worker_features
 from api.tasks.run_integrations import run_integrations_post_workflow_run
 
 
@@ -51,6 +52,10 @@ async def process_workflow_completion(
     # extraction time to land instead of writing the lead without it. No-ops
     # for runs that never had a PBX leg.
     try:
+        # Jobs may sit in Redis after an installation's telephony entitlement
+        # or owner approval changes. Recheck immediately before contacting the
+        # external PBX; billing/reporting above remains independent.
+        await require_client_worker_features("telephony")
         await sync_external_pbx_call_record(workflow_run_id)
     except Exception as e:
         logger.error(

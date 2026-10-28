@@ -16,8 +16,10 @@ from api.db import db_client
 from api.enums import TriggerState, WorkflowStatus
 from api.services.call_concurrency import (
     CallConcurrencyLimitError,
+    authorize_call_entitlement,
     call_concurrency,
 )
+from api.services.installation_license import InstallationLicenseError
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.telephony.factory import get_telephony_provider_by_id
 from api.services.telephony.outbound_readiness import (
@@ -346,6 +348,7 @@ async def _execute_resolved_target(
     # (e.g. Telnyx, Cloudonix); without them the URL contains "None/None" and
     # the stream connection fails.
     try:
+        await authorize_call_entitlement("public_agent")
         result = await provider.initiate_call(
             to_number=request.phone_number,
             webhook_url=webhook_url,
@@ -354,6 +357,10 @@ async def _execute_resolved_target(
             workflow_id=target.workflow.id,
             organization_id=target.organization_id,
         )
+    except InstallationLicenseError as exc:
+        await mark_workflow_run_failed(workflow_run.id, str(exc))
+        await call_concurrency.release_workflow_run_slot(workflow_run.id)
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as e:
         logger.warning(
             f"Failed to initiate call for workflow run {workflow_run.id}: {e}"

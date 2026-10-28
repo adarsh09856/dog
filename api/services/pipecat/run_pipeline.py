@@ -205,7 +205,8 @@ def _resolve_turn_start_min_words(run_configs: dict) -> int:
 
 
 def _create_non_realtime_user_turn_start_strategies(
-    run_configs: dict, *, uses_external_turns: bool
+    run_configs: dict, *, uses_external_turns: bool,
+    local_segmented_stt: bool = False,
 ):
     """Return user turn start strategies for non-realtime pipelines."""
 
@@ -229,11 +230,18 @@ def _create_non_realtime_user_turn_start_strategies(
             )
         ]
 
+    if local_segmented_stt:
+        # This HTTP recognizer receives VAD-cut segments and may still be
+        # decoding one when a new raw VAD start fires. Interrupting on that
+        # raw start repeatedly cancels TTS before any usable transcript is
+        # ready. A final transcript remains a valid barge-in signal.
+        return [TranscriptionUserTurnStartStrategy(use_interim=False)]
     return [TranscriptionUserTurnStartStrategy(), VADUserTurnStartStrategy()]
 
 
 def _create_non_realtime_user_turn_stop_strategies(
-    run_configs: dict, *, uses_external_turns: bool, phone_pending=None
+    run_configs: dict, *, uses_external_turns: bool, phone_pending=None,
+    local_segmented_stt: bool = False,
 ):
     """Return user turn stop strategies for non-realtime pipelines."""
 
@@ -255,7 +263,12 @@ def _create_non_realtime_user_turn_stop_strategies(
     if phone_pending is not None:
         from api.services.pipecat.contact_turn_stop import ContactAwareTurnStopStrategy
 
-        return [ContactAwareTurnStopStrategy(phone_pending=phone_pending)]
+        # Local segmented STT has already waited for VAD and drained its
+        # recognition queue before emitting a final transcript. Avoid another
+        # 600 ms fallback pause for ordinary speech; the contact-aware strategy
+        # retains its longer pause while a phone number is being dictated.
+        kwargs = {"user_speech_timeout": 0.2} if local_segmented_stt else {}
+        return [ContactAwareTurnStopStrategy(phone_pending=phone_pending, **kwargs)]
     return [SpeechTimeoutUserTurnStopStrategy()]
 
 
@@ -1015,8 +1028,19 @@ async def _run_pipeline_impl(
             None,
         }
     )
-    vad_stop_s = float(run_configs.get("vad_stop_secs", 0.2 if local_segmented_stt else 0.2))
-    user_vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=vad_stop_s))
+    vad_stop_s = float(run_configs.get("vad_stop_secs", 0.2))
+    vad_params = VADParams(stop_secs=vad_stop_s)
+    if local_segmented_stt and "vad_stop_secs" not in run_configs:
+        from api.services.pipecat.contact_vad import ContactAwareSileroVADAnalyzer
+
+        user_vad_analyzer = ContactAwareSileroVADAnalyzer(
+            params=vad_params,
+            phone_pending=lambda: bool(
+                getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+            ),
+        )
+    else:
+        user_vad_analyzer = SileroVADAnalyzer(params=vad_params)
 
     # Configure turn strategies based on STT provider, model, and workflow configuration
     if is_realtime:
@@ -1034,6 +1058,7 @@ async def _run_pipeline_impl(
         user_turn_start_strategies = _create_non_realtime_user_turn_start_strategies(
             run_configs,
             uses_external_turns=uses_external_turns,
+            local_segmented_stt=local_segmented_stt,
         )
         turn_start_strategy = run_configs.get(
             "turn_start_strategy", DEFAULT_TURN_START_STRATEGY
@@ -1050,6 +1075,7 @@ async def _run_pipeline_impl(
         user_turn_stop_strategies = _create_non_realtime_user_turn_stop_strategies(
             run_configs,
             uses_external_turns=uses_external_turns,
+            local_segmented_stt=local_segmented_stt,
             phone_pending=lambda: bool(
                 getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
             ),
@@ -1248,6 +1274,9 @@ async def _run_pipeline_impl(
         selected_visit=lambda: engine.selected_visit_id,
         workflow_id=workflow_id,
         workflow_run_id=workflow_run_id,
+        phone_pending=lambda: bool(
+            getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+        ),
         call_event_recorder=call_events_session.recorder
         if call_events_session
         else None,

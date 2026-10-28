@@ -39,7 +39,12 @@ connect (signaling succeeds) but have **no audio**.
 The platform provides Traefik, so you only deploy the app stack:
 
 1. Copy `.env.example` → `.env` and fill in `PUBLIC_HOST`, `TURN_HOST`, the
-   secrets, and the three `TRAEFIK_*` values (matched to Hostinger's Traefik).
+   secrets, and the `TRAEFIK_*` values (matched to Hostinger's Traefik).
+   Set `FORWARDED_ALLOW_IPS` to the Traefik peer IP or its dedicated Docker
+   network CIDR as seen by the API container. Find the actual network with
+   `docker network inspect "$TRAEFIK_NETWORK"`; never set this to `*`. Uvicorn
+   uses this allowlist both to honor HTTPS for signed webhooks and to reject
+   spoofed forwarded client addresses used by installation IP policies.
 2. Import / deploy `docker-compose.yaml`.
 3. Ensure the coturn UDP/TCP ports above are open in the firewall.
 
@@ -48,7 +53,7 @@ The platform provides Traefik, so you only deploy the app stack:
 On a box that does **not** already run Traefik:
 
 ```bash
-cp .env.example .env     # fill in PUBLIC_HOST, TURN_HOST, secrets, ACME_EMAIL
+cp .env.example .env     # also set FORWARDED_ALLOW_IPS to the Traefik network CIDR
 docker network create traefik-proxy
 docker compose -f docker-compose.traefik.yaml --env-file .env up -d   # stand-in Traefik
 docker compose --env-file .env up -d                                  # app stack

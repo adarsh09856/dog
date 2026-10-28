@@ -1,0 +1,92 @@
+name: Verify client bundle images
+
+on:
+  push:
+    branches:
+      - codex/client-bundle-verification-*
+  workflow_dispatch:
+    inputs:
+      caddy_image:
+        description: "Approved Caddy image@sha256 digest for the client ingress"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-bundle-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  owner-postgres:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: kodewaves_client_release_test
+          POSTGRES_USER: kodewaves_test
+          POSTGRES_PASSWORD: disposable_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kodewaves_test -d kodewaves_client_release_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install API and test dependencies
+        run: |
+          python -m pip install -r api/requirements.txt pytest pytest-asyncio httpx cryptography
+          python -m pip install --no-deps -e ./pipecat
+      - name: Verify owner enrollment and client limits with PostgreSQL
+        env:
+          KODEWAVES_CLIENT_RELEASE_TEST_DATABASE_URL: postgresql+asyncpg://kodewaves_test:disposable_ci_password@127.0.0.1:5432/kodewaves_client_release_test
+          DATABASE_URL: postgresql+asyncpg://kodewaves_test:disposable_ci_password@127.0.0.1:5432/kodewaves_client_release_test
+          REDIS_URL: redis://127.0.0.1:6379/15
+        run: python -m pytest --noconftest api/tests/test_client_release_postgres_integration.py -q
+      - name: Verify installer and image-verification orchestration
+        run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py -q
+
+  verify:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install release verification dependencies
+        run: python -m pip install cryptography 'sqlalchemy==2.0.43' 'PyYAML==6.0.2'
+      - name: Check release tool imports
+        run: |
+          python deploy/client/build_and_verify.py --help > /dev/null
+          python deploy/client/ci_verify.py --help > /dev/null
+          python owner-tools/package_client_installer.py --help > /dev/null
+      - name: Build and verify client images with temporary keys
+        env:
+          CADDY_IMAGE: ${{ inputs.caddy_image }}
+        run: >-
+          python deploy/client/ci_verify.py
+          --caddy-image "$CADDY_IMAGE"
+          --report "$RUNNER_TEMP/client-verification.json"
+      - name: Preserve verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-image-verification-${{ github.sha }}
+          path: ${{ runner.temp }}/client-verification.json
+          if-no-files-found: error
+          retention-days: 14

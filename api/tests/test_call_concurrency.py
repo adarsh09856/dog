@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -5,8 +6,115 @@ import pytest
 from api.services.call_concurrency import (
     CallConcurrencyLimitError,
     CallConcurrencyService,
+    authorize_call_entitlement,
 )
 from api.services.call_concurrency.rate_limiter import ConcurrentSlotAcquisition
+from api.services.installation_license import InstallationLicenseError
+
+
+@pytest.fixture(autouse=True)
+def isolated_saas_entitlements(monkeypatch):
+    from api.db.kodewaves_client import kodewaves_db_client
+    from api.services.call_concurrency import service
+
+    monkeypatch.setattr(service, "get_org_saas_limit", AsyncMock(return_value=None))
+    monkeypatch.setattr(service, "enforce_saas_feature", AsyncMock())
+    monkeypatch.setattr(kodewaves_db_client, "get_setting", AsyncMock(return_value=None))
+
+
+@pytest.mark.asyncio
+async def test_call_entitlement_recheck_is_noop_for_saas():
+    with patch(
+        "api.services.call_concurrency.service._licensed_call_limit", return_value=None
+    ), patch(
+        "api.services.call_concurrency.service.require_current_owner_status",
+        new_callable=AsyncMock,
+    ) as owner_check:
+        assert await authorize_call_entitlement("campaign:8") is None
+        owner_check.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_call_entitlement_recheck_fails_closed_for_owner_revocation():
+    with (
+        patch(
+            "api.services.call_concurrency.service._licensed_call_limit",
+            return_value=2,
+        ),
+        patch("api.services.call_concurrency.service.load_license"),
+        patch(
+            "api.services.call_concurrency.service.require_current_owner_status",
+            new_callable=AsyncMock,
+            side_effect=InstallationLicenseError("revoked"),
+        ),
+        pytest.raises(InstallationLicenseError, match="revoked"),
+    ):
+        await authorize_call_entitlement("campaign:8")
+
+
+@pytest.mark.asyncio
+async def test_client_license_caps_fleet_and_org_call_slots():
+    service = CallConcurrencyService()
+    with (
+        patch("api.services.call_concurrency.service._licensed_call_limit", return_value=1),
+        patch("api.services.call_concurrency.service.load_license"),
+        patch("api.services.call_concurrency.service.require_current_owner_status", new_callable=AsyncMock),
+        patch("api.services.call_concurrency.service.db_client") as mock_db,
+        patch("api.services.call_concurrency.service.rate_limiter") as mock_rate_limiter,
+    ):
+        mock_db.get_configuration = AsyncMock(return_value=None)
+        mock_rate_limiter.get_fleet_concurrent_count = AsyncMock(return_value=0)
+        mock_rate_limiter.try_acquire_concurrent_slot_details = AsyncMock(
+            return_value=ConcurrentSlotAcquisition(slot_id="licensed-slot", active_count=1)
+        )
+        slot = await service.acquire_org_slot(199, source="webrtc")
+        assert slot.max_concurrent == 1
+        mock_rate_limiter.try_acquire_concurrent_slot_details.assert_awaited_once_with(
+            199,
+            1,
+            scope_key=None,
+            scope_max_concurrent=None,
+            fleet_max_concurrent=1,
+        )
+
+        mock_rate_limiter.get_fleet_concurrent_count = AsyncMock(return_value=1)
+        mock_rate_limiter.try_acquire_concurrent_slot_details.reset_mock()
+        with pytest.raises(CallConcurrencyLimitError):
+            await service.acquire_org_slot(199, source="webrtc")
+        mock_rate_limiter.try_acquire_concurrent_slot_details.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_client_call_admission_denies_invalid_license_before_dial():
+    service = CallConcurrencyService()
+    with (
+        patch(
+            "api.services.call_concurrency.service._licensed_call_limit",
+            side_effect=InstallationLicenseError("expired"),
+        ),
+        patch("api.services.call_concurrency.service.rate_limiter") as mock_rate_limiter,
+    ):
+        with pytest.raises(CallConcurrencyLimitError):
+            await service.acquire_org_slot(199, source="ari_inbound")
+        mock_rate_limiter.try_acquire_concurrent_slot_details.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_client_call_admission_denies_owner_revocation_before_dial():
+    service = CallConcurrencyService()
+    with (
+        patch("api.services.call_concurrency.service._licensed_call_limit", return_value=1),
+        patch("api.services.call_concurrency.service.load_license"),
+        patch(
+            "api.services.call_concurrency.service.require_current_owner_status",
+            new_callable=AsyncMock,
+        ) as owner_check,
+        patch("api.services.call_concurrency.service.rate_limiter") as mock_rate_limiter,
+    ):
+        owner_check.side_effect = InstallationLicenseError("revoked")
+        with pytest.raises(CallConcurrencyLimitError):
+            await service.acquire_org_slot(199, source="ari_inbound")
+        mock_rate_limiter.try_acquire_concurrent_slot_details.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -112,7 +220,7 @@ async def test_acquire_org_slot_fires_usage_event_per_org_member_when_limit_reac
         kwargs = call.kwargs
         assert kwargs["event"] == PostHogEvent.USAGE_CONCURRENT_CALL_LIMIT_REACHED
         assert "groups" not in kwargs
-        assert kwargs["properties"]["event_source"] == "dograh"
+        assert kwargs["properties"]["event_source"] == "kodewaves"
         assert kwargs["properties"]["organization_id"] == 199
         assert kwargs["properties"]["source"] == "webrtc"
         assert kwargs["properties"]["active_calls"] == 10
@@ -251,6 +359,36 @@ async def test_strict_org_count_propagates_storage_errors(failed_operation):
         await rl.get_concurrent_count(42, raise_on_error=True)
     # Admission logging keeps its existing fallback behavior.
     assert await rl.get_concurrent_count(42) == 0
+
+
+@requires_redis
+@pytest.mark.asyncio
+async def test_atomic_fleet_cap_allows_only_one_parallel_acquisition():
+    from api.services.call_concurrency.rate_limiter import FLEET_CONCURRENT_KEY
+
+    first_worker, second_worker = RateLimiter(), RateLimiter()
+    org_a, org_b = _unique_org_id(), _unique_org_id()
+    redis_client = await first_worker._get_redis()
+    acquired = []
+    try:
+        baseline = await first_worker.get_fleet_concurrent_count()
+        results = await asyncio.gather(
+            first_worker.try_acquire_concurrent_slot_details(
+                org_a, 10, fleet_max_concurrent=baseline + 1
+            ),
+            second_worker.try_acquire_concurrent_slot_details(
+                org_b, 10, fleet_max_concurrent=baseline + 1
+            ),
+        )
+        acquired = [(org, result.slot_id) for org, result in zip((org_a, org_b), results) if result]
+        assert len(acquired) == 1
+        assert await first_worker.get_fleet_concurrent_count() == baseline + 1
+    finally:
+        for org, slot_id in acquired:
+            await redis_client.zrem(FLEET_CONCURRENT_KEY, f"{org}:{slot_id}")
+        await redis_client.delete(f"concurrent_calls:{org_a}", f"concurrent_calls:{org_b}")
+        await first_worker.close()
+        await second_worker.close()
 
 
 @requires_redis

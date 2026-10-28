@@ -1,6 +1,5 @@
 """Require the calendar action when a caller explicitly confirms a booking."""
 
-import os
 import re
 import time
 from loguru import logger
@@ -24,26 +23,14 @@ _OPENING_WORDS = (
 _GREETING_SEPARATORS = " \t\r\n!,.:;?।॥،؛"
 from api.services.workflow.direct_caller_reply import END_CALL_TOOL_NAMES as _END_CALL_TOOLS
 _LOCAL_CALLER_RESPONSE_GUARD = (
-    "Answer the latest caller message directly; do not echo it or repeat an earlier "
-    "reply. Remember their name and contact details from the conversation; ask only "
-    "for details that are missing or corrected."
+    "Answer the latest caller message directly. Do not repeat the caller's words or "
+    "an earlier reply. Never invent service names. Remember their name and contact "
+    "details from the conversation; ask only for details that are missing or corrected. "
+    "For a booking, carry forward every date, service, and time the caller already "
+    "gave. Ask only for the next missing detail. If a date is ambiguous, ask one "
+    "short clarification about that date; do not restart the booking questions or "
+    "guess a year or time. After the date is clear, ask only for the time."
 )
-
-
-def _local_ollama_num_threads() -> int | None:
-    """Honor the container's Ollama CPU budget for local model requests."""
-    raw_value = os.getenv("OLLAMA_NUM_THREADS", "3").strip().lower()
-    if raw_value in {"", "auto", "0"}:
-        return None
-    try:
-        value = int(raw_value)
-    except ValueError:
-        logger.warning("Ignoring invalid OLLAMA_NUM_THREADS value")
-        return None
-    if not 1 <= value <= 64:
-        logger.warning("Ignoring out-of-range OLLAMA_NUM_THREADS value")
-        return None
-    return value
 
 
 _EXPLICIT_END_REQUEST = re.compile(
@@ -366,9 +353,16 @@ class _BookingToolChoiceMixin:
             booking_contact_question,
             caller_name_followup_reply,
             caller_phone_fragment_reply,
+            remember_recent_caller_statements,
             remember_explicit_caller_name,
         )
         from api.services.workflow.direct_caller_reply import direct_caller_reply
+
+        contact_state = getattr(self, "_contact_conversation_state", None)
+        if not isinstance(contact_state, dict):
+            contact_state = {}
+            self._contact_conversation_state = contact_state
+        remember_recent_caller_statements(messages, contact_state)
 
         latest_user_text = (
             _message_text(messages[-1])
@@ -437,7 +431,15 @@ class _BookingToolChoiceMixin:
         if phone_fragment_reply:
             await self._emit_direct_reply(phone_fragment_reply)
             return
-        name_followup_reply = caller_name_followup_reply(messages, contact_state)
+        booking_tool_available = any(
+            getattr(tool, "name", None) == "book_appointment" for tool in tools
+        )
+        known_phone = (getattr(self, "_known_contact", {}) or {}).get("customer_phone")
+        name_followup_reply = caller_name_followup_reply(
+            messages, contact_state,
+            booking_available=booking_tool_available,
+            known_phone=known_phone,
+        )
         if name_followup_reply:
             await self._emit_direct_reply(name_followup_reply)
             return
@@ -455,21 +457,19 @@ class _BookingToolChoiceMixin:
             fast_booking_question = booking_contact_question(
                 messages, known, contact_state if contact_state is not None else {}
             )
-        if fast_booking_question and any(
-            getattr(tool, "name", None) == "book_appointment" for tool in tools
-        ):
-            # Small CPU models can take many seconds to ask this obvious
-            # question, and often repeat date/time details already supplied.
-            # Send it through the normal transcript and TTS path without an
-            # extra inference request.
-            await self._emit_direct_reply(fast_booking_question)
-            return
         if (
             messages and isinstance(messages[-1], dict)
             and messages[-1].get("role") == "user"
             and any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
         ):
-            arguments = confirmed_booking_arguments(_message_text(messages[-1]))
+            from api.services.workflow.contact_context import confirmed_staged_booking_arguments
+            from api.services.workflow.confirmed_booking import room_booking_active
+
+            arguments = None if room_booking_active(messages) else confirmed_booking_arguments(_message_text(messages[-1]))
+            if not arguments:
+                arguments = confirmed_staged_booking_arguments(
+                    messages, contact_state if isinstance(contact_state, dict) else {}, known
+                )
             if arguments:
                 # Use the registered native handler so org ownership, caller
                 # consent, persistence and normal tool-result frames are shared
@@ -479,6 +479,11 @@ class _BookingToolChoiceMixin:
                     tool_call_id=f"confirmed_booking_{uuid4().hex}", arguments=arguments,
                 )])
                 return
+        if fast_booking_question:
+            # A complete caller-approved request must reach its registered
+            # action before incomplete-request intake asks another question.
+            await self._emit_direct_reply(fast_booking_question)
+            return
         self._completion_has_text = False
         self._completion_has_tool_calls = False
         try:
@@ -498,7 +503,7 @@ class _BookingToolChoiceMixin:
             # Keep the original error observable upstream, but give a caller
             # whose answer never started a normal transcript/TTS recovery.
             # Never append this to a partial answer or retry an external action.
-            if not self._completion_has_text:
+            if not self._completion_has_text and not self._completion_has_tool_calls:
                 await self._push_llm_text(self._completion_recovery_text(messages))
             raise
 
@@ -572,37 +577,20 @@ class _BookingToolChoiceMixin:
             and model.startswith(("qwen3:", "qwen3.5:"))
             and isinstance(messages, list)
         ):
-            # Suppress deep reasoning in local voice pipelines to prevent token starvation
+            # Ollama's OpenAI endpoint reads reasoning_effort and max_tokens.
+            # Native /api/chat fields (think, options.num_thread/num_ctx/
+            # num_predict) are silently ignored here. Thread/context tuning
+            # must be persisted in the selected Ollama model's parameters so
+            # native warm-up and OpenAI conversation requests use one runner.
             params["reasoning_effort"] = "none"
             extra_body = params.get("extra_body")
             params["extra_body"] = {
                 **(extra_body if isinstance(extra_body, dict) else {}),
-                "think": False,
-                "reasoning_effort": "none",
-                # The OpenAI adapter strips max_tokens when it is set to its
-                # NOT_GIVEN sentinel, which is the default for these models.
-                # Ollama accepts its native generation cap in the options body.
-                "options": {
-                    **(
-                        extra_body.get("options", {})
-                        if isinstance(extra_body, dict)
-                        and isinstance(extra_body.get("options"), dict)
-                        else {}
-                    ),
-                    # A 48-token cap cut a short appointment reply mid-thought
-                    # on the production CPU model. Allow a complete sentence
-                    # while retaining a bounded voice response.
-                    "num_predict": 80,
-                    "num_ctx": 4096,
-                    "num_thread": _local_ollama_num_threads(),
-                },
                 # Prevent multi-minute model reloads on the first caller turn.
                 # The OpenAI-compatible endpoint parses this as a Go duration;
                 # a bare "-1" is rejected there (native /api/chat accepts -1).
                 "keep_alive": "8760h",
             }
-            if params["extra_body"]["options"]["num_thread"] is None:
-                params["extra_body"]["options"].pop("num_thread")
             # Ollama's OpenAI-compatible streaming API sends input/output usage
             # in a final chunk when requested. The trace wrapper records these
             # counts without logging caller text, letting production distinguish
@@ -778,6 +766,15 @@ class _BookingToolChoiceMixin:
                 and isinstance(message.get("content"), str) else message
                 for message in params["messages"]
             ]
+        messages = params.get("messages")
+        if isinstance(messages, list) and getattr(self, "_kodewaves_local_ollama", False):
+            from api.services.pipecat.runtime_clock_context import CallerClockContext
+
+            if not hasattr(self, "_caller_clock_context"):
+                contact_state = getattr(self, "_contact_conversation_state", None)
+                state = contact_state.setdefault("_runtime_clock_context", {}) if isinstance(contact_state, dict) else None
+                self._caller_clock_context = CallerClockContext(state)
+            params["messages"] = self._caller_clock_context.apply(messages)
         # Preserve each recognized utterance's request-only language hint on
         # later turns. Removing old hints changes the prompt prefix and forces
         # CPU inference to reprocess conversation history unnecessarily.
@@ -793,6 +790,25 @@ class _BookingToolChoiceMixin:
             params["messages"] = self._caller_language_context.apply(
                 messages, getattr(self, "_caller_language_source", None)
             )
+        if getattr(self, "_kodewaves_local_ollama", False):
+            from api.services.workflow.contact_context import caller_state_instruction
+
+            messages = params.get("messages")
+            reminder = caller_state_instruction(
+                getattr(self, "_contact_conversation_state", None),
+                messages if isinstance(messages, list) else None,
+            )
+            if isinstance(messages, list):
+                from api.services.pipecat.caller_state_context import CallerStateContext
+
+                if not hasattr(self, "_caller_state_context"):
+                    self._caller_state_context = CallerStateContext()
+                params["messages"] = self._caller_state_context.apply(messages, reminder)
+        messages = params.get("messages")
+        if isinstance(messages, list) and not getattr(self, "_kodewaves_local_ollama", False):
+            from api.services.pipecat.runtime_clock_context import add_current_clock
+
+            params["messages"] = add_current_clock(messages)
         return params
 
 

@@ -1,6 +1,7 @@
 """Recording instructions and routing follow the same formatted node prompt."""
 
 from dataclasses import replace
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -94,3 +95,31 @@ async def test_routing_follows_node_prompt_across_transitions(
             router.push_frame.assert_awaited_once_with(frame, direction)
             fetch.assert_not_awaited()
         await router.process_frame(LLMFullResponseEndFrame(), direction)
+
+
+@pytest.mark.asyncio
+async def test_hindi_local_voice_adds_a_language_rule_to_each_agent_node(
+    three_node_workflow,
+):
+    llm = Mock()
+    llm._update_settings = AsyncMock()
+    engine = PipecatEngine(
+        workflow=three_node_workflow,
+        llm=llm,
+        call_context_vars={},
+    )
+    engine.active_agent.user_config = SimpleNamespace(
+        tts=SimpleNamespace(
+            provider="speaches", voice="hi_IN-pratham-medium", language=None
+        ),
+        stt=SimpleNamespace(language="multi"),
+    )
+
+    await engine._prepare_node(engine.active_agent, three_node_workflow.nodes["agent"])
+
+    assert "respond in Hindi" in engine.active_agent.system_prompt
+    assert "Devanagari" in engine.active_agent.system_prompt
+    assert (
+        llm._update_settings.call_args.args[0].system_instruction
+        == engine.active_agent.system_prompt
+    )

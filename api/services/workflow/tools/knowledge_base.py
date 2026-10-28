@@ -269,6 +269,7 @@ async def _perform_retrieval(
             # id. The Kodewaves-managed path forwards it via request metadata.
             embedding_service = await build_embedding_service(
                 db_client=db_client,
+                organization_id=organization_id,
                 provider=embeddings_provider,
                 api_key=embeddings_api_key,
                 model=embeddings_model,

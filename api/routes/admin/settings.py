@@ -1,11 +1,11 @@
 import os
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
-from sqlalchemy import select
+from pydantic import BaseModel, ValidationError
+from sqlalchemy.exc import SQLAlchemyError
 
 from api.db.kodewaves_client import kodewaves_db_client
-from api.db.kodewaves_models import GlobalPlatformSettingModel
+from api.schemas.branding import PlatformBranding
 from api.services.auth.depends import get_superuser
 from api.services.catalog.catalog_service import catalog_service
 from api.services.catalog.local_inventory import whisper_api_base
@@ -17,9 +17,12 @@ router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
 class PlatformSettingsResponse(BaseModel):
     company_name: str = "Kodewaves"
-    logo_url: Optional[str] = "/kodewaves-logo.png"
-    support_email: Optional[str] = "support@kodewaves.in"
-    primary_color: Optional[str] = "#4f46e5"
+    tagline: str = "Voice agents for web and phone"
+    favicon_url: str = ""
+    font: str = "geist"
+    logo_url: Optional[str] = ""
+    support_email: Optional[str] = ""
+    primary_color: Optional[str] = "#304c73"
     allow_user_byok: bool = False
     enforce_wallet_balance: bool = True
     enable_local_ai_engine: bool = False
@@ -58,16 +61,10 @@ class PiperDownloadRequest(BaseModel):
 @router.get("", response_model=PlatformSettingsResponse)
 async def get_all_platform_settings(_user=Depends(get_superuser)):
     """Retrieve all consolidated sovereign platform settings."""
-    settings_map: Dict[str, Any] = {}
     try:
-        async with kodewaves_db_client.get_session() as session:
-            stmt = select(GlobalPlatformSettingModel)
-            result = await session.execute(stmt)
-            records = result.scalars().all()
-            for r in records:
-                settings_map[r.key] = r.value
-    except Exception:
-        pass
+        settings_map = await kodewaves_db_client.get_settings_map()
+    except SQLAlchemyError as exc:
+        raise HTTPException(status_code=503, detail="Platform settings are unavailable. Retry before editing.") from exc
 
     branding = settings_map.get("branding") or {}
     byok = settings_map.get("byok_policy") or {}
@@ -87,9 +84,12 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
 
     return PlatformSettingsResponse(
         company_name=branding.get("company_name", "Kodewaves"),
-        logo_url=branding.get("logo_url", "/kodewaves-logo.png"),
-        support_email=branding.get("support_email", "support@kodewaves.in"),
-        primary_color=branding.get("primary_color", "#4f46e5"),
+        tagline=branding.get("tagline", "Voice agents for web and phone"),
+        favicon_url=branding.get("favicon_url", ""),
+        font=branding.get("font", "geist"),
+        logo_url=branding.get("logo_url", ""),
+        support_email=branding.get("support_email", ""),
+        primary_color=branding.get("primary_color", "#304c73"),
         allow_user_byok=byok.get("allow_user_byok", False),
         enforce_wallet_balance=wallet.get("enforce_wallet_balance", True),
         enable_local_ai_engine=local_ai.get("enable_local_ai_engine", local_ai.get("enabled", False)),
@@ -119,74 +119,71 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
 @router.post("")
 async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_superuser)):
     """Update global platform configuration (Branding, BYOK policy, SMTP, Payments, Local AI)."""
-    # If standard PlatformSettings dictionary is submitted:
-    if "company_name" in payload or "allow_user_byok" in payload or "smtp_host" in payload or "enable_local_ai_engine" in payload or "razorpay_key_id" in payload:
+    smtp_fields = {"smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from"}
+    local_ai_fields = {
+        "enable_local_ai_engine", "local_ai_access_policy", "ollama_endpoint",
+        "piper_endpoint", "whisper_endpoint", "indic_vits_tts_endpoint",
+        "local_ai_max_concurrency",
+    }
+    payment_fields = {
+        "razorpay_key_id", "razorpay_key_secret", "stripe_publishable_key",
+        "stripe_secret_key",
+    }
+    structured_fields = (
+        set(PlatformBranding.model_fields) | smtp_fields | local_ai_fields |
+        payment_fields | {"allow_user_byok", "enforce_wallet_balance", "s2s_multiplier",
+                          "default_org_concurrency_limit", "max_concurrent_calls"}
+    )
+    if structured_fields.intersection(payload):
         # 1. Branding
-        branding = {
-            "company_name": payload.get("company_name", "Kodewaves"),
-            "logo_url": payload.get("logo_url", "/kodewaves-logo.png"),
-            "support_email": payload.get("support_email", "support@kodewaves.in"),
-            "primary_color": payload.get("primary_color", "#4f46e5"),
-        }
-        await kodewaves_db_client.set_setting(key="branding", value=branding, category="branding")
+        if any(key in payload for key in PlatformBranding.model_fields):
+            existing_branding = await kodewaves_db_client.get_setting("branding") or {}
+            try:
+                branding = PlatformBranding.model_validate({
+                    **existing_branding,
+                    **{key: value for key, value in payload.items() if key in PlatformBranding.model_fields},
+                }).model_dump()
+            except ValidationError as exc:
+                raise HTTPException(status_code=422, detail="Invalid branding settings: " + str(exc)) from exc
+            await kodewaves_db_client.set_setting(key="branding", value=branding, category="branding")
 
         # 2. BYOK Policy
-        byok = {
-            "allow_user_byok": bool(payload.get("allow_user_byok", False)),
-        }
-        await kodewaves_db_client.set_setting(key="byok_policy", value=byok, category="policy")
+        if "allow_user_byok" in payload:
+            byok = {"allow_user_byok": bool(payload["allow_user_byok"])}
+            await kodewaves_db_client.set_setting(key="byok_policy", value=byok, category="policy")
 
         # 3. Wallet Policy
-        wallet = {
-            "enforce_wallet_balance": bool(payload.get("enforce_wallet_balance", True)),
-        }
-        await kodewaves_db_client.set_setting(key="wallet_policy", value=wallet, category="policy")
+        if "enforce_wallet_balance" in payload:
+            wallet = {"enforce_wallet_balance": bool(payload["enforce_wallet_balance"])}
+            await kodewaves_db_client.set_setting(key="wallet_policy", value=wallet, category="policy")
 
         # 4. SMTP Settings
-        if payload.get("smtp_host"):
-            existing_smtp = await kodewaves_db_client.get_setting("smtp") or {}
-            smtp_pass = payload.get("smtp_password")
-            if smtp_pass and smtp_pass.startswith("••••••••"):
-                smtp_pass = existing_smtp.get("smtp_password")
-            smtp = {
-                "smtp_host": payload.get("smtp_host"),
-                "smtp_port": payload.get("smtp_port", 587),
-                "smtp_user": payload.get("smtp_user"),
-                "smtp_password": smtp_pass,
-                "smtp_from": payload.get("smtp_from"),
-            }
+        if smtp_fields.intersection(payload):
+            smtp = await kodewaves_db_client.get_setting("smtp") or {}
+            for key in smtp_fields.intersection(payload):
+                value = payload[key]
+                if key == "smtp_password" and isinstance(value, str) and value.startswith("••••••••"):
+                    continue
+                smtp[key] = value
             await kodewaves_db_client.set_setting(key="smtp", value=smtp, category="smtp")
 
         # 5. Local AI Engine Settings
-        local_ai = {
-            "enable_local_ai_engine": bool(payload.get("enable_local_ai_engine", False)),
-            "local_ai_access_policy": payload.get("local_ai_access_policy", "public"),
-            "ollama_endpoint": payload.get("ollama_endpoint", "http://ollama:11434"),
-            "piper_endpoint": payload.get("piper_endpoint", "http://piper:5000"),
-            "whisper_endpoint": payload.get("whisper_endpoint", "http://whisper:8000/v1"),
-            "indic_vits_tts_endpoint": payload.get(
-                "indic_vits_tts_endpoint", "http://indic-vits-tts:8000/v1"
-            ),
-            "local_ai_max_concurrency": int(payload.get("local_ai_max_concurrency", 2)),
-        }
-        await kodewaves_db_client.set_setting(key="local_ai", value=local_ai, category="local_ai")
+        if local_ai_fields.intersection(payload):
+            local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+            local_ai.update({key: payload[key] for key in local_ai_fields.intersection(payload)})
+            if "local_ai_max_concurrency" in local_ai:
+                local_ai["local_ai_max_concurrency"] = int(local_ai["local_ai_max_concurrency"])
+            await kodewaves_db_client.set_setting(key="local_ai", value=local_ai, category="local_ai")
 
         # 6. Payment Gateways
-        existing_payments = await kodewaves_db_client.get_setting("payments") or {}
-        rp_secret = payload.get("razorpay_key_secret")
-        if rp_secret and rp_secret.startswith("••••••••"):
-            rp_secret = existing_payments.get("razorpay_key_secret")
-        st_secret = payload.get("stripe_secret_key")
-        if st_secret and st_secret.startswith("••••••••"):
-            st_secret = existing_payments.get("stripe_secret_key")
-
-        payments = {
-            "razorpay_key_id": payload.get("razorpay_key_id"),
-            "razorpay_key_secret": rp_secret if rp_secret is not None else existing_payments.get("razorpay_key_secret"),
-            "stripe_publishable_key": payload.get("stripe_publishable_key"),
-            "stripe_secret_key": st_secret if st_secret is not None else existing_payments.get("stripe_secret_key"),
-        }
-        await kodewaves_db_client.set_setting(key="payments", value=payments, category="payments")
+        if payment_fields.intersection(payload):
+            payments = await kodewaves_db_client.get_setting("payments") or {}
+            for key in payment_fields.intersection(payload):
+                value = payload[key]
+                if key in {"razorpay_key_secret", "stripe_secret_key"} and isinstance(value, str) and value.startswith("••••••••"):
+                    continue
+                payments[key] = value
+            await kodewaves_db_client.set_setting(key="payments", value=payments, category="payments")
 
         # 7. Pricing & S2S Multiplier
         if "s2s_multiplier" in payload:
@@ -231,6 +228,11 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
     value = payload.get("value")
     category = payload.get("category", "general")
     if key and value is not None:
+        if key == "branding":
+            try:
+                value = PlatformBranding.model_validate(value).model_dump()
+            except ValidationError as exc:
+                raise HTTPException(status_code=422, detail="Invalid branding settings") from exc
         await kodewaves_db_client.set_setting(key=key, value=value, category=category)
         await catalog_service.notify_changed()
         return {"message": f"Successfully updated setting '{key}'"}

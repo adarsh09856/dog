@@ -2,13 +2,71 @@ import asyncio
 import time
 from dataclasses import dataclass
 
+from fastapi import HTTPException
 from loguru import logger
 
-from api.constants import DEFAULT_ORG_CONCURRENCY_LIMIT
+from api.constants import DEFAULT_ORG_CONCURRENCY_LIMIT, KODEWAVES_EDITION
 from api.db import db_client
 from api.enums import OrganizationConfigurationKey, PostHogEvent
 from api.services.call_concurrency.rate_limiter import rate_limiter
+from api.services.installation_license import (
+    InstallationLicenseError,
+    load_license,
+    require_feature,
+    require_limit,
+    validate_installation_license,
+)
+from api.services.owner_installation_status import require_current_owner_status
 from api.services.posthog_client import capture_event
+from api.services.saas_entitlements import enforce_saas_feature, get_org_saas_limit
+
+
+def _licensed_call_limit(source: str) -> int | None:
+    """Load signed client entitlements for every new call admission."""
+    if KODEWAVES_EDITION != "client":
+        return None
+    license_data = load_license()
+    validate_installation_license(license_data)
+    require_feature(license_data, "voice")
+    if source.startswith("campaign:"):
+        require_feature(license_data, "campaigns")
+        require_feature(license_data, "telephony")
+    elif source.startswith(("inbound:", "inbound_legacy:", "telephony_", "agent_stream:")) or source in {
+        "ari_inbound",
+        "public_agent",
+    }:
+        require_feature(license_data, "telephony")
+    elif source == "public_embed":
+        require_feature(license_data, "widgets")
+    return require_limit(license_data, "max_concurrent_calls")
+
+
+async def authorize_call_entitlement(
+    source: str, *, organization_id: int | None = None
+) -> int | None:
+    """Recheck a client's call grant and owner status immediately before dialing."""
+    if organization_id is not None:
+        feature = (
+            "campaigns" if source.startswith("campaign:")
+            else "widgets" if source == "public_embed"
+            else None
+        )
+        if feature:
+            try:
+                await enforce_saas_feature(organization_id, feature)
+            except HTTPException as exc:
+                raise CallConcurrencyLimitError(
+                    organization_id=organization_id, source=source,
+                    wait_time=0.0, max_concurrent=0,
+                ) from exc
+    try:
+        client_max = _licensed_call_limit(source)
+        if client_max is not None:
+            await require_current_owner_status(load_license())
+    except InstallationLicenseError as exc:
+        logger.warning("Client installation license denied new call: {}", exc)
+        raise
+    return client_max
 
 
 @dataclass(frozen=True)
@@ -55,8 +113,18 @@ class CallConcurrencyService:
     def __init__(self):
         self.default_concurrent_limit = int(DEFAULT_ORG_CONCURRENCY_LIMIT)
 
-    async def get_org_concurrent_limit(self, organization_id: int) -> int:
+    async def get_org_concurrent_limit(
+        self, organization_id: int, *, include_saas_plan: bool = True
+    ) -> int:
         """Get the concurrent call limit for an organization."""
+        limits: list[int] = []
+        if include_saas_plan and KODEWAVES_EDITION != "client":
+            # Plan lookup is an entitlement check. Do not silently fall back to a
+            # larger platform default if the entitlement store is unavailable.
+            limit = await get_org_saas_limit(organization_id, "max_concurrent_calls")
+            if limit is not None:
+                limits.append(limit)
+
         try:
             config = await db_client.get_configuration(
                 organization_id,
@@ -65,21 +133,25 @@ class CallConcurrencyService:
             if config and config.value:
                 value = config.value.get("value")
                 if value is not None:
-                    return int(value)
+                    limits.append(max(0, int(value)))
         except Exception as e:
             logger.warning(
                 f"Error getting concurrent limit for org {organization_id}: {e}"
             )
 
-        try:
-            from api.db.kodewaves_client import kodewaves_db_client
-            conc_setting = await kodewaves_db_client.get_setting("concurrency")
-            if conc_setting and conc_setting.get("default_org_concurrency_limit"):
-                return int(conc_setting["default_org_concurrency_limit"])
-        except Exception:
-            pass
+        if not limits:
+            try:
+                from api.db.kodewaves_client import kodewaves_db_client
 
-        return self.default_concurrent_limit
+                conc_setting = await kodewaves_db_client.get_setting("concurrency") or {}
+                value = conc_setting.get("default_org_concurrency_limit")
+                if value is not None:
+                    limits.append(max(0, int(value)))
+            except Exception:
+                pass
+            if not limits:
+                limits.append(self.default_concurrent_limit)
+        return min(limits)
 
     async def get_fleet_active_calls(self) -> int:
         """Total active calls across every org — the fleet-wide autoscaling
@@ -120,6 +192,17 @@ class CallConcurrencyService:
         concurrency without measuring — or being starved by — unrelated calls
         in the same org.
         """
+        try:
+            client_max = await authorize_call_entitlement(
+                source, organization_id=organization_id
+            )
+        except InstallationLicenseError as exc:
+            raise CallConcurrencyLimitError(
+                organization_id=organization_id,
+                source=source,
+                wait_time=0.0,
+                max_concurrent=0,
+            ) from exc
         # Enforce fleet-wide platform limit
         try:
             from api.db.kodewaves_client import kodewaves_db_client
@@ -127,6 +210,8 @@ class CallConcurrencyService:
             fleet_max = int(conc_setting.get("max_concurrent_calls", 50)) if conc_setting else 50
         except Exception:
             fleet_max = 50
+        if client_max is not None:
+            fleet_max = min(fleet_max, client_max)
 
         try:
             fleet_count = await self.get_fleet_active_calls()
@@ -143,6 +228,14 @@ class CallConcurrencyService:
         except CallConcurrencyLimitError:
             raise
         except Exception as e:
+            if client_max is not None:
+                logger.warning("Client installation fleet admission is unavailable: {}", e)
+                raise CallConcurrencyLimitError(
+                    organization_id=organization_id,
+                    source=source,
+                    wait_time=0.0,
+                    max_concurrent=fleet_max,
+                ) from e
             logger.debug(f"Fleet active count check skipped: {e}")
 
         # Enforce local AI concurrency limit if local source
@@ -155,17 +248,26 @@ class CallConcurrencyService:
             except Exception:
                 scope_max_concurrent = 2
 
-        max_concurrent = await self.get_org_concurrent_limit(organization_id)
+        max_concurrent = await self.get_org_concurrent_limit(
+            organization_id, include_saas_plan=client_max is None
+        )
+        if client_max is not None:
+            max_concurrent = min(max_concurrent, client_max)
         if scope_max_concurrent is not None:
             scope_max_concurrent = int(scope_max_concurrent)
 
         wait_start = time.time()
         while True:
+            admission_kwargs = {
+                "scope_key": scope_key,
+                "scope_max_concurrent": scope_max_concurrent,
+            }
+            if client_max is not None:
+                admission_kwargs["fleet_max_concurrent"] = fleet_max
             acquisition = await rate_limiter.try_acquire_concurrent_slot_details(
                 organization_id,
                 max_concurrent,
-                scope_key=scope_key,
-                scope_max_concurrent=scope_max_concurrent,
+                **admission_kwargs,
             )
             if acquisition:
                 logger.info(

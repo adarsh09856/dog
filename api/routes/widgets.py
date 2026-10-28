@@ -10,6 +10,7 @@ from api.db import widgets as widget_db
 from api.db.models import UserModel
 from api.routes.workflow_embed import generate_embed_script
 from api.services.auth.depends import get_user
+from api.services.saas_entitlements import enforce_saas_feature, require_saas_feature
 
 router = APIRouter(prefix="/widgets", tags=["widgets"])
 
@@ -103,7 +104,7 @@ def _widget_values(req, creating):
     return values
 
 
-@router.get("", response_model=list[WidgetItem])
+@router.get("", response_model=list[WidgetItem], dependencies=[Depends(require_saas_feature("widgets"))])
 async def list_widgets(user: UserModel = Depends(get_user)):
     if not user.selected_organization_id:
         return []
@@ -113,7 +114,7 @@ async def list_widgets(user: UserModel = Depends(get_user)):
     ]
 
 
-@router.get("/{widget_id}", response_model=WidgetItem)
+@router.get("/{widget_id}", response_model=WidgetItem, dependencies=[Depends(require_saas_feature("widgets"))])
 async def get_widget(widget_id: str, user: UserModel = Depends(get_user)):
     row = await widget_db.get_widget(_organization_id(user), widget_id)
     if row is None:
@@ -151,19 +152,19 @@ async def _save_widget(req, user, widget_id=None):
     }
 
 
-@router.post("", response_model=dict[str, Any])
+@router.post("", response_model=dict[str, Any], dependencies=[Depends(require_saas_feature("widgets"))])
 async def create_widget(req: WidgetCreateRequest, user: UserModel = Depends(get_user)):
     return await _save_widget(req, user)
 
 
-@router.put("/{widget_id}", response_model=dict[str, Any])
+@router.put("/{widget_id}", response_model=dict[str, Any], dependencies=[Depends(require_saas_feature("widgets"))])
 async def update_widget(
     widget_id: str, req: WidgetCreateRequest, user: UserModel = Depends(get_user)
 ):
     return await _save_widget(req, user, widget_id)
 
 
-@router.delete("/{widget_id}", response_model=dict[str, Any])
+@router.delete("/{widget_id}", response_model=dict[str, Any], dependencies=[Depends(require_saas_feature("widgets"))])
 async def delete_widget(widget_id: str, user: UserModel = Depends(get_user)):
     try:
         await widget_db.delete_widget(_organization_id(user), widget_id)
@@ -180,6 +181,7 @@ async def get_public_widget_config(widget_id: str):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if widget is None:
         raise HTTPException(status_code=404, detail="Widget not found or disabled")
+    await enforce_saas_feature(widget.organization_id, "widgets")
     return {
         "id": str(widget.id),
         "workflow_id": widget.workflow_id,

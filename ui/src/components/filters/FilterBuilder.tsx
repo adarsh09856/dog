@@ -460,7 +460,7 @@ export const FilterBuilder: React.FC<FilterBuilderProps> = ({
                     Auto-refresh every 5s
                   </label>
                   {autoRefresh && (
-                    <RefreshCw className="h-4 w-4 text-gray-500 animate-spin" />
+                    <RefreshCw className="h-4 w-4 text-muted-foreground animate-spin" />
                   )}
                 </div>
               )}

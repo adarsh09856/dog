@@ -121,7 +121,10 @@ class CallerLanguageContext:
                         "do not repeat questions already answered."
                     ))
 
-        detected = getattr(source, "latest_detected_language", None)
+        # Keep raw STT metadata, but guide replies using an installed TTS language.
+        detected = getattr(source, "latest_tts_language", None)
+        if not detected:
+            detected = getattr(source, "latest_detected_language", None)
         detected_text = getattr(source, "latest_detected_text", None)
         if (
             users and users[-1][0] == len(messages) - 1

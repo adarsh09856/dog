@@ -48,7 +48,7 @@ export function CaptchaChallenge({
     <div className="lead-form-slab relative w-full max-w-xs overflow-hidden rounded-xl border border-border/70 bg-card shadow-2xl">
       <div className="lead-form-underline relative space-y-4 p-5">
         <div className="flex items-start gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-cta/25 bg-cta/10 text-cta">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-cta/25 bg-cta/10 text-cta-text">
             <ShieldCheck className="size-4" />
           </span>
           <div className="space-y-1">

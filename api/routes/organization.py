@@ -635,10 +635,39 @@ async def save_model_configuration_v2(
             organization_id=organization_id,
             created_by=user.provider_id,
         )
-        from api.services.configuration.kodewaves_resolver import (
-            require_explicit_indic_stt_language,
-        )
-        require_explicit_indic_stt_language(effective.stt.model, effective.stt.language)
+        managed = configuration.kodewaves or configuration.dograh
+        if (
+            configuration.mode in ("kodewaves", "dograh")
+            and managed is not None
+            and effective.stt is not None
+            and (
+                managed.stt_engine_type == "local_cpu"
+                or getattr(effective.stt, "api_key", None) in ("sovereign-local-cpu", "local-cpu-token")
+            )
+            and (
+                str(effective.stt.model or "default").casefold() in {"default", "indicconformer-ctc-int8"}
+                or str(effective.stt.model).casefold().startswith(
+                    ("systran/faster-whisper", "faster-whisper", "faster-distil-whisper")
+                )
+            )
+        ):
+            import os
+            import aiohttp
+            from api.services.catalog.local_inventory import get_local_stt_models, whisper_api_base
+            from api.services.configuration.stt_capabilities import local_stt_language_error
+            from api.utils.common import normalize_local_ai_endpoint
+
+            local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+            endpoint = local_ai.get("indic_stt_endpoint") or os.environ.get(
+                "INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"
+            )
+            try:
+                models = await get_local_stt_models(whisper_api_base(normalize_local_ai_endpoint(endpoint)))
+            except (aiohttp.ClientError, TimeoutError) as exc:
+                raise HTTPException(status_code=503, detail="Local Indic STT inventory is unavailable") from exc
+            error = local_stt_language_error(effective.stt.language, models.get("indicconformer-ctc-int8", {}))
+            if error:
+                raise HTTPException(status_code=400, detail=error)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=exc.args[0])
 
