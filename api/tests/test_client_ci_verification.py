@@ -233,6 +233,18 @@ def test_ci_rejects_floating_ingress_image_before_building(verifier, monkeypatch
         verifier.verify("caddy:latest", tmp_path / "evidence.json")
 
 
+def test_ci_expands_official_caddy_digest_for_installer(verifier):
+    digest = "a" * 64
+    assert verifier.normalize_caddy_image("caddy@sha256:" + digest) == (
+        "docker.io/library/caddy@sha256:" + digest
+    )
+    assert verifier.normalize_caddy_image("registry.example.com/ingress/caddy@sha256:" + digest) == (
+        "registry.example.com/ingress/caddy@sha256:" + digest
+    )
+    with pytest.raises(ValueError, match="full registry path"):
+        verifier.normalize_caddy_image("other@sha256:" + digest)
+
+
 def test_ci_does_not_reuse_a_stale_success_report(verifier, monkeypatch, tmp_path):
     report = tmp_path / "evidence.json"
     report.write_text("old result")

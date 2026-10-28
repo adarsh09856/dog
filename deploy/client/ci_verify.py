@@ -19,7 +19,16 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 import yaml
 
-from validate_install import validate as validate_client_install
+from validate_install import PINNED_IMAGE, validate as validate_client_install
+
+
+def normalize_caddy_image(image: str) -> str:
+    """Expand Docker Hub's official-image shorthand before installer validation."""
+    if re.fullmatch(r"caddy@sha256:[0-9a-f]{64}", image):
+        image = "docker.io/library/" + image
+    if not PINNED_IMAGE.fullmatch(image):
+        raise ValueError("Caddy image must use an approved immutable sha256 digest and full registry path")
+    return image
 
 
 def _temporary_keypair(directory: Path, name: str) -> tuple[Path, Path]:
@@ -220,8 +229,7 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> N
 
 
 def verify(caddy_image: str, report: Path) -> None:
-    if not re.fullmatch(r"[^@]+@sha256:[0-9a-f]{64}", caddy_image):
-        raise ValueError("Caddy image must use an approved immutable sha256 digest")
+    caddy_image = normalize_caddy_image(caddy_image)
     if report.exists():
         raise ValueError("Report already exists; use a new path for fresh verification")
     root = Path(__file__).resolve().parents[2]
