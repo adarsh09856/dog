@@ -21,7 +21,7 @@ def package_inputs(monkeypatch, tmp_path):
     root = tmp_path / "source"
     directory = root / "deploy/client"
     directory.mkdir(parents=True)
-    for name in ("INSTALL.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "Caddyfile", "validate_install.py", "recovery.py", "enroll_identity.py", ".env.example"):
+    for name in ("INSTALL.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "docker-compose.recovery.yaml", "Caddyfile", "validate_install.py", "recovery.py", "compose_client.py", "enroll_identity.py", ".env.example"):
         shutil.copy2(repository / "deploy/client" / name, directory / name)
     (directory / ".env").write_text("KODEWAVES_LICENSE_TOKEN=customer-secret")
     (root / "owner-tools").mkdir()
@@ -65,17 +65,17 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
 
     with tarfile.open(output, "r:gz") as archive:
         assert set(archive.getnames()) == {
-            "README.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "Caddyfile", "validate_install.py", "enroll_identity.py",
-            "recovery.py", ".env.example", "client-release-manifest.json", "release-public-key.txt", "SHA256SUMS",
+            "README.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "docker-compose.recovery.yaml", "Caddyfile", "validate_install.py", "enroll_identity.py",
+            "recovery.py", "compose_client.py", ".env.example", "client-release-manifest.json", "release-public-key.txt", "SHA256SUMS",
         }
         contents = {name: archive.extractfile(name).read() for name in archive.getnames()}
         assert archive.getmember(".env.example").mode == 0o600
     install_guide = contents["README.md"].decode("utf-8")
-    assert "docker compose -f docker-compose.client.yaml pull api" in install_guide
+    assert "python3 compose_client.py pull api" in install_guide
     start_section = install_guide.split("## Start and create the administrator", 1)[1].split("## Renewal and recovery", 1)[0]
-    compose_commands = [line.strip() for line in start_section.splitlines() if line.strip().startswith("docker compose")]
+    compose_commands = [line.strip() for line in start_section.splitlines() if line.strip().startswith("python3 compose_client.py")]
     assert compose_commands
-    assert all("-f docker-compose.identity.yaml" in command for command in compose_commands)
+    assert all("compose_client.py" in command for command in compose_commands)
     assert b"customer-secret" not in b"".join(contents.values())
     assert b"private-key-must-never-ship" not in b"".join(contents.values())
     assert b"owner-signer-must-never-ship" not in b"".join(contents.values())
@@ -115,8 +115,20 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
         cwd=extracted, capture_output=True, text=True, check=False,
     )
     assert recovery_help.returncode == 0, recovery_help.stderr
-    assert "{validate,create,restore}" in recovery_help.stdout
+    assert "backup-docker" in recovery_help.stdout
+    assert "rollback-docker" in recovery_help.stdout
+    restore_help = subprocess.run(
+        [sys.executable, "-I", "-S", "recovery.py", "restore", "--help"],
+        cwd=extracted, capture_output=True, text=True, check=False,
+    )
+    assert restore_help.returncode == 0, restore_help.stderr
+    assert "--docker-volumes" in restore_help.stdout
     assert "new offline directory" in recovery_help.stdout
+    compose_help = subprocess.run(
+        [sys.executable, "-I", "-S", "compose_client.py", "--help"],
+        cwd=extracted, capture_output=True, text=True, check=False,
+    )
+    assert compose_help.returncode == 0, compose_help.stderr
 
 
 def test_customer_archive_is_reproducible_for_identical_release_inputs(package_inputs, monkeypatch):

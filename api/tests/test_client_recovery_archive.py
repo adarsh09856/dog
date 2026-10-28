@@ -29,6 +29,7 @@ def _archive(path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str
         b"KODEWAVES_INSTALLATION_ID=customer-123\n"
         b"CLIENT_IDENTITY_KEY_FILE=/secure/identity.key\n"
         b"CLIENT_IDENTITY_GID=1234\n"
+        b"CLIENT_RELEASE_MANIFEST_FILE=./client-release-manifest.json\n"
         b"KODEWAVES_LICENSE_TOKEN=payload.signature\n"
         b"CLIENT_API_IMAGE=registry.example.com/kodewaves/api@sha256:"
         + b"a" * 64 + b"\nCLIENT_UI_IMAGE=registry.example.com/kodewaves/ui@sha256:"
@@ -122,6 +123,7 @@ def _create_archive_inputs(tmp_path: Path) -> dict[str, Path]:
     public_key.write_bytes(files["config/release-public-key.txt"])
     identity = tmp_path / "identity.key"
     identity.write_bytes(b"k" * 32)
+    env.write_bytes(env.read_bytes().replace(b"/secure/identity.key", str(identity.resolve()).encode()))
     if os.name != "nt":
         os.chmod(identity, 0o640)
         try:

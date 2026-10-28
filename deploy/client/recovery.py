@@ -18,9 +18,15 @@ import os
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import tarfile
+import tempfile
+import uuid
 from pathlib import Path, PurePosixPath
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from validate_install import parse_env
 
 REQUIRED_FILES = {
     "recovery.json",
@@ -37,6 +43,9 @@ MAX_METADATA_SIZE = 1024 * 1024
 MAX_ARCHIVE_SIZE = 1024 * 1024 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 10_000
 HASH_CHUNK_SIZE = 1024 * 1024
+MAX_DOCKER_TIMEOUT = 3600
+RECOVERY_OVERRIDE = "docker-compose.recovery.yaml"
+RECOVERY_STATE_DIR = ".client-recovery-state"
 
 
 def _validate_member_name(name: str) -> None:
@@ -395,6 +404,540 @@ def create_archive(
         raise
 
 
+def _run(command: list[str], *, cwd: Path, timeout: int = 120) -> str:
+    configured: set[str] = set()
+    if command[:2] == ["docker", "compose"] and "--env-file" in command:
+        env_index = command.index("--env-file")
+        if env_index + 1 < len(command):
+            configured = set(parse_env(Path(command[env_index + 1])))
+    command_env = {
+        key: value for key, value in os.environ.items()
+        if key not in configured and key not in {
+            "COMPOSE_PROJECT_NAME", "COMPOSE_PROFILES", "COMPOSE_FILE",
+            "COMPOSE_ENV_FILES", "COMPOSE_PATH_SEPARATOR",
+        }
+    }
+    try:
+        result = subprocess.run(
+            command, cwd=cwd, capture_output=True, text=True,
+            timeout=timeout, check=False, env=command_env,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Recovery command could not complete: {command[0]} {command[1]}") from exc
+    if result.returncode:
+        raise RuntimeError(
+            f"Recovery command failed: {Path(command[0]).name} {command[1]} (exit {result.returncode})"
+        )
+    return result.stdout.strip()
+
+
+def _compose_context(compose_dir: Path, env_file: Path) -> tuple[list[str], dict[str, object], dict[str, str]]:
+    compose_dir = compose_dir.resolve(strict=True)
+    env_file = env_file.resolve(strict=True)
+    env = parse_env(env_file)
+    compose_files = ["docker-compose.client.yaml"]
+    if env.get("CLIENT_IDENTITY_KEY_FILE"):
+        compose_files.append("docker-compose.identity.yaml")
+    compose_files.append(RECOVERY_OVERRIDE)
+    from compose_client import _project_name
+
+    project_name = _project_name(compose_dir, env)
+    for name in compose_files:
+        path = compose_dir / name
+        if not path.is_file():
+            raise ValueError(f"Compose file is missing: {name}")
+    command = [
+        "docker", "compose", "--project-directory", str(compose_dir),
+        "--project-name", project_name, "--env-file", str(env_file),
+    ]
+    for name in compose_files:
+        command.extend(("-f", str(compose_dir / name)))
+    rendered = json.loads(_run([*command, "config", "--format", "json"], cwd=compose_dir))
+    return command, rendered, env
+
+
+def _running_services(compose_command: list[str], compose_dir: Path, services: set[str]) -> list[str]:
+    output = _run(
+        [*compose_command, "ps", "--services", "--status", "running"],
+        cwd=compose_dir,
+    )
+    running = sorted(set(output.splitlines()) & services)
+    return running
+
+
+def _compose_volume_names(compose_model: dict[str, object]) -> dict[str, str]:
+    volumes = compose_model.get("volumes")
+    if not isinstance(volumes, dict):
+        raise ValueError("Compose configuration does not declare named volumes")
+    resolved = {}
+    for logical_name in ("postgres_data", "minio_data", "redis_data"):
+        item = volumes.get(logical_name)
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"]:
+            raise ValueError(f"Compose did not resolve the {logical_name} volume name")
+        resolved[logical_name] = item["name"]
+    return resolved
+
+
+def _atomic_write(path: Path, content: bytes, *, mode: int | None = None) -> None:
+    existing = path.stat() if path.exists() else None
+    if mode is None:
+        mode = stat.S_IMODE(existing.st_mode) if existing else 0o600
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as destination:
+            destination.write(content)
+            destination.flush()
+            os.fsync(destination.fileno())
+            if os.name != "nt":
+                os.fchmod(destination.fileno(), mode)
+                if existing is not None and os.geteuid() == 0:
+                    os.fchown(destination.fileno(), existing.st_uid, existing.st_gid)
+        os.replace(temporary, path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _update_env_value(content: bytes, key: str, value: str) -> bytes:
+    text = content.decode("utf-8")
+    lines = text.splitlines(keepends=True)
+    replaced = False
+    for index, raw in enumerate(lines):
+        line = raw.strip()
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if "=" in line and line.split("=", 1)[0].strip() == key:
+            ending = "\r\n" if raw.endswith("\r\n") else "\n" if raw.endswith("\n") else ""
+            lines[index] = f"{key}={value}{ending}"
+            replaced = True
+            break
+    if not replaced:
+        if lines and not lines[-1].endswith(("\n", "\r")):
+            lines[-1] += "\n"
+        lines.append(f"{key}={value}\n")
+    return "".join(lines).encode("utf-8")
+
+
+def _recovery_override(volume_names: dict[str, str]) -> bytes:
+    selected = {
+        logical: {"external": True, "name": name}
+        for logical, name in volume_names.items()
+    }
+    return (json.dumps({"volumes": selected}, sort_keys=True, indent=2) + "\n").encode()
+
+
+def _get_volume_image(env: dict[str, str]) -> str:
+    image = env.get("CLIENT_POSTGRES_IMAGE", "")
+    if not re.fullmatch(r"[^\s@]+@sha256:[0-9a-f]{64}", image):
+        raise ValueError("CLIENT_POSTGRES_IMAGE must be an approved immutable digest for safe volume operations")
+    return image
+
+
+def _docker_volume_exists(name: str, compose_dir: Path) -> bool:
+    result = subprocess.run(
+        ["docker", "volume", "inspect", name], cwd=compose_dir,
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    if result.returncode == 0:
+        return True
+    if "no such volume" in (result.stderr or "").lower():
+        return False
+    raise RuntimeError("Docker volume availability could not be checked safely")
+
+
+def _assert_no_running_volume_consumers(names: list[str], compose_dir: Path) -> None:
+    for name in names:
+        output = _run(
+            ["docker", "ps", "--quiet", "--filter", f"volume={name}"],
+            cwd=compose_dir,
+        )
+        if output:
+            raise ValueError(
+                f"Refusing a cold snapshot: one or more running containers still mount volume {name}"
+            )
+
+
+def _create_volume(name: str, compose_dir: Path, recovery_id: str) -> None:
+    if _docker_volume_exists(name, compose_dir):
+        raise ValueError(f"Recovery volume already exists; refusing to reuse: {name}")
+    _run(
+        ["docker", "volume", "create", "--label", f"com.kodewaves.recovery={recovery_id}", name],
+        cwd=compose_dir,
+    )
+
+
+def _remove_owned_recovery_volumes(names: list[str], compose_dir: Path, recovery_id: str) -> list[str]:
+    """Remove only volumes whose recovery label proves this run created them."""
+    removed: list[str] = []
+    for name in names:
+        result = subprocess.run(
+            ["docker", "volume", "inspect", name], cwd=compose_dir,
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        if result.returncode:
+            if "no such volume" in (result.stderr or "").lower():
+                continue
+            raise RuntimeError(f"Could not verify recovery volume ownership: {name}")
+        try:
+            inspected = json.loads(result.stdout)
+            labels = inspected[0].get("Labels") or {}
+        except (ValueError, IndexError, TypeError, AttributeError) as exc:
+            raise RuntimeError(f"Could not verify recovery volume ownership: {name}") from exc
+        if labels.get("com.kodewaves.recovery") != recovery_id:
+            raise RuntimeError(f"Refusing to remove a volume without this recovery label: {name}")
+        _run(["docker", "volume", "rm", name], cwd=compose_dir)
+        removed.append(name)
+    return removed
+
+
+def _volume_tar_command(
+    *, image: str, volume_name: str, host_directory: Path, archive_name: str,
+    compose_dir: Path, extract: bool,
+) -> None:
+    source_path = host_directory / archive_name
+    if extract:
+        cmd = (
+            "set -eu; command -v tar >/dev/null; "
+            f"tar --numeric-owner -C /target -xf /snapshot/{archive_name}"
+        )
+        mounts = [
+            "type=volume,src=" + volume_name + ",dst=/target",
+            "type=bind,src=" + str(host_directory.resolve()) + ",dst=/snapshot,readonly",
+        ]
+    else:
+        cmd = (
+            "set -eu; command -v tar >/dev/null; "
+            f"tar --numeric-owner -C /source -cf /snapshot/{archive_name} ."
+        )
+        mounts = [
+            "type=volume,src=" + volume_name + ",dst=/source,readonly",
+            "type=bind,src=" + str(host_directory.resolve()) + ",dst=/snapshot",
+        ]
+    command = [
+        "docker", "run", "--rm", "--pull=never", "--network=none", "--user=0:0",
+        "--entrypoint", "/bin/sh",
+    ]
+    for mount in mounts:
+        command.extend(("--mount", mount))
+    command.extend((image, "-ec", cmd))
+    _run(command, cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
+
+
+def _restart_services(compose_command: list[str], compose_dir: Path, services: list[str]) -> None:
+    if services:
+        _run([*compose_command, "start", *services], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
+
+
+def create_docker_backup(
+    *, compose_dir: Path, env_file: Path, output: Path,
+    release_public_key: Path, confirm_maintenance: bool,
+) -> dict[str, object]:
+    """Stop Compose writers, cold-export both data volumes, then restart prior services."""
+    if not confirm_maintenance:
+        raise ValueError("Docker backup requires --confirm-maintenance because client services will stop")
+    compose_dir = compose_dir.resolve(strict=True)
+    command, model, env = _compose_context(compose_dir, env_file)
+    required_services = {"postgres", "minio", "api", "ui", "redis"}
+    if not required_services <= set(model.get("services", {})):
+        raise ValueError("Compose project is missing required client services for backup")
+    volume_names = _compose_volume_names(model)
+    for volume in (volume_names["postgres_data"], volume_names["minio_data"]):
+        if not _docker_volume_exists(volume, compose_dir):
+            raise ValueError(f"Required data volume does not exist; refusing to snapshot an empty replacement: {volume}")
+    running = _running_services(command, compose_dir, set(model["services"]))
+    if output.exists():
+        raise ValueError("Recovery archive already exists; refusing to overwrite")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    restart_error: Exception | None = None
+    backup_result: dict[str, object] | None = None
+    try:
+        if running:
+            _run([*command, "stop"], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
+        _assert_no_running_volume_consumers(
+            [volume_names["postgres_data"], volume_names["minio_data"]], compose_dir,
+        )
+        image = _get_volume_image(env)
+        with tempfile.TemporaryDirectory(prefix="kodewaves-client-backup-", dir=output.parent) as temp_name:
+            temp_dir = Path(temp_name)
+            _assert_no_running_volume_consumers(
+                [volume_names["postgres_data"], volume_names["minio_data"]], compose_dir,
+            )
+            _volume_tar_command(
+                image=image, volume_name=volume_names["postgres_data"], host_directory=temp_dir,
+                archive_name="postgres.tar", compose_dir=compose_dir, extract=False,
+            )
+            _assert_no_running_volume_consumers(
+                [volume_names["postgres_data"], volume_names["minio_data"]], compose_dir,
+            )
+            _volume_tar_command(
+                image=image, volume_name=volume_names["minio_data"], host_directory=temp_dir,
+                archive_name="minio.tar", compose_dir=compose_dir, extract=False,
+            )
+            current_env = parse_env(env_file)
+            manifest_path = Path(current_env["CLIENT_RELEASE_MANIFEST_FILE"])
+            if not manifest_path.is_absolute():
+                manifest_path = compose_dir / manifest_path
+            identity_path = Path(current_env["CLIENT_IDENTITY_KEY_FILE"]) if current_env.get("CLIENT_IDENTITY_KEY_FILE") else None
+            backup_result = create_archive(
+                postgres_tar=temp_dir / "postgres.tar", minio_tar=temp_dir / "minio.tar",
+                env_file=env_file, manifest=manifest_path,
+                release_public_key=release_public_key, identity_key=identity_path,
+                output=output, writers_stopped=True,
+            )
+    finally:
+        try:
+            _restart_services(command, compose_dir, running)
+        except Exception as exc:
+            restart_error = exc
+    if restart_error is not None:
+        raise RuntimeError(
+            "Backup archive may have been created, but the previously running services could not be restarted; "
+            "use docker compose start after resolving the Docker error"
+        ) from restart_error
+    if backup_result is None:
+        raise RuntimeError("Docker backup did not produce an archive")
+    return {**backup_result, "services_restarted": running}
+
+
+def _write_private(path: Path, content: bytes, *, mode: int = 0o600) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, mode)
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(content)
+        stream.flush()
+        os.fsync(stream.fileno())
+    if os.name != "nt":
+        path.chmod(mode)
+
+
+def _staged_config_matches_installation(staged: Path, env_file: Path, compose_dir: Path) -> dict[str, str]:
+    archived_env_path = staged / "config/.env"
+    archived_env = parse_env(archived_env_path)
+    current_env = parse_env(env_file)
+    if {
+        key: value for key, value in archived_env.items() if key != "COMPOSE_FILE"
+    } != {
+        key: value for key, value in current_env.items() if key != "COMPOSE_FILE"
+    }:
+        raise ValueError("Active .env differs from the recovery set; refusing to change installation credentials")
+    manifest_ref = current_env.get("CLIENT_RELEASE_MANIFEST_FILE", "")
+    manifest_path = Path(manifest_ref)
+    if not manifest_path.is_absolute():
+        manifest_path = compose_dir / manifest_path
+    _check_regular_file(manifest_path, "active release manifest")
+    if manifest_path.read_bytes() != (staged / "config/client-release-manifest.json").read_bytes():
+        raise ValueError("Active release manifest differs from the recovery set")
+    if current_env.get("CLIENT_IDENTITY_KEY_FILE"):
+        key_path = Path(current_env["CLIENT_IDENTITY_KEY_FILE"])
+        _check_regular_file(key_path, "active installation identity key")
+        if key_path.read_bytes() != (staged / "config/installation.key").read_bytes():
+            raise ValueError("Active installation identity key differs from the recovery set")
+    return current_env
+
+
+def _persisted_recovery_state(compose_dir: Path) -> Path:
+    return compose_dir / RECOVERY_STATE_DIR
+
+
+def _switch_compose_up(
+    compose_dir: Path, env_file: Path, services: list[str], *, timeout: int = 360,
+) -> None:
+    if not services:
+        return
+    command, _model, _env = _compose_context(compose_dir, env_file)
+    _run(
+        [*command, "up", "--detach", "--wait", "--wait-timeout", str(timeout), *services],
+        cwd=compose_dir, timeout=timeout + 60,
+    )
+
+
+def restore_to_docker_volumes(
+    *, archive_path: Path, compose_dir: Path, env_file: Path,
+    confirm_maintenance: bool,
+) -> dict[str, object]:
+    """Restore into new labeled volumes, atomically switch Compose, retain rollback volumes."""
+    if not confirm_maintenance:
+        raise ValueError("Docker restore requires --confirm-maintenance because client services will stop")
+    compose_dir = compose_dir.resolve(strict=True)
+    env_file = env_file.resolve(strict=True)
+    state_dir = _persisted_recovery_state(compose_dir)
+    if state_dir.exists():
+        raise ValueError("A prior recovery is still active; run rollback-docker before another restore")
+    command, model, env = _compose_context(compose_dir, env_file)
+    stage_parent = compose_dir / ".client-recovery-stage"
+    stage_parent.mkdir(mode=0o700, exist_ok=True)
+    stage_dir = stage_parent / f"restore-{uuid.uuid4().hex}"
+    summary = restore_to_directory(archive_path, stage_dir)
+    try:
+        current_env = _staged_config_matches_installation(stage_dir, env_file, compose_dir)
+        original_volumes = _compose_volume_names(model)
+        services = set(model.get("services", {}))
+        running = _running_services(command, compose_dir, services)
+        image = _get_volume_image(env)
+        metadata = json.loads((stage_dir / "recovery.json").read_text(encoding="utf-8"))
+        recovery_id = uuid.uuid4().hex[:12]
+        project = str(model.get("name") or compose_dir.name.lower())
+        new_volumes = {
+            "postgres_data": f"{project}_postgres_recovery_{recovery_id}",
+            "minio_data": f"{project}_minio_recovery_{recovery_id}",
+            "redis_data": f"{project}_redis_recovery_{recovery_id}",
+        }
+        override_path = compose_dir / RECOVERY_OVERRIDE
+        original_override_exists = override_path.exists()
+        original_override = override_path.read_bytes() if original_override_exists else b""
+        state_dir.mkdir(mode=0o700)
+        try:
+            _write_private(state_dir / "previous-recovery-override", original_override)
+        except Exception:
+            shutil.rmtree(state_dir, ignore_errors=True)
+            raise
+        state = {
+            "format": "kodewaves-client-recovery-state-v1",
+            "restore_id": recovery_id,
+            "installation_id": metadata["installation_id"],
+            "original_volumes": original_volumes,
+            "new_volumes": new_volumes,
+            "running_services": running,
+            "original_override_exists": original_override_exists,
+            "original_override_sha256": hashlib.sha256(original_override).hexdigest(),
+            "created_volumes": [],
+            "status": "preparing",
+        }
+        try:
+            _write_private(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
+        except Exception:
+            shutil.rmtree(state_dir, ignore_errors=True)
+            raise
+        try:
+            for name in new_volumes.values():
+                state["created_volumes"].append(name)
+                _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
+                _create_volume(name, compose_dir, recovery_id)
+            _volume_tar_command(
+                image=image, volume_name=new_volumes["postgres_data"],
+                host_directory=stage_dir / "volumes", archive_name="postgres.tar",
+                compose_dir=compose_dir, extract=True,
+            )
+            _volume_tar_command(
+                image=image, volume_name=new_volumes["minio_data"],
+                host_directory=stage_dir / "volumes", archive_name="minio.tar",
+                compose_dir=compose_dir, extract=True,
+            )
+            if running:
+                _run([*command, "stop"], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
+            _atomic_write(override_path, _recovery_override(new_volumes), mode=0o600)
+            state["status"] = "switching"
+            _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
+            _switch_compose_up(compose_dir, env_file, running)
+        except Exception as restore_error:
+            # A failed stop may have stopped only part of the project. Restore
+            # the exact previous mapping first, then restart only its services.
+            if running:
+                current_command, _current_model, _ = _compose_context(compose_dir, env_file)
+                try:
+                    _run([*current_command, "stop"], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
+                except Exception:
+                    pass
+            if original_override_exists:
+                _atomic_write(override_path, original_override, mode=0o600)
+            else:
+                override_path.unlink(missing_ok=True)
+            try:
+                _switch_compose_up(compose_dir, env_file, running)
+            except Exception as rollback_error:
+                state["status"] = "automatic_rollback_failed"
+                _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
+                raise RuntimeError(
+                    "Restore failed and automatic rollback could not restart the original volumes; "
+                    "the original volume set and recovery state are preserved"
+                ) from rollback_error
+            state["status"] = "automatic_rollback_succeeded"
+            try:
+                _remove_owned_recovery_volumes(state["created_volumes"], compose_dir, recovery_id)
+            except Exception as cleanup_error:
+                state["status"] = "automatic_rollback_succeeded_volumes_retained"
+                state["cleanup_error"] = str(cleanup_error)
+            _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
+            failed_state_dir = compose_dir / f".client-recovery-failed-{recovery_id}"
+            state_dir.rename(failed_state_dir)
+            raise RuntimeError("Restore failed; original volume selection was automatically restored") from restore_error
+        state["status"] = "active"
+        _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
+        return {
+            **summary,
+            "status": "restored_to_new_volumes",
+            "installation_id": metadata["installation_id"],
+            "new_volumes": new_volumes,
+            "original_volumes_preserved": True,
+            "rollback_command": "python3 recovery.py rollback-docker",
+            "docker_volumes_modified": True,
+        }
+    finally:
+        if stage_dir.exists():
+            shutil.rmtree(stage_dir, ignore_errors=True)
+        try:
+            if stage_parent.exists() and not any(stage_parent.iterdir()):
+                stage_parent.rmdir()
+        except OSError:
+            pass
+
+
+def rollback_docker_restore(*, compose_dir: Path, env_file: Path, confirm_maintenance: bool) -> dict[str, object]:
+    """Switch Compose back to the original volumes without deleting either set."""
+    if not confirm_maintenance:
+        raise ValueError("Docker rollback requires --confirm-maintenance because client services will stop")
+    compose_dir = compose_dir.resolve(strict=True)
+    env_file = env_file.resolve(strict=True)
+    state_dir = _persisted_recovery_state(compose_dir)
+    if not state_dir.is_dir():
+        raise ValueError("No active Docker recovery state exists")
+    state_path = state_dir / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    if state.get("format") != "kodewaves-client-recovery-state-v1" or state.get("status") != "active":
+        raise ValueError("Recovery state is not in an active rollback-ready state")
+    current_override = compose_dir / RECOVERY_OVERRIDE
+    current_bytes = current_override.read_bytes()
+    if json.loads(current_bytes).get("volumes") != {
+        logical: {"external": True, "name": value}
+        for logical, value in state["new_volumes"].items()
+    }:
+        raise ValueError("Recovery Compose override changed after restore; refusing automatic rollback")
+    original_override = (state_dir / "previous-recovery-override").read_bytes()
+    if hashlib.sha256(original_override).hexdigest() != state.get("original_override_sha256"):
+        raise ValueError("Saved original Compose override is damaged")
+    command, model, _env = _compose_context(compose_dir, env_file)
+    running = _running_services(command, compose_dir, set(model.get("services", {})))
+    original_running = list(state.get("running_services", []))
+    if running:
+        _run([*command, "stop"], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
+    try:
+        if state.get("original_override_exists"):
+            _atomic_write(current_override, original_override, mode=0o600)
+        else:
+            current_override.unlink(missing_ok=True)
+        _switch_compose_up(compose_dir, env_file, original_running)
+    except Exception as rollback_error:
+        _atomic_write(current_override, current_bytes, mode=0o600)
+        try:
+            _switch_compose_up(compose_dir, env_file, running)
+        except Exception as restart_error:
+            raise RuntimeError(
+                "Rollback failed and the restored-volume services could not restart; both volume sets are retained"
+            ) from restart_error
+        raise RuntimeError("Rollback failed; the restored-volume selection was reinstated") from rollback_error
+    rolled_back_dir = compose_dir / f".client-recovery-rolled-back-{state['restore_id']}"
+    state["status"] = "rolled_back"
+    _atomic_write(state_path, (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
+    state_dir.rename(rolled_back_dir)
+    return {
+        "status": "rolled_back",
+        "original_volumes_selected": state["original_volumes"],
+        "restored_volumes_preserved": state["new_volumes"],
+        "rollback_state": str(rolled_back_dir),
+    }
+
+
 def _validate_archive_handle(archive: tarfile.TarFile) -> tuple[dict[str, object], dict[str, str]]:
     """Validate one already-open archive and return summary and verified checksums."""
     files: dict[str, tarfile.TarInfo] = {}
@@ -631,7 +1174,22 @@ def main() -> int:
     )
     restore_parser = commands.add_parser("restore", help="stage a validated archive into a new offline directory")
     restore_parser.add_argument("archive", type=Path)
-    restore_parser.add_argument("--destination", required=True, type=Path)
+    restore_mode = restore_parser.add_mutually_exclusive_group(required=True)
+    restore_mode.add_argument("--destination", type=Path, help="stage files in a new offline directory")
+    restore_mode.add_argument("--docker-volumes", action="store_true", help="restore to new Compose volumes and retain old volumes for rollback")
+    restore_parser.add_argument("--compose-dir", type=Path, default=Path(__file__).resolve().parent)
+    restore_parser.add_argument("--env-file", type=Path)
+    restore_parser.add_argument("--confirm-maintenance", action="store_true")
+    docker_backup_parser = commands.add_parser("backup-docker", help="stop client services and create a cold backup of Postgres and MinIO volumes")
+    docker_backup_parser.add_argument("--compose-dir", type=Path, default=Path(__file__).resolve().parent)
+    docker_backup_parser.add_argument("--env-file", type=Path)
+    docker_backup_parser.add_argument("--release-public-key", type=Path)
+    docker_backup_parser.add_argument("--output", required=True, type=Path)
+    docker_backup_parser.add_argument("--confirm-maintenance", action="store_true")
+    rollback_parser = commands.add_parser("rollback-docker", help="switch to preserved original volumes after a Docker restore")
+    rollback_parser.add_argument("--compose-dir", type=Path, default=Path(__file__).resolve().parent)
+    rollback_parser.add_argument("--env-file", type=Path)
+    rollback_parser.add_argument("--confirm-maintenance", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "validate":
@@ -643,9 +1201,28 @@ def main() -> int:
                 release_public_key=args.release_public_key, output=args.output,
                 identity_key=args.identity_key, writers_stopped=args.confirm_stopped_writers,
             )
-        else:
+        elif args.command == "restore" and args.destination is not None:
             result = restore_to_directory(args.archive, args.destination)
-    except (ValueError, OSError, UnicodeError, json.JSONDecodeError) as exc:
+        elif args.command == "restore":
+            env_file = args.env_file or args.compose_dir / ".env"
+            result = restore_to_docker_volumes(
+                archive_path=args.archive, compose_dir=args.compose_dir, env_file=env_file,
+                confirm_maintenance=args.confirm_maintenance,
+            )
+        elif args.command == "backup-docker":
+            env_file = args.env_file or args.compose_dir / ".env"
+            release_public_key = args.release_public_key or args.compose_dir / "release-public-key.txt"
+            result = create_docker_backup(
+                compose_dir=args.compose_dir, env_file=env_file, output=args.output,
+                release_public_key=release_public_key, confirm_maintenance=args.confirm_maintenance,
+            )
+        else:
+            env_file = args.env_file or args.compose_dir / ".env"
+            result = rollback_docker_restore(
+                compose_dir=args.compose_dir, env_file=env_file,
+                confirm_maintenance=args.confirm_maintenance,
+            )
+    except (ValueError, OSError, RuntimeError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"Recovery archive rejected: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(result, sort_keys=True))

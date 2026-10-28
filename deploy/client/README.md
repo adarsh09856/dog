@@ -230,16 +230,17 @@ image build, clean-install, owner-alert or upgrade/rollback acceptance.
 
 Run commands from this directory so Compose resolves `.env` and the manifest
 path consistently. Validate the inputs before Docker contacts any registry or
-starts the services. Complete the enrolled-identity steps in `INSTALL.md` for
-the customer license first. Every Compose command in this section then includes
-the identity overlay so both API and UI retain access to the key:
+starts the services. Complete mandatory owner enrollment in `INSTALL.md` before
+starting client services. Use `compose_client.py` for every Compose command; it
+pins the project name and always includes the persistent recovery overlay. It
+adds the identity overlay automatically after enrollment:
 
 ```bash
 python3 validate_install.py
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml config --quiet
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml pull
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d api
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml ps
+python3 compose_client.py config --quiet
+python3 compose_client.py pull
+python3 compose_client.py up -d api
+python3 compose_client.py ps
 ```
 
 Wait until the API reports healthy and its logs contain
@@ -259,7 +260,7 @@ from the client image. Create the initial local administrator once, using the
 licensed bootstrap below with a new empty installation database.
 
 ```bash
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml run --rm --no-deps api \
+python3 compose_client.py run --rm --no-deps api \
   python -m api.services.bootstrap_client_admin --email admin@customer.example.com
 ```
 
@@ -267,8 +268,8 @@ The command prompts for the password interactively. It refuses to run after a
 user or workspace already exists. Then start the UI and remaining services:
 
 ```bash
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml ps
+python3 compose_client.py up -d
+python3 compose_client.py ps
 ```
 
 Complete HTTPS/WSS proxy setup and check the public hostname before signing in.
@@ -288,6 +289,17 @@ renewal, follow `INSTALL.md` to replace the token and recreate both the API and
 UI before the handover window ends. A Compose restart does not reload changed
 environment variables. Follow the license guide for key rotation, DNS changes
 and owner outage behavior.
+
+The bundle's `recovery.py backup-docker` command can stop the project, verify no
+running container still writes the Postgres or MinIO volumes, and create a cold
+archive. `recovery.py restore --docker-volumes` stages data into new labeled
+volumes and keeps the original set available for rollback with
+`recovery.py rollback-docker`. These Docker operations have deterministic
+failure-path tests but have not been exercised against a Docker daemon; they
+are not yet accepted restore evidence. See `INSTALL.md` for the required
+maintenance commands and limitations. Use `compose_client.py` for every
+Compose operation so the project name and active recovery volume mapping remain
+consistent. Owner enrollment is required before starting services.
 
 Do not expose `.env`, the signed license token, database credentials or the
 release manifest through a public web server. A customer with root control of

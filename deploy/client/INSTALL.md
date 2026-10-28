@@ -56,9 +56,12 @@ to deny access and report the finding when the owner service is reachable.
 
 ### Enrolled installation identity
 
+Owner enrollment is mandatory before starting or entering any client service.
 Key enrollment requires an owner-issued enrollment token and matching approved
-images. Complete enrollment before enabling the identity overlay; enrolling a
-key without configuring the overlay will make owner checks fail.
+images. The bundled Compose wrapper refuses `up`, `start`, `restart`, `run`,
+`exec`, `create` and `scale` until the identity key exists, and always selects
+the recovery overlay so a restored installation cannot silently revert to old
+volume names.
 Keep the enrolled 32-byte private key outside this installation directory and
 back it up securely. Losing or replacing it requires owner-assisted recovery.
 
@@ -68,7 +71,7 @@ to read the key. Pull the approved API image first, then run the enrollment
 command and enter the owner's one-time token at its prompt:
 
 ```bash
-docker compose -f docker-compose.client.yaml pull api
+python3 compose_client.py pull api
 python3 enroll_identity.py
 ```
 
@@ -79,14 +82,17 @@ host, the key must be group-readable by the configured group and inaccessible
 to other users, for example mode `0640`. Both API and UI containers join that
 group and mount the key read-only. `python3 validate_install.py` checks the file
 and group. To verify a previously enrolled key without creating or replacing
-it, run `python3 enroll_identity.py --verify-only`.
-After enrollment, add `-f docker-compose.identity.yaml` after
-`-f docker-compose.client.yaml` to **every** Compose command below, including
-the administrator bootstrap and future updates. For example:
+it, run `python3 enroll_identity.py --verify-only`. Use `compose_client.py` for
+all Compose operations; it selects the identity overlay automatically once the
+configured key exists. Do not pass Compose file, project, or env-file override
+options to it, because they could switch an existing installation to different
+volumes or bypass the enrolled identity. The project name comes from
+`COMPOSE_PROJECT_NAME` in `.env`, or the installation directory name when that
+setting is absent. Preserve that value on upgrades and recovery.
 
 ```bash
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml config --quiet
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d api
+python3 compose_client.py config --quiet
+python3 compose_client.py up -d api
 ```
 
 The enrollment tooling and live recovery process still require installation
@@ -98,20 +104,20 @@ Run these commands from the extracted installation directory:
 
 ```bash
 python3 validate_install.py
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml config --quiet
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml pull
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d api
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml ps
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml logs --tail=100 api
+python3 compose_client.py config --quiet
+python3 compose_client.py pull
+python3 compose_client.py up -d api
+python3 compose_client.py ps
+python3 compose_client.py logs --tail=100 api
 ```
 
 Wait for API health and `Initial owner installation check succeeded` in its
 logs. For a new empty installation, create the first local administrator:
 
 ```bash
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml run --rm --no-deps api \
+python3 compose_client.py run --rm --no-deps api \
   python -m api.services.bootstrap_client_admin --email admin@customer.example.com
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d
+python3 compose_client.py up -d
 ```
 
 The bootstrap command prompts for a password. It refuses to run after any user
@@ -134,17 +140,63 @@ key must be restored with its original group and permissions; ask the owner
 for recovery if it is unavailable.
 
 Arrange a maintenance window, stop new calls and background writes, and use
-the owner's approved, version-compatible backup process to obtain a consistent
-set. Test restoration on an isolated host without live telephony or outbound
-jobs before relying on it. The package does not yet provide an accepted backup
-and restore procedure; obtain owner assistance rather than assuming copying
-live database files or rolling back an image is sufficient.
+the commands below to stop the complete Compose project before taking a cold
+snapshot. The backup command also checks that no other running container still
+mounts either data volume. It refuses missing volumes rather than allowing
+Docker to create an empty replacement. Keep the source archive encrypted and
+test restoration on an isolated host without live telephony or outbound jobs
+before relying on it.
 
-The customer bundle includes `recovery.py` for **offline snapshot packaging,
-validation, and staging**. It does not stop services or access Docker volumes.
-First use an owner-approved process to export both data volumes after stopping
-the API, UI, and every database/object writer. Then package the already-cold
-exports with the installation config:
+The customer bundle includes `recovery.py` for offline archive validation and
+staging, plus controlled Compose volume export and restore. Create a cold backup
+with:
+
+```bash
+python3 recovery.py backup-docker \
+  --env-file .env \
+  --release-public-key ./release-public-key.txt \
+  --output /secure/backups/client-recovery.tar.gz \
+  --confirm-maintenance
+```
+
+This stops all services in this Compose project, confirms Postgres and MinIO
+volumes exist and have no running container consumers (including containers in
+other projects), exports both volumes read-only, packages the exact
+installation configuration and identity key, then restarts only the services
+that were running before the backup. If restart fails, the archive may exist
+and the command reports that services need operator recovery. The command uses
+the approved pinned Postgres image as a tar helper and never pulls images.
+Postgres tablespace symlinks are refused. Redis is intentionally not included;
+it starts with a fresh queue after restore.
+
+To restore, first validate and stage into new volumes; the existing volumes are
+kept intact and available for rollback:
+
+```bash
+python3 recovery.py restore /secure/backups/client-recovery.tar.gz \
+  --docker-volumes --env-file .env --confirm-maintenance
+```
+
+The restore accepts an archive only when installation ID, `.env`, signed
+manifest and enrolled key match the current installation. It creates uniquely
+labeled Postgres/MinIO/Redis volumes and selects them through the persistent
+`docker-compose.recovery.yaml` override. It waits for the services that were
+running before the maintenance window to become healthy. The old volumes and
+new volumes are both retained. Roll back the selection with:
+
+```bash
+python3 recovery.py rollback-docker --env-file .env --confirm-maintenance
+```
+
+Do not remove either volume set until the restored application and its data
+have been checked. If the process is interrupted, inspect
+`.client-recovery-state/state.json`; the tool does not automatically delete
+volumes whose selection is uncertain. The Docker path has not yet been
+exercised against a live Docker daemon in CI or on an isolated installation, so
+this package feature is not customer-accepted disaster-recovery proof.
+
+The `recovery.py create` command remains available when an approved external
+process produced cold volume tar files:
 
 ```bash
 python3 recovery.py create \
@@ -204,22 +256,21 @@ recreate both API and UI so they receive the new environment. A Compose
 
 ```bash
 python3 validate_install.py
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d --no-deps --force-recreate api
+python3 compose_client.py up -d --no-deps --force-recreate api
 ```
 
 Wait for API health and `Initial owner installation check succeeded`, then run:
 
 ```bash
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml up -d --no-deps --force-recreate ui
-docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml ps
+python3 compose_client.py up -d --no-deps --force-recreate ui
+python3 compose_client.py ps
 ```
 
 The UI also needs the new token to report integrity failures to the owner.
-Keep both Compose files
-(`docker-compose.client.yaml` and `docker-compose.identity.yaml`) on every later
-update, bootstrap, log or recovery command so the API and UI can read the
-enrolled key. Ask your installation owner for license, domain/IP policy,
-renewal, capacity and recovery changes.
+Use `compose_client.py` for later update, bootstrap and log operations so the
+same project, identity and recovery volume selection stays active. Ask your
+installation owner for license, domain/IP policy, renewal, capacity and
+recovery changes.
 
 If the bundled ingress displays “Service temporarily unavailable,” check the
 API and UI container logs and contact the installation owner. This message can
