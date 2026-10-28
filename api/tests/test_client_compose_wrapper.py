@@ -18,6 +18,7 @@ def _package(tmp_path: Path, *, identity: bool) -> Path:
         "docker-compose.recovery.yaml",
         "validate_install.py",
         "compose_client.py",
+        "recovery_lock.py",
     ):
         (tmp_path / name).write_bytes((source / name).read_bytes())
     identity_value = str(tmp_path / "installation.key") if identity else ""
@@ -120,3 +121,32 @@ def test_compose_wrapper_environment_cannot_override_dotenv_values(tmp_path, mon
     assert "COMPOSE_PROJECT_NAME" not in environment
     assert "COMPOSE_PROFILES" not in environment
     assert environment["DOCKER_CONFIG"] == "C:/docker/config"
+
+
+def test_compose_wrapper_waits_for_recovery_operation_lock(tmp_path, monkeypatch):
+    directory = _package(tmp_path, identity=True)
+    monkeypatch.setattr(compose_client, "__file__", str(directory / "compose_client.py"))
+    command_started = __import__("threading").Event()
+    worker_finished = __import__("threading").Event()
+
+    def fake_run(command, **_kwargs):
+        command_started.set()
+        return compose_client.subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(compose_client.subprocess, "run", fake_run)
+
+    def invoke_wrapper():
+        try:
+            assert compose_client.main(["up", "-d", "api"]) == 0
+        finally:
+            worker_finished.set()
+
+    worker = __import__("threading").Thread(target=invoke_wrapper)
+    with compose_client.recovery_operation_lock(directory):
+        worker.start()
+        __import__("time").sleep(0.05)
+        assert not command_started.is_set()
+    worker.join(timeout=2)
+
+    assert worker_finished.is_set()
+    assert command_started.is_set()

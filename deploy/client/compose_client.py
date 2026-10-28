@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from validate_install import parse_env
+from recovery_lock import recovery_operation_lock
 
 FORBIDDEN_OPTIONS = {"-f", "--file", "--project-directory", "--env-file", "-p", "--project-name"}
 SERVICE_START_COMMANDS = {"create", "exec", "restart", "run", "scale", "start", "up"}
@@ -92,9 +93,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     try:
-        command = build_command(directory, arguments)
-        controlled_env = controlled_environment(directory)
-        return subprocess.run(command, cwd=directory, check=False, env=controlled_env).returncode
+        with recovery_operation_lock(directory):
+            command = build_command(directory, arguments)
+            controlled_env = controlled_environment(directory)
+            return subprocess.run(command, cwd=directory, check=False, env=controlled_env).returncode
     except (ValueError, OSError) as exc:
         print(f"Client Compose command rejected: {exc}", file=sys.stderr)
         return 2

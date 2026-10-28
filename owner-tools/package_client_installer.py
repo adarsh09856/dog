@@ -113,6 +113,7 @@ def package_installer(
         "validate_install.py": (directory / "validate_install.py").read_bytes(),
         "recovery.py": (directory / "recovery.py").read_bytes(),
         "compose_client.py": (directory / "compose_client.py").read_bytes(),
+        "recovery_lock.py": (directory / "recovery_lock.py").read_bytes(),
         "enroll_identity.py": (directory / "enroll_identity.py").read_bytes(),
         ".env.example": env_template.encode("utf-8"),
         "client-release-manifest.json": manifest_bytes,

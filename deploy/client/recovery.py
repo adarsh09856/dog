@@ -11,7 +11,6 @@ new offline directory; it never writes Docker volumes or modifies an install.
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
 import hashlib
 import io
 import json
@@ -28,6 +27,7 @@ from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from validate_install import parse_env
+from recovery_lock import RECOVERY_LOCK_FILE, recovery_operation_lock
 
 REQUIRED_FILES = {
     "recovery.json",
@@ -47,42 +47,7 @@ HASH_CHUNK_SIZE = 1024 * 1024
 MAX_DOCKER_TIMEOUT = 3600
 RECOVERY_OVERRIDE = "docker-compose.recovery.yaml"
 RECOVERY_STATE_DIR = ".client-recovery-state"
-RECOVERY_LOCK_FILE = ".client-recovery-operation.lock"
-
-
-@contextmanager
-def _recovery_operation_lock(compose_dir: Path):
-    """Serialize backup/restore/rollback across processes without stale locks."""
-    compose_dir = compose_dir.resolve(strict=True)
-    lock_path = compose_dir / RECOVERY_LOCK_FILE
-    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(lock_path, flags, 0o600)
-    try:
-        if os.name == "nt":
-            import msvcrt
-
-            if os.fstat(descriptor).st_size == 0:
-                os.write(descriptor, b"\0")
-                os.lseek(descriptor, 0, os.SEEK_SET)
-            msvcrt.locking(descriptor, msvcrt.LK_LOCK, 1)
-        else:
-            import fcntl
-
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
-        yield
-    finally:
-        try:
-            if os.name == "nt":
-                import msvcrt
-
-                os.lseek(descriptor, 0, os.SEEK_SET)
-                msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(descriptor, fcntl.LOCK_UN)
-        finally:
-            os.close(descriptor)
+_recovery_operation_lock = recovery_operation_lock
 
 
 def _validate_member_name(name: str) -> None:

@@ -233,7 +233,9 @@ path consistently. Validate the inputs before Docker contacts any registry or
 starts the services. Complete mandatory owner enrollment in `INSTALL.md` before
 starting client services. Use `compose_client.py` for every Compose command; it
 pins the project name and always includes the persistent recovery overlay. It
-adds the identity overlay automatically after enrollment:
+adds the identity overlay automatically after enrollment and shares an
+OS-held operation lock with `recovery.py`, preventing Compose changes during
+backup, restore, or rollback:
 
 ```bash
 python3 validate_install.py
