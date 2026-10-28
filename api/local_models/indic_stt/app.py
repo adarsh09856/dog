@@ -150,6 +150,20 @@ def _load(lang: str) -> sherpa_onnx.OfflineRecognizer:
     return recognizer
 
 
+def _warm_recognizer(lang: str) -> None:
+    """Run one short synthetic decode so first callers avoid cold graph setup."""
+    recognizer = _load(lang)
+    sample_rate = 16_000
+    index = np.arange(sample_rate, dtype=np.float32)
+    waveform = (
+        0.01 * np.sin(2 * np.pi * 173 * index / sample_rate)
+        + 0.005 * np.sin(2 * np.pi * 431 * index / sample_rate)
+    ).astype(np.float32, copy=False)
+    stream = recognizer.create_stream()
+    stream.accept_waveform(sample_rate, waveform)
+    recognizer.decode_stream(stream)
+
+
 @app.on_event("startup")
 async def startup() -> None:
     global _lid_session, _english_lid
@@ -162,6 +176,15 @@ async def startup() -> None:
     if "en" in languages and _max_resident_models > 1:
         # Keep both main caller languages ready without first-call model loading.
         await asyncio.to_thread(_load, "en")
+    warm_languages = [lang for lang in ("hi", "en") if lang in _loaded]
+    for lang in warm_languages:
+        warmup_started = time.monotonic()
+        await asyncio.to_thread(_warm_recognizer, lang)
+        _logger.info(
+            "stt_decoder_warmup_ms=%s language=%s",
+            round((time.monotonic() - warmup_started) * 1000),
+            lang,
+        )
     if LID_ENABLED:
         try:
             await asyncio.to_thread(_load_language_identifier)
