@@ -469,6 +469,19 @@ def test_owner_ci_installs_same_pipecat_extras_as_api_image():
     assert ci_extras.group(1) == image_extras.group(1)
 
 
+def test_client_production_cors_is_bound_to_public_origin():
+    import yaml
+
+    root = Path(__file__).resolve().parents[2]
+    compose = yaml.safe_load(
+        (root / "deploy/client/docker-compose.client.yaml").read_text(encoding="utf-8")
+    )
+    environment = compose["services"]["api"]["environment"]
+    assert environment["DEPLOYMENT_MODE"] == "production"
+    assert environment["CORS_ALLOWED_ORIGINS"] == environment["UI_APP_URL"]
+    assert environment["CORS_ALLOWED_ORIGINS"] == "https://${PUBLIC_HOST:?Set licensed public host}"
+
+
 @pytest.mark.parametrize("tamper", ["api_count", "ui_image", "edition"])
 def test_ci_requires_evidence_to_match_signed_manifest(verifier, tmp_path, tamper):
     manifest = tmp_path / "release.json"
