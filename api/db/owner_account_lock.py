@@ -10,4 +10,3 @@ async def lock_owner_account_mutation(session) -> None:
     await session.execute(
         text(f"SELECT pg_advisory_xact_lock({OWNER_ACCOUNT_ADVISORY_LOCK_ID})")
     )
-
