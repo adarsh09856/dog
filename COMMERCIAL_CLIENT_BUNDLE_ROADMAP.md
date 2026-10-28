@@ -1,5 +1,13 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — current runtime failure and recovery requirement
+
+- Hosted runs `40651922061`, `40655769220` and `40656693626` failed the disposable Compose runtime gate. PostgreSQL, Redis and MinIO became healthy; the API became unhealthy. This supersedes earlier pending-run statements. The underlying API startup exception is still unconfirmed.
+- Commits `430da163`, `5e6e6bff`, `3b9507d1` and `459bbfa7` improve bounded failure diagnostics, reserve annotation space for the error tail, and capture API startup logs. The 18 focused verifier tests passed. Run `40657527604` contains these diagnostics; its last observed state was active, and a later job-detail request was blocked by GitHub's unauthenticated API rate limit. Do not classify that observation failure as a terminal job result.
+- Commit `430da163` also preserves validated public catalog selections across login to signup. The pricing/auth UI suite passed 12 tests and targeted ESLint passed.
+- Credential recovery reproduction confirmed that adding or removing Base64 padding changes the encryption key selected by the existing API. Commit `f6238bae` updates new-install key generation and requires preserving existing key text exactly. Existing runtime key derivation is unchanged to preserve saved credentials.
+- Backup/restore tooling, enrolled clean installation, saved-brand persistence with the real API, payment acceptance, owner alert delivery, upgrade/rollback and voice integration acceptance remain open. No percentage is a measured acceptance result. No merge or production deployment was performed for this batch.
+
 ## 28 October 2026 — campaign plan enforcement and theme synchronization
 
 - Fixed a plan-gate bypass where `campaigns` had no SaaS plan column and therefore resolved as enabled by default. Added `has_campaigns_access` to the database model/migration, owner plan editor/API, public pricing feature list, generated client types, and runtime entitlement check. Existing plans migrate with campaign access enabled; owners can disable it per plan. Migration `e0f1a2b3c4d5` is the sole Alembic head.
