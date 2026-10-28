@@ -113,6 +113,13 @@ def test_compose_wrapper_environment_cannot_override_dotenv_values(tmp_path, mon
     monkeypatch.setenv("API_PORT", "9999")
     monkeypatch.setenv("COMPOSE_PROJECT_NAME", "different-shell-project")
     monkeypatch.setenv("COMPOSE_PROFILES", "")
+    # These optional interpolation variables are intentionally absent from
+    # .env; Compose must use its documented defaults, not shell overrides.
+    monkeypatch.setenv("CLIENT_API_IMAGE", "attacker.example/api:latest")
+    monkeypatch.setenv("CLIENT_INTERNAL_SUBNET", "10.99.0.0/16")
+    monkeypatch.setenv("CLIENT_CADDY_IPV4", "10.99.0.2")
+    monkeypatch.setenv("MINIO_PORT", "9443")
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "*")
     monkeypatch.setenv("DOCKER_CONFIG", "C:/docker/config")
 
     environment = compose_client.controlled_environment(directory)
@@ -120,16 +127,28 @@ def test_compose_wrapper_environment_cannot_override_dotenv_values(tmp_path, mon
     assert "API_PORT" not in environment
     assert "COMPOSE_PROJECT_NAME" not in environment
     assert "COMPOSE_PROFILES" not in environment
+    assert "CLIENT_API_IMAGE" not in environment
+    assert "CLIENT_INTERNAL_SUBNET" not in environment
+    assert "CLIENT_CADDY_IPV4" not in environment
+    assert "MINIO_PORT" not in environment
+    assert "FORWARDED_ALLOW_IPS" not in environment
     assert environment["DOCKER_CONFIG"] == "C:/docker/config"
 
 
 def test_compose_wrapper_waits_for_recovery_operation_lock(tmp_path, monkeypatch):
     directory = _package(tmp_path, identity=True)
     monkeypatch.setattr(compose_client, "__file__", str(directory / "compose_client.py"))
+    monkeypatch.setattr(
+        compose_client,
+        "validate_installation",
+        lambda *_args: ["preflight passed; run docker compose config --quiet"],
+    )
     command_started = __import__("threading").Event()
     worker_finished = __import__("threading").Event()
+    commands = []
 
     def fake_run(command, **_kwargs):
+        commands.append(command)
         command_started.set()
         return compose_client.subprocess.CompletedProcess(command, 0)
 
@@ -150,3 +169,22 @@ def test_compose_wrapper_waits_for_recovery_operation_lock(tmp_path, monkeypatch
 
     assert worker_finished.is_set()
     assert command_started.is_set()
+    assert commands[0][-2:] == ["config", "--quiet"]
+    assert commands[1][-3:] == ["up", "-d", "api"]
+
+
+def test_compose_start_runs_full_preflight_before_any_docker_command(tmp_path, monkeypatch):
+    directory = _package(tmp_path, identity=True)
+    monkeypatch.setattr(compose_client, "__file__", str(directory / "compose_client.py"))
+    monkeypatch.setattr(
+        compose_client,
+        "validate_installation",
+        lambda *_args: ["CLIENT_API_IMAGE is required and must not be empty"],
+    )
+    monkeypatch.setattr(
+        compose_client.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("Compose must not run when preflight fails"),
+    )
+
+    assert compose_client.main(["up", "-d", "api"]) == 2

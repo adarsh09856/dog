@@ -581,8 +581,9 @@ def test_client_install_readme_runs_preflight_before_compose():
     readme = (root / "deploy/client/README.md").read_text(encoding="utf-8")
     assert "python3 validate_install.py" in readme
     assert readme.index("python3 validate_install.py") < readme.index(
-        "docker compose -f docker-compose.client.yaml -f docker-compose.identity.yaml config --quiet"
+        "python3 compose_client.py up -d api"
     )
+    assert "reruns the local preflight" in readme
 
 
 def test_release_builder_rejects_unknown_upgrade_origin_before_docker(monkeypatch, tmp_path):

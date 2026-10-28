@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import subprocess
 import os
+import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from validate_install import parse_env
+from validate_install import parse_env, validate as validate_installation
 from recovery_lock import recovery_operation_lock
 
 FORBIDDEN_OPTIONS = {"-f", "--file", "--project-directory", "--env-file", "-p", "--project-name"}
@@ -71,14 +72,48 @@ def build_command(directory: Path, arguments: list[str]) -> list[str]:
 
 
 def controlled_environment(directory: Path) -> dict[str, str]:
-    """Keep shell-provided Compose selectors and config from overriding .env."""
+    """Keep shell variables from overriding configured values or Compose defaults."""
     configured = parse_env(directory / ".env")
+    interpolated: set[str] = set()
+    for name in (
+        "docker-compose.client.yaml",
+        "docker-compose.identity.yaml",
+        "docker-compose.recovery.yaml",
+    ):
+        path = directory / name
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"Required Compose file is missing or unsafe: {name}")
+        interpolated.update(re.findall(r"\$\{([A-Z][A-Z0-9_]*)", path.read_text(encoding="utf-8")))
     forbidden = {
         "COMPOSE_PROJECT_NAME", "COMPOSE_PROFILES", "COMPOSE_FILE",
         "COMPOSE_ENV_FILES", "COMPOSE_PATH_SEPARATOR",
-        *configured.keys(),
+        *configured.keys(), *interpolated,
     }
     return {key: value for key, value in os.environ.items() if key not in forbidden}
+
+
+def preflight_start(directory: Path, environment: dict[str, str]) -> None:
+    """Validate installation inputs and the selected Compose configuration before startup."""
+    env_file = directory / ".env"
+    compose_file = directory / "docker-compose.client.yaml"
+    findings = validate_installation(env_file, compose_file)
+    failures = [item for item in findings if not item.startswith("preflight passed;")]
+    if failures:
+        raise ValueError("Client installation preflight failed: " + "; ".join(failures))
+
+    config_command = build_command(directory, ["config", "--quiet"])
+    result = subprocess.run(
+        config_command,
+        cwd=directory,
+        check=False,
+        env=environment,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        raise ValueError(
+            "Docker Compose configuration check failed; run `python3 compose_client.py config --quiet` for details"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -96,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
         with recovery_operation_lock(directory):
             command = build_command(directory, arguments)
             controlled_env = controlled_environment(directory)
+            if any(item in SERVICE_START_COMMANDS for item in arguments):
+                preflight_start(directory, controlled_env)
             return subprocess.run(command, cwd=directory, check=False, env=controlled_env).returncode
     except (ValueError, OSError) as exc:
         print(f"Client Compose command rejected: {exc}", file=sys.stderr)

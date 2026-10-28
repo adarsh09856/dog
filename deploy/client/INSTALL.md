@@ -90,7 +90,10 @@ volumes or bypass the enrolled identity. The project name comes from
 `COMPOSE_PROJECT_NAME` in `.env`, or the installation directory name when that
 setting is absent. Preserve that value on upgrades and recovery. The wrapper
 and `recovery.py` share an OS-held operation lock, so Compose commands wait
-while backup, restore, or rollback is in progress.
+while backup, restore, or rollback is in progress. Before every command that
+can start services, the wrapper reruns the installation preflight and validates
+the selected Compose configuration. Keep the standalone checks below when you
+want diagnostic output before the start command.
 
 ```bash
 python3 compose_client.py config --quiet
