@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - codex/client-bundle-verification-*
+      - codex/client-bundle-theme
   workflow_dispatch:
     inputs:
       caddy_image:
@@ -56,6 +57,25 @@ jobs:
         run: python -m pytest --noconftest api/tests/test_client_release_postgres_integration.py -q
       - name: Verify installer and image-verification orchestration
         run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py -q
+
+  owner-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
+      - name: Verify owner installation renewal and revocation UI
+        working-directory: ui
+        run: npm test -- --run src/app/admin/client-installations/page.test.tsx
 
   verify:
     if: github.event_name == 'workflow_dispatch'
