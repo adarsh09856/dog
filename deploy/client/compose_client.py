@@ -71,9 +71,9 @@ def build_command(directory: Path, arguments: list[str]) -> list[str]:
     return command
 
 
-def controlled_environment(directory: Path) -> dict[str, str]:
+def controlled_environment(directory: Path, env_file: Path | None = None) -> dict[str, str]:
     """Keep shell variables from overriding configured values or Compose defaults."""
-    configured = parse_env(directory / ".env")
+    configured = parse_env(env_file or directory / ".env")
     interpolated: set[str] = set()
     for name in (
         "docker-compose.client.yaml",

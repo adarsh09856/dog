@@ -407,18 +407,13 @@ def create_archive(
 
 
 def _run(command: list[str], *, cwd: Path, timeout: int = 120) -> str:
-    configured: set[str] = set()
+    command_env = os.environ.copy()
     if command[:2] == ["docker", "compose"] and "--env-file" in command:
         env_index = command.index("--env-file")
         if env_index + 1 < len(command):
-            configured = set(parse_env(Path(command[env_index + 1])))
-    command_env = {
-        key: value for key, value in os.environ.items()
-        if key not in configured and key not in {
-            "COMPOSE_PROJECT_NAME", "COMPOSE_PROFILES", "COMPOSE_FILE",
-            "COMPOSE_ENV_FILES", "COMPOSE_PATH_SEPARATOR",
-        }
-    }
+            from compose_client import controlled_environment
+
+            command_env = controlled_environment(cwd, Path(command[env_index + 1]))
     try:
         result = subprocess.run(
             command, cwd=cwd, capture_output=True, text=True,

@@ -15,6 +15,25 @@ sys.path.insert(0, str(ROOT / "deploy/client"))
 import recovery  # noqa: E402
 
 
+def test_recovery_compose_does_not_inherit_omitted_interpolation_values(tmp_path, monkeypatch):
+    env_file = tmp_path / "custom.env"
+    env_file.write_text("PUBLIC_HOST=example.test\n", encoding="utf-8")
+    for name in ("docker-compose.client.yaml", "docker-compose.identity.yaml", "docker-compose.recovery.yaml"):
+        (tmp_path / name).write_text("value: ${CLIENT_INTERNAL_SUBNET:-default}\n", encoding="utf-8")
+    monkeypatch.setenv("CLIENT_INTERNAL_SUBNET", "10.99.0.0/16")
+    monkeypatch.setenv("DOCKER_CONFIG", "docker-config")
+    captured = {}
+
+    def run(_command, **kwargs):
+        captured.update(kwargs["env"])
+        return __import__("subprocess").CompletedProcess(_command, 0, stdout="ok")
+
+    monkeypatch.setattr(recovery.subprocess, "run", run)
+    recovery._run(["docker", "compose", "--env-file", str(env_file), "config"], cwd=tmp_path)
+    assert "CLIENT_INTERNAL_SUBNET" not in captured
+    assert captured["DOCKER_CONFIG"] == "docker-config"
+
+
 def _write_volume_tar(path: Path, name: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(path, "w") as archive:

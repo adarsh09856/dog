@@ -2,6 +2,7 @@
 
 ## 28 October 2026 — public brand follow-up
 
+- Recovery Compose invocations now use the same shell-variable isolation as the client wrapper, including optional interpolation variables omitted from the selected environment file. Recovery, wrapper, package and installer archive tests passed 80 cases; real Docker recovery with this revision remains unverified.
 - Client image verification diagnostics now retain the original Compose failure ahead of bounded API/UI state and log excerpts. The focused verifier suite passed 20 tests. This prepares the next image run for diagnosis; it does not establish why the previous run failed or that a new build passes.
 - A local ASGI test now exercises the actual client startup integrity-failure reporter through the owner check route, including signed installation proof and the signed owner response. The release-integrity suite passed 34 tests with 2 skipped. This test stubs persistence and uses no network; the separate disposable PostgreSQL test covers persistence, while deployed alert delivery remains unverified.
 - The public home page's final call-to-action now uses the configured company name instead of a hard-coded Kodewaves label. The focused homepage suite passed 2 tests and scoped ESLint passed. This is local code verification; saved branding and rendered deployment acceptance remain open.
