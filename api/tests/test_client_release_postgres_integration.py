@@ -192,6 +192,11 @@ async def test_enrolled_identity_replay_and_integrity_alert_persist(monkeypatch)
             token_fingerprint=hashlib.sha256(token.encode("ascii")).hexdigest(),
             issued_by_user_id=1,
         )
+        assert await record_client_installation_check(
+            installation_id,
+            hashlib.sha256(token.encode("ascii")).hexdigest(),
+            integrity_ok=True,
+        ) is None
         enrollment_token = secrets.token_urlsafe(32)
         assert await issue_installation_enrollment(
             installation_id, hashlib.sha256(enrollment_token.encode("ascii")).hexdigest()
