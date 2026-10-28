@@ -393,7 +393,7 @@ def _verify_compose_runtime(
         failure = exc
         try:
             status = subprocess.run(
-                [*compose_command, "ps", "--all", "--format", "json", "api"],
+                [*compose_command, "ps", "--all", "--format", "json", "api", "ui"],
                 cwd=root, check=False, env=command_env, timeout=30,
                 capture_output=True, text=True,
             )
