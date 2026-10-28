@@ -1,5 +1,19 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — local Docker recovery orchestration and enrollment hardening
+
+- `cf7d3859` adds cold Docker volume export, unique staged restore volumes, persistent Compose selection, rollback state and the canonical `compose_client.py` wrapper. Review corrections cover output collision cleanup, source-volume existence, external consumers, partial stop, failed mapping writes and failed startup. Parent verification: 31 recovery-Docker/wrapper/installer tests passed; these mock Docker orchestration. Real volume export, startup and restore remain unverified because no local Docker daemon is available.
+- `b6d02ffd` closes bearer-only good-status checks for unenrolled installations at both route and database boundaries. Agent verification: 103 focused API cases passed. `9ad75394` extends disposable PostgreSQL acceptance, but that real-DB test is unexecuted locally. Enrollment bootstrap remains available independently.
+- `76257780` discloses one-time credit-bundle purchases and non-expiring wallet minutes on public cards. Seven pricing UI cases and focused lint passed. Live payment/catalog acceptance remains open.
+- These commits are local only. The user stopped further pushes/merges; no production deployment occurred. Remaining release requirements include the failing full UI/runtime smoke, real recovery and enrolled HTTPS installation, owner alert delivery, saved-brand and payment journeys, and integration/voice acceptance.
+
+## 28 October 2026 — local recovery milestone and API startup result
+
+- Run `40657527604` identified the concrete client API startup exception: production requires an explicit CORS allowlist. Commit `3e2f9cfa` binds it to the licensed public HTTPS hostname. Run `40658358955` subsequently records API startup complete, API container healthy and `/api/v1/health` HTTP 200. That run still failed the overall Compose smoke; UI/runtime diagnosis remains open. Do not count it as a passing image acceptance gate.
+- Local commits `baf6caf8` and `b7a658fb` add recovery-set creation from pre-exported cold volume archives, streamed checksums, identity/config consistency checks, safe new-directory staging and nested volume extraction with space/ownership checks. The combined run initially had one stale CLI-help assertion; after correcting it, all nine installer-archive cases passed, alongside the preceding successful recovery/package cases. This is offline recovery evidence, not Docker export, service restart or customer-data acceptance.
+- Local commit `a6d40d88` fixes public foreign-currency digit grouping; seven pricing UI cases and focused lint passed. Pushes and merges are stopped at the user's request. Local integration report records 50 shared changed paths and 32 simulated conflicts against committed voice state; uncommitted VPS/voice changes must be captured separately before integration.
+- Active remaining work: Docker backup and staged-volume activation/rollback, remaining UI and backend acceptance, failed full runtime smoke, saved-brand/database/payment journeys, owner alert delivery, enrolled HTTPS installation, and voice/browser/telephone integration. The full commercial bundle remains incomplete.
+
 ## 28 October 2026 — current runtime failure and recovery requirement
 
 - Hosted runs `40651922061`, `40655769220` and `40656693626` failed the disposable Compose runtime gate. PostgreSQL, Redis and MinIO became healthy; the API became unhealthy. This supersedes earlier pending-run statements. The underlying API startup exception is still unconfirmed.
