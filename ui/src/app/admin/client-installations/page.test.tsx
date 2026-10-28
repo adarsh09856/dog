@@ -89,4 +89,68 @@ describe("owner integrity alert refresh", () => {
     expect(screen.getByText("Installation identity enrolled")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Create enrollment token" }).hasAttribute("disabled")).toBe(true);
   });
+
+  it("renews an installation and displays the replacement token once", async () => {
+    const expiresAt = 1_900_000_000;
+    const installation = {
+      installation_id: "client-1", customer_id: "customer-1", domains: ["customer.example"],
+      ip_ranges: [], features: ["voice"], limits: { max_concurrent_calls: 1 },
+      expires_at: expiresAt, token_fingerprint: "old-fingerprint", revoked_at: null,
+      last_seen_at: null, integrity_failed_at: null,
+    };
+    mocks.apiFetch.mockImplementation((endpoint: string) => {
+      if (endpoint.endsWith("/alerts")) return Promise.resolve([]);
+      if (endpoint.endsWith("/renew")) {
+        return Promise.resolve({
+          installation_id: "client-1", token: "replacement-token", public_key: "verification-key",
+          expires_at: expiresAt + 30 * 86400,
+        });
+      }
+      return Promise.resolve([installation]);
+    });
+    render(<ClientInstallationsPage />);
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Renew for 30 days" }));
+    });
+
+    expect(mocks.apiFetch).toHaveBeenCalledWith(
+      "/admin/client-installations/client-1/renew",
+      { method: "POST", body: JSON.stringify({ expires_at: expiresAt + 30 * 86400 }) },
+    );
+    expect(screen.getByDisplayValue("replacement-token")).toBeTruthy();
+  });
+
+  it("confirms revocation, persists it, and refreshes the owner record", async () => {
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    let revoked = false;
+    const record = {
+      installation_id: "client-1", customer_id: "customer-1", domains: ["customer.example"],
+      ip_ranges: [], features: ["voice"], limits: { max_concurrent_calls: 1 },
+      expires_at: 1_900_000_000, token_fingerprint: "fingerprint",
+      revoked_at: null as string | null, last_seen_at: null, integrity_failed_at: null,
+    };
+    mocks.apiFetch.mockImplementation((endpoint: string, options?: { method?: string }) => {
+      if (endpoint.endsWith("/alerts")) return Promise.resolve([]);
+      if (endpoint.endsWith("/revoke") && options?.method === "POST") {
+        revoked = true;
+        record.revoked_at = "2026-10-28T00:00:00Z";
+        return Promise.resolve({ installation_id: "client-1", revoked_at: record.revoked_at });
+      }
+      return Promise.resolve([{ ...record, revoked_at: revoked ? record.revoked_at : null }]);
+    });
+    render(<ClientInstallationsPage />);
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Mark revoked" }));
+    });
+
+    expect(confirmation).toHaveBeenCalledWith(expect.stringContaining("Mark installation client-1 revoked?"));
+    expect(mocks.apiFetch).toHaveBeenCalledWith(
+      "/admin/client-installations/client-1/revoke", { method: "POST" },
+    );
+    expect(screen.getByText(/Marked revoked/)).toBeTruthy();
+  });
 });
