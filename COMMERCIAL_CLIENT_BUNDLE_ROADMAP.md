@@ -1,5 +1,11 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — renewal lifecycle and current client-image verification
+
+- Commit `f85cafd7` adds a PostgreSQL integration check for installation license renewal: the previous fingerprint is accepted only for its bounded handover, replayed renewal is rejected, and revocation is observed for both current and previous fingerprints.
+- [GitHub Actions run 40640975881](https://github.com/adarsh09856/dog/actions/runs/40640975881) passed both `owner-postgres` and `verify` on `codex/client-bundle-theme`. The owner job ran against disposable PostgreSQL; the verification job built the client API/UI images using temporary signing keys and passed source/route, signature, tamper-at-startup and installer orchestration checks.
+- This is hosted CI evidence, not a released customer image. Registry publication, clean HTTPS installation, real DNS/domain enrollment, pushed owner alert delivery, live expiry/revocation, upgrade/rollback, saved-brand review, and browser/telephone acceptance remain open. No production image or migration was changed by this run.
+
 ## 28 October 2026 — built client-image and startup-tamper gate
 
 - [GitHub Actions run 40630042494](https://github.com/adarsh09856/dog/actions/runs/40630042494) succeeded at commit `b6cd7e2e`: both `verify` and `owner-postgres` jobs passed. The downloaded evidence artifact `client-image-verification-b6cd7e2e9d8f14286cc9629053ac2eb0043c6628` reports API image ID `sha256:4fd512af7c5ce807209731608eef9ef8d77ab9a005a27387c5b2e48d27991264`, UI image ID `sha256:1350ce1f34c731d4deb4da9cee95c32503fa171ca6f39fd3acdeec84c2f7ef17`, and signed manifest hash `5c0314d83babf7cf92b0fb7ce11b250f33f5a834e21b496f6207a14185a8e556`.
