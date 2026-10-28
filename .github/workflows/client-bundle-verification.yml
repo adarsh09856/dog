@@ -57,6 +57,18 @@ jobs:
         run: python -m pytest --noconftest api/tests/test_client_release_postgres_integration.py -q
       - name: Verify installer and image-verification orchestration
         run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py -q
+      - name: Verify client licensing, owner-route boundaries and feature entitlements
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test
+          REDIS_URL: redis://127.0.0.1:1/15
+        run: >-
+          python -m pytest --noconftest
+          api/tests/test_deployment_edition.py
+          api/tests/test_client_startup_entrypoint.py
+          api/tests/test_installation_license.py
+          api/tests/test_owner_installation_status.py
+          api/tests/test_client_worker_entitlements.py -q
 
   owner-ui:
     runs-on: ubuntu-24.04
