@@ -4,6 +4,8 @@ Status: planning, 27 October 2026. This is an expanded product direction, not a 
 
 ## Product direction
 
+The [AI platform control plan](AI_PLATFORM_CONTROL_PLAN.md) defines the shared assistant, action permissions, approval and recovery path, complete module coverage, delivery order and acceptance checklist. All new business panels and integrations must use that action contract so the assistant can operate the delivered platform consistently.
+
 Build a configurable business operating platform with voice AI, omnichannel communications, customer relationships, workflow automation and optional industry modules. Support the owner-operated SaaS and a separately packaged customer installation. Customers enable only relevant modules, configure their workspace and connect their own accounts; the owner controls plans, licensing, limits and availability. Design for multiple languages and accessibility, with capabilities determined by the connected model and provider.
 
 Do not promise every industry, jurisdiction, social feature, device-linking method or model language until the specific journey is implemented and accepted. Rank opportunities with customer evidence, delivery cost, provider access and maintenance capacity. This catalog is broad rather than exhaustive.

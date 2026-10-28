@@ -1,5 +1,7 @@
 # Kodewaves platform delivery roadmap
 
+Platform expansion now includes the [AI control plan](AI_PLATFORM_CONTROL_PLAN.md): one contextual assistant across permitted public, workspace and owner operations, backed by authorized domain actions and durable task execution. These planned capabilities extend the product roadmap; existing commercial release and voice acceptance gates remain open until their own evidence is recorded.
+
 ## 27 October 2026 - disposable owner PostgreSQL gate
 
 - GitHub Actions run [40559667514](https://github.com/adarsh09856/dog/actions/runs/40559667514), commit `f70770a5`, passed the `owner-postgres` job: four integration tests against a disposable PostgreSQL 17 service. The tests cover first-owner concurrency, enrolled identity replay and integrity-alert persistence, workspace-scoped user changes, and signed client seat limits.
