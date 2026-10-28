@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { getPostAuthDestination, getPricingSelection } from "./pricingSelection";
+import {
+  getAuthContinuationSearch,
+  getPostAuthDestination,
+  getPricingSelection,
+} from "./pricingSelection";
 
 describe("pricing selection redirects", () => {
   it("keeps a valid plan and billing cycle through local authentication", () => {
@@ -20,5 +24,13 @@ describe("pricing selection redirects", () => {
       .toBe("/billing-sovereign?credit_package=starter_bundle-1");
     expect(getPostAuthDestination("?credit_package=https%3A%2F%2Fevil.example"))
       .toBe("/after-sign-in");
+  });
+
+  it("preserves only the validated purchase intent between sign-in and sign-up", () => {
+    expect(getAuthContinuationSearch("?plan=pro&billing_cycle=annual&next=%2Fadmin"))
+      .toBe("?plan=pro&billing_cycle=annual");
+    expect(getAuthContinuationSearch("?credit_package=bundle-500&next=https%3A%2F%2Fevil.example"))
+      .toBe("?credit_package=bundle-500");
+    expect(getAuthContinuationSearch("?plan=..%2Fadmin&next=%2Fadmin")).toBe("");
   });
 });

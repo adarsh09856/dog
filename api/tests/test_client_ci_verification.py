@@ -296,9 +296,11 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
     verifier, monkeypatch, tmp_path
 ):
     commands = []
+    command_options = []
 
     def run(command, **kwargs):
         commands.append(command)
+        command_options.append((command, kwargs))
         if command[:2] == ["docker", "build"]:
             return SimpleNamespace(returncode=0)
         if command[:2] == ["docker", "compose"]:
@@ -335,8 +337,42 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
 
     down = next(command for command in commands if command[:2] == ["docker", "compose"] and "down" in command)
     image_rm = next(command for command in commands if command[:3] == ["docker", "image", "rm"])
+    compose_up_options = next(
+        options for command, options in command_options
+        if command[:2] == ["docker", "compose"] and "up" in command
+    )
+    assert compose_up_options["capture_output"] is True
+    assert compose_up_options["text"] is True
     assert "--volumes" in down and "--remove-orphans" in down
     assert image_rm[-1].startswith("kodewaves-ci-minio:kw-ci-")
+
+
+def test_runtime_smoke_preserves_compose_startup_diagnostics(verifier, monkeypatch, tmp_path):
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append((command, kwargs))
+        if command[:2] == ["docker", "build"]:
+            return SimpleNamespace(returncode=0)
+        if command[:2] == ["docker", "compose"] and "up" in command:
+            assert kwargs["capture_output"] is True
+            assert kwargs["text"] is True
+            raise subprocess.CalledProcessError(1, command, stderr="api healthcheck failed")
+        return SimpleNamespace(returncode=0, stdout="")
+
+    monkeypatch.setattr(verifier.subprocess, "run", run)
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        verifier._verify_compose_runtime(
+            Path("/repo"), tmp_path, api_image="kodewaves-api:ci-check",
+            ui_image="kodewaves-ui:ci-check", manifest=tmp_path / "manifest.json",
+        )
+
+    assert error.value.stderr == "api healthcheck failed"
+    down = next(
+        command for command, _ in commands
+        if command[:2] == ["docker", "compose"] and "down" in command
+    )
+    assert "--volumes" in down and "--remove-orphans" in down
 
 
 def test_ci_rejects_floating_ingress_image_before_building(verifier, monkeypatch, tmp_path):

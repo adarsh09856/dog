@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { loginApiV1AuthLoginPost } from "@/client/sdk.gen";
@@ -10,12 +10,17 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getPostAuthDestination } from "@/lib/pricingSelection";
+import { getAuthContinuationSearch, getPostAuthDestination } from "@/lib/pricingSelection";
 
 export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [signupContinuation, setSignupContinuation] = useState("");
+
+  useEffect(() => {
+    setSignupContinuation(getAuthContinuationSearch(window.location.search));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,7 +98,7 @@ export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
       {signupEnabled && (
         <p className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
-          <Link href="/auth/signup" className="text-primary underline-offset-4 hover:underline">
+          <Link href={`/auth/signup${signupContinuation}`} className="text-primary underline-offset-4 hover:underline">
             Sign up
           </Link>
         </p>

@@ -353,7 +353,10 @@ def _verify_compose_runtime(
         )
         subprocess.run(
             [*compose_command, "up", "--detach", "--wait", "--wait-timeout", "300", "api", "ui"],
+            # Capture Compose's startup diagnostics so a failed health wait can
+            # be surfaced in the bounded GitHub Actions failure annotation.
             cwd=root, check=True, env=command_env, timeout=360,
+            capture_output=True, text=True,
         )
         api_port = _loopback_port(compose_command, "api", 8000)
         ui_port = _loopback_port(compose_command, "ui", 3010)

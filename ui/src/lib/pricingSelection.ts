@@ -25,3 +25,19 @@ export function getPostAuthDestination(search: string): string {
   if (selection.billingCycle) destinationParams.set("billing_cycle", selection.billingCycle);
   return `/billing-sovereign?${destinationParams.toString()}`;
 }
+
+/** Preserve only a validated catalog selection while moving between auth pages. */
+export function getAuthContinuationSearch(search: string): string {
+  const params = new URLSearchParams(search);
+  const creditPackage = params.get("credit_package");
+  if (creditPackage && /^[a-zA-Z0-9_-]{1,80}$/.test(creditPackage)) {
+    return `?${new URLSearchParams({ credit_package: creditPackage }).toString()}`;
+  }
+
+  const selection = getPricingSelection(search);
+  if (!selection) return "";
+
+  const continuation = new URLSearchParams({ plan: selection.plan });
+  if (selection.billingCycle) continuation.set("billing_cycle", selection.billingCycle);
+  return `?${continuation.toString()}`;
+}
