@@ -595,6 +595,19 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
     if not isinstance(text, str):
         return None
     text = text.strip()
+    # Turn pipelines may revisit the latest user message while waiting on the
+    # assistant. Key by user-turn ordinal (not raw message index) and content
+    # so a repeated parser pass cannot append the same dictated digits twice.
+    user_turn_key = (
+        sum(
+            1 for message in messages[: latest_index + 1]
+            if isinstance(message, dict) and message.get("role") == "user"
+        ),
+        text,
+    )
+    if state.get("caller_phone_last_processed_user_turn") == user_turn_key:
+        return None
+    state["caller_phone_last_processed_user_turn"] = user_turn_key
     # Hindi ASR alternates nukta spellings (फोन/फ़ोन, फाइव/फ़ाइव).
     # Normalize only the parser's copy; keep the caller's original transcript.
     phone_text = unicodedata.normalize(
@@ -622,7 +635,7 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
     # Split those separators before matching individual number words.
     words = re.findall(r"[^\s,.!?।:;\-]+", rest.casefold())
     fillers = {"है", "हैं", "हूँ", "हूं", "hai", "hain", "he", "is", "uh", "um"}
-    tokens = [word for word in words if word not in fillers]
+    tokens = [word for word in words if word not in fillers and word != "plus"]
     # These words can be a misrecognition of "one", but also have normal
     # meanings. Never silently store a guessed digit as the caller's number.
     ambiguous_one = {"on", "run", "won", "wan"}
@@ -712,7 +725,7 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
                 r"reschedule|address|help|status)\b|रद्द|कैंसल|बदल|ऑर्डर|"
                 r"अपॉइंटमेंट|बुकिंग|पता|मदद", phone_text, re.IGNORECASE
             )
-            if changed_intent or len(digits) < 4 or len(unknown) > len(digits):
+            if changed_intent:
                 return None
 
     # A full number re-introduction or a retry after an unclear digit replaces

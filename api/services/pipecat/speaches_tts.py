@@ -263,6 +263,15 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._turn_keepalive = asyncio.create_task(keep_turn_open())
 
     async def on_turn_context_completed(self):
+        # A final HTTP synthesis phrase can fail after an earlier phrase has
+        # already queued PCM. Pipecat derives this flag from only the final
+        # phrase; still close the active context so playback gets its stop
+        # sentinel instead of waiting for the three-second timeout.
+        if (
+            self._turn_context_id is not None
+            and self.audio_context_available(self._turn_context_id)
+        ):
+            self._is_yielding_frames_synchronously = True
         try:
             await super().on_turn_context_completed()
         finally:
