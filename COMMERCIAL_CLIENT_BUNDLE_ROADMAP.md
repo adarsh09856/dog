@@ -2,6 +2,8 @@
 
 ## 28 October 2026 — local Docker setup checkpoint
 
+- After restart, Docker Engine reported 2 CPUs and 3,052,437,504 bytes memory. The real PostgreSQL 17 disposable container ran with a 384 MB memory cap, 0.5 CPU, 128 PIDs and tmpfs data. All five opt-in client release database tests passed in 4.98 seconds, covering concurrent owner/signup limits, enrollment and signed status, replay rejection, IP binding, renewal/revocation, alert persistence and workspace-scoped user changes. Container removed after the run.
+- The renewal test schema omitted `client_installation_nonces`, which the owner check handler uses. Added that table to the isolated test schema; this correction was included in the passing run. Full migrated-install and container-image acceptance remain open.
 - Docker Desktop installation completed through winget. The Docker client exists at `C:\Program Files\Docker\Docker\resources\bin\docker.exe`, but its engine pipe was unavailable at the last check.
 - Windows DISM log records WSL feature installed and `Reboot required=yes` at 16:39:10. A Windows restart is required before further engine verification; do not repeat installer polling or start a second installation based on silence.
 - The previously absent user `.wslconfig` now caps WSL at 3 GB memory, 2 processors and 1 GB swap. Verify these limits and engine health after restart before starting containers. No image build or client-stack acceptance has run on this PC.

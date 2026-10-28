@@ -294,6 +294,7 @@ async def test_renewal_handover_and_revocation_persist(monkeypatch):
             await conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY)"))
             await conn.execute(text("INSERT INTO users (id) VALUES (1)"))
             await conn.run_sync(ClientInstallationModel.__table__.create)
+            await conn.run_sync(ClientInstallationNonceModel.__table__.create)
         monkeypatch.setattr(kodewaves_db_client, "async_session", async_sessionmaker(engine))
 
         installation_id = "client-renewal-1"
