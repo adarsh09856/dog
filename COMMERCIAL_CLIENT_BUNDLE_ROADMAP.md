@@ -1,9 +1,15 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — public brand follow-up
+
+- The public home page's final call-to-action now uses the configured company name instead of a hard-coded Kodewaves label. The focused homepage suite passed 2 tests and scoped ESLint passed. This is local code verification; saved branding and rendered deployment acceptance remain open.
+- The canonical client Compose wrapper now runs installation preflight and `docker compose config --quiet` before service-start commands, under the recovery operation lock. Invalid inputs stop startup. The wrapper, package and installer archive suites passed 68 tests; these use mocked orchestration and do not prove a clean installation with built images.
+- The wrapper also strips inherited shell values for variables referenced by its approved Compose files, including optional variables omitted from `.env`, so they cannot silently override Compose defaults. Focused wrapper/package tests passed 59 cases; deployed Compose behavior remains to be accepted.
+
 ## 28 October 2026 — isolated Compose recovery journey
 
 - A unique disposable VPS Compose project ran real PostgreSQL 17, MinIO and Redis with sleeping API/UI stand-ins, no published ports or production mounts. The agent seeded a database row and MinIO object, ran `create_docker_backup`, changed original data, ran `restore_to_docker_volumes` and confirmed the backed-up values, then ran `rollback_docker_restore` and confirmed the later original values. The exact temporary containers, volumes, network and code directory were removed; production services were not stopped or contacted.
-- This exercises the recovery commands with real database/object storage and synthetic application services. It does not establish successful recovery of a real signed client image, production data, identity owner checks, or live calls. The wrapper/recovery shared-lock concurrency fix remains pending.
+- This exercises the recovery commands with real database/object storage and synthetic application services. It does not establish successful recovery of a real signed client image, production data, identity owner checks, or live calls. The wrapper/recovery shared-lock fix was subsequently added in `28ba60eb`; its focused tests do not replace full-stack recovery acceptance.
 
 ## 28 October 2026 — disposable PostgreSQL enrollment acceptance
 

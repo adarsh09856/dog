@@ -316,7 +316,7 @@ export default function HomePage() {
         <section className="border-t border-border bg-muted/40 px-5 py-20 text-center sm:px-8 sm:py-24">
           <div className="mx-auto max-w-3xl">
             <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
-              Kodewaves voice agent workspace
+              {branding.company_name} voice agent workspace
             </p>
             <h2 className="text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
               Configure your first voice agent.

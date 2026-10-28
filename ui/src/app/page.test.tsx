@@ -23,6 +23,10 @@ describe("public home branding", () => {
     expect(screen.getByRole("main").textContent).toContain(
       "Acme helps every caller take the next step.",
     );
+    expect(screen.getByRole("main").textContent).toContain(
+      "Acme Voice voice agent workspace",
+    );
+    expect(screen.getByRole("main").textContent).not.toContain("Kodewaves");
     expect(screen.getByRole("contentinfo").textContent).toContain(
       "Acme helps every caller take the next step.",
     );
