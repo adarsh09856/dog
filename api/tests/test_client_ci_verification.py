@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import sys
 import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
@@ -377,6 +378,23 @@ def test_ci_rejects_incomplete_or_invalid_inventory_metrics(verifier, tmp_path):
     }))
     with pytest.raises(ValueError, match="Invalid protected inventory metrics for api"):
         verifier._read_inventory_metrics(metrics)
+
+
+def test_cli_emits_bounded_ci_annotation_on_failure(verifier, monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(sys, "argv", [
+        "ci_verify", "--caddy-image", "registry.example.com/ingress@sha256:" + "a" * 64,
+        "--report", str(tmp_path / "report.json"),
+    ])
+
+    def fail(_caddy_image, _report):
+        raise ValueError("runtime smoke failed\nlocal diagnostics")
+
+    monkeypatch.setattr(verifier, "verify", fail)
+    with pytest.raises(ValueError, match="runtime smoke failed"):
+        verifier.main()
+
+    assert "::error title=Client image verification failed::ValueError: runtime smoke failed%0Alocal diagnostics" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("tamper", ["api_count", "ui_image", "edition"])

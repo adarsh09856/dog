@@ -496,7 +496,16 @@ def main() -> int:
     parser.add_argument("--caddy-image", required=True)
     parser.add_argument("--report", required=True, type=Path)
     args = parser.parse_args()
-    verify(args.caddy_image, args.report)
+    try:
+        verify(args.caddy_image, args.report)
+    except Exception as exc:
+        if os.getenv("GITHUB_ACTIONS", "").lower() == "true":
+            # Surface a bounded summary when private action logs aren't visible;
+            # never dump subprocess output or the process environment here.
+            detail = f"{type(exc).__name__}: {exc}"[:800]
+            detail = detail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::error title=Client image verification failed::{detail}", file=sys.stderr)
+        raise
     return 0
 
 
