@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -49,16 +50,18 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
             _write_fake_build_outputs(command)
             return SimpleNamespace(returncode=0)
         if command[:2] == ["docker", "compose"]:
-            env_file = Path(command[command.index("--env-file") + 1])
-            contents = env_file.read_text()
-            assert "COMPOSE_PROFILES=direct-ingress" in contents
-            assert "KODEWAVES_LICENSE_TOKEN=ci-payload.ci-signature" in contents
-            manifest_path = Path(contents.split("CLIENT_RELEASE_MANIFEST_FILE=", 1)[1].splitlines()[0])
-            config_manifest = json.loads(manifest_path.read_text())
-            assert config_manifest["ci_configuration_fixture"] is True
-            assert "signature" not in config_manifest
-            assert config_manifest["payload"]["images"]["api"]["kind"] == "registry_digest"
+            if "config" in command:
+                env_file = Path(command[command.index("--env-file") + 1])
+                contents = env_file.read_text()
+                assert "COMPOSE_PROFILES=direct-ingress" in contents
+                assert "KODEWAVES_LICENSE_TOKEN=ci-payload.ci-signature" in contents
+                manifest_path = Path(contents.split("CLIENT_RELEASE_MANIFEST_FILE=", 1)[1].splitlines()[0])
+                config_manifest = json.loads(manifest_path.read_text())
+                assert config_manifest["ci_configuration_fixture"] is True
+                assert "signature" not in config_manifest
+                assert config_manifest["payload"]["images"]["api"]["kind"] == "registry_digest"
             if command[-3:] == ["config", "--format", "json"]:
+                contents = env_file.read_text()
                 if any(str(argument).endswith("docker-compose.identity.yaml") for argument in command):
                     assert "CLIENT_IDENTITY_KEY_FILE=" in contents
                     assert "CLIENT_IDENTITY_GID=" in contents
@@ -84,12 +87,60 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
                     "caddy": {"networks": {"internal": {"ipv4_address": "172.31.40.2"}}},
                     "api": {"environment": {"FORWARDED_ALLOW_IPS": "172.31.40.2"}},
                 }}))
-            assert command[-2:] == ["config", "--quiet"]
+            if command[-2:] == ["config", "--quiet"]:
+                return SimpleNamespace(returncode=0)
+            if "up" in command:
+                assert "--wait" in command
+                override = Path(command[command.index("-f", command.index("-f") + 1) + 1])
+                assert "internal: true" in override.read_text()
+                env_values = dict(
+                    line.split("=", 1)
+                    for line in Path(command[command.index("--env-file") + 1]).read_text().splitlines()
+                )
+                assert env_values["COMPOSE_PROFILES"] == ""
+                assert env_values["KODEWAVES_LICENSE_TOKEN"] == "invalid-ci-license.signature"
+                assert "@sha256:" in env_values["CLIENT_POSTGRES_IMAGE"]
+                assert "@sha256:" in env_values["CLIENT_REDIS_IMAGE"]
+                assert kwargs["env"]["COMPOSE_PROFILES"] == ""
+                return SimpleNamespace(returncode=0)
+            if "port" in command:
+                service = command[command.index("port") + 1]
+                return SimpleNamespace(stdout="127.0.0.1:12345\n" if service == "api" else "127.0.0.1:12346\n")
+            if "down" in command:
+                assert "--volumes" in command and "--remove-orphans" in command
+                return SimpleNamespace(returncode=0)
+            if "logs" in command:
+                return SimpleNamespace(returncode=0)
+            pytest.fail(f"Unexpected Compose command: {command}")
+        if command[:2] == ["docker", "build"]:
+            assert Path(command[command.index("--file") + 1]).name == "Dockerfile"
             return SimpleNamespace(returncode=0)
-        assert command[:3] == ["docker", "image", "inspect"]
-        return SimpleNamespace(stdout="sha256:" + "a" * 64)
+        if command[:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(stdout="sha256:" + "a" * 64)
+        if command[:3] == ["docker", "image", "rm"]:
+            return SimpleNamespace(returncode=0)
+        pytest.fail(f"Unexpected command: {command}")
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    requested_urls = []
+
+    def open_url(request, timeout):
+        requested_urls.append(request.full_url)
+        if request.full_url.endswith("/api/v1/workflow"):
+            assert request.get_header("Host") == "smoke.customer.example.invalid"
+            raise urllib.error.HTTPError(request.full_url, 402, "invalid license", {}, None)
+        return Response()
 
     monkeypatch.setattr(verifier.subprocess, "run", run)
+    monkeypatch.setattr(verifier.urllib.request, "urlopen", open_url)
     report = tmp_path / "evidence.json"
     verifier.verify("registry.example.com/kodewaves/caddy@sha256:" + "b" * 64, report)
 
@@ -100,14 +151,26 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
     assert evidence["compose_config"] == "passed"
     assert evidence["custom_network_proxy_config"] == "passed"
     assert evidence["identity_overlay_config"] == "passed"
+    assert evidence["runtime_compose_smoke"]["api_health"] == "passed"
+    assert evidence["runtime_compose_smoke"]["ui_root"] == "passed"
+    assert evidence["runtime_compose_smoke"]["invalid_license_protected_route"] == "rejected_with_http_402"
+    assert "@sha256:" in evidence["runtime_compose_smoke"]["dependency_images"]["postgres"]
+    assert "@sha256:" in evidence["runtime_compose_smoke"]["dependency_images"]["redis"]
     assert "Unsigned configuration fixture" in evidence["installer_manifest_scope"]
     assert evidence["protected_inventory"] == {
         "api": {"file_count": 2, "elapsed_ms": 840.5},
         "ui": {"file_count": 1, "elapsed_ms": 121.0},
     }
     assert "telephone" in evidence["not_verified"]
-    assert "Compose interpolation" in evidence["scope"]
-    assert len(commands) == 6
+    assert any(
+        item.startswith("owner-enrolled clean installation")
+        for item in evidence["not_verified"]
+    )
+    assert "Compose runtime smoke" in evidence["scope"]
+    assert any(command[:2] == ["docker", "build"] for command in commands)
+    assert any(command[:2] == ["docker", "compose"] and "down" in command for command in commands)
+    assert len(requested_urls) == 3
+    assert all(url.startswith("http://127.0.0.1:") for url in requested_urls)
     assert captured_keys and all(not key.exists() for key in captured_keys)
     assert "private" not in report.read_text()
 
@@ -225,6 +288,53 @@ def test_ci_preflight_failure_does_not_run_compose_or_write_report(verifier, mon
         verifier.verify("registry.example.com/kodewaves/caddy@sha256:" + "b" * 64, report)
     assert not report.exists()
     assert keys and all(not key.exists() for key in keys)
+
+
+def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_failure(
+    verifier, monkeypatch, tmp_path
+):
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append(command)
+        if command[:2] == ["docker", "build"]:
+            return SimpleNamespace(returncode=0)
+        if command[:2] == ["docker", "compose"]:
+            if "port" in command:
+                return SimpleNamespace(stdout="127.0.0.1:23456\n")
+            return SimpleNamespace(returncode=0)
+        if command[:3] == ["docker", "image", "inspect"]:
+            return SimpleNamespace(stdout="sha256:" + "f" * 64)
+        if command[:3] == ["docker", "image", "rm"]:
+            return SimpleNamespace(returncode=0)
+        pytest.fail(f"Unexpected command: {command}")
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def open_url(request, timeout):
+        if request.full_url.endswith("/api/v1/workflow"):
+            raise urllib.error.HTTPError(request.full_url, 500, "unexpected response", {}, None)
+        return Response()
+
+    monkeypatch.setattr(verifier.subprocess, "run", run)
+    monkeypatch.setattr(verifier.urllib.request, "urlopen", open_url)
+    with pytest.raises(ValueError, match="received HTTP 500"):
+        verifier._verify_compose_runtime(
+            Path("/repo"), tmp_path, api_image="kodewaves-api:ci-check",
+            ui_image="kodewaves-ui:ci-check", manifest=tmp_path / "manifest.json",
+        )
+
+    down = next(command for command in commands if command[:2] == ["docker", "compose"] and "down" in command)
+    image_rm = next(command for command in commands if command[:3] == ["docker", "image", "rm"])
+    assert "--volumes" in down and "--remove-orphans" in down
+    assert image_rm[-1].startswith("kodewaves-ci-minio:kw-ci-")
 
 
 def test_ci_rejects_floating_ingress_image_before_building(verifier, monkeypatch, tmp_path):

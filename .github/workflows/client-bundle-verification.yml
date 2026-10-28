@@ -74,7 +74,9 @@ jobs:
           root = ET.parse(sys.argv[1]).getroot()
           failures = []
           for case in root.iter("testcase"):
-              failed = case.find("failure") or case.find("error")
+              failed = case.find("failure")
+              if failed is None:
+                  failed = case.find("error")
               if failed is not None:
                   name = case.attrib.get("name", "")
                   details = ""
@@ -86,7 +88,13 @@ jobs:
                   detail_suffix = f" {details}" if details else ""
                   print(f"::error title=Client licensing test failed::{test_name}{detail_suffix}")
           else:
-              print("::error title=Client licensing tests failed::See pytest report for collection/setup details")
+              summaries = [
+                  f"{suite.attrib.get('name', 'suite')}: failures={suite.attrib.get('failures', '0')}, errors={suite.attrib.get('errors', '0')}"
+                  for suite in root.iter("testsuite")
+                  if int(suite.attrib.get("failures", "0")) or int(suite.attrib.get("errors", "0"))
+              ]
+              detail = "; ".join(summaries) if summaries else "See pytest report for collection/setup details"
+              print(f"::error title=Client licensing tests failed::{detail}")
           PY
           fi
           exit "$test_status"
@@ -113,7 +121,7 @@ jobs:
         run: npm test -- --run src/app/admin/client-installations/page.test.tsx
 
   verify:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/codex/client-bundle-theme'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -133,7 +141,7 @@ jobs:
           python owner-tools/package_client_installer.py --help > /dev/null
       - name: Build and verify client images with temporary keys
         env:
-          CADDY_IMAGE: ${{ inputs.caddy_image }}
+          CADDY_IMAGE: ${{ inputs.caddy_image || 'caddy@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f' }}
         run: >-
           python deploy/client/ci_verify.py
           --caddy-image "$CADDY_IMAGE"

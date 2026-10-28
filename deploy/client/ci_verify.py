@@ -6,13 +6,19 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import ipaddress
 import json
 import math
 import os
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
@@ -20,6 +26,20 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 import yaml
 
 from validate_install import PINNED_IMAGE, validate as validate_client_install
+
+
+# Immutable upstream multi-arch manifests for pgvector/pgvector:pg17 and
+# library/redis:7, used only by the disposable CI runtime smoke. The MinIO
+# service image is built from this repository's version-pinned Dockerfile and
+# removed after the smoke.
+_CI_POSTGRES_IMAGE = (
+    "docker.io/pgvector/pgvector@sha256:"
+    "ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d"
+)
+_CI_REDIS_IMAGE = (
+    "docker.io/library/redis@sha256:"
+    "b6b6e3dc0c0952737748e55d5d885272840c7e42ba41ab1d5489f693419882f5"
+)
 
 
 def normalize_caddy_image(image: str) -> str:
@@ -228,6 +248,186 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> N
             raise ValueError(f"Rendered {service_name.upper()} identity key path does not match its mount")
 
 
+def _loopback_port(compose_command: list[str], service: str, container_port: int) -> int:
+    result = subprocess.run(
+        [*compose_command, "port", service, str(container_port)],
+        check=True, capture_output=True, text=True,
+    )
+    value = result.stdout.strip().splitlines()[-1]
+    parsed = urllib.parse.urlsplit(f"//{value}")
+    try:
+        address = parsed.hostname or ""
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(f"Compose returned an invalid {service} port binding: {value!r}") from exc
+    if port is None or not ipaddress.ip_address(address).is_loopback:
+        raise ValueError(f"Compose {service} port must be bound to loopback, got {value!r}")
+    return port
+
+
+def _http_status(url: str, *, host: str | None = None) -> int:
+    headers = {"Host": host} if host else {}
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return response.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
+
+
+def _verify_compose_runtime(
+    root: Path,
+    directory: Path,
+    *,
+    api_image: str,
+    ui_image: str,
+    manifest: Path,
+) -> dict[str, object]:
+    """Start the built images with isolated dependencies and assert HTTP boundaries.
+
+    The disposable network is internal, so client-mode startup cannot contact
+    the trusted owner endpoint. The invalid license must be rejected by the
+    signed-license middleware before that owner status check is reached.
+    """
+    project = f"kw-ci-{uuid.uuid4().hex[:12]}"
+    minio_image = f"kodewaves-ci-minio:{project}"
+    env_file = directory / f"{project}.env"
+    compose_override = directory / f"{project}-internal-network.yaml"
+    compose_file = root / "deploy/client/docker-compose.client.yaml"
+    values = {
+        "CLIENT_API_IMAGE": api_image,
+        "CLIENT_UI_IMAGE": ui_image,
+        "CLIENT_POSTGRES_IMAGE": _CI_POSTGRES_IMAGE,
+        "CLIENT_REDIS_IMAGE": _CI_REDIS_IMAGE,
+        "CLIENT_MINIO_IMAGE": minio_image,
+        # This service is not started by the selected api/ui dependency graph.
+        "CLIENT_COTURN_IMAGE": "registry.invalid/kodewaves/coturn-ci@sha256:" + "0" * 64,
+        "CLIENT_CADDY_IMAGE": "registry.invalid/kodewaves/caddy-ci@sha256:" + "0" * 64,
+        "COMPOSE_PROFILES": "",
+        "KODEWAVES_INSTALLATION_ID": "ci-installation-smoke",
+        "KODEWAVES_LICENSE_TOKEN": "invalid-ci-license.signature",
+        "PUBLIC_HOST": "smoke.customer.example.invalid",
+        "TURN_HOST": "8.8.8.8",
+        "POSTGRES_PASSWORD": secrets.token_urlsafe(32),
+        "REDIS_PASSWORD": secrets.token_urlsafe(32),
+        "MINIO_ROOT_USER": "kodewaves-ci-storage",
+        "MINIO_ROOT_PASSWORD": secrets.token_urlsafe(32),
+        "OSS_JWT_SECRET": secrets.token_urlsafe(32),
+        "MASTER_CREDENTIAL_ENCRYPTION_KEY": base64.urlsafe_b64encode(
+            secrets.token_bytes(32)
+        ).rstrip(b"=").decode("ascii"),
+        "TELEPHONY_WS_TOKEN_SECRET": secrets.token_urlsafe(32),
+        "TURN_SECRET": secrets.token_urlsafe(32),
+        "CLIENT_RELEASE_MANIFEST_FILE": str(manifest.resolve()),
+        # Docker selects unused loopback ports for each published service.
+        "API_PORT": "0",
+        "UI_PORT": "0",
+        "MINIO_PORT": "0",
+    }
+    env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8")
+    compose_override.write_text(
+        "services:\n"
+        "  api:\n"
+        "    environment:\n"
+        "      ARQ_WORKERS: \"0\"\n"
+        "      ENABLE_ARI_MANAGER: \"false\"\n"
+        "      ENABLE_CAMPAIGN_ORCHESTRATOR: \"false\"\n"
+        "networks:\n"
+        "  internal:\n"
+        "    internal: true\n",
+        encoding="utf-8",
+    )
+    compose_command = [
+        "docker", "compose", "--project-name", project,
+        "--env-file", str(env_file), "-f", str(compose_file),
+        "-f", str(compose_override),
+    ]
+    command_env = {**os.environ, "COMPOSE_PROFILES": ""}
+    result: dict[str, object] = {}
+    failure: BaseException | None = None
+    try:
+        subprocess.run(
+            ["docker", "build", "--tag", minio_image, "--file",
+             str(root / "deploy/minio/Dockerfile"), str(root / "deploy/minio")],
+            cwd=root, check=True, env=command_env,
+        )
+        subprocess.run(
+            [*compose_command, "up", "--detach", "--wait", "--wait-timeout", "300", "api", "ui"],
+            cwd=root, check=True, env=command_env, timeout=360,
+        )
+        api_port = _loopback_port(compose_command, "api", 8000)
+        ui_port = _loopback_port(compose_command, "ui", 3010)
+        health_status = _http_status(f"http://127.0.0.1:{api_port}/api/v1/health")
+        if health_status != 200:
+            raise ValueError(f"Packaged API health endpoint returned HTTP {health_status}")
+        ui_status = _http_status(f"http://127.0.0.1:{ui_port}/")
+        if ui_status != 200:
+            raise ValueError(f"Packaged UI root returned HTTP {ui_status}")
+        protected_status = _http_status(
+            f"http://127.0.0.1:{api_port}/api/v1/workflow",
+            host="smoke.customer.example.invalid",
+        )
+        if protected_status != 402:
+            raise ValueError(
+                "Invalid client license must reject a protected API request with HTTP 402; "
+                f"received HTTP {protected_status}"
+            )
+        image_inspect = subprocess.run(
+            ["docker", "image", "inspect", "--format", "{{.Id}}", minio_image],
+            check=True, capture_output=True, text=True,
+        )
+        result = {
+            "api_health": "passed",
+            "ui_root": "passed",
+            "invalid_license_protected_route": "rejected_with_http_402",
+            "dependency_images": {
+                "postgres": _CI_POSTGRES_IMAGE,
+                "redis": _CI_REDIS_IMAGE,
+                "minio_image_id": image_inspect.stdout.strip(),
+            },
+        }
+    except BaseException as exc:
+        failure = exc
+        try:
+            subprocess.run(
+                [*compose_command, "logs", "--no-color", "--tail", "100"],
+                cwd=root, check=False, env=command_env, timeout=30,
+            )
+        except Exception:  # noqa: BLE001 - preserve the failing smoke result
+            pass
+        raise
+    finally:
+        cleanup_errors: list[str] = []
+        try:
+            down = subprocess.run(
+                [*compose_command, "down", "--volumes", "--remove-orphans", "--timeout", "20"],
+                cwd=root, check=False, env=command_env, timeout=60,
+            )
+            if down.returncode:
+                cleanup_errors.append(f"compose_down={down.returncode}")
+        except Exception as exc:  # noqa: BLE001 - continue cleanup of the remaining resources
+            cleanup_errors.append(f"compose_down={type(exc).__name__}")
+        try:
+            image_cleanup = subprocess.run(
+                ["docker", "image", "rm", "--force", minio_image],
+                cwd=root, check=False, env=command_env, timeout=60,
+            )
+            if image_cleanup.returncode:
+                cleanup_errors.append(f"minio_image_remove={image_cleanup.returncode}")
+        except Exception as exc:  # noqa: BLE001 - preserve smoke failure and report cleanup failure
+            cleanup_errors.append(f"minio_image_remove={type(exc).__name__}")
+        if cleanup_errors and failure is None:
+            raise RuntimeError(
+                "Client runtime smoke cleanup failed: " + ", ".join(cleanup_errors)
+            )
+        if cleanup_errors:
+            print(
+                "Client runtime smoke cleanup warning: " + ", ".join(cleanup_errors),
+                file=sys.stderr,
+            )
+    return result
+
+
 def verify(caddy_image: str, report: Path) -> None:
     caddy_image = normalize_caddy_image(caddy_image)
     if report.exists():
@@ -267,16 +467,23 @@ def verify(caddy_image: str, report: Path) -> None:
                 raise ValueError(f"Missing immutable {name} image ID")
             image_ids[name] = image_id
         _verify_manifest_evidence(manifest, inventory_metrics, image_ids)
+        runtime_smoke = _verify_compose_runtime(
+            root, directory, api_image=api_image, ui_image=ui_image, manifest=manifest,
+        )
         evidence = {
             "status": "passed", "production_release": False,
-            "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation and enrolled identity overlay",
+            "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation, enrolled identity overlay, and disposable API/UI Compose runtime smoke",
             "installer_preflight": "passed", "compose_config": "passed",
             "installer_manifest_scope": "Unsigned configuration fixture; signed build inventories and image IDs verified separately",
             "custom_network_proxy_config": "passed",
             "identity_overlay_config": "passed",
             "startup_tamper_rejection": "passed",
+            "runtime_compose_smoke": runtime_smoke,
             "protected_inventory": inventory_metrics,
-            "not_verified": ["clean install", "upgrade/rollback", "live owner alerts", "browser audio", "telephone"],
+            "not_verified": [
+                "owner-enrolled clean installation and first-admin acceptance",
+                "upgrade/rollback", "live owner alerts", "browser audio", "telephone",
+            ],
             "image_ids": image_ids, "caddy_image": caddy_image,
             "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
         }

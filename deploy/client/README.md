@@ -94,12 +94,13 @@ does not carry WebRTC media traffic.
 
 ### CI image verification before an owner release
 
-The manual GitHub Actions workflow **Verify client bundle images**
-(`.github/workflows/client-bundle-verification.yml`) runs the Docker boundary,
-Caddy configuration, signed API/UI inventory, installer preflight and full
-Compose interpolation checks without production signing keys or registry
-publication. Select the reviewed branch and provide the approved immutable
-Caddy image reference as its `caddy_image` input.
+The GitHub Actions workflow **Verify client bundle images**
+(`.github/workflows/client-bundle-verification.yml`) runs on pushes to
+`codex/client-bundle-theme` and can also be dispatched manually. It runs the Docker boundary,
+Caddy configuration, signed API/UI inventory, installer preflight, full Compose
+interpolation checks, and a disposable API/UI runtime smoke without production
+signing keys or registry publication. Select the reviewed branch and provide
+the approved immutable Caddy image reference as its `caddy_image` input.
 
 The same check runs on a Docker-capable Linux machine with Python,
 `cryptography`, and SQLAlchemy 2.0.43 installed. SQLAlchemy is imported by the
@@ -116,7 +117,18 @@ Only a successful run writes the report; an existing report path is rejected
 to avoid confusing stale evidence with a new result. CI uploads only that
 report, which records image IDs, ingress digest, signed-manifest hash, installer
 preflight result, and the result of the actual `docker compose config --quiet`
-command. It also records the protected API/UI inventory file counts and scan
+command. On the Docker runner it also builds the repository's version-pinned
+MinIO service image, starts API/UI with disposable Postgres, Redis and MinIO
+dependencies, and checks API health, the UI root, and HTTP 402 for a protected
+API request with an invalid license. A unique Compose project, loopback-only
+ephemeral host ports, and an internal-only network isolate the smoke; the
+Compose project volumes/network/containers and temporary MinIO image are
+removed in `finally`. Postgres and Redis use immutable CI image digests. The
+smoke's invalid license fails before any owner HTTP request, and the internal
+network blocks egress. It does not prove an owner-enrolled installation or
+owner alert delivery.
+
+The report also records the protected API/UI inventory file counts and scan
 durations measured while the build tool creates the signed release manifest.
 These measurements make packaged integrity-hash cost visible for later startup
 profiling; they do not by themselves measure API/UI startup latency. A report
@@ -127,8 +139,10 @@ and verifies that the API trusts the resulting Caddy address. Its report records
 this separately as `custom_network_proxy_config`.
 Images produced by this check use disposable trust keys and an invalid test
 owner URL. They are verification artifacts and cannot serve as customer releases.
-Clean installation, upgrades, live alerts and voice/telephone acceptance still
-require separate evidence. The workflow has not yet run for this worktree.
+The runtime smoke is not full clean-install acceptance: owner enrollment, the
+first-administrator journey, real domain/IP binding, updates/rollback, live
+alerts, and browser/telephone acceptance remain separate release gates. The
+next branch push or manual verification run executes this runtime smoke.
 
 ### Production release
 
