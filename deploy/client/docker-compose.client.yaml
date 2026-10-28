@@ -113,6 +113,7 @@ services:
       SERVER_IP: ${SERVER_IP:-}
       BACKEND_API_ENDPOINT: https://${PUBLIC_HOST:?Set licensed public host}
       UI_APP_URL: https://${PUBLIC_HOST:?Set licensed public host}
+      CORS_ALLOWED_ORIGINS: https://${PUBLIC_HOST:?Set licensed public host}
       DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:?Set database password}@postgres:5432/postgres
       REDIS_URL: redis://:${REDIS_PASSWORD:?Set Redis password}@redis:6379
       MINIO_ENDPOINT: minio:9000
