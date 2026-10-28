@@ -2,6 +2,7 @@
 
 ## 28 October 2026 — public brand follow-up
 
+- A local ASGI test now exercises the actual client startup integrity-failure reporter through the owner check route, including signed installation proof and the signed owner response. The release-integrity suite passed 34 tests with 2 skipped. This test stubs persistence and uses no network; the separate disposable PostgreSQL test covers persistence, while deployed alert delivery remains unverified.
 - The public home page's final call-to-action now uses the configured company name instead of a hard-coded Kodewaves label. The focused homepage suite passed 2 tests and scoped ESLint passed. This is local code verification; saved branding and rendered deployment acceptance remain open.
 - The canonical client Compose wrapper now runs installation preflight and `docker compose config --quiet` before service-start commands, under the recovery operation lock. Invalid inputs stop startup. The wrapper, package and installer archive suites passed 68 tests; these use mocked orchestration and do not prove a clean installation with built images.
 - The wrapper also strips inherited shell values for variables referenced by its approved Compose files, including optional variables omitted from `.env`, so they cannot silently override Compose defaults. Focused wrapper/package tests passed 59 cases; deployed Compose behavior remains to be accepted.

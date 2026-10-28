@@ -1,6 +1,10 @@
+import asyncio
 import base64
 import json
+import time
 from types import SimpleNamespace
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -294,6 +298,139 @@ def test_failed_startup_signs_alert_when_installation_key_is_configured(monkeypa
         nonce=body["nonce"], issued_at=body["proof_issued_at"], integrity_ok=False,
         integrity_finding=body["integrity_finding"],
     )
+
+
+@pytest.mark.asyncio
+async def test_startup_integrity_alert_reaches_owner_check_endpoint(monkeypatch, tmp_path):
+    """Bridge the real startup reporter to the owner API without network or DB access."""
+    import httpx
+    from fastapi import FastAPI
+
+    from api.routes.admin import client_installation_check
+    from api.services import release_integrity
+    from api.services.installation_license import issue_license_token, verify_installation_status_claims
+
+    def private_bytes(key):
+        return key.private_bytes(
+            serialization.Encoding.Raw,
+            serialization.PrivateFormat.Raw,
+            serialization.NoEncryption(),
+        )
+
+    def public_string(key):
+        return base64.urlsafe_b64encode(
+            key.public_key().public_bytes(
+                serialization.Encoding.Raw,
+                serialization.PublicFormat.Raw,
+            )
+        ).rstrip(b"=").decode("ascii")
+
+    owner_key = Ed25519PrivateKey.generate()
+    installation_key = Ed25519PrivateKey.generate()
+    owner_private = private_bytes(owner_key)
+    owner_public = public_string(owner_key)
+    installation_public = public_string(installation_key)
+    now = int(time.time())
+    installation_id = "client-alert-test"
+    token = issue_license_token({
+        "iat": now - 1,
+        "exp": now + 3600,
+        "edition": "client",
+        "installation_id": installation_id,
+        "customer_id": "isolated-test",
+        "domains": ["customer.example"],
+        "ip_ranges": ["203.0.113.0/24"],
+        "features": ["voice"],
+        "limits": {"max_concurrent_calls": 1},
+    }, owner_private)
+    key_path = tmp_path / "installation.key"
+    key_path.write_bytes(private_bytes(installation_key))
+
+    monkeypatch.setattr(release_integrity, "IMAGE_EDITION", "client")
+    monkeypatch.setattr(
+        release_integrity,
+        "trusted_owner_status_url",
+        lambda: "https://owner.example.com/client-installations/check",
+    )
+    monkeypatch.setattr(
+        client_installation_check,
+        "_owner_verification_signers",
+        lambda: [(owner_private, owner_public)],
+    )
+    monkeypatch.setattr(
+        client_installation_check,
+        "get_client_installation_record",
+        AsyncMock(return_value={"installation_public_key": installation_public}),
+    )
+    persisted = {}
+
+    async def record_check(_installation_id, _fingerprint, **kwargs):
+        persisted.update(kwargs)
+        return {
+            "revoked_at": None,
+            "integrity_failed_at": datetime.now(UTC).isoformat(),
+            "expires_at": now + 3600,
+        }
+
+    monkeypatch.setattr(client_installation_check, "record_client_installation_check", record_check)
+    monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", token)
+    monkeypatch.setenv("KODEWAVES_INSTALLATION_ID", installation_id)
+    monkeypatch.setenv("KODEWAVES_INSTALLATION_KEY_FILE", str(key_path))
+
+    owner_app = FastAPI()
+    owner_app.include_router(client_installation_check.router)
+    responses = []
+
+    def post_to_local_owner(url, **kwargs):
+        async def request_owner():
+            transport = httpx.ASGITransport(app=owner_app, client=("203.0.113.7", 1234))
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="https://owner.example.com",
+            ) as client:
+                response = await client.post(
+                    url,
+                    json=kwargs["json"],
+                    headers=kwargs["headers"],
+                )
+                responses.append(response)
+                return response
+
+        # The production reporter is synchronous; run its local ASGI transport
+        # in this worker thread so the test's async event loop stays independent.
+        return asyncio.run(request_owner())
+
+    monkeypatch.setattr(httpx, "post", post_to_local_owner)
+    finding = ReleaseIntegrityError(
+        "Protected application file changed",
+        reason="modified_file",
+        component="api/app.py",
+        expected_sha256="a" * 64,
+        observed_sha256="b" * 64,
+    )
+    def fail_release_verification(_root=None):
+        raise finding
+
+    monkeypatch.setattr(release_integrity, "verify_configured_release", fail_release_verification)
+    with pytest.raises(ReleaseIntegrityError, match="Protected application file changed"):
+        await asyncio.to_thread(release_integrity.verify_release_before_startup)
+
+    assert len(responses) == 1
+    assert responses[0].status_code == 200, responses[0].text
+    assert persisted["integrity_ok"] is False
+    assert persisted["integrity_finding"] == finding.finding()
+    assert persisted["expected_public_key"] == installation_public
+    request_body = json.loads(responses[0].request.content)
+    status = verify_installation_status_claims(
+        responses[0].json()["signed_status"],
+        public_key=owner_public,
+        installation_id=installation_id,
+        license_token=token,
+        nonce=request_body["nonce"],
+    )
+    assert status["revoked"] is True
+    assert status["binding_valid"] is True
+    assert status["observed_ip"] == "203.0.113.7"
 
 
 def test_direct_app_startup_reports_and_rejects_integrity_failure(monkeypatch):
