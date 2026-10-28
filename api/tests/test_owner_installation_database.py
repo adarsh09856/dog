@@ -41,8 +41,15 @@ async def owner_database(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_owner_heartbeat_returns_status_after_real_session_commit(owner_database):
+    async with owner_database() as session:
+        enrolled = await session.get(ClientInstallationModel, "client-test")
+        enrolled.installation_public_key = "A" * 43
+        await session.commit()
     result = await client_installations.record_client_installation_check(
         "client-test", "a" * 64, integrity_ok=True, observed_ip="203.0.113.7",
+        expected_public_key="A" * 43,
+        nonce_fingerprint=hashlib.sha256(b"heartbeat-nonce").hexdigest(),
+        nonce_expires_at=datetime.now(UTC) + timedelta(seconds=91),
     )
     assert result["installation_id"] == "client-test"
     assert result["revoked_at"] is None
@@ -83,15 +90,32 @@ async def test_signed_owner_check_and_revocation_use_committed_database_state(ow
         "installation_id": "client-test", "customer_id": "customer-test",
         "domains": ["customer.example"], "features": [], "limits": {},
     }, private)
+    installation_key = Ed25519PrivateKey.generate()
+    installation_private = installation_key.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+        serialization.NoEncryption(),
+    )
+    installation_public = base64.urlsafe_b64encode(installation_key.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode("ascii")
     async with owner_database() as session:
         record = await session.get(ClientInstallationModel, "client-test")
         record.token_fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
+        record.installation_public_key = installation_public
         await session.commit()
     monkeypatch.setattr(client_installation_check, "_owner_verification_signers", lambda: [(private, public)])
-    request = client_installation_check.InstallationCheckRequest(nonce="n" * 43, integrity_ok=True)
     http_request = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"), headers={})
 
     async def check():
+        nonce = base64.urlsafe_b64encode(hashlib.sha256(str(time.time_ns()).encode()).digest()).rstrip(b"=").decode()
+        issued_at = int(time.time())
+        signature = sign_owner_check(
+            installation_private, installation_id="client-test", license_token=token,
+            nonce=nonce, issued_at=issued_at, integrity_ok=True, integrity_finding=None,
+        )
+        request = client_installation_check.InstallationCheckRequest(
+            nonce=nonce, integrity_ok=True, proof_issued_at=issued_at, proof_signature=signature,
+        )
         response = await client_installation_check.check_client_installation(
             http_request, request, f"Bearer {token}"
         )

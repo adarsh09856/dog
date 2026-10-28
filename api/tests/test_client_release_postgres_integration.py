@@ -216,6 +216,13 @@ async def test_enrolled_identity_replay_and_integrity_alert_persist(monkeypatch)
 
         transport = httpx.ASGITransport(app=app, client=("203.0.113.7", 1234))
         async with httpx.AsyncClient(transport=transport, base_url="http://owner") as http:
+            unsigned = await http.post(
+                "/client-installations/check",
+                json={"nonce": secrets.token_urlsafe(32), "integrity_ok": True},
+                headers=headers,
+            )
+            assert unsigned.status_code == 401
+            assert "enroll this installation" in unsigned.json()["detail"]
             enrolled = await http.post("/client-installations/enroll", json=enrollment, headers=headers)
             assert enrolled.status_code == 200 and enrolled.json() == {"enrolled": True}
             assert (await http.post("/client-installations/enroll", json=enrollment, headers=headers)).status_code == 401
@@ -294,6 +301,7 @@ async def test_renewal_handover_and_revocation_persist(monkeypatch):
             domains=["customer.example"], ip_ranges=[], features=["voice"],
             limits={"max_concurrent_calls": 2}, expires_at=initial_expiry,
             token_fingerprint=old_fingerprint, issued_by_user_id=1,
+            installation_public_key="A" * 43,
         )
 
         assert await renew_client_installation_record(
@@ -304,9 +312,15 @@ async def test_renewal_handover_and_revocation_persist(monkeypatch):
         )
         old_status = await record_client_installation_check(
             installation_id, old_fingerprint, integrity_ok=True,
+            expected_public_key="A" * 43,
+            nonce_fingerprint=hashlib.sha256(b"old-token-check").hexdigest(),
+            nonce_expires_at=datetime.now(UTC) + timedelta(seconds=91),
         )
         new_status = await record_client_installation_check(
             installation_id, new_fingerprint, integrity_ok=True,
+            expected_public_key="A" * 43,
+            nonce_fingerprint=hashlib.sha256(b"new-token-check").hexdigest(),
+            nonce_expires_at=datetime.now(UTC) + timedelta(seconds=91),
         )
         assert old_status is not None and new_status is not None
         assert old_status["expires_at"] <= int(initial_expiry.timestamp())
@@ -315,9 +329,15 @@ async def test_renewal_handover_and_revocation_persist(monkeypatch):
         assert await revoke_client_installation_record(installation_id, 1)
         old_status = await record_client_installation_check(
             installation_id, old_fingerprint, integrity_ok=True,
+            expected_public_key="A" * 43,
+            nonce_fingerprint=hashlib.sha256(b"old-token-revoked-check").hexdigest(),
+            nonce_expires_at=datetime.now(UTC) + timedelta(seconds=91),
         )
         new_status = await record_client_installation_check(
             installation_id, new_fingerprint, integrity_ok=True,
+            expected_public_key="A" * 43,
+            nonce_fingerprint=hashlib.sha256(b"new-token-revoked-check").hexdigest(),
+            nonce_expires_at=datetime.now(UTC) + timedelta(seconds=91),
         )
         assert old_status is not None and old_status["revoked_at"] is not None
         assert new_status is not None and new_status["revoked_at"] is not None

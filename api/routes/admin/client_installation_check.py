@@ -166,31 +166,35 @@ async def check_client_installation(
         raise HTTPException(status_code=401, detail="Invalid installation token")
     license_data, private_key = verified
 
+    if request.proof_signature is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Installation identity proof is required; enroll this installation with its owner",
+        )
+
     observed_ip = _observed_client_ip(http_request)
     binding_valid = _license_ip_binding_valid(license_data.ip_ranges, observed_ip)
 
     fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
-    identity_args = {}
-    if request.proof_signature is not None:
-        installation = await get_client_installation_record(license_data.installation_id)
-        public_key = installation.get("installation_public_key") if installation else None
-        if not public_key:
-            raise HTTPException(status_code=401, detail="Invalid installation proof")
-        try:
-            verify_owner_check(
-                public_key, request.proof_signature,
-                installation_id=license_data.installation_id, license_token=token,
-                nonce=request.nonce, issued_at=request.proof_issued_at,
-                integrity_ok=request.integrity_ok,
-                integrity_finding=request.integrity_finding.model_dump() if request.integrity_finding else None,
-            )
-        except InstallationIdentityError as exc:
-            raise HTTPException(status_code=401, detail="Invalid installation proof") from exc
-        identity_args = {
-            "expected_public_key": public_key,
-            "nonce_fingerprint": hashlib.sha256(request.nonce.encode("ascii")).hexdigest(),
-            "nonce_expires_at": datetime.fromtimestamp(request.proof_issued_at + 91, UTC),
-        }
+    installation = await get_client_installation_record(license_data.installation_id)
+    public_key = installation.get("installation_public_key") if installation else None
+    if not public_key:
+        raise HTTPException(status_code=401, detail="Installation identity is not enrolled; ask the owner to enroll it")
+    try:
+        verify_owner_check(
+            public_key, request.proof_signature,
+            installation_id=license_data.installation_id, license_token=token,
+            nonce=request.nonce, issued_at=request.proof_issued_at,
+            integrity_ok=request.integrity_ok,
+            integrity_finding=request.integrity_finding.model_dump() if request.integrity_finding else None,
+        )
+    except InstallationIdentityError as exc:
+        raise HTTPException(status_code=401, detail="Invalid installation proof") from exc
+    identity_args = {
+        "expected_public_key": public_key,
+        "nonce_fingerprint": hashlib.sha256(request.nonce.encode("ascii")).hexdigest(),
+        "nonce_expires_at": datetime.fromtimestamp(request.proof_issued_at + 91, UTC),
+    }
     record = await record_client_installation_check(
         license_data.installation_id, fingerprint, integrity_ok=request.integrity_ok,
         integrity_finding=request.integrity_finding.model_dump() if request.integrity_finding else None,

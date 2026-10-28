@@ -244,7 +244,11 @@ async def record_client_installation_check(
             ).with_for_update()
         )
         record = result.scalar_one_or_none()
-        if record is None or record.installation_public_key != expected_public_key:
+        if (
+            record is None
+            or not expected_public_key
+            or record.installation_public_key != expected_public_key
+        ):
             return None
         now = datetime.now(UTC)
         if expected_public_key is not None:
