@@ -27,17 +27,17 @@ _PHONE_REQUEST = re.compile(
     re.IGNORECASE,
 )
 _EXPLICIT_NAME_ANSWER = re.compile(
-    r"^(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is|mera\s+naam)\s+(.+?)"
+    r"^(?:(?:uh|um)[,]?\s+)?(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is|mera\s+naam)\s+(.+?)"
     r"(?:\s+(?:hai|है|हूँ))?[.!?।\s]*$",
     re.IGNORECASE,
 )
 _EXPLICIT_NAME_PREFIX = re.compile(
-    r"^(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is)\s+(.+?)"
+    r"^(?:(?:uh|um)[,]?\s+)?(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is)\s+(.+?)"
     r"(?=\s+(?:and\s+(?:i|we)\b|but\b|i\s+(?:need|want|would|am)\b|my\s+(?:phone|number)\b)|[,.!?]|$)",
     re.IGNORECASE,
 )
 _HINDI_NAME_ANSWER = re.compile(
-    r"^(?:मेरा\s+नाम|मैं)\s+(.+?)(?:\s+(?:है|हूँ))?[.!?।\s]*$"
+    r"^(?:(?:अः|अह|उम्)[,،]?\s+)?(?:मेरा\s+नाम|मैं)\s+(.+?)(?:\s+(?:है|हूँ))?[.!?।\s]*$"
 )
 _HINDI_NAME_PREFIX = re.compile(
     r"^(?:(?:अः|अह|अच्छा)\s*)?मेरा\s+नाम\s+(.+?)\s+है(?=$|[\s,।.!])"
