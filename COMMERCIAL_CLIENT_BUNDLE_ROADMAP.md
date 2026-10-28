@@ -1,5 +1,14 @@
 # Kodewaves platform delivery roadmap
 
+## 28 October 2026 — campaign plan enforcement and theme synchronization
+
+- Fixed a plan-gate bypass where `campaigns` had no SaaS plan column and therefore resolved as enabled by default. Added `has_campaigns_access` to the database model/migration, owner plan editor/API, public pricing feature list, generated client types, and runtime entitlement check. Existing plans migrate with campaign access enabled; owners can disable it per plan. Migration `e0f1a2b3c4d5` is the sole Alembic head.
+- Fixed the workspace/admin theme toggle to update `next-themes` state rather than only mutating the DOM/local storage. This keeps the resolved-theme-based brand palette synchronized and disables the control until theme hydration completes.
+- Local verification on the current worktree: **69 API entitlement/plan/pricing tests passed**; **28 UI theme/pricing/admin-plan/client-installation tests passed**; **64 client package/image-verifier tests passed**; `scripts/check_openapi_snapshot.py` verified **503 paths with zero removed routes**. Alembic offline SQL contains only the expected `has_campaigns_access` column add/default backfill/default removal, and `alembic heads` reports `e0f1a2b3c4d5`.
+- The broader local-model regression file had two stale assertions after commit `46d1d929` intentionally retired the Whisper admin route and changed local service resource budgets. Updated it to cover the active IndicConformer inventory endpoint and current local-profile/resource controls; the file now passes **4/4**.
+- The hosted push run on `e0688589` failed before these local fixes: owner route import lacked `aiortc`, and the Compose runtime smoke did not reach healthy API/UI. The CI dependency setup now mirrors the Pipecat extras installed in `api/Dockerfile`; verifier annotations now include bounded, redacted subprocess diagnostics. These updates and fixes are uncommitted and need a new hosted run before they count as remote verification.
+- Installed-client backup/restore is still unimplemented and unaccepted. A safe path needs a consistent PostgreSQL+MinIO snapshot, external identity/config preservation, staging-volume restore and rollback checks; this checkout has no Docker runtime to validate it. Owner-enrolled installation, clean HTTPS/domain acceptance, live alerts, upgrade/rollback, browser/telephone and production release gates remain open.
+
 ## 28 October 2026 — renewal lifecycle and current client-image verification
 
 - Commit `f85cafd7` adds a PostgreSQL integration check for installation license renewal: the previous fingerprint is accepted only for its bounded handover, replayed renewal is rejected, and revocation is observed for both current and previous fingerprints.
