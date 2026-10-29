@@ -49,7 +49,13 @@ async def get_org_saas_plan(organization_id: int):
     plan = await kodewaves_db_client.get_default_saas_plan()
     if plan is not None:
         return plan
-    return await kodewaves_db_client.get_active_saas_plan("starter")
+    plan = await kodewaves_db_client.get_active_saas_plan("starter")
+    if plan is not None:
+        return plan
+    raise HTTPException(
+        status_code=503,
+        detail="No active SaaS plan is configured; ask the platform administrator to restore the plan catalog.",
+    )
 
 
 _PLAN_FEATURE_COLUMNS = {

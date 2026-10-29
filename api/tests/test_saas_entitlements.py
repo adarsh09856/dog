@@ -226,6 +226,23 @@ async def test_plan_resolver_uses_default_after_assignment_expiry(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_plan_resolver_fails_closed_when_no_active_default_or_starter_exists(monkeypatch):
+    from api.db.kodewaves_client import kodewaves_db_client
+    from api.services import saas_entitlements as entitlements
+
+    monkeypatch.setattr(entitlements, "KODEWAVES_EDITION", "saas")
+    monkeypatch.setattr(kodewaves_db_client, "get_setting", AsyncMock(return_value=None))
+    monkeypatch.setattr(kodewaves_db_client, "get_default_saas_plan", AsyncMock(return_value=None))
+    monkeypatch.setattr(kodewaves_db_client, "get_active_saas_plan", AsyncMock(return_value=None))
+
+    with pytest.raises(HTTPException) as error:
+        await entitlements.get_org_saas_plan(42)
+
+    assert error.value.status_code == 503
+    assert "No active SaaS plan" in error.value.detail
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(("feature", "column"), FEATURE_COLUMNS.items())
 async def test_disabled_plan_feature_is_denied_at_server_boundary(monkeypatch, feature, column):
     from api.services import saas_entitlements as entitlements
