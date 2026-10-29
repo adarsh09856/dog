@@ -17,10 +17,9 @@ import { useAuth } from "@/lib/auth";
 import { cn, getRandomId } from "@/lib/utils";
 import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
-import { AiSimulatorPlaceholder } from "./workflow-tester/AiSimulatorPlaceholder";
 import { EmbeddedVoiceTester } from "./workflow-tester/EmbeddedVoiceTester";
 import { ManualTextChatPanel } from "./workflow-tester/ManualTextChatPanel";
-import { ChatModeToggle, DisabledNotice, EmptyState } from "./workflow-tester/shared";
+import { DisabledNotice, EmptyState } from "./workflow-tester/shared";
 import type { WorkflowRuntimeNodeTransition } from "./workflow-tester/types";
 import { extractSdkErrorMessage, getErrorMessage } from "./workflow-tester/utils";
 
@@ -52,7 +51,6 @@ export function WorkflowTesterPanel({
     const { isAuthenticated, loading: authLoading, getAccessToken } = auth;
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [activeMode, setActiveMode] = useState<"audio" | "text">("audio");
-    const [chatMode, setChatMode] = useState<"manual" | "simulated">("manual");
     const [chatSessionKey, setChatSessionKey] = useState(0);
     const [chatActive, setChatActive] = useState(false);
     const [voiceRunId, setVoiceRunId] = useState<number | null>(null);
@@ -243,8 +241,8 @@ export function WorkflowTesterPanel({
                 <TabsContent value="text" className="min-h-0 flex-1 px-4 py-3">
                     <div className="flex h-full min-h-0 flex-col gap-3">
                         <div className="flex items-center justify-between gap-2">
-                            <ChatModeToggle value={chatMode} onChange={setChatMode} />
-                            {chatMode === "manual" && chatActive ? (
+                            <span className="text-xs font-medium text-muted-foreground">Manual test</span>
+                            {chatActive ? (
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -258,8 +256,7 @@ export function WorkflowTesterPanel({
                             ) : null}
                         </div>
 
-                        {chatMode === "manual" ? (
-                            <ManualTextChatPanel
+                        <ManualTextChatPanel
                                 key={chatSessionKey}
                                 workflowId={workflowId}
                                 ready={tokenReady && !!accessToken}
@@ -268,10 +265,7 @@ export function WorkflowTesterPanel({
                                 disabledReason={effectiveDisabledReason}
                                 onActiveChange={setChatActive}
                                 onNodeTransition={onRuntimeNodeTransition}
-                            />
-                        ) : (
-                            <AiSimulatorPlaceholder disabledReason={effectiveDisabledReason} />
-                        )}
+                        />
                     </div>
                 </TabsContent>
             </Tabs>

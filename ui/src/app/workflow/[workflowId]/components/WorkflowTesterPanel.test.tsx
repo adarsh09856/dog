@@ -40,9 +40,6 @@ vi.mock("./workflow-tester/ManualTextChatPanel", () => ({
     ManualTextChatPanel: () => <div data-testid="chat-panel" />,
 }));
 
-vi.mock("./workflow-tester/AiSimulatorPlaceholder", () => ({
-    AiSimulatorPlaceholder: () => null,
-}));
 
 import { WorkflowTesterPanel } from "./WorkflowTesterPanel";
 

@@ -45,42 +45,6 @@ export function EmptyState({
     );
 }
 
-export function ChatModeToggle({
-    value,
-    onChange,
-}: {
-    value: "manual" | "simulated";
-    onChange: (next: "manual" | "simulated") => void;
-}) {
-    const options: Array<{ id: "manual" | "simulated"; label: string }> = [
-        { id: "manual", label: "Manual" },
-        { id: "simulated", label: "Simulated" },
-    ];
-
-    return (
-        <div className="inline-flex items-center gap-0.5 rounded-md border border-border/70 bg-muted/40 p-0.5">
-            {options.map((option) => {
-                const active = option.id === value;
-                return (
-                    <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => onChange(option.id)}
-                        className={cn(
-                            "rounded-[5px] px-2.5 py-1 text-xs font-medium transition",
-                            active
-                                ? "bg-background text-foreground shadow-xs"
-                                : "text-muted-foreground hover:text-foreground",
-                        )}
-                    >
-                        {option.label}
-                    </button>
-                );
-            })}
-        </div>
-    );
-}
-
 export function TypingIndicator() {
     return (
         <div className="flex justify-start">
