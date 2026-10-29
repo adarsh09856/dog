@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import { Ban, KeyRound, Plus, RefreshCw } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
@@ -75,6 +77,7 @@ export default function ClientInstallationsPage() {
   const [renewingId, setRenewingId] = useState<string | null>(null);
   const [enrollingId, setEnrollingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [signerUnavailable, setSignerUnavailable] = useState(false);
   const [issued, setIssued] = useState<IssuedLicense | null>(null);
   const [enrollment, setEnrollment] = useState<EnrollmentToken | null>(null);
   const [challenge, setChallenge] = useState<DomainChallenge | null>(null);
@@ -173,9 +176,12 @@ export default function ClientInstallationsPage() {
         }),
       });
       setIssued(result);
+      setSignerUnavailable(false);
       await refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to issue license.");
+      const message = cause instanceof Error ? cause.message : "Unable to issue license.";
+      setSignerUnavailable(/owner license signer|signing key/i.test(message));
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -243,11 +249,18 @@ export default function ClientInstallationsPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Client Installations</h1>
+    <div className={admin.surface} data-area="DISTRIBUTION / INSTALLATIONS">
+      <div className={admin.hero}>
+        <span className={admin.kicker}>Owner control / distribution</span>
+        <h1 className={admin.title}>Client Installations</h1>
         <p className="mt-1 text-sm text-muted-foreground">Issue signed installation licenses and review owner records. SaaS plans are managed separately.</p>
       </div>
+
+      <div className={admin.prerequisite} role="note">
+        <KeyRound className="h-5 w-5 shrink-0" aria-hidden="true" />
+        <div><strong>Owner signing prerequisite</strong><p>License issuance requires the owner server to have a private signing key configured. This page cannot verify that server setting in advance; issuance reports an error if it is missing.</p></div>
+      </div>
+      {signerUnavailable && <div className={admin.setupError} role="alert">Owner signing is unavailable. Configure <code>KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE</code> on the owner API server, mount the private key readable by that service, then retry issuance. Keep the private key out of client bundles.</div>}
 
       <Card>
         <CardHeader>
@@ -256,8 +269,10 @@ export default function ClientInstallationsPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={issue} className="grid gap-4 sm:grid-cols-2">
+            <div className={admin.formSection}><span>01 / Identity</span><p>Name the installation and customer before verifying the destination domain.</p></div>
             <div className="space-y-2"><Label htmlFor="installation-id">Installation ID</Label><Input id="installation-id" required minLength={3} maxLength={100} pattern="[A-Za-z0-9][A-Za-z0-9._:-]{2,99}" title="Use 3–100 letters, digits, dots, underscores, colons or hyphens, starting with a letter or digit." value={installationId} onChange={(event) => setInstallationId(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="customer-id">Customer ID</Label><Input id="customer-id" required value={customerId} onChange={(event) => { setCustomerId(event.target.value); setChallenge(null); setDomainVerified(false); }} /></div>
+            <div className={admin.formSection}><span>02 / Domain proof</span><p>Verify control of the licensed host. Restrict server addresses only when the deployment has stable egress IPs.</p></div>
             <div className="space-y-2"><Label htmlFor="domain">Licensed domain</Label><Input id="domain" required placeholder="client.example.com" value={domain} onChange={(event) => { setDomain(event.target.value); setChallenge(null); setDomainVerified(false); }} /></div>
             <div className="space-y-2 sm:col-span-2"><Button type="button" variant="outline" disabled={challengeBusy || !customerId.trim() || !domain.trim()} onClick={() => void createChallenge()}>{challengeBusy ? "Checking DNS…" : "Create DNS challenge"}</Button></div>
             {challenge && <div className="space-y-2 rounded-lg border p-3 text-sm sm:col-span-2">
@@ -267,6 +282,7 @@ export default function ClientInstallationsPage() {
               <Button type="button" variant="outline" disabled={challengeBusy || domainVerified} onClick={() => void verifyChallenge()}>{domainVerified ? "Domain verified" : challengeBusy ? "Checking DNS…" : "Verify DNS record"}</Button>
             </div>}
             <div className="space-y-2"><Label htmlFor="ip-ranges">Allowed server IP/CIDR, optional</Label><Input id="ip-ranges" placeholder="203.0.113.10" value={ipRanges} onChange={(event) => setIpRanges(event.target.value)} /></div>
+            <div className={admin.formSection}><span>03 / Entitlements</span><p>Set the features, capacity and validity that this signed release may use.</p></div>
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="features">Enabled features, comma separated</Label><Input id="features" value={features} onChange={(event) => setFeatures(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="max-calls">Maximum concurrent calls</Label><Input id="max-calls" type="number" min={1} required value={maxCalls} onChange={(event) => setMaxCalls(Number(event.target.value))} /></div>
             <div className="space-y-2"><Label htmlFor="max-seats">Maximum provisioned users, optional</Label><Input id="max-seats" type="number" min={1} value={maxSeats} onChange={(event) => setMaxSeats(event.target.value)} /></div>
@@ -274,7 +290,7 @@ export default function ClientInstallationsPage() {
             <div className="space-y-2"><Label htmlFor="max-agents">Maximum provisioned agents, optional</Label><Input id="max-agents" type="number" min={0} value={maxAgents} onChange={(event) => setMaxAgents(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="max-campaigns">Maximum campaigns, optional</Label><Input id="max-campaigns" type="number" min={0} value={maxCampaigns} onChange={(event) => setMaxCampaigns(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="valid-days">Valid for days</Label><Input id="valid-days" type="number" min={1} required value={days} onChange={(event) => setDays(Number(event.target.value))} /></div>
-            <div className="sm:col-span-2"><Button type="submit" disabled={submitting}>{submitting ? "Issuing…" : "Issue signed license"}</Button></div>
+            <div className={admin.formFooter}><span>The signed token is displayed once after issuance.</span><Button type="submit" disabled={submitting}>{submitting ? "Issuing…" : "Issue signed license"}</Button></div>
           </form>
         </CardContent>
       </Card>
@@ -314,7 +330,7 @@ export default function ClientInstallationsPage() {
           {loading && <p className="text-sm text-muted-foreground">Loading installations…</p>}
           {!loading && records.length === 0 && <p className="text-sm text-muted-foreground">No installations issued yet.</p>}
           {records.map((item) => (
-            <div key={item.installation_id} className="rounded-lg border p-4 text-sm">
+            <div key={item.installation_id} className={admin.installationRow}>
               <div className="flex flex-wrap justify-between gap-2"><strong>{item.installation_id}</strong><span>{item.customer_id}</span></div>
               <p className="mt-1 text-muted-foreground">{item.domains.join(", ")} · Expires {new Date(item.expires_at * 1000).toLocaleDateString()}</p>
               {item.ip_ranges.length > 0 && <p className="mt-1 text-muted-foreground">Allowed source IPs: {item.ip_ranges.join(", ")}</p>}

@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../admin/AdminWorkspace.module.css";
+
 import { ArrowRight, List, Loader2, ShieldAlert } from 'lucide-react';
 import Link from "next/link";
 import { useState } from "react";
@@ -99,10 +101,11 @@ export default function SuperadminPage() {
 
     return (
         <>
-            <main className="container mx-auto p-6 space-y-6 max-w-5xl">
-                <div className="text-center">
-                    <h1 className="text-3xl font-bold mb-2">Superadmin Dashboard</h1>
-                    <p className="text-sm text-muted-foreground">Manage users and view system-wide data</p>
+            <main className={`${admin.surface} mx-auto max-w-5xl`}>
+                <div className={admin.hero}>
+                    <span className={admin.kicker}>Owner control / access</span>
+                    <h1 className={admin.title}>Superadmin Dashboard</h1>
+                    <p>Manage access across customers and inspect platform-wide activity.</p>
                 </div>
 
                 <div className="p-4 rounded-xl border border-primary/40 bg-primary/5 flex items-center justify-between">

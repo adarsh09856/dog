@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import {
   AlertTriangle,
   Coins,
@@ -339,12 +341,13 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="IDENTITY / ACCOUNTS">
       {plansError && <p role="alert" className="text-sm text-destructive">Plan catalog: {plansError}. Reopen the form to retry.</p>}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">User Management & Platform Governance</h1>
+          <span className={admin.kicker}>IDENTITY / ACCOUNTS</span>
+          <h1 className={admin.title}>User Management & Platform Governance</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Complete AgentLabs-grade controls: provision users, grant promo credits, adjust quotas, reset passwords, and manage status.
           </p>

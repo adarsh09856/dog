@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import {
   CheckCircle2,
   Clock,
@@ -81,11 +83,12 @@ export default function AdminMonitoringPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="OPERATIONS / LIVE CALLS">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Real-Time Voice Call Telemetry</h1>
+          <span className={admin.kicker}>OPERATIONS / LIVE CALLS</span>
+          <h1 className={admin.title}>Real-Time Voice Call Telemetry</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Live monitoring of voice sessions and run records.
           </p>

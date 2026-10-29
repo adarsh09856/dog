@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import { Download, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
@@ -73,11 +75,12 @@ export default function AdminAuditLogsPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="SECURITY / AUDIT">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">System Audit Trail</h1>
+          <span className={admin.kicker}>SECURITY / AUDIT</span>
+          <h1 className={admin.title}>System Audit Trail</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Immutable log of all administrative actions, key rotations, credit adjustments, and kill-switch executions.
           </p>

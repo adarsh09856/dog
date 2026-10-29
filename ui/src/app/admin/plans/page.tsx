@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import {
   Edit,
   KeyRound,
@@ -106,11 +108,12 @@ export default function AdminPlansPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="COMMERCE / PLANS">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">SaaS Plans</h1>
+          <span className={admin.kicker}>COMMERCE / PLANS</span>
+          <h1 className={admin.title}>SaaS Plans</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Configure 30-day and 365-day access with manual renewal. Included minutes are credited once per purchase.
           </p>

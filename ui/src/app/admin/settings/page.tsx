@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import {
   Building2,
   CheckCircle2,
@@ -239,11 +241,12 @@ export default function AdminSettingsPage() {
   if (loadError) return <div role="alert" className="space-y-4 rounded-xl border border-destructive/30 p-8"><p className="text-sm text-destructive">{loadError}</p><Button variant="outline" onClick={() => void fetchSettings()}>Retry</Button></div>;
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="PLATFORM / CONFIGURATION">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Platform Settings & Sovereignty</h1>
+          <span className={admin.kicker}>PLATFORM / CONFIGURATION</span>
+          <h1 className={admin.title}>Platform Settings & Sovereignty</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Configure the platform name and public theme, email delivery, self-hosted model services, and payment settings.
           </p>

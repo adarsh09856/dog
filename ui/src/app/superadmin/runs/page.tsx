@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../../admin/AdminWorkspace.module.css";
+
 import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle, ChevronLeft, ChevronRight, ExternalLink, FileText, Info, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -319,10 +321,11 @@ export default function RunsPage() {
     }
 
     return (
-        <div className="container mx-auto p-6 space-y-6 max-w-full">
-            <div>
-                <h1 className="text-3xl font-bold mb-2">Workflow Runs</h1>
-                <p className="text-muted-foreground">View and manage all workflow runs across organizations</p>
+        <div className={admin.surface}>
+            <div className={admin.hero}>
+                <span className={admin.kicker}>Owner control / activity</span>
+                <h1 className={admin.title}>Workflow Runs</h1>
+                <p>Review workflow activity across organizations and filter the run history.</p>
             </div>
 
             {error && (

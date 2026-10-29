@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import {
   AlertCircle,
   CheckCircle2,
@@ -342,11 +344,12 @@ export default function MasterKeysAndModelsPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="INTELLIGENCE / MODELS">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Master Credentials & AI Models</h1>
+          <span className={admin.kicker}>INTELLIGENCE / MODELS</span>
+          <h1 className={admin.title}>Master Credentials & AI Models</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Centrally manage sovereign API keys (Sarvam, OpenAI, ElevenLabs, Exotel) and configure markup margins.
           </p>

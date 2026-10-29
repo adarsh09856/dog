@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import {
   Edit,
   Flame,
@@ -101,11 +103,12 @@ export default function AdminCreditPackagesPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="COMMERCE / TOP-UPS">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Voice Minute Bundles (Top-ups)</h1>
+          <span className={admin.kicker}>COMMERCE / TOP-UPS</span>
+          <h1 className={admin.title}>Voice Minute Bundles (Top-ups)</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Create on-demand minute packages with bonus credits and one explicitly configured currency price.
           </p>
