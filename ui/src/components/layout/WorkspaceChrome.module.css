@@ -33,3 +33,12 @@
 .template span { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: auto; font-size: 11px; font-weight: 600; color: var(--primary); }
 @media(max-width:767px) { .templates { grid-template-columns: 1fr; } .template { border-right: 0; border-bottom: 1px solid var(--border); } .template:last-child { border-bottom: 0; } .editorHeader { padding: 10px; flex-wrap: wrap; height: auto; gap: 8px; } }
 @media(prefers-reduced-motion:reduce) { .template { transition: none; } }
+.detailTitle { font-size: clamp(1.8rem,3vw,2.6rem); font-weight: 550; letter-spacing: -.045em; line-height: 1.15; margin-bottom: .75rem; }
+.detailPage { max-width: 1180px; }
+.detailHeader { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 24px; }
+.creationHeader { border-bottom: 1px solid var(--border); padding: 16px 0 32px; margin-bottom: 32px; }
+.creationHeader h1 { font-size: clamp(2rem,3.4vw,3rem); font-weight: 550; letter-spacing: -.05em; }
+.editorTitle { font-size: 16px; font-weight: 550; letter-spacing: -.025em; }
+.testerPanel { background: var(--muted); }
+.testerPanel > :global([data-slot="tabs"]) > div:first-child { background: var(--card); }
+.testerPanel :global([data-slot="tabs-content"]) { background: color-mix(in srgb,var(--background) 94%,var(--primary) 6%); }

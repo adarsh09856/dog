@@ -1,4 +1,5 @@
 "use client";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { Check, Copy, KeyRound, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
@@ -109,10 +110,10 @@ export default function ApiKeysPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-10">
-      <header>
+      <header className={chrome.detailHeader}>
         <div className="flex items-center gap-2">
           <KeyRound className="h-5 w-5 text-primary" />
-          <h1 className="text-2xl font-semibold tracking-tight">API Keys</h1>
+          <h1 className={chrome.detailTitle}>API Keys</h1>
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Create and manage keys for this workspace&apos;s public-agent and MCP integrations.

@@ -1,4 +1,5 @@
 "use client";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { format } from 'date-fns';
 import { AlertCircle, AlertTriangle, ArrowLeft, CalendarIcon, Check, Clock, Download, Info, Pause, Pencil, Phone, Play, RefreshCw, X } from 'lucide-react';
@@ -461,7 +462,7 @@ export default function CampaignDetailPage() {
 
     if (isLoadingCampaign) {
         return (
-            <div className="container mx-auto p-6 space-y-6">
+            <div className={`${chrome.detailPage} container mx-auto p-6 space-y-6`}>
                 <div className="animate-pulse">
                     <div className="h-8 bg-muted rounded w-1/4 mb-4"></div>
                     <div className="h-64 bg-muted rounded"></div>
@@ -472,14 +473,14 @@ export default function CampaignDetailPage() {
 
     if (!campaign) {
         return (
-            <div className="container mx-auto p-6 space-y-6">
+            <div className={`${chrome.detailPage} container mx-auto p-6 space-y-6`}>
                 <p className="text-center text-muted-foreground">Campaign not found</p>
             </div>
         );
     }
 
     return (
-        <div className="container mx-auto p-6 space-y-6">
+        <div className={`${chrome.detailPage} container mx-auto p-6 space-y-6`}>
             <div>
                 <Button
                     variant="ghost"
@@ -491,7 +492,7 @@ export default function CampaignDetailPage() {
                 </Button>
                 <div className="flex justify-between items-start">
                     <div>
-                        <h1 className="text-3xl font-bold mb-2">{campaign.name}</h1>
+                        <h1 className={chrome.detailTitle}>{campaign.name}</h1>
                             <div className="flex items-center gap-4">
                                 <Badge variant={getStateBadgeVariant(campaign.state)}>
                                     {campaign.state}

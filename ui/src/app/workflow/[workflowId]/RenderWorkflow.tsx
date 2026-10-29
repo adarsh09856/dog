@@ -632,7 +632,7 @@ function RenderWorkflow({
                             >
                                 <Background
                                     variant={BackgroundVariant.Dots}
-                                    gap={16}
+                                    gap={24}
                                     size={1}
                                     color="#94a3b8"
                                 />

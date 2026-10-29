@@ -1,4 +1,5 @@
 "use client";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { ArrowLeft } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -314,7 +315,7 @@ export default function EditCampaignPage() {
     }
 
     return (
-        <div className="container mx-auto p-6 pb-12 space-y-6 max-w-2xl">
+        <div className={`${chrome.detailPage} container mx-auto p-6 pb-12 space-y-6 max-w-3xl`}>
             <div>
                 <Button
                     variant="ghost"
@@ -324,7 +325,7 @@ export default function EditCampaignPage() {
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Campaign
                 </Button>
-                <h1 className="text-3xl font-bold mb-2">Edit Campaign</h1>
+                <h1 className={chrome.detailTitle}>Edit Campaign</h1>
                 <p className="text-muted-foreground">Modify campaign settings</p>
             </div>
 

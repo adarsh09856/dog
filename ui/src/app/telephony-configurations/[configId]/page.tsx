@@ -1,4 +1,5 @@
 "use client";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import {
   AlertTriangle,
@@ -243,7 +244,7 @@ export default function TelephonyConfigurationDetailPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-6">
+    <div className={`${chrome.detailPage} container mx-auto px-4 py-8 space-y-6`}>
       <div>
         <Link
           href="/telephony-configurations"
@@ -257,7 +258,7 @@ export default function TelephonyConfigurationDetailPage() {
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <CardTitle className="truncate">{config.name}</CardTitle>
+              <CardTitle className={`${chrome.detailTitle} truncate`}>{config.name}</CardTitle>
               <Badge variant="secondary">{config.provider}</Badge>
               {config.is_default_outbound && (
                 <Badge className="gap-1">

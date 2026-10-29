@@ -1,4 +1,5 @@
 'use client';
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import {
     AlertTriangle,
@@ -349,7 +350,7 @@ export default function CreateWorkflowPage() {
         <div className="min-h-screen bg-background">
             <div className="container mx-auto px-4 py-8 max-w-6xl">
                 {/* Hero Header */}
-                <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-background to-primary/5 p-6 md:p-8 mb-8">
+                <div className={chrome.creationHeader}>
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
@@ -363,7 +364,7 @@ export default function CreateWorkflowPage() {
                                 Create Your Voice Agent
                             </h1>
                             <p className="text-muted-foreground max-w-2xl text-sm md:text-base">
-                                Choose from battle-tested, pre-built agent templates configured with natural conversational flow, or build your own custom voice agent from scratch.
+                                Choose a starting workflow, then make its instructions, voice and tools your own. Test the conversation before publishing.
                             </p>
                         </div>
                         <div className="flex flex-wrap gap-2 shrink-0">

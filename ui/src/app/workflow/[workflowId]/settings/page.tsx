@@ -1,4 +1,5 @@
 "use client";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { format } from "date-fns";
 import { ArrowLeft, BookA, Brain, CalendarIcon, Clipboard, Download, ExternalLink, FileDown, Fingerprint, Loader2, Mic, Pause, PhoneOff, Play, Plus, Rocket, Settings, Trash2Icon, Upload, Variable, X } from "lucide-react";
@@ -1777,7 +1778,7 @@ function WorkflowSettingsInner({
                 </Button>
                 <div>
                     <p className="text-xs text-muted-foreground">Workflow Settings</p>
-                    <h1 className="text-sm font-semibold">{workflowName || workflow.name}</h1>
+                    <h1 className={chrome.editorTitle}>{workflowName || workflow.name}</h1>
                 </div>
             </header>
 

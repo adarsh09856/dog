@@ -15,6 +15,7 @@ import { WORKFLOW_RUN_MODES } from "@/constants/workflowRunModes";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { useAuth } from "@/lib/auth";
 import { cn, getRandomId } from "@/lib/utils";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { AiSimulatorPlaceholder } from "./workflow-tester/AiSimulatorPlaceholder";
 import { EmbeddedVoiceTester } from "./workflow-tester/EmbeddedVoiceTester";
@@ -155,13 +156,13 @@ export function WorkflowTesterPanel({
     };
 
     return (
-        <div className={cn("flex h-full min-h-0 flex-col bg-background", className)}>
+        <div className={cn(chrome.testerPanel, "flex h-full min-h-0 flex-col bg-background", className)}>
             <Tabs
                 value={activeMode}
                 onValueChange={handleModeChange}
                 className="min-h-0 flex-1 gap-0"
             >
-                <div className="border-b border-border/70 px-4 py-3">
+                <div className="border-b border-border/70 px-4 py-3"><p className="mb-3 font-mono text-[9px] uppercase tracking-[.14em] text-muted-foreground">CONVERSATION TESTING</p>
                     <div className="flex items-center gap-3">
                         <TabsList className="grid h-9 flex-1 grid-cols-2 rounded-lg bg-muted/60 p-1">
                             <TabsTrigger value="audio" className="rounded-md text-sm">

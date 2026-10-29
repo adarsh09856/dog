@@ -32,12 +32,12 @@ export function EmptyState({
     action?: ReactNode;
 }) {
     return (
-        <div className="flex flex-1 flex-col justify-center rounded-xl border border-border/70 bg-background px-5 py-6 text-left">
+        <div className="flex flex-1 flex-col justify-center rounded-xl border border-border bg-card px-6 py-8 text-left">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                 {icon}
             </div>
             <div className="mt-4 space-y-1.5">
-                <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+                <h3 className="text-xl font-medium tracking-tight text-foreground">{title}</h3>
                 <p className="text-sm leading-6 text-muted-foreground">{description}</p>
             </div>
             {action ? <div className="mt-5">{action}</div> : null}
@@ -86,9 +86,9 @@ export function TypingIndicator() {
         <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-md bg-muted px-3.5 py-3">
                 <div className="flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/60" />
+                    <span className="h-1.5 w-1.5 animate-bounce motion-reduce:animate-none rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce motion-reduce:animate-none rounded-full bg-muted-foreground/60 [animation-delay:-0.15s]" />
+                    <span className="h-1.5 w-1.5 animate-bounce motion-reduce:animate-none rounded-full bg-muted-foreground/60" />
                 </div>
             </div>
         </div>

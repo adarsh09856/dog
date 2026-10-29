@@ -1,4 +1,5 @@
 "use client";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
@@ -314,7 +315,7 @@ export default function NewCampaignPage() {
     };
 
     return (
-        <div className="container mx-auto p-6 pb-12 space-y-6 max-w-2xl">
+        <div className={`${chrome.detailPage} container mx-auto p-6 pb-12 space-y-6 max-w-3xl`}>
             <div>
                 <Button
                     variant="ghost"
@@ -324,7 +325,7 @@ export default function NewCampaignPage() {
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Campaigns
                 </Button>
-                <h1 className="text-3xl font-bold mb-2">Create New Campaign</h1>
+                <h1 className={chrome.detailTitle}>Create New Campaign</h1>
                 <p className="text-muted-foreground">Set up a new campaign to execute workflows at scale</p>
             </div>
 
