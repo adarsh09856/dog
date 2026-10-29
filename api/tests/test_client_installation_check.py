@@ -355,6 +355,9 @@ async def test_owner_records_integrity_alert_and_does_not_clear_it(monkeypatch):
     assert session.execute.await_count == 7  # Two select/delete/nonce groups plus the alert upsert.
     upsert = session.execute.await_args_list[3].args[0]
     assert "ON CONFLICT" in str(upsert.compile(dialect=postgresql.dialect()))
+    alert_updates = dict(upsert._post_values_clause.update_values_to_set)
+    assert alert_updates["acknowledged_at"] is None
+    assert alert_updates["acknowledged_by_user_id"] is None
 
     record.previous_token_fingerprint = "fingerprint"
     record.previous_token_valid_until = datetime.now(UTC) + timedelta(hours=1)

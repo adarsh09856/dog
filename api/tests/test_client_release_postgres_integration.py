@@ -28,6 +28,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.db.client_installations import (
+    acknowledge_client_integrity_alert,
     create_client_installation_record,
     get_client_binding_request,
     get_client_installation_record,
@@ -277,6 +278,14 @@ async def test_enrolled_identity_replay_and_integrity_alert_persist(monkeypatch)
             assert len(alerts) == 1
             assert alerts[0]["installation_id"] == installation_id
             assert alerts[0]["reason"] == "modified_file" and alerts[0]["component"] == finding["component"]
+            assert await acknowledge_client_integrity_alert(alerts[0]["id"], 1)
+            assert await list_client_integrity_alerts() == []
+            _, repeated_tamper_status = await check(False, finding)
+            assert repeated_tamper_status["revoked"] is True
+            active_alerts = await list_client_integrity_alerts()
+            assert len(active_alerts) == 1
+            assert active_alerts[0]["occurrence_count"] == 2
+            assert active_alerts[0]["acknowledged_at"] is None
             _, later_status = await check(True)
             assert later_status["revoked"] is True
     finally:

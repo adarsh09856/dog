@@ -480,6 +480,10 @@ async def record_client_installation_check(
                 set_={
                     "last_seen_at": now,
                     "occurrence_count": ClientIntegrityAlertModel.occurrence_count + 1,
+                    # A repeated tamper event after acknowledgement is active
+                    # again and must return to the owner's unacknowledged queue.
+                    "acknowledged_at": None,
+                    "acknowledged_by_user_id": None,
                 },
             )
             await session.execute(statement)
