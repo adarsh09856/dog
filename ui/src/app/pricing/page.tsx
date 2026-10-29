@@ -11,6 +11,7 @@ import {
   type PublicCreditPackage,
   type PublicSaaSPlan,
 } from "@/lib/kodewavesApi";
+import styles from "./PricingSurface.module.css";
 
 function money(cents: number, currency: string) {
   try {
@@ -102,7 +103,7 @@ export default function PricingPage() {
     <div className="public-site public-pricing min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content" className="mx-auto max-w-7xl px-5 pb-24 sm:px-8">
-        <section className="grid gap-8 border-b border-border py-14 sm:py-20 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <section className={`${styles.intro} grid gap-8 border-b border-border py-14 sm:py-20 md:grid-cols-[minmax(0,1fr)_auto] md:items-end`}>
           <div className="max-w-2xl">
             <p className="mb-5 inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               <span className="h-px w-8 bg-cta" aria-hidden="true" />
@@ -208,8 +209,9 @@ export default function PricingPage() {
             return (
               <article
                 key={plan.id}
-                className="flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-foreground/20 sm:p-7"
+                className={`${styles.planCard} flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-foreground/20 sm:p-7`}
               >
+                <span className={styles.planIndex}>WORKSPACE PLAN / {String(plans.indexOf(plan) + 1).padStart(2, "0")}</span>
                 <h2 className="text-xl font-semibold tracking-tight">
                   {plan.name}
                 </h2>
@@ -310,7 +312,7 @@ export default function PricingPage() {
             {packages.map((pkg) => (
               <article
                 key={pkg.id}
-                className="rounded-2xl border border-border bg-card p-7"
+                className={`${styles.creditCard} rounded-2xl border border-border bg-card p-7`}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-semibold">{pkg.name}</h3>
@@ -340,7 +342,7 @@ export default function PricingPage() {
           </div>
         </section>
 
-        <section className="my-24 grid gap-8 rounded-2xl border border-border bg-muted/40 p-7 sm:p-10 md:grid-cols-2">
+        <section className={`${styles.installation} my-24 grid gap-8 rounded-2xl border border-border bg-muted/40 p-7 sm:p-10 md:grid-cols-2`}>
           <div>
             <Server className="mb-5 size-6 text-cta-text" />
             <h2 className="text-3xl font-medium tracking-tight">
