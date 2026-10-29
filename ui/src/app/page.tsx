@@ -18,6 +18,7 @@ import Link from "next/link";
 
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { useClientBranding } from "@/context/ClientBrandingContext";
+import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
 
 const platformAreas = [
   {
@@ -51,36 +52,13 @@ const platformAreas = [
     ],
   },
 ];
-const stages = [
-  {
-    number: "01",
-    title: "Build the workflow",
-    text: "Define prompts, branches and actions in the visual editor.",
-  },
-  {
-    number: "02",
-    title: "Test the conversation",
-    text: "Run the agent in the browser and review what it heard and said.",
-  },
-  {
-    number: "03",
-    title: "Connect voice and models",
-    text: "Choose speech, language and telephony providers for the deployment.",
-  },
-  {
-    number: "04",
-    title: "Operate and improve",
-    text: "Handle web and phone calls, then review transcripts and recordings.",
-  },
-];
-
 export default function HomePage() {
   const branding = useClientBranding();
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="public-site min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content">
-        <section className="relative overflow-hidden border-b border-border bg-muted/25">
+        <section className="public-hero relative overflow-hidden border-b border-border">
           <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[1fr_0.82fr] lg:gap-20 lg:py-24">
             <div>
               <p className="mb-6 inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -88,7 +66,7 @@ export default function HomePage() {
                 Voice operations platform
               </p>
               <h1 className="max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-6xl">
-                Build, test and operate voice agents.
+                Every conversation.<br /><span className="public-heading-accent">A clear next step.</span>
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-8 text-foreground/80">
                 {branding.tagline}
@@ -123,32 +101,7 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-            <div className="relative overflow-hidden rounded-lg border border-border bg-background shadow-[0_18px_55px_-36px_color-mix(in_oklab,var(--foreground)_35%,transparent)]">
-              <div className="flex items-center justify-between border-b border-border px-6 py-5">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Operating lifecycle</p>
-                  <p className="mt-2 text-base font-semibold tracking-tight">From first draft to live calls</p>
-                </div>
-                <span className="flex size-10 items-center justify-center rounded-md border border-border bg-muted/60 text-cta-text">
-                  <Workflow className="size-5" aria-hidden="true" />
-                </span>
-              </div>
-              <ol className="px-6 py-2">
-                {stages.map(({ number, title, text }) => (
-                  <li key={number} className="group relative flex gap-5 py-4 first:pt-5 last:pb-5">
-                    <span className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full border border-border bg-background font-mono text-[10px] tabular-nums text-muted-foreground transition-colors group-hover:border-cta/50 group-hover:text-cta-text">{number}</span>
-                    <div className="min-w-0 pt-0.5">
-                      <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
-                      <p className="mt-1 text-[13px] leading-6 text-muted-foreground">{text}</p>
-                    </div>
-                    {number !== "04" && <span className="absolute left-[15px] top-12 h-[calc(100%-1.25rem)] w-px bg-border" aria-hidden="true" />}
-                  </li>
-                ))}
-              </ol>
-              <div className="flex items-center justify-between border-t border-border bg-muted/35 px-6 py-3 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                <span>Configure</span><span aria-hidden="true">/</span><span>Validate</span><span aria-hidden="true">/</span><span>Operate</span>
-              </div>
-            </div>
+            <VoiceOperationsIllustration />
           </div>
         </section>
         <section

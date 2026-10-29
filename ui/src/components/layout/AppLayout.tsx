@@ -18,15 +18,20 @@ import { AppSidebar } from "./AppSidebar";
 
 function AppHeader() {
   const { toggleSidebar } = useSidebar();
+  const pathname = usePathname();
+  const section = (pathname || "/").split("/").filter(Boolean)[0] || "Workspace";
+  const sectionLabel = section === "workflow" ? "Voice agents" : section.replaceAll("-", " ");
 
   return (
-    <header className="sticky top-[var(--event-banner-h,0px)] z-50 flex items-center justify-between border-b border-border/60 bg-background/70 px-4 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/55">
+    <header className="workspace-topbar sticky top-[var(--event-banner-h,0px)] z-50 flex items-center justify-between border-b border-border/60 bg-background/70 px-4 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/55">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Open menu" className="md:hidden">
           <Menu className="h-5 w-5" />
         </Button>
         <Link href="/" className="md:hidden" aria-label="Home"><BrandLogo className="h-6" /></Link>
+        <div className="hidden items-center gap-3 text-xs md:flex"><span className="text-muted-foreground">Workspace</span><span aria-hidden="true" className="text-muted-foreground/50">/</span><span className="font-semibold capitalize text-foreground">{sectionLabel}</span></div>
       </div>
+      <span className="hidden font-mono text-[9px] tracking-[.12em] text-muted-foreground sm:inline">VOICE OPERATIONS</span>
     </header>
   );
 }

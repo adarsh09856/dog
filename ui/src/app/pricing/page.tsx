@@ -99,7 +99,7 @@ export default function PricingPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="public-site public-pricing min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content" className="mx-auto max-w-7xl px-5 pb-24 sm:px-8">
         <section className="grid gap-8 border-b border-border py-14 sm:py-20 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">

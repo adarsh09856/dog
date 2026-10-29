@@ -24,7 +24,7 @@ export function PublicHeader() {
   useEffect(() => setOpen(false), [pathname]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl">
+    <header className="public-header sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl">
       <a
         href="#main-content"
         className="sr-only rounded-lg bg-background px-4 py-3 focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50"
