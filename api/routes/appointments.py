@@ -121,7 +121,7 @@ async def delete_appointment(appointment_id: str, user: UserModel = Depends(get_
         raise HTTPException(
             status_code=400, detail="Invalid appointment ID format"
         ) from exc
-    return {"message": "Appointment deleted successfully"}
+    return {"message": "Appointment cancelled successfully"}
 
 
 @router.get("/settings", response_model=AppointmentSettingsItem)

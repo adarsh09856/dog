@@ -283,6 +283,10 @@ class TestEndCallViaNodeTransition:
             ],
         )
 
+        engine.context.add_message(
+            {"role": "user", "content": "Goodbye, please end the call."}
+        )
+
         # Patch DB calls and extraction manager
         with patch(
             "api.db:db_client.get_organization_id_by_workflow_run_id",
@@ -380,6 +384,10 @@ class TestEndCallViaNodeTransition:
 
         engine, tts, transport, task = await create_engine_with_tracking(
             three_node_workflow, llm, test_helper
+        )
+
+        engine.context.add_message(
+            {"role": "user", "content": "Goodbye, please end the call."}
         )
 
         # Patch DB calls and extraction manager
@@ -666,15 +674,10 @@ class TestEndCallViaClientDisconnect:
         # Verify call was disposed
         assert any(test_helper.call_disposed_state), "Call should be disposed"
 
-        # Verify synchronous extraction was called (run_in_background=False)
-        sync_extraction_calls = [
-            call
-            for call in test_helper.extraction_calls
-            if not call["run_in_background"]
-        ]
-        assert len(sync_extraction_calls) >= 1, (
-            f"Expected at least 1 synchronous extraction call during disconnect. "
-            f"All calls: {test_helper.extraction_calls}"
+        # A transport disconnect uses the immediate-abort path. It records the
+        # observed hangup without waiting for final LLM extraction.
+        assert not any(
+            not call["run_in_background"] for call in test_helper.extraction_calls
         )
 
         # Verify user muting is active via CallbackUserMuteStrategy
@@ -928,7 +931,7 @@ class TestEndCallExtractionBehavior:
 
                     # End the call
                     await engine.end_call_with_reason(
-                        EndTaskReason.USER_HANGUP.value, abort_immediately=True
+                        EndTaskReason.USER_HANGUP.value, abort_immediately=False
                     )
 
                     # Verify extraction was awaited (synchronous)
@@ -1136,7 +1139,7 @@ class TestEndCallExtractionBehavior:
                         )
                         await asyncio.sleep(0.1)
                         await engine.end_call_with_reason(
-                            EndTaskReason.USER_HANGUP.value, abort_immediately=True
+                            EndTaskReason.USER_HANGUP.value, abort_immediately=False
                         )
 
                     await run_engine_test_pipeline(
@@ -1229,7 +1232,7 @@ class TestEndCallExtractionBehavior:
                         )
                         await asyncio.sleep(0.1)
                         await engine.end_call_with_reason(
-                            EndTaskReason.USER_HANGUP.value, abort_immediately=True
+                            EndTaskReason.USER_HANGUP.value, abort_immediately=False
                         )
 
                     await run_engine_test_pipeline(
@@ -1294,7 +1297,7 @@ class TestEndCallExtractionBehavior:
                         VariableExtractionManager,
                         "_perform_extraction",
                         side_effect=never_returns,
-                    ):
+                ) as extraction_mock:
 
                         async def end_after_response():
                             await engine.set_node(
@@ -1315,6 +1318,7 @@ class TestEndCallExtractionBehavior:
                         await run_engine_test_pipeline(
                             task, engine, transport, on_ready=end_after_response
                         )
+        extraction_mock.assert_not_awaited()
 
         # The floor stands: there is no extracted outcome to refine it with.
         final = await engine.get_gathered_context()

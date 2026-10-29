@@ -201,6 +201,69 @@ def test_booking_date_uses_india_today_and_reads_back_corrections(monkeypatch):
     assert contacts._explicit_caller_booking_date(["27th October 2099"]) == "2099-10-27"
 
 
+def test_booking_date_parser_accepts_english_month_first_dates():
+    assert contacts._explicit_caller_booking_date(
+        ["October twenty-seventh, 2026"]
+    ) == "2026-10-27"
+    assert contacts._explicit_caller_booking_date(
+        ["October twenty seven twenty twenty-six"]
+    ) == "2026-10-27"
+    assert contacts._explicit_caller_booking_date(
+        ["27 October 2026", "October twenty-eighth 2026"]
+    ) == "2026-10-28"
+
+
+def test_booking_date_parser_joins_recent_spoken_date_fragments(monkeypatch):
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 20, 10, 0, tzinfo=tz or timezone(timedelta(hours=5, minutes=30)))
+
+    monkeypatch.setattr(contacts, "datetime", FrozenDatetime)
+    state = {
+        "caller_name": "Adarsh",
+        "caller_phone": "9538300941",
+        "reply_language": "English",
+    }
+    history = [
+        {"role": "user", "content": "I want to book an appointment"},
+        {"role": "assistant", "content": "What date and time would you prefer?"},
+        {"role": "user", "content": "twenty-seventh"},
+        {"role": "assistant", "content": "Which month?"},
+        {"role": "user", "content": "of October"},
+        {"role": "assistant", "content": "What year?"},
+        {"role": "user", "content": "twenty twenty-six"},
+    ]
+
+    reply = contacts.booking_date_time_question(history, state)
+
+    assert reply == "Okay, 27 October 2026. What time works for you?"
+    assert state["booking_time_question_date"] == "2026-10-27"
+
+
+def test_hinglish_kal_means_tomorrow_during_booking_intake(monkeypatch):
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 29, 10, 0, tzinfo=tz or timezone(timedelta(hours=5, minutes=30)))
+
+    monkeypatch.setattr(contacts, "datetime", FrozenDatetime)
+    state = {
+        "caller_name": "Adarsh",
+        "caller_phone": "9538300941",
+        "reply_language": "English",
+    }
+    history = [
+        {"role": "user", "content": "I want to book an appointment"},
+        {"role": "assistant", "content": "What date and time would you prefer?"},
+        {"role": "user", "content": "kal ka"},
+    ]
+
+    reply = contacts.booking_date_time_question(history, state)
+
+    assert reply == "Okay, 30 October 2026. What time works for you?"
+
+
 def test_unclear_time_after_relative_booking_date_asks_for_time(monkeypatch):
     class FrozenDatetime(datetime):
         @classmethod

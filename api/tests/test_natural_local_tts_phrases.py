@@ -58,7 +58,7 @@ async def test_followup_phrase_releases_before_48_chars_to_reduce_audio_gaps():
     try:
         assert aggregator._streaming_phrase_characters == 24
         first = [part async for part in aggregator.aggregate("I can help you today, ")]
-        assert first == ["I can help you today, "]
+        assert [part.text for part in first] == ["I can help you today, "]
 
         followup = [
             part async for part in aggregator.aggregate("please tell me your name and number ")

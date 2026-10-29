@@ -85,6 +85,10 @@ async def lifespan(app: FastAPI):
         )
         from api.services.catalog.catalog_service import handle_catalog_sync
         sync_manager.register(WorkerSyncEventType.MODEL_CATALOG, handle_catalog_sync)
+        from api.services.pipecat.active_runtime import handle_worker_termination
+        sync_manager.register(
+            WorkerSyncEventType.CALL_TERMINATION, handle_worker_termination
+        )
         await sync_manager.start()
         set_worker_sync_manager(sync_manager)
 

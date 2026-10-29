@@ -29,6 +29,11 @@ from api.services.observability.active_calls import (
     unregister_active_call as unregister_worker_active_call,
 )
 from api.services.pipecat.agent_bridge import AgentBridgeProcessor
+from api.services.pipecat.active_runtime import (
+    bind_active_engine,
+    register_active_runtime,
+    unregister_active_runtime,
+)
 from api.services.pipecat.agent_generation_processor import AgentGenerationProcessor
 from api.services.pipecat.agent_runtime_factory import (
     AgentGenerationCallbacks,
@@ -448,6 +453,7 @@ async def run_pipeline_telephony(
     # Register before any async setup so deploy drains see calls that are still
     # resolving DB/config/transport state.
     register_worker_active_call(workflow_run_id)
+    register_active_runtime(workflow_run_id, organization_id)
     try:
         await _run_pipeline_telephony_impl(
             websocket,
@@ -465,6 +471,7 @@ async def run_pipeline_telephony(
             try:
                 await call_concurrency.unregister_active_call(workflow_run_id)
             finally:
+                unregister_active_runtime(workflow_run_id)
                 unregister_worker_active_call(workflow_run_id)
 
 
@@ -604,6 +611,7 @@ async def run_pipeline_smallwebrtc(
     # Register before any async setup so deploy drains see calls that are still
     # resolving DB/config/transport state.
     register_worker_active_call(workflow_run_id)
+    register_active_runtime(workflow_run_id, organization_id)
     try:
         await _run_pipeline_smallwebrtc_impl(
             webrtc_connection,
@@ -621,6 +629,7 @@ async def run_pipeline_smallwebrtc(
             try:
                 await call_concurrency.unregister_active_call(workflow_run_id)
             finally:
+                unregister_active_runtime(workflow_run_id)
                 unregister_worker_active_call(workflow_run_id)
 
 
@@ -731,6 +740,7 @@ async def _run_pipeline(
 ) -> None:
     """Run the pipeline with active-call drain accounting."""
     register_worker_active_call(workflow_run_id)
+    register_active_runtime(workflow_run_id, organization_id)
     try:
         await _run_pipeline_impl(
             transport,
@@ -751,6 +761,7 @@ async def _run_pipeline(
             try:
                 await call_concurrency.unregister_active_call(workflow_run_id)
             finally:
+                unregister_active_runtime(workflow_run_id)
                 unregister_worker_active_call(workflow_run_id)
 
 
@@ -1526,6 +1537,9 @@ async def _run_pipeline_impl(
     )
 
     register_audio_data_handler(audio_buffer, workflow_run_id, in_memory_audio_buffer)
+    # Bind only after the worker task and its completion handlers are ready. An
+    # admin kill delivered during setup waits on engine_ready until this point.
+    bind_active_engine(workflow_run_id, engine)
 
     try:
         # Run the pipeline

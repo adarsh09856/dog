@@ -52,6 +52,7 @@ class ControlledLLM(MockLLMService):
         self.mode = "audio"
         self.requested = asyncio.Event()
         self.release = asyncio.Event()
+        self.context_history = []
 
     async def process_frame(self, frame, direction):
         if type(frame) is DataFrame and self.mode == "queued":
@@ -63,6 +64,7 @@ class ControlledLLM(MockLLMService):
         await super().process_frame(frame, direction)
 
     async def get_chat_completions(self, context):
+        self.context_history.append(list(context.get_messages()))
         self.requested.set()
         if self.mode == "error":
             raise RuntimeError("simulated provider failure")
@@ -295,15 +297,33 @@ async def test_successful_long_audio_renews_deadline_and_arms_normal_idle(respon
     assert not response.engine.call_monitor.pending_response
 
 
-async def test_failed_idle_reminder_also_has_a_deadline(response):
+async def test_unsupported_idle_language_skips_reminder_but_still_ends_on_deadline(response):
     await response.request()
     await asyncio.wait_for(response.output.writing.wait(), 1)
-    response.llm.mode = "error"
     response.handle_idle = True
-    await response.assert_aborted()
-    assert response.monitor._retry_count == 1
-    # The transport broadcasts each speaking event upstream and downstream.
-    assert response.output.events.count(BotStartedSpeakingFrame) == 2
+    await asyncio.wait_for(asyncio.shield(response.task), 2)
+    assert (
+        response.engine._gathered_context["call_status"]
+        == EndTaskReason.USER_IDLE_MAX_DURATION_EXCEEDED.value
+    )
+    assert response.child.has_finished()
+    assert not response.engine.speech_playback.pending
+    assert response.monitor._retry_count == 2
+    if response.engine._is_realtime:
+        system_messages = [
+            message.get("content", "")
+            for message in response.context.messages
+            if message.get("role") == "system"
+        ]
+        assert any("short check-in question" in message for message in system_messages)
+        assert any("short, polite goodbye" in message for message in system_messages)
+    else:
+        # No caller language is known, so local mode skips generated idle speech.
+        assert not any(
+            message.get("role") == "system"
+            and "short check-in question" in message.get("content", "")
+            for message in response.context.messages
+        )
 
 
 async def test_bot_start_before_a_stuck_transport_write_is_not_progress(response):
@@ -727,10 +747,18 @@ async def test_two_idle_windows_remind_then_disconnect(response):
     assert response.engine._gathered_context["call_status"] == (
         EndTaskReason.USER_IDLE_MAX_DURATION_EXCEEDED.value
     )
-    assert any(
-        "ask if they're still there" in m.get("content", "")
-        for m in response.context.messages
-    )
+    if response.engine._is_realtime:
+        system_messages = [
+            message.get("content", "")
+            for generation in response.llm.context_history
+            for message in generation
+            if message.get("role") == "system"
+        ]
+        assert any("short check-in question" in message for message in system_messages)
+        assert any("short, polite goodbye" in message for message in system_messages)
+    else:
+        # Local mode has no safe fixed prompt until the caller's language is known.
+        assert response.monitor._retry_count == 2
 
 
 @pytest.mark.parametrize("response", [True, False], indirect=True)

@@ -92,6 +92,11 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         # The SDK otherwise retries timeouts, multiplying the per-request wait.
         self._client.max_retries = 0
         self.latest_detected_language: str | None = None
+        # The local Indic service may decode with a fallback language that
+        # differs from its LID result. Keep both values: transcript/frame
+        # routing follows the detected language, while this records the
+        # decoder actually used for diagnostics.
+        self.latest_decoder_language: str | None = None
         # LLM language choice can use the best transcript guess, but TTS voice
         # routing must not treat a weak first-turn language guess as verified.
         self.latest_tts_language: str | None = None
@@ -278,11 +283,27 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             if isinstance(detected_language, str):
                 detected_language = detected_language.strip().lower()
             if local_indic:
-                self.latest_detected_language = (
+                language_route = response_extra.get("language_route", "detector")
+                self.latest_decoder_language = (
                     selected.strip().lower() if isinstance(selected, str) and selected.strip() else None
                 )
-                language_route = response_extra.get("language_route", "detector")
+                if language_route in {"phone_hi_rescue", "phone_en_rescue"}:
+                    self.latest_decoder_language = language_route.removeprefix("phone_").removesuffix("_rescue")
+                if auto_language:
+                    self.latest_detected_language, resolved_route = _resolve_auto_language(
+                        detected_language if isinstance(detected_language, str) else None,
+                        language_confidence,
+                        self._stable_detected_language,
+                    )
+                    # Preserve detector/decode rescue routes unless language
+                    # normalization or confidence hysteresis deliberately
+                    # changed the selected language.
+                    if resolved_route != "detector":
+                        language_route = resolved_route
+                else:
+                    self.latest_detected_language = self.latest_decoder_language
             else:
+                self.latest_decoder_language = None
                 self.latest_detected_language, language_route = _resolve_auto_language(
                     detected_language if isinstance(detected_language, str) else None,
                     language_confidence,
@@ -293,6 +314,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 result = result.model_copy(update={"language": self.latest_detected_language})
         else:
             self.latest_detected_language = None
+            self.latest_decoder_language = None
             self._latest_language_confidence = None
             result = await super()._transcribe(normalized)
         text = (getattr(result, "text", None) or "").strip()
@@ -313,7 +335,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 language_confidence is None
                 or language_confidence >= (
                     AUTO_ENGLISH_MIN_CONFIDENCE
-                    if detected_language == "en"
+                    if str(detected_language or "").strip().lower().replace("_", "-").split("-", 1)[0] == "en"
                     else AUTO_LANGUAGE_MIN_CONFIDENCE
                 )
                 or language_route in {"urdu_routed_to_hindi", "competitive_indian_english", "whisper_english_rescue"}
