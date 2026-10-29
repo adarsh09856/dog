@@ -33,6 +33,22 @@ async def test_long_followup_releases_a_coherent_phrase_before_sentence_end():
 
 
 @pytest.mark.asyncio
+async def test_first_phrase_releases_at_16_chars_on_a_safe_word_boundary():
+    aggregator = LocalSpeechAggregator(
+        min_characters=24,
+        first_chunk_characters=12,
+        first_phrase_characters=16,
+    )
+    emitted = []
+    for word in "I can help you today, please tell me your name.".split(" "):
+        emitted.extend([part.text async for part in aggregator.aggregate(word + " ")])
+        if emitted:
+            break
+
+    assert emitted == ["I can help you today, "]
+
+
+@pytest.mark.asyncio
 async def test_streamed_numbers_and_dates_stay_in_one_synthesis_phrase():
     examples = (
         ("Please confirm the number nine five three eight three double zero nine four one.",
@@ -53,7 +69,7 @@ async def test_streamed_numbers_and_dates_stay_in_one_synthesis_phrase():
     for text, sequence in examples:
         aggregator = LocalSpeechAggregator(
             min_characters=24, first_chunk_characters=12,
-            first_clause_characters=24, first_phrase_characters=24,
+            first_clause_characters=24, first_phrase_characters=16,
             streaming_phrase_characters=48,
         )
         phrases = []
@@ -75,7 +91,7 @@ async def test_number_group_survives_character_stream_and_later_phrase():
     sequence = "nine and five three eight three double zero nine four one"
     aggregator = LocalSpeechAggregator(
         min_characters=24, first_chunk_characters=12,
-        first_clause_characters=24, first_phrase_characters=24,
+        first_clause_characters=24, first_phrase_characters=16,
         streaming_phrase_characters=48,
     )
     phrases = []
@@ -90,7 +106,7 @@ async def test_number_group_survives_character_stream_and_later_phrase():
 
 @pytest.mark.asyncio
 async def test_interruption_discards_a_pending_number():
-    aggregator = LocalSpeechAggregator(first_chunk_characters=12, first_phrase_characters=24)
+    aggregator = LocalSpeechAggregator(first_chunk_characters=12, first_phrase_characters=16)
     async for _ in aggregator.aggregate("Please confirm the number nine five three "):
         pass
     await aggregator.handle_interruption()
@@ -115,7 +131,7 @@ async def test_hindi_spoken_day_month_and_year_are_not_split_between_requests():
         for width in (1, 2, 3, 7, 13, 36, 64):
             aggregator = LocalSpeechAggregator(
                 min_characters=24, first_chunk_characters=12,
-                first_clause_characters=24, first_phrase_characters=24,
+                first_clause_characters=24, first_phrase_characters=16,
                 streaming_phrase_characters=48,
             )
             phrases = []

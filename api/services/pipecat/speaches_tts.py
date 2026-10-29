@@ -58,7 +58,10 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # after a coherent word-boundary phrase instead of waiting
                 # several more seconds for punctuation. The aggregator retains
                 # every character and keeps later phrases at the larger size.
-                first_phrase_characters=24,
+                # Lower only the first phrase threshold to reduce the gap
+                # between LLM first text and TTS. The aggregator still waits
+                # for a safe word boundary and keeps number/date groups intact.
+                first_phrase_characters=16,
                 # Release later phrases sooner so slow CPU LLM token generation
                 # is less likely to leave silence after the current audio ends.
                 # Keep a moderate phrase length to limit extra synthesis calls;

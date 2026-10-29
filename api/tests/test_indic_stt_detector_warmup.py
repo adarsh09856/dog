@@ -84,9 +84,18 @@ def test_phone_english_rescue_uses_candidate_only_when_it_recovers_more_digits()
     assert indic_stt._phone_rescue_is_better(
         "999999999999999999999999999999", "nine five three eight three double zero nine four one"
     )
-    assert indic_stt._phone_rescue_is_better(
+    assert not indic_stt._phone_rescue_is_better(
         "999999999999999999999999999999", "the phone is"
     )
+    assert not indic_stt._phone_rescue_is_better(
+        "nine five pre-ed", "nine five three eight three double zero nine four one two three four five six seven"
+    )
+
+
+def test_phone_rescue_detects_unknown_mixed_script_fragments_but_ignores_preambles():
+    assert indic_stt._phone_decode_has_unknown_tokens("नाइन ஃபைவ் pre-ed")
+    assert not indic_stt._phone_decode_has_unknown_tokens("my phone number is nine five")
+    assert not indic_stt._phone_decode_has_unknown_tokens("नाइन ஃபைவ் थ्री")
 
 
 def test_phone_rescue_digit_score_counts_existing_regional_spellings():
@@ -117,16 +126,22 @@ def test_phone_rescue_digit_score_counts_phonetic_gujarati_and_tamil_forms():
     ("hindi_text", "expected_text", "expected_route", "expected_decodes"),
     [
         (
+            "नाइन ஃபைவ் pre-ed",
+            "nine five 383 double zero 941",
+            "phone_en_rescue",
+            ["hi", "en"],
+        ),
+        (
             "pre-ed pre-double-zero",
             "nine five 383 double zero 941",
-            "phone_english_rescue",
+            "phone_en_rescue",
             ["hi", "en"],
         ),
         (
             "nine five 383 double zero 941",
             "nine five 383 double zero 941",
             "detector",
-            ["hi", "en"],
+            ["hi"],
         ),
     ],
 )
@@ -164,7 +179,7 @@ async def test_phone_capture_uses_resident_english_decode_only_when_hindi_number
     monkeypatch.setattr(indic_stt, "_installed_languages", lambda: ["en", "hi"])
     monkeypatch.setattr(indic_stt, "_lid_session", object())
     monkeypatch.setattr(indic_stt, "_inference_lock", asyncio.Lock())
-    monkeypatch.setattr(indic_stt, "_loaded", OrderedDict([("en", object())]))
+    monkeypatch.setattr(indic_stt, "_loaded", OrderedDict([("hi", object()), ("en", object())]))
     monkeypatch.setattr(indic_stt, "_detect_language", lambda *_: ("hi", 0.95, None))
     monkeypatch.setattr(indic_stt, "_load", lambda lang: Recognizer(
         lang,

@@ -540,6 +540,15 @@ def register_event_handlers(
             try:
                 feedback_events = in_memory_logs_buffer.get_events()
                 logs_update["realtime_feedback_events"] = feedback_events
+                # The buffer intentionally has no persistence responsibility.
+                # Snapshot its low-volume speech-stage and audio-health evidence
+                # into the completed run so latency can be inspected after calls.
+                speech_diagnostics = [
+                    event for event in feedback_events
+                    if event.get("type") in {"rtf-speech-stage", "rtf-audio-health"}
+                ]
+                if speech_diagnostics:
+                    logs_update["speech_diagnostics"] = speech_diagnostics
                 logger.debug(
                     f"Saved {len(feedback_events)} feedback events to workflow run logs"
                 )

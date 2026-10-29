@@ -134,20 +134,44 @@ def _phone_digit_count(text: str) -> int:
     return count
 
 
+def _phone_decode_has_unknown_tokens(text: str) -> bool:
+    """Return whether a phone-slot decode contains non-digit, unknown words.
+
+    Phone speech is often code-switched, so a partial Hindi decode with an
+    English phonetic fragment (or vice versa) is a useful signal to try the
+    already-resident alternate decoder. Common number-introduction words are
+    ignored so callers can say "my phone number is ..." without triggering a
+    rescue solely because of the preamble.
+    """
+    ignored = {
+        "my", "mobile", "phone", "number", "is", "the", "hai", "hain",
+        "mera", "मेरे", "मेरा", "फोन", "नंबर", "नम्बर", "है", "हैं",
+        "uh", "um", "and", "plus", "और", "तथा",
+    }
+    tokens = (
+        token.strip("()[]{}\"'")
+        for token in re.split(r"[\s,.!?।॥:;\-–—]+", str(text or "").casefold())
+    )
+    return any(
+        token
+        and not token.isdecimal()
+        and token not in _PHONE_DIGIT_WORDS
+        and token not in ignored
+        for token in tokens
+    )
+
+
 def _phone_rescue_is_better(primary: str, english: str) -> bool:
     """Prefer a plausible longer phone decode over an incomplete or runaway one."""
     primary_digits = _phone_digit_count(primary)
     candidate_digits = _phone_digit_count(english)
     candidate_plausible = 3 <= candidate_digits <= 15
     primary_plausible = 3 <= primary_digits <= 15
-    if primary_digits > 15:
-        # In a phone slot an overlong decode is a hallucination. Even a
-        # candidate with no usable digits is safer because the caller-side
-        # parser will ask for a repeat instead of retaining a fake number.
-        return True
-    return candidate_plausible and (
-        not primary_plausible or candidate_digits > primary_digits
-    )
+    # Treat an overlong primary as unusable (score 0), but never select an
+    # overlong alternate. This keeps the chosen transcript bounded while
+    # allowing a valid 10-digit alternate to replace a runaway hallucination.
+    primary_score = primary_digits if primary_plausible else 0
+    return candidate_plausible and candidate_digits > primary_score
 
 app = FastAPI(title="Kodewaves Indic CPU STT")
 _loaded: OrderedDict[str, sherpa_onnx.OfflineRecognizer] = OrderedDict()
@@ -588,6 +612,9 @@ async def transcribe(
         decode_started = time.monotonic()
         text = await asyncio.to_thread(decode, lang)
         primary_phone_digits = _phone_digit_count(text) if phone_capture else 0
+        primary_phone_has_unknown_tokens = (
+            phone_capture and _phone_decode_has_unknown_tokens(text)
+        )
         if (
             phone_capture
             and lang in {"hi", "en"}
@@ -595,8 +622,13 @@ async def transcribe(
             # recognizers for every phone utterance serializes two CPU-heavy
             # inference passes under _inference_lock and made routine turns
             # needlessly slow. The alternate decoder is a rescue only when
-            # the primary produced no usable digits or an implausible runaway.
-            and (primary_phone_digits == 0 or primary_phone_digits > 15)
+            # the primary produced no digits, an implausible runaway, or a
+            # partial (<15 digit) decode containing unknown words.
+            and (
+                primary_phone_digits == 0
+                or primary_phone_digits > 15
+                or (primary_phone_digits < 15 and primary_phone_has_unknown_tokens)
+            )
             and all(candidate in installed and candidate in _loaded for candidate in {"hi", "en"})
         ):
             # Phone strings are commonly spoken in English inside Hindi calls,
