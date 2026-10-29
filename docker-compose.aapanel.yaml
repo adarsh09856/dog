@@ -88,7 +88,7 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
-    image: kodewaves-api:v2.0.0
+    image: "${KODEWAVES_API_IMAGE:-kodewaves-api:v2.0.0}"
     container_name: kodewaves_api
     restart: unless-stopped
     depends_on:
@@ -105,8 +105,9 @@ services:
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-https://your-domain.com}"
       PUBLIC_HOST: "${PUBLIC_HOST:-your-domain.com}"
       BACKEND_API_ENDPOINT: "${PUBLIC_BASE_URL:-https://your-domain.com}"
-      FORWARDED_ALLOW_IPS: "*"
-      
+      # Set this to the aaPanel/Nginx proxy peer as seen by the API container.
+      # Wildcard trust allows spoofed X-Forwarded-For values to bypass IP policy.
+      FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-127.0.0.1}"
       # Database and Cache
       DATABASE_URL: "postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/postgres"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-redis_secure_pass}@redis:6379"
@@ -155,11 +156,12 @@ services:
       TURN_HOST: "${PUBLIC_HOST:-your-domain.com}"
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
 
-      # Local CPU AI Engine (Ollama + Indus TTS + Faster-Whisper STT)
+      # Local CPU AI Engine
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
       INDIC_STT_ENDPOINT: "${INDIC_STT_ENDPOINT:-http://indic-stt:8000/v1}"
       INDIC_MIO_TTS_ENDPOINT: "${INDIC_MIO_TTS_ENDPOINT:-http://indic-mio-tts:8000/v1}"
+      INDIC_PARLER_TTS_ENDPOINT: "${INDIC_PARLER_TTS_ENDPOINT:-http://indic-parler-tts:8000/v1}"
       INDIC_VITS_TTS_ENDPOINT: "${INDIC_VITS_TTS_ENDPOINT:-http://indic-vits-tts:8000/v1}"
       INDUS_COMBINED_ENDPOINT: "${INDUS_COMBINED_ENDPOINT:-}"
       DHVAANI_TTS_ENDPOINT: "${DHVAANI_TTS_ENDPOINT:-http://dhvaani-tts:8000/v1}"
@@ -171,10 +173,8 @@ services:
       KODEWAVES_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-}"
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
-    volumes:
-      - ./api:/app/api:ro
-      - ./scripts:/app/scripts:ro
-      - ./pipecat:/app/pipecat:ro
+    # Application source is baked into the image. Host source mounts would
+    # override a release image and silently keep the previous checkout live.
     healthcheck:
       test:
         [
@@ -197,7 +197,7 @@ services:
     build:
       context: .
       dockerfile: ui/Dockerfile
-    image: kodewaves-ui:v2.0.0
+    image: "${KODEWAVES_UI_IMAGE:-kodewaves-ui:v2.0.0}"
     container_name: kodewaves_ui
     restart: unless-stopped
     depends_on:
@@ -239,6 +239,10 @@ services:
       - --fingerprint
       - --lt-cred-mech
       - --realm=${PUBLIC_HOST:-localhost}
+      # SERVER_IP maps Docker's relay address to the public IPv4.
+      - --external-ip=${SERVER_IP:?SERVER_IP must be set to the server public IPv4}
+      - --min-port=49152
+      - --max-port=49350
       - --static-auth-secret=${TURN_SECRET:-coturn_shared_secret}
     environment:
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
@@ -301,7 +305,7 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_ENDPOINT: http://ollama:11434
-      OLLAMA_WARM_MODELS: "${OLLAMA_WARM_MODELS:-qwen3.5:2b}"
+      OLLAMA_WARM_MODELS: "${OLLAMA_WARM_MODELS:-qwen3.5:2b-q4_K_M}"
       OLLAMA_WARM_INTERVAL_SECONDS: "${OLLAMA_WARM_INTERVAL_SECONDS:-30}"
     command: ["python", "/app/warm_local_ollama.py"]
     volumes:
@@ -318,12 +322,17 @@ services:
   indic-stt:
     build:
       context: ./api/local_models/indic_stt
-    image: kodewaves-indic-stt:v1.0.0
+    image: "${KODEWAVES_INDIC_STT_IMAGE:-kodewaves-indic-stt:v1.0.0}"
     container_name: kodewaves_indic_stt
     restart: unless-stopped
     environment:
       INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-all}"
+      # Optional comma-separated startup languages, bounded by resident slots.
+      INDIC_STT_PREWARM_LANGUAGES: "${INDIC_STT_PREWARM_LANGUAGES:-}"
       INDIC_STT_THREADS: "${INDIC_STT_THREADS:-2}"
+      INDIC_STT_AUTO_DETECT: "${INDIC_STT_AUTO_DETECT:-1}"
+      INDIC_STT_LID_THREADS: "${INDIC_STT_LID_THREADS:-2}"
+      INDIC_STT_RESIDENT_MODELS: "${INDIC_STT_RESIDENT_MODELS:-4}"
     volumes:
       - kodewaves_indic_stt_models:/models
     healthcheck:
@@ -350,6 +359,7 @@ services:
     profiles: ["indus"]
     environment:
       INDUS_MODEL_DIR: /models/indus-pocket-tts
+      INDUS_WORKERS: "${INDUS_WORKERS:-1}"
       HF_HOME: /models/huggingface
       OMP_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
@@ -365,7 +375,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1.0"
+          cpus: "${INDUS_CPU_LIMIT:-1.0}"
           memory: 2048M
     networks:
       - kodewaves-network
@@ -378,9 +388,14 @@ services:
     container_name: kodewaves_indic_vits_tts
     restart: unless-stopped
     profiles: ["local"]
+    depends_on:
+      indus-tts:
+        condition: service_healthy
+        required: false
     environment:
       INDIC_VITS_THREADS: "${INDIC_VITS_THREADS:-2}"
       INDUS_TTS_ENDPOINT: "${INDUS_COMBINED_ENDPOINT:-}"
+      INDUS_GATEWAY_WORKERS: "${INDUS_WORKERS:-1}"
       HF_HOME: /models/huggingface
     volumes:
       - kodewaves_indic_vits_tts_models:/models
@@ -430,6 +445,33 @@ services:
     networks:
       - kodewaves-network
 
+  # Evaluation profile: provision approved weights and tokenizer before starting.
+  indic-parler-tts:
+    build:
+      context: ./api/local_models/indic_parler
+      dockerfile: Dockerfile
+    image: kodewaves-indic-parler-tts:v1.0.0
+    container_name: kodewaves_indic_parler_tts
+    restart: "no"
+    profiles: ["indic-parler"]
+    environment:
+      INDIC_PARLER_THREADS: "2"
+    volumes:
+      - ${INDIC_PARLER_MODELS_DIR:-./models/indic-parler}:/models:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+    networks:
+      - kodewaves-network
+
   # CPU LiteRT Indic-Mio TTS, with Indian-language and English voice support.
   # This model buffers utterances, so keep it distinct from the streaming voice.
   indic-mio-tts:
@@ -467,7 +509,9 @@ services:
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     container_name: kodewaves_whisper
     restart: unless-stopped
-    profiles: ["local"]
+    # Legacy Whisper is opt-in separately; local Indic installs should not
+    # load a second STT stack on small CPU hosts.
+    profiles: ["whisper"]
     ports:
       - "127.0.0.1:${WHISPER_PORT:-8765}:8000"
     volumes:

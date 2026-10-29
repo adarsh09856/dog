@@ -635,10 +635,19 @@ async def save_model_configuration_v2(
             organization_id=organization_id,
             created_by=user.provider_id,
         )
-        from api.services.configuration.kodewaves_resolver import (
-            require_explicit_indic_stt_language,
-        )
-        require_explicit_indic_stt_language(effective.stt.model, effective.stt.language)
+        if effective.stt.model == "indicconformer-ctc-int8" and str(effective.stt.language).lower() in {"auto", "multi"}:
+            import os
+            from api.db.kodewaves_client import kodewaves_db_client
+            from api.services.catalog.local_inventory import get_local_stt_models, whisper_api_base
+            from api.utils.common import normalize_local_ai_endpoint
+
+            local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+            endpoint = local_ai.get("indic_stt_endpoint") or os.environ.get(
+                "INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1"
+            )
+            models = await get_local_stt_models(whisper_api_base(normalize_local_ai_endpoint(endpoint)))
+            if models.get("indicconformer-ctc-int8", {}).get("supports_auto_detect") is not True:
+                raise HTTPException(status_code=400, detail="Installed self-hosted STT does not support automatic detection")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=exc.args[0])
 

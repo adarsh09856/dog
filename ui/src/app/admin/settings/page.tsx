@@ -35,7 +35,7 @@ import { adminApi, PlatformSettings } from "@/lib/kodewavesApi";
 import IndicSttTest from "./IndicSttTest";
 
 const POPULAR_OLLAMA_MODELS = [
-  { value: "qwen3.5:2b", label: "Qwen 3.5 2B" },
+  { value: "qwen3.5:2b-q4_K_M", label: "Qwen 3.5 2B Q4 (CPU)" },
 ];
 
 
@@ -69,7 +69,7 @@ export default function AdminSettingsPage() {
   // Ollama Model Manager state
   const [ollamaModels, setOllamaModels] = useState<any[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
-  const [pullModelName, setPullModelName] = useState("qwen3.5:2b");
+  const [pullModelName, setPullModelName] = useState("qwen3.5:2b-q4_K_M");
   const [customPullModel, setCustomPullModel] = useState("");
   const [isPulling, setIsPulling] = useState(false);
   const [pullStatusMessage, setPullStatusMessage] = useState<string | null>(null);
@@ -640,7 +640,7 @@ export default function AdminSettingsPage() {
               Self-hosted Indian speech recognition
             </CardTitle>
             <CardDescription>
-              Test the installed CPU IndicConformer languages against real WAV audio. The selected language is used for recognition; this local model does not auto-detect languages.
+              Test a selected CPU IndicConformer language against WAV audio. Live calls can use automatic detection for the supported installed speech languages shown in Model Configurations.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -518,14 +518,14 @@ export interface Contact {
   phone: string;
   email?: string;
   company?: string;
-  stage_id?: string | number;
+  stage_id?: string | null;
   notes?: string;
   custom_fields?: Record<string, any>;
   created_at?: string;
 }
 
 export interface LeadStage {
-  id: string | number;
+  id: string;
   name: string;
   order?: number;
   order_index?: number;
@@ -793,6 +793,7 @@ export interface CatalogModelOption {
   languages?: string[];
   /** True only when this exact STT model has a supported auto-detect setting. */
   supports_auto_detect?: boolean;
+  auto_detect_languages?: string[];
 }
 
 export interface AvailableCatalogResponse {

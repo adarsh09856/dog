@@ -30,8 +30,28 @@ class CampaignSourceSyncService(ABC):
 
     @staticmethod
     def normalize_headers(headers: List[str]) -> List[str]:
-        """Normalize headers by stripping whitespace and lowercasing."""
-        return [h.strip().lower() for h in headers]
+        """Normalize headers and map common destination aliases to phone_number.
+
+        Spreadsheet exports often use a BOM or human-readable header while the
+        campaign pipeline expects ``phone_number``. Keep arbitrary workflow
+        variable names intact; canonicalize only well-known phone columns.
+        """
+        normalized = [h.strip().lstrip("\ufeff").strip().lower() for h in headers]
+        if "phone_number" not in normalized:
+            phone_aliases = {
+                "phone number", "phone-number", "phone", "phonenumber",
+                "mobile number", "mobile-number", "mobile_number", "mobile",
+                "mobilenumber", "contact number", "contact-number",
+                "contact_number", "contact phone", "contact_phone",
+                "phone no", "phone_no", "mobile no", "mobile_no",
+            }
+            alias_index = next(
+                (index for index, header in enumerate(normalized) if header in phone_aliases),
+                None,
+            )
+            if alias_index is not None:
+                normalized[alias_index] = "phone_number"
+        return normalized
 
     @staticmethod
     def _format_rows(row_indexes: List[int]) -> str:

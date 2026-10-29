@@ -2,6 +2,8 @@
 
 import re
 
+from api.services.pipecat.runtime_clock_context import standalone_current_date_reply
+
 END_CALL_TOOL_NAMES = frozenset({"finish_call", "end_call", "close_conversation", "hang_up"})
 
 def has_live_lookup_tools(tools) -> bool:
@@ -128,20 +130,20 @@ _HINDI_ROOM_BOOKING = re.compile(
     r"(?:(?:अः|अह|उम्)\s+)?(?:मुझे|मेरे को|हमको|हमें|मेरे लिए|मैं)\s+(?:ना\s+)?(?:एक\s+)?"
     r"(?:(?:रूम|कमरा|कमरे)(?:\s+वगैरह)?(?:\s+की)?\s+(?:बुकिंग|बुक|आरक्षित|रिज़र्व)|"
     r"(?:बुक|बुकिंग|आरक्षित|रिज़र्व)\s+(?:एक\s+)?(?:रूम|कमरा|कमरे))\s+"
-    r"(?:करना|करनी|कराना|करानी|करें|करिए|करूँ|चाहिए)(?:\s+है)?"
-    r"(?:\s+.+)?[.!?।\s]*$",
+    r"(?:करना|करनी|कराना|करानी|करें|करिए|करूँ|चाहिए)(?:\s+(?:है|था|थी))?"
+    r"[.!?।\s]*$",
 )
 _ENGLISH_ROOM_BOOKING = re.compile(
     r"(?:(?:i|we)\s+(?:want|need|would\s+like|have)\s+to\s+)?"
     r"(?:book|reserve)\s+(?:a\s+|the\s+|my\s+)?(?:hotel\s+)?room"
-    r"(?:\s+.+)?[.!?\s]*$",
+    r"[.!?\s]*$",
     re.IGNORECASE,
 )
 _ROMAN_HINDI_ROOM_BOOKING = re.compile(
     r"(?:(?:mujhe|mere\s+liye|humko)\s+)?(?:ek\s+)?"
     r"(?:room|kamra|kamre)\s+(?:book|reserve|booking)\s+"
     r"(?:karna|karni|karana|karani)(?:\s+(?:hai|he))?"
-    r"(?:\s+.+)?[.!?\s]*$",
+    r"[.!?\s]*$",
     re.IGNORECASE,
 )
 _ROOM_BOOKING_NEGATION = re.compile(
@@ -220,6 +222,9 @@ def direct_caller_reply(text: str, *, has_lookup_tools: bool) -> str | None:
     workflow has tools. Explicit order status requests stay on the tool path.
     Multi-intent messages are left to the normal workflow.
     """
+    current_date_reply = standalone_current_date_reply(text)
+    if current_date_reply:
+        return current_date_reply
     if _HINDI_BOOKING_REFUSAL.fullmatch(text):
         return "ठीक है, कोई बात नहीं।"
     if _ENGLISH_BOOKING_REFUSAL.fullmatch(text):

@@ -663,7 +663,7 @@ SPEACHES_LLM_MODELS = [
     "qwen2.5:1.5b",
     "phi4-mini",
     "llama3.2:1b",
-    "qwen3.5:2b",
+    "qwen3.5:2b-q4_K_M",
     "llama3:8b",
     "mistral:7b",
     "deepseek-r1",
@@ -2165,7 +2165,7 @@ class SpeachesSTTConfiguration(BaseSTTConfiguration):
     provider: Literal[ServiceProviders.SPEACHES] = ServiceProviders.SPEACHES
     model: str = Field(
         default="indicconformer-ctc-int8",
-        description="Self-hosted Indian-language and English recognizers. Select one installed language; automatic detection is not supported.",
+        description="Self-hosted Indian-language and English recognizers. Automatic detection is available only when the installed engine advertises it.",
         json_schema_extra={
             "examples": SPEACHES_STT_MODELS,
             "allow_custom_input": True,
@@ -2173,7 +2173,7 @@ class SpeachesSTTConfiguration(BaseSTTConfiguration):
     )
     language: str = Field(
         default="hi",
-        description="Select one installed language. IndicConformer handles Indian languages and Moonshine handles English; automatic detection is unavailable.",
+        description="Select one installed language or multi when the installed speech detector is available. Mixed-language decoding within an utterance is not guaranteed.",
         json_schema_extra={
             "examples": SPEACHES_STT_LANGUAGES,
             "allow_custom_input": True,

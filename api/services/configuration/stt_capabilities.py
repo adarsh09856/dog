@@ -9,6 +9,9 @@ def stt_model_supports_auto_detect(provider: str, model: str) -> bool:
     from api.services.configuration.registry import REGISTRY, ServiceType
 
     provider_key = str(provider or "").strip().casefold()
+    if model == "indicconformer-ctc-int8" and provider_key in {"indicconformer", "speaches", "whisper", "local_cpu"}:
+        # The serving manifest is checked separately before a call begins.
+        return True
     provider_key = {
         "google_realtime": "google",
         "google_speech": "google",

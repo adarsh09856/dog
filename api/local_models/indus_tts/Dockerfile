@@ -14,10 +14,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+RUN pip install --no-cache-dir "torch==2.14.1+cpu" --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir \
        "pocket-tts @ git+https://github.com/kyutai-labs/pocket-tts@0c2db3b" \
-       fastapi uvicorn huggingface_hub safetensors sentencepiece
+       "fastapi==0.158.1" "uvicorn==0.54.0" "huggingface_hub==2.2.0" \
+       "safetensors==0.8.0" "sentencepiece==0.2.2"
 
 COPY app.py /app/app.py
 

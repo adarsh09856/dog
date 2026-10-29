@@ -2,15 +2,20 @@
 
 import asyncio
 import os
+import time
 from contextlib import aclosing, suppress
 
+from loguru import logger
 from openai import BadRequestError, DefaultAsyncHttpxClient
 
 from api.services.configuration.language_normalizer import normalize_language_code
 from api.services.pipecat.local_speech_aggregator import LocalSpeechAggregator
 from api.services.pipecat.tts_cache.models import SynthesisRequest
 from api.services.pipecat.tts_cache.synthesis import cached_synthesis
-from pipecat.frames.frames import CancelFrame, ErrorFrame, InterruptionFrame, TTSAudioRawFrame
+from pipecat.frames.frames import (
+    AggregatedTextFrame, CancelFrame, EndFrame, ErrorFrame,
+    InterruptionFrame, TTSAudioRawFrame,
+)
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.speaches.tts import SpeachesTTSService
 from pipecat.services.tts_service import TextAggregationMode
@@ -20,7 +25,10 @@ from pipecat.utils.tracing.service_decorators import traced_tts
 class SpeachesLiveTTSService(SpeachesTTSService):
     """Keep a synthesis context open while the CPU provider is working."""
 
-    _INITIAL_PCM_BUFFER_SECONDS = 0.4
+    # The Rasa gateway emits ~200 ms PCM chunks. Buffer one chunk to bridge
+    # the next sequential phrase without holding the first audio for two
+    # chunks (which added 400 ms before playback could begin).
+    _INITIAL_PCM_BUFFER_SECONDS = 0.2
 
     @property
     def chunk_size(self) -> int:
@@ -54,7 +62,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # Keep each later Inaya request long enough for coherent
                 # prosody, but release it before the full sentence ends so the
                 # next synthesis can overlap the current audio playback.
-                streaming_phrase_characters=64,
+                streaming_phrase_characters=48,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
@@ -78,9 +86,9 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         return True
 
     async def _buffer_initial_pcm(self, frames):
-        # Two short, sequential CPU synthesis requests can leave a silent gap
-        # between phrases. Hold a small amount of the first phrase so paced
-        # playback has audio while the next phrase is being synthesized.
+        # Sequential CPU synthesis requests can leave a silent gap between
+        # phrases. Hold one output chunk of the first phrase so paced playback
+        # has a small cushion while the next phrase is being synthesized.
         sample_rate = self.sample_rate or self._init_sample_rate or 24000
         target_bytes = int(sample_rate * 2 * self._INITIAL_PCM_BUFFER_SECONDS)
         pending = []
@@ -106,6 +114,33 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         for buffered in pending:
             yield buffered
 
+    async def _trace_phrase(self, frames, text: str, context_id: str):
+        """Measure each phrase without logging caller or assistant text."""
+        started = time.monotonic()
+        first_pcm_ms = None
+        pcm_bytes = 0
+        pcm_frames = 0
+        try:
+            async for frame in frames:
+                if isinstance(frame, TTSAudioRawFrame):
+                    if first_pcm_ms is None:
+                        first_pcm_ms = round((time.monotonic() - started) * 1000)
+                    pcm_bytes += len(frame.audio)
+                    pcm_frames += 1
+                yield frame
+        finally:
+            logger.info(
+                "local_tts_phrase_trace context={} chars={} language={} first_pcm_ms={} "
+                "wall_ms={} pcm_frames={} pcm_bytes={}",
+                context_id,
+                len(text),
+                self._request_speech_language(),
+                first_pcm_ms,
+                round((time.monotonic() - started) * 1000),
+                pcm_frames,
+                pcm_bytes,
+            )
+
     async def _stop_turn_keepalive(self):
         task, self._turn_keepalive = self._turn_keepalive, None
         if task:
@@ -117,20 +152,66 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         await self._stop_turn_keepalive()
         await super().cleanup()
 
+    async def stop(self, frame: EndFrame):
+        # AIService handles EndFrame before TTSService flushes its aggregator.
+        # The inherited stop() drains and terminates the audio-context worker,
+        # so flushing afterward can synthesize the final phrase into an orphaned
+        # queue. Finish the HTTP turn while its consumer is still alive; then
+        # let the base stop drain every queued frame before forwarding EndFrame.
+        if self._audio_context_task is not None:
+            remaining = await self._text_aggregator.flush()
+            await self.stop_text_aggregation_metrics()
+            if remaining:
+                if self._turn_context_id is None:
+                    self._turn_context_id = self.create_context_id()
+                    await self.on_turn_context_created(self._turn_context_id)
+                await self._push_tts_frames(AggregatedTextFrame(
+                    remaining.text, remaining.type,
+                    raw_text=getattr(remaining, "full_match", remaining.text),
+                ))
+            await self._push_sequencer_frames(
+                await self._aggregated_frame_sequencer.finalize(self._turn_context_id),
+                self._turn_context_id,
+            )
+            await self.on_turn_context_completed()
+        await super().stop(frame)
+
     async def cancel(self, frame: CancelFrame):
         await self._stop_turn_keepalive()
         await super().cancel(frame)
 
     def _resolve_speech_language(self):
         source = getattr(self, "_caller_language_source", None)
+        # An explicit caller preference is shared with the STT/LLM language
+        # context. Prefer it over the previous utterance's detected language
+        # so text and audio stay in the same language after a switch request.
+        preferred = getattr(source, "reply_language_override", None)
+        if preferred is not None:
+            raw_preferred = getattr(preferred, "value", preferred)
+            preferred_code = normalize_language_code(raw_preferred)
+            if preferred_code in {"en", "hi"}:
+                return preferred_code
+        # Auto STT may expose a best-effort language to the LLM even when the
+        # detector confidence is too weak to choose a regional voice. In that
+        # case let the gateway route unambiguous output scripts or retain the
+        # configured bilingual voice instead of cold-loading a guessed voice.
+        if source is not None and hasattr(source, "latest_tts_language"):
+            detected_for_tts = source.latest_tts_language
+        else:
+            detected_for_tts = getattr(source, "latest_detected_language", None)
         for value in (
-            getattr(source, "latest_detected_language", None),
+            detected_for_tts,
             getattr(getattr(source, "_settings", None), "language", None),
             self._speech_language,
         ):
             if value is None:
                 continue
-            code = normalize_language_code(getattr(value, "value", value))
+            raw_value = getattr(value, "value", value)
+            if str(raw_value).strip().casefold() in {
+                "", "auto", "multi", "multilingual", "unknown", "default", "none",
+            }:
+                continue
+            code = normalize_language_code(raw_value)
             if code not in {"", "auto", "multi", "multilingual", "unknown", "default", "none"}:
                 return code
         return None
@@ -190,7 +271,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             )
             async with aclosing(generator) as frames:
                 output = self._buffer_initial_pcm(frames) if buffer_initial else frames
-                async for frame in output:
+                traced = output if isinstance(self, SpeachesCachingTTSService) else self._trace_phrase(output, text, context_id)
+                async for frame in traced:
                     yield frame
         finally:
             keepalive.cancel()
@@ -214,6 +296,15 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._turn_keepalive = asyncio.create_task(keep_turn_open())
 
     async def on_turn_context_completed(self):
+        # The HTTP generator is synchronous even when its last phrase failed
+        # after an earlier phrase emitted PCM. Pipecat derives this flag from
+        # the final phrase only; false would leave the active audio context
+        # without a stop sentinel, delaying the next turn until its timeout.
+        if (
+            self._turn_context_id is not None
+            and self.audio_context_available(self._turn_context_id)
+        ):
+            self._is_yielding_frames_synchronously = True
         try:
             await super().on_turn_context_completed()
         finally:
@@ -286,5 +377,5 @@ class SpeachesCachingTTSService(SpeachesLiveTTSService):
             # so the nested base method will not buffer twice.
             buffer_initial = self._claim_initial_pcm_buffer(context_id)
             output = self._buffer_initial_pcm(frames) if buffer_initial else frames
-            async for frame in output:
+            async for frame in self._trace_phrase(output, text, context_id):
                 yield frame

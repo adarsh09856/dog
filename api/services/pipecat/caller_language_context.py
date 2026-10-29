@@ -44,6 +44,21 @@ _STANDALONE_HINDI_REQUEST = re.compile(
 )
 
 
+def _trusted_detected_language(source) -> str | None:
+    """Use the voice router's confidence-filtered language when available.
+
+    A present-but-empty ``latest_tts_language`` is intentional: the detector
+    heard a weak or unsupported label, so it must not steer the reply language.
+    Older recognizers do not expose that property and retain the legacy raw
+    detected-language behavior.
+    """
+    if source is None:
+        return None
+    if hasattr(source, "latest_tts_language"):
+        return getattr(source, "latest_tts_language", None)
+    return getattr(source, "latest_detected_language", None)
+
+
 def standalone_language_request(text: str) -> str | None:
     """A reply-language setting request with no other task to drop."""
     if _STANDALONE_ENGLISH_REQUEST.fullmatch(text):
@@ -76,7 +91,9 @@ class CallerLanguageContext:
         self._explicit_source_language: str | None = None
 
     def choose_language(self, language: str, source=None, *, text: str = "") -> None:
-        detected = getattr(source, "latest_detected_language", None)
+        # Keep the transcript's raw STT result intact, but guide the LLM with
+        # the language that the active TTS inventory can actually speak.
+        detected = _trusted_detected_language(source)
         code = str(detected or "").lower().replace("_", "-").split("-", 1)[0]
         spoken = SPEECH_LANGUAGE_NAMES.get(code)
         if not spoken:
@@ -110,6 +127,11 @@ class CallerLanguageContext:
         # Recover explicit choices from its persisted caller history so a
         # successful switch acknowledgment also governs subsequent replies.
         if source is None:
+            # Text chat has no recognizer metadata. Reuse the conservative
+            # English classifier used by the local LLM adapter; avoid assigning
+            # English to Romanized Hindi or mixed Indic-script text.
+            from api.services.pipecat.booking_tool_choice import _clearly_english_caller_text
+
             for ordinal, (_, text) in enumerate(users):
                 requested = standalone_language_request(text)
                 if requested:
@@ -120,9 +142,27 @@ class CallerLanguageContext:
                         f"for assistant replies. Reply only in {self._explicit_preference}; "
                         "do not repeat questions already answered."
                     ))
+                elif _clearly_english_caller_text(text):
+                    self._hints.setdefault((ordinal, text), (
+                        "The caller wrote in English. Answer in English; "
+                        "do not repeat questions already answered."
+                    ))
 
-        detected = getattr(source, "latest_detected_language", None)
+        # STT can identify languages beyond the installed TTS inventory. Keep
+        # the raw detector metadata, but reply in a voice we can actually emit.
+        detected = _trusted_detected_language(source)
         detected_text = getattr(source, "latest_detected_text", None)
+        latest_user_text = users[-1][1] if users else ""
+        explicit_language = _requested_language(latest_user_text) if users else None
+        if explicit_language:
+            self._explicit_preference = explicit_language
+            # A low-confidence detector may intentionally expose no TTS
+            # language. Still honor the caller's explicit reply-language
+            # request, while tracking the utterance's likely source language
+            # separately so a later language change can resume auto mode.
+            if not detected:
+                detected = "hi" if re.search(r"[\u0900-\u097f]", latest_user_text) else "en"
+                detected_text = latest_user_text
         if (
             users and users[-1][0] == len(messages) - 1
             and isinstance(detected, str)
@@ -133,7 +173,7 @@ class CallerLanguageContext:
             language = SPEECH_LANGUAGE_NAMES.get(code)
             key = (len(users) - 1, users[-1][1])
             if language and key not in self._hints:
-                requested = _requested_language(users[-1][1])
+                requested = explicit_language or _requested_language(users[-1][1])
                 if requested:
                     self._explicit_preference = requested
                     self._explicit_source_language = language
@@ -157,6 +197,17 @@ class CallerLanguageContext:
                         f"The caller just spoke {language}. Answer in {answer_language}; "
                         "follow their latest language choice and do not repeat the greeting."
                     )
+
+        # The same preference that guides the LLM must guide TTS. Otherwise
+        # an explicit "speak English" request can produce English text while
+        # the speech service still uses the previous Hindi detector result.
+        # Keep this override call-scoped on the recognizer and clear it as
+        # soon as a later utterance changes the detected source language.
+        if source is not None:
+            source.reply_language_override = {
+                "English": "en",
+                "Hindi": "hi",
+            }.get(self._explicit_preference)
 
         result = list(messages)
         for ordinal, (index, content) in enumerate(users):

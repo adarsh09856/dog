@@ -2,4 +2,4 @@
 
 import os
 
-DEFAULT_LOCAL_LLM_MODEL = os.getenv("OLLAMA_DEFAULT_MODEL", "qwen3.5:2b").strip() or "qwen3.5:2b"
+DEFAULT_LOCAL_LLM_MODEL = os.getenv("OLLAMA_DEFAULT_MODEL", "qwen3.5:2b-q4_K_M").strip() or "qwen3.5:2b-q4_K_M"

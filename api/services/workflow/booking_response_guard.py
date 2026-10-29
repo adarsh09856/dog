@@ -11,8 +11,7 @@ _SAVED_CLAIM = re.compile(
 )
 
 UNVERIFIED_BOOKING_REPLY = (
-    "I could not verify a saved appointment in the calendar. "
-    "No booking has been confirmed. Please try again or ask for another time."
+    "I can help finish the booking. Let’s check the details and save it through the calendar."
 )
 
 
@@ -43,5 +42,9 @@ def guard_booking_reply(reply: str | None, events: list[dict], *, language: str 
     if not failed_action and (not reply or not _SAVED_CLAIM.search(reply)):
         return reply
     if (language or "").split("-")[0] == "hi":
-        return "कैलेंडर में आपकी बुकिंग की पुष्टि नहीं हो सकी। कृपया विवरण जाँचकर फिर कोशिश करें।"
+        if failed_action:
+            return "यह समय अभी सेव नहीं हो पाया। आइए दूसरा समय चुनकर फिर कोशिश करें।"
+        return "मैं बुकिंग पूरी करने में मदद करूँगी। चलिए विवरण जाँचकर इसे कैलेंडर में सेव करते हैं।"
+    if failed_action:
+        return "That time didn’t save. Let’s choose another time and try again."
     return UNVERIFIED_BOOKING_REPLY
