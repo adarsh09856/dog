@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -68,33 +69,125 @@ def _pushed_digest(image_reference: str, repo_digests_json: str) -> str:
     raise ValueError(f"No immutable repository digest found for {image_reference}")
 
 
-def push_and_write_digest_env(
-    api_tag: str, ui_tag: str, output: Path
-) -> tuple[str, str]:
-    """Push verified tags and write their immutable references for Compose."""
+def _staging_tag(release_tag: str, release_id: str) -> str:
+    return f"{_repository_name(release_tag)}:kodewaves-verify-{release_id}"
+
+
+def push_staging_images(
+    api_local_tag: str,
+    ui_local_tag: str,
+    api_release_tag: str,
+    ui_release_tag: str,
+    *,
+    release_id: str | None = None,
+) -> tuple[tuple[str, str], tuple[str, str]]:
+    """Push unique staging refs; customer-facing release tags remain untouched."""
+    release_id = release_id or uuid.uuid4().hex
+    staging_tags: list[str] = []
     pinned: list[str] = []
-    for tag in (api_tag, ui_tag):
-        repository = _repository_name(tag)
+    for component, local_tag, release_tag in (
+        ("api", api_local_tag, api_release_tag),
+        ("ui", ui_local_tag, ui_release_tag),
+    ):
+        repository = _repository_name(release_tag)
         if "/" not in repository:
             raise ValueError(
-                f"Publish tags must include a registry or namespace: {tag}"
+                f"Publish tags must include a registry or namespace: {release_tag}"
             )
-        subprocess.run(["docker", "push", tag], check=True)
+        staging_tag = _staging_tag(release_tag, f"{release_id}-{component}")
+        subprocess.run(["docker", "tag", local_tag, staging_tag], check=True)
+        subprocess.run(["docker", "push", staging_tag], check=True)
         inspected = subprocess.run(
-            ["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", tag],
+            ["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", staging_tag],
             check=True,
             capture_output=True,
             text=True,
         )
-        pinned.append(_pushed_digest(tag, inspected.stdout.strip()))
+        staging_tags.append(staging_tag)
+        pinned.append(_pushed_digest(staging_tag, inspected.stdout.strip()))
+    return (staging_tags[0], staging_tags[1]), (pinned[0], pinned[1])
 
+
+def _registry_manifest_digest(image_tag: str) -> str:
+    inspected = subprocess.run(
+        ["docker", "buildx", "imagetools", "inspect", "--format", "{{json .Manifest}}", image_tag],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    value = inspected.stdout.strip()
+    try:
+        manifest = json.loads(value)
+    except json.JSONDecodeError:
+        manifest = None
+    digest = manifest.get("digest") if isinstance(manifest, dict) else None
+    if not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+        raise ValueError(f"Registry returned an invalid manifest digest for {image_tag}")
+    return digest
+
+
+def _assert_final_tag_is_new(image_tag: str) -> None:
+    inspected = subprocess.run(
+        ["docker", "buildx", "imagetools", "inspect", image_tag],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if inspected.returncode == 0:
+        raise ValueError(f"Refusing to overwrite existing release tag: {image_tag}")
+    error = f"{inspected.stdout}\n{inspected.stderr}".casefold()
+    expected_not_found = (
+        "manifest unknown", "name unknown", "not found", "404", "does not exist",
+    )
+    if not any(marker in error for marker in expected_not_found):
+        raise RuntimeError(
+            f"Could not safely determine whether release tag is unused: {image_tag}: "
+            f"{error.strip()[:500]}"
+        )
+
+
+def promote_verified_images(
+    staging_tags: tuple[str, str],
+    release_tags: tuple[str, str],
+    expected_digests: tuple[str, str],
+) -> None:
+    """Promote verified digests, refusing to replace existing tags."""
+    for release_tag in release_tags:
+        _assert_final_tag_is_new(release_tag)
+    for staging_tag, release_tag, expected_ref in zip(
+        staging_tags, release_tags, expected_digests
+    ):
+        # Docker Buildx has no portable compare-and-swap tag operation.
+        _assert_final_tag_is_new(release_tag)
+        expected_digest = expected_ref.rsplit("@", 1)[-1]
+        subprocess.run(
+            [
+                "docker", "buildx", "imagetools", "create", "--prefer-index=false",
+                "--tag", release_tag, expected_ref,
+            ],
+            check=True,
+        )
+        if _registry_manifest_digest(release_tag) != expected_digest:
+            raise ValueError(
+                f"Promoted tag does not resolve to its verified staging digest: {release_tag}"
+            )
+        if _registry_manifest_digest(staging_tag) != expected_digest:
+            raise ValueError(f"Staging tag changed during release verification: {staging_tag}")
+
+
+def write_digest_env(output: Path, api_digest: str, ui_digest: str) -> None:
+    """Atomically write immutable image references after tag promotion succeeds."""
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        f"CLIENT_API_IMAGE={pinned[0]}\nCLIENT_UI_IMAGE={pinned[1]}\n",
-        encoding="utf-8",
-    )
-    return pinned[0], pinned[1]
+    temporary = output.with_name(f".{output.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(
+            f"CLIENT_API_IMAGE={api_digest}\nCLIENT_UI_IMAGE={ui_digest}\n",
+            encoding="utf-8",
+        )
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def inspect_image_id(tag: str) -> str:
@@ -122,8 +215,8 @@ def main() -> int:
     parser.add_argument("--public-key-output", type=Path, help="Where to write its public verification key")
     parser.add_argument("--inventory-metrics-output", type=Path, help="Write protected API/UI file counts and inventory scan durations")
     parser.add_argument("--approved-upgrade-from", action="append", default=[], help="Tested Alembic revision permitted for upgrade; repeat for each verified origin")
-    parser.add_argument("--push", action="store_true", help="Push verified images to their tagged registries")
-    parser.add_argument("--release-env-output", type=Path, help="Write API/UI @sha256 references after pushing")
+    parser.add_argument("--push", action="store_true", help="Stage, verify, then promote images to unused release tags")
+    parser.add_argument("--release-env-output", type=Path, help="Write API/UI @sha256 references after verified promotion")
     args = parser.parse_args()
     if any((args.owner_private_key, args.manifest_output, args.public_key_output)) and not all(
         (args.owner_private_key, args.manifest_output, args.public_key_output)
@@ -139,6 +232,10 @@ def main() -> int:
         for tag in (args.api_tag, args.ui_tag):
             if "/" not in _repository_name(tag):
                 parser.error(f"Publish tags must include a registry or namespace: {tag}")
+        # Release tags are immutable identifiers. Reject a collision before
+        # spending time on image builds; promotion repeats this check to catch races.
+        for tag in (args.api_tag, args.ui_tag):
+            _assert_final_tag_is_new(tag)
     root = Path(__file__).resolve().parents[2]
     schema_compatibility = (
         migration_compatibility(root / "api" / "alembic" / "versions", args.approved_upgrade_from)
@@ -178,17 +275,14 @@ def main() -> int:
     verify_ui(args.ui_tag)
     verify_caddyfile(args.caddy_image, str(root / "deploy" / "client" / "Caddyfile"))
     image_refs = None
+    staging_tags: tuple[str, str] | None = None
     if args.push:
-        # Resolve the immutable refs before signing so they are covered by the
-        # owner signature. The env file is written only after verification.
-        pinned = []
-        for tag in (args.api_tag, args.ui_tag):
-            subprocess.run(["docker", "push", tag], check=True)
-            inspected = subprocess.run(
-                ["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", tag],
-                check=True, capture_output=True, text=True,
-            )
-            pinned.append(_pushed_digest(tag, inspected.stdout.strip()))
+        # Push unique per-run staging tags to obtain immutable registry digests.
+        # The requested customer tags stay untouched until all signed-manifest
+        # and startup-rejection checks pass below.
+        staging_tags, pinned = push_staging_images(
+            args.api_tag, args.ui_tag, args.api_tag, args.ui_tag
+        )
         image_refs = {name: {"kind": "registry_digest", "reference": ref}
                       for name, ref in zip(("api", "ui"), pinned)}
     elif args.owner_private_key:
@@ -285,9 +379,14 @@ def main() -> int:
         verify_startup_rejection(args.api_tag, args.ui_tag, manifest)
     if args.push:
         api_digest, ui_digest = image_refs["api"]["reference"], image_refs["ui"]["reference"]
+        assert staging_tags is not None
+        promote_verified_images(
+            staging_tags,
+            (args.api_tag, args.ui_tag),
+            (api_digest, ui_digest),
+        )
         output = args.release_env_output.resolve()
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(f"CLIENT_API_IMAGE={api_digest}\nCLIENT_UI_IMAGE={ui_digest}\n", encoding="utf-8")
+        write_digest_env(output, api_digest, ui_digest)
         print(f"Published API image: {api_digest}")
         print(f"Published UI image: {ui_digest}")
         print(f"Compose image references written to {args.release_env_output.resolve()}")

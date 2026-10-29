@@ -168,18 +168,30 @@ python deploy/client/build_and_verify.py \
   --push --release-env-output /secure/releases/release-images.env
 ```
 
-The script builds both client images, verifies their owner-source and route
-boundaries, validates the Caddyfile against the pinned Caddy image, and signs
-the protected API/UI inventories with immutable image references and Alembic
-compatibility metadata. In publish mode, it pushes first to resolve registry
-digests, then writes `release-images.env` only after verifying the signed
-manifest inside both images. Kodewaves must also provide approved pinned
-digests for the infrastructure and Caddy images. Review the output and merge only its two
-`CLIENT_*_IMAGE` values into the installer's `.env`; use approved immutable
-digests for the infrastructure images as well. Copy the signed manifest into
-the client install directory as `client-release-manifest.json`. Keep generated
-release artifacts and key material out of source control. This host has not run
-this Docker release flow.
+The script first checks that the requested release tags are unused. It builds
+both client images, verifies their owner-source and route boundaries, and
+pushes each to a unique `kodewaves-verify-<run-id>-<component>` staging tag to obtain
+immutable registry digests. It signs the protected API/UI inventories and
+Alembic compatibility metadata, verifies the signed manifest inside both images,
+and runs the startup tamper-rejection checks. Only then does Docker Buildx
+promote those exact verified digests to the requested release tags; the script
+rechecks that each tag is unused immediately before promotion and confirms
+that final tags resolve to the signed digests before it atomically writes
+`release-images.env`. Use unique version tags and enable immutable-tag policy
+in the registry: Docker Buildx does not provide a registry-portable
+compare-and-swap operation, so another publisher could race between the check
+and tag write. Failed verification leaves final tags and the output env file
+untouched; a failure during the two-tag promotion may leave one verified final
+tag published, but withholds the env file. Unique staging tags may remain in
+the registry for later retention-policy cleanup. Docker Buildx is required for
+promotion.
+
+Kodewaves must also provide approved pinned digests for the infrastructure and
+Caddy images. Review the output and merge only its two `CLIENT_*_IMAGE` values
+into the installer's `.env`; use approved immutable digests for infrastructure
+images as well. Copy the signed manifest into the client install directory as
+`client-release-manifest.json`. Keep generated release artifacts and key
+material out of source control. This host has not run this Docker release flow.
 
 By default, the manifest allows a fresh database or a database already at this
 release's Alembic head. After testing an upgrade from a specific older revision,
