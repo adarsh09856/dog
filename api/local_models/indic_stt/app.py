@@ -591,13 +591,18 @@ async def transcribe(
         if (
             phone_capture
             and lang in {"hi", "en"}
+            # Keep the normal phone-slot path to one decode. Running both
+            # recognizers for every phone utterance serializes two CPU-heavy
+            # inference passes under _inference_lock and made routine turns
+            # needlessly slow. The alternate decoder is a rescue only when
+            # the primary produced no usable digits or an implausible runaway.
+            and (primary_phone_digits == 0 or primary_phone_digits > 15)
             and all(candidate in installed and candidate in _loaded for candidate in {"hi", "en"})
         ):
             # Phone strings are commonly spoken in English inside Hindi calls,
-            # and LID can route an English digit utterance to Moonshine. Compare
-            # both warm decoders in either direction; reject overlong
-            # hallucinations instead of treating their digit count as a valid
-            # phone number.
+            # and LID can route an English digit utterance to Moonshine. Try
+            # the other warm decoder only when the first result cannot be used;
+            # reject overlong hallucinations instead of carrying fake digits.
             other_language = "en" if lang == "hi" else "hi"
             other_text = await asyncio.to_thread(decode, other_language)
             if _phone_rescue_is_better(text, other_text):
