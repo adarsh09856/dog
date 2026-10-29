@@ -138,14 +138,13 @@ class CallerLanguageContext:
                     self._explicit_preference = requested
                 if self._explicit_preference:
                     self._hints.setdefault((ordinal, text), (
-                        f"The caller explicitly chose {self._explicit_preference} "
-                        f"for assistant replies. Reply only in {self._explicit_preference}; "
-                        "do not repeat questions already answered."
+                        f"Caller explicitly chose {self._explicit_preference}. "
+                        f"Reply only in {self._explicit_preference}; do not repeat "
+                        "answered questions."
                     ))
                 elif _clearly_english_caller_text(text):
                     self._hints.setdefault((ordinal, text), (
-                        "The caller wrote in English. Answer in English; "
-                        "do not repeat questions already answered."
+                        "Reply in English; do not repeat answered questions."
                     ))
 
         # STT can identify languages beyond the installed TTS inventory. Keep
@@ -185,17 +184,14 @@ class CallerLanguageContext:
                 answer_language = self._explicit_preference or language
                 if self._explicit_preference and answer_language != language:
                     self._hints[key] = (
-                        f"The caller just spoke {language}, but explicitly chose "
-                        f"{answer_language} for assistant replies. This choice is still "
-                        f"active. Reply only in {answer_language}, even if the caller "
-                        f"speaks {language}. An earlier default language in the agent "
-                        "prompt applies only until the caller asks to switch. Do not "
-                        "repeat questions the caller has already answered."
+                        f"Caller explicitly chose {answer_language}. Reply only in "
+                        f"{answer_language}, even if speaking {language}. Do not greet "
+                        "or repeat answered questions."
                     )
                 else:
                     self._hints[key] = (
-                        f"The caller just spoke {language}. Answer in {answer_language}; "
-                        "follow their latest language choice and do not repeat the greeting."
+                        f"Answer in {answer_language} with natural grammar. No "
+                        "translation unless asked; do not repeat the greeting."
                     )
 
         # The same preference that guides the LLM must guide TTS. Otherwise
