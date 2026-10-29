@@ -135,9 +135,19 @@ def _phone_digit_count(text: str) -> int:
 
 
 def _phone_rescue_is_better(primary: str, english: str) -> bool:
-    """Use an English candidate only when it recovers a clear digit sequence."""
-    english_digits = _phone_digit_count(english)
-    return english_digits >= 3 and english_digits > _phone_digit_count(primary)
+    """Prefer a plausible longer phone decode over an incomplete or runaway one."""
+    primary_digits = _phone_digit_count(primary)
+    candidate_digits = _phone_digit_count(english)
+    candidate_plausible = 3 <= candidate_digits <= 15
+    primary_plausible = 3 <= primary_digits <= 15
+    if primary_digits > 15:
+        # In a phone slot an overlong decode is a hallucination. Even a
+        # candidate with no usable digits is safer because the caller-side
+        # parser will ask for a repeat instead of retaining a fake number.
+        return True
+    return candidate_plausible and (
+        not primary_plausible or candidate_digits > primary_digits
+    )
 
 app = FastAPI(title="Kodewaves Indic CPU STT")
 _loaded: OrderedDict[str, sherpa_onnx.OfflineRecognizer] = OrderedDict()
@@ -578,21 +588,21 @@ async def transcribe(
         decode_started = time.monotonic()
         text = await asyncio.to_thread(decode, lang)
         primary_phone_digits = _phone_digit_count(text) if phone_capture else 0
-        primary_number_complete = 10 <= primary_phone_digits <= 15
         if (
             phone_capture
-            and lang == "hi"
-            and not primary_number_complete
-            and "en" in installed
-            and "en" in _loaded
+            and lang in {"hi", "en"}
+            and all(candidate in installed and candidate in _loaded for candidate in {"hi", "en"})
         ):
-            # English digit words are frequently code-switched into Hindi calls.
-            # The primary Hindi result remains the fallback unless the already
-            # resident Moonshine decoder recovers more explicit digit content.
-            english_text = await asyncio.to_thread(decode, "en")
-            if _phone_rescue_is_better(text, english_text):
-                text = english_text
-                language_route = "phone_english_rescue"
+            # Phone strings are commonly spoken in English inside Hindi calls,
+            # and LID can route an English digit utterance to Moonshine. Compare
+            # both warm decoders in either direction; reject overlong
+            # hallucinations instead of treating their digit count as a valid
+            # phone number.
+            other_language = "en" if lang == "hi" else "hi"
+            other_text = await asyncio.to_thread(decode, other_language)
+            if _phone_rescue_is_better(text, other_text):
+                text = other_text
+                language_route = f"phone_{other_language}_rescue"
         decode_ms = round((time.monotonic() - decode_started) * 1000)
     duration_ms = round((time.monotonic() - started) * 1000)
     _logger.info(

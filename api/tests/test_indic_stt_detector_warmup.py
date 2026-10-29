@@ -80,6 +80,13 @@ def test_phone_english_rescue_uses_candidate_only_when_it_recovers_more_digits()
     assert indic_stt._phone_rescue_is_better("pre-ed pre-double-zero", "nine five 383 double zero 941")
     assert not indic_stt._phone_rescue_is_better("nine five 383 double zero 941", "nine five 383 double zero 941")
     assert not indic_stt._phone_rescue_is_better("नौ पाँच तीन", "ordinary English words")
+    assert indic_stt._phone_digit_count("999999999999999999999999999999") == 30
+    assert indic_stt._phone_rescue_is_better(
+        "999999999999999999999999999999", "nine five three eight three double zero nine four one"
+    )
+    assert indic_stt._phone_rescue_is_better(
+        "999999999999999999999999999999", "the phone is"
+    )
 
 
 def test_phone_rescue_digit_score_counts_existing_regional_spellings():
@@ -119,7 +126,7 @@ def test_phone_rescue_digit_score_counts_phonetic_gujarati_and_tamil_forms():
             "nine five 383 double zero 941",
             "nine five 383 double zero 941",
             "detector",
-            ["hi"],
+            ["hi", "en"],
         ),
     ],
 )
@@ -173,6 +180,52 @@ async def test_phone_capture_uses_resident_english_decode_only_when_hindi_number
     assert result["language"] == "hi"  # Keep reply/voice language stable.
     assert result["language_route"] == expected_route
     assert decode_calls == expected_decodes
+
+
+@pytest.mark.asyncio
+async def test_phone_capture_rescues_english_routed_hallucinated_digits_with_hindi_decode(monkeypatch):
+    decode_calls = []
+
+    class Stream:
+        def __init__(self, text):
+            self.result = SimpleNamespace(text=text)
+        def accept_waveform(self, _sample_rate, _waveform):
+            pass
+
+    class Recognizer:
+        def __init__(self, language):
+            self.language = language
+        def create_stream(self):
+            return Stream("")
+        def decode_stream(self, stream):
+            decode_calls.append(self.language)
+            stream.result.text = (
+                "999999999999999999999999999999" if self.language == "en"
+                else "नाइन फाइव थ्री एट थ्री डबल जीरो नाइन फोर वन"
+            )
+
+    audio = io.BytesIO()
+    sf.write(audio, np.full(4800, 0.05, dtype=np.float32), 16000, format="WAV")
+    class Upload:
+        async def read(self, _limit):
+            return audio.getvalue()
+
+    monkeypatch.setattr(indic_stt, "_installed_languages", lambda: ["en", "hi"])
+    monkeypatch.setattr(indic_stt, "_lid_session", object())
+    monkeypatch.setattr(indic_stt, "_inference_lock", asyncio.Lock())
+    monkeypatch.setattr(indic_stt, "_loaded", OrderedDict([("en", object()), ("hi", object())]))
+    monkeypatch.setattr(indic_stt, "_detect_language", lambda *_: ("en", 0.996, None))
+    monkeypatch.setattr(indic_stt, "_load", lambda lang: Recognizer(lang))
+
+    result = await indic_stt.transcribe(
+        file=Upload(), model=indic_stt.MODEL_ID, language="auto",
+        fallback_language="hi", phone_capture=True,
+    )
+
+    assert result["text"] == "नाइन फाइव थ्री एट थ्री डबल जीरो नाइन फोर वन"
+    assert result["language"] == "en"  # Keep detected language for downstream reply routing.
+    assert result["language_route"] == "phone_hi_rescue"
+    assert decode_calls == ["en", "hi"]
 
 
 def test_excluded_auto_detection_falls_back_to_supported_language_without_urdu_transcript():
