@@ -509,3 +509,42 @@
 .dark { --background: oklch(.19 .018 190); --foreground: oklch(.95 .01 145); --primary: oklch(.82 .07 145); --primary-foreground: oklch(.2 .025 180); --sidebar-accent: oklch(.3 .035 165); --sidebar-accent-foreground: oklch(.92 .04 145); --border: oklch(.39 .025 175); --muted: oklch(.27 .02 180); }
 .public-heading-accent,.dark .public-heading-accent { color: var(--primary); }
 .workspace-topbar { min-height: 48px; }
+
+/* One surface language across public, workspace and administration. The
+   selected mode changes the whole canvas; brand accents remain inline tokens. */
+:root {
+  --background: #edf3f5;
+  --foreground: #17313d;
+  --card: #ffffff;
+  --card-foreground: #17313d;
+  --popover: #ffffff;
+  --popover-foreground: #17313d;
+  --muted: #e3ecef;
+  --muted-foreground: #526d7a;
+  --secondary: #dce9ed;
+  --secondary-foreground: #234854;
+  --border: #ccdde3;
+  --input: #bed1da;
+  --sidebar: #dbe8ed;
+  --sidebar-foreground: #234854;
+  --sidebar-border: #bed2db;
+}
+.dark {
+  --background: #0d2027;
+  --foreground: #e6eff2;
+  --card: #152e37;
+  --card-foreground: #e6eff2;
+  --popover: #19343e;
+  --popover-foreground: #e6eff2;
+  --muted: #203c47;
+  --muted-foreground: #abc1cb;
+  --secondary: #25444f;
+  --secondary-foreground: #e6eff2;
+  --border: #35535f;
+  --input: #466470;
+  --sidebar: #102630;
+  --sidebar-foreground: #e4eef3;
+  --sidebar-border: #304b58;
+}
+.app-surface { background-color: var(--background); }
+.workspace-topbar { background: var(--card); border-color: var(--border); }

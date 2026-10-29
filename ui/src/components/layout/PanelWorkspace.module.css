@@ -63,3 +63,8 @@
 .billingMetrics > div:last-child { border-right: 0; }
 .billingMetrics :global(.text-3xl) { font-size: clamp(1.8rem,3vw,2.7rem); font-weight: 550; letter-spacing: -.045em; }
 @media(max-width:639px) { .billingMetrics { grid-template-columns: 1fr; } .billingMetrics > div { border-right: 0; border-bottom: 1px solid var(--border); } .billingMetrics > div:last-child { border-bottom: 0; } }
+/* Let page actions flow within the available inset width, including at zoom. */
+.collectionHeader { flex-wrap: wrap; min-width: 0; }
+.collectionHeader > div:first-child { min-width: min(100%,260px); flex: 1 1 330px; }
+.collectionHeader > div:last-child { max-width: 100%; flex-shrink: 1; flex-wrap: wrap; }
+.collectionHeader h1 { overflow-wrap: anywhere; }

@@ -119,7 +119,7 @@ async function PageContent() {
             <div className="mb-6">
                 <div className={panel.collectionHeader}>
                     <div><span className={panel.eyebrow}>BUILD / VOICE AGENTS</span><h1>Your Agents</h1><p>Shape each conversation, connect its tools, and test the workflow before taking it live.</p></div>
-                    <div className="flex gap-2">
+                    <div className="flex max-w-full flex-wrap items-center gap-2 [&>*]:max-w-full">
                         <UploadWorkflowButton />
                         <CreateFolderButton />
                         <CreateWorkflowButton />

@@ -69,3 +69,16 @@
 .agentSearch > svg { position: absolute; left: 13px; top: 12px; color: var(--muted-foreground); }
 .agentSearch input { padding-left: 38px; }
 @media(max-width:700px) { .agentOverview { grid-template-columns: 1fr; } .agentOverview > div { padding: 22px; border-right: 0; border-bottom: 1px solid #39515a; } .agentOverview strong { font-size: 36px; margin-top: 10px; } .agentToolbar { flex-direction: column; align-items: stretch; gap: 15px; } .agentSearch { width: 100%; } }
+/* Light mode uses the same blue-ink material at a lighter exposure, rather
+   than retaining a disconnected dark rail against a pale canvas. */
+:global(html:not(.dark)) .navigation { --sidebar: #dbe8ed; --sidebar-foreground: #234854; --sidebar-border: #bed2db; --sidebar-accent: #c9dde5; --sidebar-accent-foreground: #132f3c; --muted-foreground: #4b6876; --foreground: #17313d; --border: #bed2db; --muted: #cbdde5; --accent: #c9dde5; --accent-foreground: #132f3c; }
+:global(html:not(.dark)) .navigation :global([data-slot="sidebar-inner"]) { background: #dbe8ed; color: #234854; border-right-color: #bed2db; }
+:global(html:not(.dark)) .navigation :global([data-slot="sidebar-menu-button"]) { color: #365565; }
+:global(html:not(.dark)) .navigation :global([data-slot="sidebar-menu-button"]:hover) { color: #132f3c; background: #cbdde5; }
+:global(html:not(.dark)) .navigation :global([data-slot="sidebar-menu-button"][data-active="true"]) { color: #132f3c; background: #c1d8e3; box-shadow: inset 3px 0 var(--cta); }
+:global(html:not(.dark)) .navigation :global([data-slot="sidebar-menu-button"][data-active="true"] svg) { color: #132f3c; }
+:global(html:not(.dark)) .navigation :global([data-slot="sidebar-group-label"]), :global(html:not(.dark)) .navigation .identity > span { color: #526d7a; }
+:global(html:not(.dark)) .navigation :global([data-slot="sidebar-footer"]) { background: #cfdee5; }
+:global(html:not(.dark)) .navigation :global([data-slot="sidebar-trigger"]) { color: #234854; }
+:global(html.dark) .navigation :global([data-slot="sidebar-inner"]) { background: #102630; }
+:global(html:not(.dark)) .agentOverview { background: #234854; }
