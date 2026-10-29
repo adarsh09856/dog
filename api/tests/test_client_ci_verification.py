@@ -1,14 +1,20 @@
 """CI signing material must stay disposable and never publish customer releases."""
 
+import base64
+import io
 import json
 import re
+import secrets
 import subprocess
 import sys
+import time
 import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+from api.services.installation_license import load_license
 
 
 def _write_fake_build_outputs(command):
@@ -37,7 +43,11 @@ def verifier(monkeypatch):
 
 
 def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, monkeypatch, tmp_path):
+    monkeypatch.setenv("CLIENT_API_IMAGE", "unexpected-host-image")
+    monkeypatch.setenv("CLIENT_INTERNAL_SUBNET", "10.99.0.0/16")
+    monkeypatch.setenv("COMPOSE_FILE", "unexpected-host-compose.yaml")
     captured_keys = []
+    captured_license_public = []
     commands = []
     root = Path(__file__).resolve().parents[2]
 
@@ -49,9 +59,15 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
             assert not private.is_relative_to(root)
             assert len(private.read_bytes()) == 32
             captured_keys.append(private)
+            captured_license_public.append(
+                Path(command[command.index("--license-public-key-file") + 1]).read_text(encoding="ascii")
+            )
             _write_fake_build_outputs(command)
             return SimpleNamespace(returncode=0)
         if command[:2] == ["docker", "compose"]:
+            assert "CLIENT_API_IMAGE" not in kwargs["env"]
+            assert "CLIENT_INTERNAL_SUBNET" not in kwargs["env"]
+            assert "COMPOSE_FILE" not in kwargs["env"]
             if "config" in command:
                 env_file = Path(command[command.index("--env-file") + 1])
                 contents = env_file.read_text()
@@ -95,12 +111,19 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
                 assert "--wait" in command
                 override = Path(command[command.index("-f", command.index("-f") + 1) + 1])
                 assert "internal: true" in override.read_text()
+                env_file = Path(command[command.index("--env-file") + 1])
                 env_values = dict(
                     line.split("=", 1)
                     for line in Path(command[command.index("--env-file") + 1]).read_text().splitlines()
                 )
                 assert env_values["COMPOSE_PROFILES"] == ""
-                assert env_values["KODEWAVES_LICENSE_TOKEN"] == "invalid-ci-license.signature"
+                license_data = load_license(
+                    env_values["KODEWAVES_LICENSE_TOKEN"],
+                    captured_license_public[0],
+                    now=int(time.time()),
+                )
+                assert license_data.installation_id == "ci-installation-smoke"
+                assert license_data.domains == ("smoke.customer.example.invalid",)
                 assert "@sha256:" in env_values["CLIENT_POSTGRES_IMAGE"]
                 assert "@sha256:" in env_values["CLIENT_REDIS_IMAGE"]
                 assert kwargs["env"]["COMPOSE_PROFILES"] == ""
@@ -132,17 +155,37 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
         def __exit__(self, *_args):
             return False
 
+        def read(self, _limit):
+            return b"{}"
+
     requested_urls = []
 
     def open_url(request, timeout):
         requested_urls.append(request.full_url)
         if request.full_url.endswith("/api/v1/workflow"):
-            assert request.get_header("Host") == "smoke.customer.example.invalid"
-            raise urllib.error.HTTPError(request.full_url, 402, "invalid license", {}, None)
+            host = request.get_header("Host")
+            if host == "wrong.customer.example.invalid":
+                body = b'{"detail":"This domain is not licensed for this installation"}'
+            else:
+                assert host == "smoke.customer.example.invalid"
+                body = b'{"detail":"Owner installation check has not succeeded"}'
+            raise urllib.error.HTTPError(
+                request.full_url, 402, "license gate", {}, io.BytesIO(body)
+            )
         return Response()
 
     monkeypatch.setattr(verifier.subprocess, "run", run)
     monkeypatch.setattr(verifier.urllib.request, "urlopen", open_url)
+    monkeypatch.setattr(verifier, "_verify_compose_runtime", lambda *_args, **_kwargs: {
+        "api_health": "passed", "ui_root": "passed",
+        "mismatched_host": "rejected_by_signed_domain_binding",
+        "valid_host_owner_gate": "owner_status_accepted_http_404",
+        "owner_enrollment": "passed_signed_one_time_enrollment_and_status",
+        "first_admin_bootstrap": "passed_active_superuser_with_workspace",
+        "first_admin_replay": "rejected_after_initial_account",
+        "dependency_images": {"postgres": verifier._CI_POSTGRES_IMAGE,
+                              "redis": verifier._CI_REDIS_IMAGE, "minio_image_id": "sha256:" + "f" * 64},
+    })
     report = tmp_path / "evidence.json"
     verifier.verify("registry.example.com/kodewaves/caddy@sha256:" + "b" * 64, report)
 
@@ -155,7 +198,9 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
     assert evidence["identity_overlay_config"] == "passed"
     assert evidence["runtime_compose_smoke"]["api_health"] == "passed"
     assert evidence["runtime_compose_smoke"]["ui_root"] == "passed"
-    assert evidence["runtime_compose_smoke"]["invalid_license_protected_route"] == "rejected_with_http_402"
+    assert evidence["runtime_compose_smoke"]["mismatched_host"] == "rejected_by_signed_domain_binding"
+    assert evidence["runtime_compose_smoke"]["valid_host_owner_gate"] == "owner_status_accepted_http_404"
+    assert evidence["runtime_compose_smoke"]["first_admin_bootstrap"] == "passed_active_superuser_with_workspace"
     assert "@sha256:" in evidence["runtime_compose_smoke"]["dependency_images"]["postgres"]
     assert "@sha256:" in evidence["runtime_compose_smoke"]["dependency_images"]["redis"]
     assert "Unsigned configuration fixture" in evidence["installer_manifest_scope"]
@@ -164,17 +209,101 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
         "ui": {"file_count": 1, "elapsed_ms": 121.0},
     }
     assert "telephone" in evidence["not_verified"]
-    assert any(
-        item.startswith("owner-enrolled clean installation")
-        for item in evidence["not_verified"]
-    )
+    assert not any("owner-enrolled" in item for item in evidence["not_verified"])
     assert "Compose runtime smoke" in evidence["scope"]
-    assert any(command[:2] == ["docker", "build"] for command in commands)
-    assert any(command[:2] == ["docker", "compose"] and "down" in command for command in commands)
-    assert len(requested_urls) == 3
-    assert all(url.startswith("http://127.0.0.1:") for url in requested_urls)
+    assert any("build_and_verify.py" in command[1] for command in commands)
     assert captured_keys and all(not key.exists() for key in captured_keys)
+    assert requested_urls == []
     assert "private" not in report.read_text()
+
+
+def test_runtime_smoke_license_is_short_lived_and_bound_to_the_smoke_host(verifier, tmp_path):
+    private, public = verifier._temporary_keypair(tmp_path, "license")
+    token = verifier._runtime_smoke_license(
+        private.read_bytes(), public.read_text(encoding="ascii")
+    )
+    license_data = load_license(
+        token, public.read_text(encoding="ascii"), now=int(time.time())
+    )
+    assert license_data.installation_id == "ci-installation-smoke"
+    assert license_data.customer_id == "ci-smoke"
+    assert license_data.domains == ("smoke.customer.example.invalid",)
+    assert license_data.features == frozenset({"voice"})
+    assert license_data.limits == {
+        "max_concurrent_calls": 1,
+        "max_seats": 1,
+        "max_workspaces": 1,
+    }
+
+
+def test_disposable_owner_peer_requires_one_time_signed_enrollment_and_returns_bound_status(verifier, tmp_path):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from api.services.installation_identity import sign_enrollment, sign_owner_check
+    from api.services.installation_license import verify_installation_status_claims
+
+    license_private, license_public = verifier._temporary_keypair(tmp_path, "owner-license")
+    license_public_text = license_public.read_text(encoding="ascii")
+    token = verifier._runtime_smoke_license(license_private.read_bytes(), license_public_text)
+    with verifier._OwnerAcceptanceServer(tmp_path, token, license_private.read_bytes(), license_public_text) as owner:
+        tls_url = owner.url.replace("host.docker.internal", "127.0.0.1", 1)
+        tls_request = urllib.request.Request(
+            tls_url, data=b"{}", method="POST",
+            headers={"Content-Type": "application/json", "Authorization": "Bearer wrong"},
+        )
+        trusted_context = verifier.ssl.create_default_context(cafile=str(owner.ca_file))
+        with pytest.raises(urllib.error.HTTPError) as tls_error:
+            urllib.request.build_opener(urllib.request.HTTPSHandler(context=trusted_context)).open(
+                tls_request, timeout=5
+            )
+        assert tls_error.value.code == 401
+
+        install_key = Ed25519PrivateKey.generate()
+        public_key = base64.urlsafe_b64encode(
+            install_key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        ).rstrip(b"=").decode("ascii")
+        nonce = secrets.token_urlsafe(32)
+        issued_at = int(time.time())
+        enrollment = {
+            "enrollment_token": owner.enrollment_token,
+            "public_key": public_key,
+            "nonce": nonce,
+            "issued_at": issued_at,
+            "signature": sign_enrollment(
+                install_key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                                          serialization.NoEncryption()),
+                installation_id=owner.installation_id, license_token=token,
+                enrollment_token=owner.enrollment_token, public_key=public_key,
+                nonce=nonce, issued_at=issued_at,
+            ),
+        }
+        assert owner.enroll(enrollment) == {"enrolled": True}
+        with pytest.raises(ValueError, match="one-time"):
+            owner.enroll(enrollment)
+
+        check_nonce = secrets.token_urlsafe(32)
+        check_issued_at = int(time.time())
+        check = {
+            "nonce": check_nonce, "integrity_ok": True, "integrity_finding": None,
+            "proof_issued_at": check_issued_at,
+            "proof_signature": sign_owner_check(
+                install_key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                                          serialization.NoEncryption()),
+                installation_id=owner.installation_id, license_token=token,
+                nonce=check_nonce, issued_at=check_issued_at,
+                integrity_ok=True, integrity_finding=None,
+            ),
+        }
+        signed = owner.check(check)["signed_status"]
+        status = verify_installation_status_claims(
+            signed, public_key=license_public_text, installation_id=owner.installation_id,
+            license_token=token, nonce=check_nonce,
+        )
+        assert status["revoked"] is False
+        assert status["binding_valid"] is True
+        with pytest.raises(ValueError, match="replay"):
+            owner.check(check)
 
 
 def test_ci_failure_does_not_write_success_report_and_removes_keys(verifier, monkeypatch, tmp_path):
@@ -331,8 +460,9 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
     monkeypatch.setattr(verifier.urllib.request, "urlopen", open_url)
     with pytest.raises(ValueError, match="received HTTP 500"):
         verifier._verify_compose_runtime(
-            Path("/repo"), tmp_path, api_image="kodewaves-api:ci-check",
+            Path(__file__).resolve().parents[2], tmp_path, api_image="kodewaves-api:ci-check",
             ui_image="kodewaves-ui:ci-check", manifest=tmp_path / "manifest.json",
+            license_token="test.license",
         )
 
     down = next(command for command in commands if command[:2] == ["docker", "compose"] and "down" in command)
@@ -363,8 +493,9 @@ def test_runtime_smoke_preserves_compose_startup_diagnostics(verifier, monkeypat
     monkeypatch.setattr(verifier.subprocess, "run", run)
     with pytest.raises(subprocess.CalledProcessError) as error:
         verifier._verify_compose_runtime(
-            Path("/repo"), tmp_path, api_image="kodewaves-api:ci-check",
+            Path(__file__).resolve().parents[2], tmp_path, api_image="kodewaves-api:ci-check",
             ui_image="kodewaves-ui:ci-check", manifest=tmp_path / "manifest.json",
+            license_token="test.license",
         )
 
     assert "api healthcheck failed" in error.value.stderr
@@ -490,11 +621,12 @@ def test_runtime_smoke_keeps_compose_failure_with_bounded_service_diagnostics(ve
     monkeypatch.setattr(verifier.subprocess, "run", run)
     with pytest.raises(subprocess.CalledProcessError) as error:
         verifier._verify_compose_runtime(
-            tmp_path,
+            Path(__file__).resolve().parents[2],
             tmp_path,
             api_image="kodewaves-client-api:test",
             ui_image="kodewaves-client-ui:test",
             manifest=manifest,
+            license_token="test.license",
         )
 
     diagnostic = str(error.value.stderr)

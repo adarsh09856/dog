@@ -32,7 +32,7 @@ import { usePathname, useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
-import chrome from "./WorkspaceChrome.module.css";
+import { BrandTagline } from "@/components/BrandTagline";
 import { SidebarTeamSwitcher } from "@/components/layout/SidebarTeamSwitcher";
 import ThemeToggle from "@/components/ThemeSwitcher";
 import { Button } from "@/components/ui/button";
@@ -68,6 +68,8 @@ import type { LocalUser } from "@/lib/auth";
 import { useAuth } from "@/lib/auth";
 import type { ClientFeature } from "@/lib/clientEntitlements";
 import { cn } from "@/lib/utils";
+
+import chrome from "./WorkspaceChrome.module.css";
 
 type SidebarNavItem = {
   title: string;
@@ -402,7 +404,7 @@ export function AppSidebar() {
               className="notranslate flex items-center gap-2 px-1"
               translate="no"
             >
-              <div className={chrome.identity}><BrandLogo className="h-7 max-w-[150px]" /><span>VOICE OPERATIONS WORKSPACE</span></div>
+              <div className={chrome.identity}><BrandLogo className="h-7 max-w-[150px]" /><BrandTagline /></div>
               {versionInfo && (
                 <span
                   className="notranslate text-xs font-normal text-muted-foreground"

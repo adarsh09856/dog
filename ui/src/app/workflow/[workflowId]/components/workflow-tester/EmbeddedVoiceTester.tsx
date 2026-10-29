@@ -108,7 +108,9 @@ export function EmbeddedVoiceTester({
                 ? "Retry Call"
                 : configUnreachable
                     ? "Retry Connection"
-                    : "Starting Test...";
+                    : connectionStatus === "connecting"
+                        ? "Connecting..."
+                        : "Start Test";
 
     const handleConfigRetry = () => {
         // Deliberately NOT resetting configRetriedRef here. It's already
@@ -154,13 +156,18 @@ export function EmbeddedVoiceTester({
 
                 <div className="border-t border-border/70 bg-background px-4 py-3">
                     <div className="flex flex-col gap-3">
-                        <ConnectionStatus connectionStatus={connectionStatus} />
+                        {connectionStatus === "connecting" ? null : (
+                            <ConnectionStatus connectionStatus={connectionStatus} />
+                        )}
                         {permissionError ? (
                             <p className="text-center text-sm text-destructive">{permissionError}</p>
                         ) : null}
                         <Button
                             onClick={handleFooterAction}
-                            disabled={isStarting && connectionStatus !== "failed" && !configUnreachable}
+                            disabled={!connectionActive && !configUnreachable && (
+                                appConfigLoading || appConfig?.backendStatus !== "reachable" ||
+                                isStarting || connectionStatus === "connecting"
+                            )}
                             variant={connectionActive ? "destructive" : "default"}
                             className="w-full"
                         >
@@ -169,10 +176,10 @@ export function EmbeddedVoiceTester({
                                     <RefreshCw className="h-4 w-4" />
                                     {endButtonLabel}
                                 </>
-                            ) : isStarting && connectionStatus !== "failed" ? (
+                            ) : isStarting || connectionStatus === "connecting" ? (
                                 <>
                                     <Loader2 className="h-4 w-4 animate-spin" />
-                                    Starting Test...
+                                    Connecting...
                                 </>
                             ) : connectionActive ? (
                                 <>

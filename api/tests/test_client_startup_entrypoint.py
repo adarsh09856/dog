@@ -8,7 +8,10 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="Bash is required for the Docker entrypoint")
+@pytest.mark.skipif(
+    os.name == "nt" or shutil.which("bash") is None,
+    reason="The Docker entrypoint tests require a Linux Bash environment",
+)
 def test_seed_failure_stops_client_entrypoint_before_services_start(tmp_path):
     root = Path(__file__).resolve().parents[2]
     fixture_root = tmp_path / "installation"
@@ -58,7 +61,10 @@ def test_seed_failure_stops_client_entrypoint_before_services_start(tmp_path):
     assert "Starting uvicorn" not in result.stdout
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="Bash is required for the Docker entrypoint")
+@pytest.mark.skipif(
+    os.name == "nt" or shutil.which("bash") is None,
+    reason="The Docker entrypoint tests require a Linux Bash environment",
+)
 def test_schema_compatibility_failure_stops_before_migrations(tmp_path):
     root = Path(__file__).resolve().parents[2]
     fixture_root = tmp_path / "installation"

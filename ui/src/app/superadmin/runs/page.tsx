@@ -1,7 +1,5 @@
 "use client";
 
-import admin from "../../admin/AdminWorkspace.module.css";
-
 import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle, ChevronLeft, ChevronRight, ExternalLink, FileText, Info, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -31,6 +29,8 @@ import { superadminFilterAttributes, withDispositionCodeOptions } from "@/lib/fi
 import { decodeFiltersFromURL, encodeFiltersToURL } from '@/lib/filters';
 import { impersonateAsSuperadmin } from '@/lib/utils';
 import { ActiveFilter } from '@/types/filters';
+
+import admin from "../../admin/AdminWorkspace.module.css";
 
 interface WorkflowRun {
     id: number;
@@ -463,7 +463,7 @@ export default function RunsPage() {
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="text-sm whitespace-pre-wrap break-words">
-                                                        <span className={!run.is_completed ? "font-semibold text-blue-600" : ""}>
+                                                        <span className={!run.is_completed ? "font-semibold text-primary" : ""}>
                                                             {calculateDuration(run.is_completed, run.usage_info)}
                                                         </span>
                                                     </TableCell>
@@ -485,7 +485,7 @@ export default function RunsPage() {
                                                             {run.gathered_context && (
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
-                                                                        <Info className="h-4 w-4 text-blue-500 cursor-pointer" />
+                                                                        <Info className="h-4 w-4 text-primary cursor-pointer" />
                                                                     </TooltipTrigger>
                                                                     <TooltipContent sideOffset={4} className="max-w-sm whitespace-pre-wrap break-words">
                                                                         <p className="font-semibold text-xs mb-1">Gathered Context</p>

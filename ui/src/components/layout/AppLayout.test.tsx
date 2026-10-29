@@ -14,6 +14,9 @@ vi.mock("@/context/ClientEntitlementsContext", () => ({ useClientEntitlements: (
   hasFeature: () => false, refresh: state.refresh,
 }) }));
 vi.mock("@/context/AppConfigContext", () => ({ useAppConfig: () => ({ config: null }) }));
+vi.mock("@/context/ClientBrandingContext", () => ({
+  useClientBranding: () => ({ tagline: "Calls answered in your brand voice" }),
+}));
 vi.mock("@/context/LeadFormsContext", () => ({ LeadFormsProvider: ({ children }: { children: ReactNode }) => children }));
 vi.mock("@/components/ui/sidebar", () => ({
   SidebarProvider: ({ children }: { children: ReactNode }) => children,
@@ -28,6 +31,12 @@ import AppLayout from "./AppLayout";
 afterEach(() => { cleanup(); state.refresh.mockReset(); });
 
 describe("client installation access", () => {
+  it("uses the configured tagline in the authenticated workspace header", () => {
+    state.valid = true;
+    render(<AppLayout><p>protected content</p></AppLayout>);
+    expect(screen.getByText("Calls answered in your brand voice")).toBeTruthy();
+  });
+
   it("shows verification failure and retries rather than claiming the feature is excluded", () => {
     state.valid = null;
     render(<AppLayout><p>protected content</p></AppLayout>);

@@ -12,21 +12,34 @@ import math
 import os
 import re
 import secrets
+import ssl
 import subprocess
 import sys
 import tempfile
+import textwrap
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import UTC, datetime, timedelta
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import yaml
+from compose_client import controlled_environment
+from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-import yaml
-
-from validate_install import PINNED_IMAGE, validate as validate_client_install
-
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+)
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+from validate_install import PINNED_IMAGE
+from validate_install import validate as validate_client_install
 
 # Immutable upstream multi-arch manifests for pgvector/pgvector:pg17 and
 # library/redis:7, used only by the disposable CI runtime smoke. The MinIO
@@ -40,6 +53,163 @@ _CI_REDIS_IMAGE = (
     "docker.io/library/redis@sha256:"
     "b6b6e3dc0c0952737748e55d5d885272840c7e42ba41ab1d5489f693419882f5"
 )
+
+
+class _OwnerAcceptanceServer:
+    """Disposable HTTPS owner protocol peer for the packaged-client acceptance smoke."""
+
+    def __init__(self, directory: Path, license_token: str, license_private: bytes, license_public: str):
+        from api.services.installation_license import load_license
+
+        self.license_token = license_token
+        self.license_private = license_private
+        self.license_public = license_public
+        license_data = load_license(license_token, license_public)
+        self.installation_id = license_data.installation_id
+        self.license_fingerprint = hashlib.sha256(license_token.encode("ascii")).hexdigest()
+        self.enrollment_token = secrets.token_urlsafe(40)
+        self.public_key: str | None = None
+        self.used_nonces: set[str] = set()
+        self._lock = threading.Lock()
+        self.ca_file = directory / "ci-owner-ca.pem"
+        self.server_key_file = directory / "ci-owner-server.key"
+        self.server_cert_file = directory / "ci-owner-server.pem"
+        self._make_certificates()
+
+        owner = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 < length <= 1_048_576:
+                        raise ValueError("invalid request size")
+                    body = json.loads(self.rfile.read(length))
+                    if self.headers.get("Authorization") != f"Bearer {owner.license_token}":
+                        self._reply(401, {"detail": "Invalid installation token"})
+                        return
+                    if self.path.endswith("/enroll"):
+                        result = owner.enroll(body)
+                    elif self.path.endswith("/check"):
+                        result = owner.check(body)
+                    else:
+                        self._reply(404, {"detail": "Not found"})
+                        return
+                    self._reply(200, result)
+                except Exception:  # noqa: BLE001 - do not expose protocol secrets in test logs
+                    self._reply(401, {"detail": "Invalid CI owner request"})
+
+            def _reply(self, status: int, payload: dict) -> None:
+                data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, _format, *_args):
+                return
+
+        self.httpd = ThreadingHTTPServer(("0.0.0.0", 0), Handler)
+        tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls.load_cert_chain(str(self.server_cert_file), str(self.server_key_file))
+        self.httpd.socket = tls.wrap_socket(self.httpd.socket, server_side=True)
+        self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
+        self.thread.start()
+        self.port = self.httpd.server_address[1]
+        self.url = f"https://host.docker.internal:{self.port}/api/v1/admin/client-installations/check"
+
+    def _make_certificates(self) -> None:
+        now = datetime.now(UTC)
+        ca_key = Ed25519PrivateKey.generate()
+        ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Kodewaves disposable CI owner CA")])
+        ca = (
+            x509.CertificateBuilder()
+            .subject_name(ca_name).issuer_name(ca_name).public_key(ca_key.public_key())
+            .serial_number(x509.random_serial_number()).not_valid_before(now - timedelta(minutes=1))
+            .not_valid_after(now + timedelta(days=2))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+            .add_extension(x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key()), critical=False)
+            .add_extension(x509.KeyUsage(
+                digital_signature=False, content_commitment=False, key_encipherment=False,
+                data_encipherment=False, key_agreement=False, key_cert_sign=True,
+                crl_sign=True, encipher_only=None, decipher_only=None,
+            ), critical=True)
+            .sign(ca_key, algorithm=None)
+        )
+        leaf_key = Ed25519PrivateKey.generate()
+        leaf_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "host.docker.internal")])
+        leaf = (
+            x509.CertificateBuilder()
+            .subject_name(leaf_name).issuer_name(ca.subject).public_key(leaf_key.public_key())
+            .serial_number(x509.random_serial_number()).not_valid_before(now - timedelta(minutes=1))
+            .not_valid_after(now + timedelta(days=1))
+            .add_extension(x509.SubjectAlternativeName([
+                x509.DNSName("host.docker.internal"), x509.DNSName("localhost"),
+                x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
+            ]), critical=False)
+            .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+            .add_extension(
+                x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()), critical=False
+            )
+            .sign(ca_key, algorithm=None)
+        )
+        self.ca_file.write_bytes(ca.public_bytes(Encoding.PEM))
+        self.server_key_file.write_bytes(leaf_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()))
+        self.server_cert_file.write_bytes(leaf.public_bytes(Encoding.PEM))
+        for path in (self.ca_file, self.server_key_file):
+            path.chmod(0o600)
+
+    def enroll(self, body: dict) -> dict:
+        from api.services.installation_identity import verify_enrollment
+
+        with self._lock:
+            if self.public_key is not None or body.get("enrollment_token") != self.enrollment_token:
+                raise ValueError("invalid one-time enrollment token")
+            verify_enrollment(
+                public_key=body["public_key"], signature=body["signature"],
+                installation_id=self.installation_id, license_token=self.license_token,
+                enrollment_token=self.enrollment_token, nonce=body["nonce"], issued_at=body["issued_at"],
+            )
+            self.public_key = body["public_key"]
+        return {"enrolled": True}
+
+    def check(self, body: dict) -> dict:
+        from api.services.installation_identity import verify_owner_check
+        from api.services.installation_license import issue_license_token
+
+        with self._lock:
+            if self.public_key is None:
+                raise ValueError("installation is not enrolled")
+            nonce = body["nonce"]
+            if nonce in self.used_nonces:
+                raise ValueError("owner-check nonce replay")
+            verify_owner_check(
+                self.public_key, body["proof_signature"],
+                installation_id=self.installation_id, license_token=self.license_token,
+                nonce=nonce, issued_at=body["proof_issued_at"],
+                integrity_ok=body["integrity_ok"], integrity_finding=body["integrity_finding"],
+            )
+            self.used_nonces.add(nonce)
+        now = int(time.time())
+        status = {
+            "kind": "installation_status", "installation_id": self.installation_id,
+            "license_sha256": self.license_fingerprint, "nonce": nonce,
+            "revoked": False, "binding_valid": True, "observed_ip": "127.0.0.1",
+            "issued_at": now, "expires_at": now + 300,
+        }
+        return {"signed_status": issue_license_token(status, self.license_private)}
+
+    def close(self) -> None:
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=5)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close()
 
 
 def normalize_caddy_image(image: str) -> str:
@@ -157,7 +327,7 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> N
         raise ValueError("Client installer preflight failed: " + "; ".join(failures))
     subprocess.run(
         ["docker", "compose", "--env-file", str(env_file), "-f", str(compose_file), "config", "--quiet"],
-        cwd=root, check=True,
+        cwd=root, check=True, env=controlled_environment(compose_file.parent, env_file),
     )
 
     # Exercise the real nested interpolation, not just YAML syntax: changing
@@ -175,6 +345,7 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> N
     rendered = subprocess.run(
         ["docker", "compose", "--env-file", str(custom_env), "-f", str(compose_file), "config", "--format", "json"],
         cwd=root, check=True, capture_output=True, text=True,
+        env=controlled_environment(compose_file.parent, custom_env),
     )
     services = json.loads(rendered.stdout)["services"]
     proxy_ip = services["caddy"]["networks"]["internal"]["ipv4_address"]
@@ -222,6 +393,7 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> N
             "config", "--format", "json",
         ],
         cwd=root, check=True, capture_output=True, text=True,
+        env=controlled_environment(compose_file.parent, identity_env),
     )
     identity_services = json.loads(identity_rendered.stdout)["services"]
     for service_name in ("api", "ui"):
@@ -248,10 +420,10 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> N
             raise ValueError(f"Rendered {service_name.upper()} identity key path does not match its mount")
 
 
-def _loopback_port(compose_command: list[str], service: str, container_port: int) -> int:
+def _loopback_port(compose_command: list[str], service: str, container_port: int, *, env: dict[str, str]) -> int:
     result = subprocess.run(
         [*compose_command, "port", service, str(container_port)],
-        check=True, capture_output=True, text=True,
+        check=True, capture_output=True, text=True, env=env,
     )
     value = result.stdout.strip().splitlines()[-1]
     parsed = urllib.parse.urlsplit(f"//{value}")
@@ -275,6 +447,90 @@ def _http_status(url: str, *, host: str | None = None) -> int:
         return exc.code
 
 
+def _http_response(url: str, *, host: str | None = None) -> tuple[int, str]:
+    """Return bounded response evidence for the runtime smoke assertions."""
+    headers = {"Host": host} if host else {}
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return response.status, response.read(4096).decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        body = exc.read(4096) if exc.fp is not None else b""
+        return exc.code, body.decode("utf-8", "replace")
+
+
+def _runtime_smoke_license(private_key: bytes, public_key: str) -> str:
+    """Mint and locally verify a short-lived, domain-bound CI-only license."""
+    from api.services.installation_license import issue_license_token, load_license
+
+    issued_at = int(time.time())
+    claims = {
+        "iat": issued_at,
+        "exp": issued_at + 3600,
+        "installation_id": "ci-installation-smoke",
+        "customer_id": "ci-smoke",
+        "edition": "client",
+        "domains": ["smoke.customer.example.invalid"],
+        "ip_ranges": [],
+        "features": ["voice"],
+        "limits": {"max_concurrent_calls": 1, "max_seats": 1, "max_workspaces": 1},
+    }
+    token = issue_license_token(claims, private_key)
+    parsed = load_license(token, public_key, now=issued_at)
+    if parsed.installation_id != claims["installation_id"] or parsed.domains != tuple(claims["domains"]):
+        raise ValueError("CI runtime license did not preserve its installation/domain binding")
+    return token
+
+
+def _prepare_ci_installation_key(api_image: str, owner: _OwnerAcceptanceServer, license_token: str) -> Path:
+    """Use the built image's real helper to create and enroll a disposable identity."""
+    from enroll_identity import _enrollment_url, _image_helper
+
+    installation_key = secrets.token_bytes(32)
+    common = {
+        "license_token": license_token,
+        "installation_id": owner.installation_id,
+        "public_host": "smoke.customer.example.invalid",
+        "private_key": base64.urlsafe_b64encode(installation_key).rstrip(b"=").decode("ascii"),
+    }
+    prepared = _image_helper(api_image, {
+        **common, "action": "prepare_enrollment", "enrollment_token": owner.enrollment_token,
+    })
+    if prepared.get("owner_status_url") != owner.url:
+        raise ValueError("Built API image is not pinned to the temporary HTTPS owner endpoint")
+    enrollment_url = _enrollment_url(prepared["owner_status_url"])
+    payload = {
+        "enrollment_token": owner.enrollment_token,
+        "public_key": prepared["public_key"],
+        "nonce": prepared["nonce"],
+        "issued_at": prepared["issued_at"],
+        "signature": prepared["signature"],
+    }
+    # The owner server is also published on loopback for the verifier process;
+    # the API container reaches the same listener through host-gateway routing.
+    local_url = enrollment_url.replace("host.docker.internal", "127.0.0.1", 1)
+    request = urllib.request.Request(
+        local_url, data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+        method="POST", headers={
+            "Content-Type": "application/json", "Authorization": f"Bearer {license_token}",
+        },
+    )
+    context = ssl.create_default_context(cafile=str(owner.ca_file))
+    with urllib.request.build_opener(urllib.request.HTTPSHandler(context=context)).open(request, timeout=10) as response:
+        reply = json.loads(response.read(4096))
+    if reply.get("enrolled") is not True or owner.public_key != prepared.get("public_key"):
+        raise ValueError("Disposable owner did not confirm key enrollment")
+    key_path = owner.ca_file.parent / "ci-installation.key"
+    key_path.write_bytes(installation_key)
+    key_path.chmod(0o640)
+    gid = getattr(os, "getegid", lambda: 12345)()
+    if not 1 <= gid <= 2**31 - 1:
+        gid = 12345
+        if hasattr(os, "chown"):
+            os.chown(key_path, -1, gid)
+    return key_path
+
+
 def _verify_compose_runtime(
     root: Path,
     directory: Path,
@@ -282,17 +538,19 @@ def _verify_compose_runtime(
     api_image: str,
     ui_image: str,
     manifest: Path,
+    license_token: str,
+    owner: _OwnerAcceptanceServer | None = None,
 ) -> dict[str, object]:
     """Start the built images with isolated dependencies and assert HTTP boundaries.
 
-    The disposable network is internal, so client-mode startup cannot contact
-    the trusted owner endpoint. The invalid license must be rejected by the
-    signed-license middleware before that owner status check is reached.
+    With an owner peer, this exercises the real client identity proof and signed
+    owner status over HTTPS. The fallback mode is kept for focused boundary tests.
     """
     project = f"kw-ci-{uuid.uuid4().hex[:12]}"
     minio_image = f"kodewaves-ci-minio:{project}"
     env_file = directory / f"{project}.env"
     compose_override = directory / f"{project}-internal-network.yaml"
+    owner_trust_override = directory / f"{project}-owner-trust.yaml"
     compose_file = root / "deploy/client/docker-compose.client.yaml"
     values = {
         "CLIENT_API_IMAGE": api_image,
@@ -305,7 +563,7 @@ def _verify_compose_runtime(
         "CLIENT_CADDY_IMAGE": "registry.invalid/kodewaves/caddy-ci@sha256:" + "0" * 64,
         "COMPOSE_PROFILES": "",
         "KODEWAVES_INSTALLATION_ID": "ci-installation-smoke",
-        "KODEWAVES_LICENSE_TOKEN": "invalid-ci-license.signature",
+        "KODEWAVES_LICENSE_TOKEN": license_token,
         "PUBLIC_HOST": "smoke.customer.example.invalid",
         "TURN_HOST": "8.8.8.8",
         "POSTGRES_PASSWORD": secrets.token_urlsafe(32),
@@ -324,6 +582,19 @@ def _verify_compose_runtime(
         "UI_PORT": "0",
         "MINIO_PORT": "0",
     }
+    identity_key = None
+    identity_gid = None
+    if owner is not None:
+        identity_key = _prepare_ci_installation_key(api_image, owner, license_token)
+        identity_gid = getattr(os, "getegid", lambda: 12345)()
+        if not 1 <= identity_gid <= 2**31 - 1:
+            identity_gid = 12345
+            if hasattr(os, "chown"):
+                os.chown(identity_key, -1, identity_gid)
+        values.update(
+            CLIENT_IDENTITY_KEY_FILE=str(identity_key.resolve()),
+            CLIENT_IDENTITY_GID=str(identity_gid),
+        )
     env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8")
     compose_override.write_text(
         "services:\n"
@@ -337,12 +608,28 @@ def _verify_compose_runtime(
         "    internal: true\n",
         encoding="utf-8",
     )
+    if owner is not None:
+        owner_trust_override.write_text(
+            "services:\n"
+            "  api:\n"
+            "    environment:\n"
+            "      SSL_CERT_FILE: /run/kodewaves-ci-owner/ca.pem\n"
+            "    extra_hosts:\n"
+            "      - host.docker.internal:host-gateway\n"
+            "    volumes:\n"
+            f"      - type: bind\n        source: {owner.ca_file.resolve()}\n"
+            "        target: /run/kodewaves-ci-owner/ca.pem\n        read_only: true\n"
+            "        bind:\n          create_host_path: false\n",
+            encoding="utf-8",
+        )
     compose_command = [
         "docker", "compose", "--project-name", project,
         "--env-file", str(env_file), "-f", str(compose_file),
         "-f", str(compose_override),
     ]
-    command_env = {**os.environ, "COMPOSE_PROFILES": ""}
+    if owner is not None:
+        compose_command.extend(["-f", str(root / "deploy/client/docker-compose.identity.yaml"), "-f", str(owner_trust_override)])
+    command_env = {**controlled_environment(compose_file.parent, env_file), "COMPOSE_PROFILES": ""}
     result: dict[str, object] = {}
     failure: BaseException | None = None
     try:
@@ -358,23 +645,109 @@ def _verify_compose_runtime(
             cwd=root, check=True, env=command_env, timeout=360,
             capture_output=True, text=True,
         )
-        api_port = _loopback_port(compose_command, "api", 8000)
-        ui_port = _loopback_port(compose_command, "ui", 3010)
+        api_port = _loopback_port(compose_command, "api", 8000, env=command_env)
+        ui_port = _loopback_port(compose_command, "ui", 3010, env=command_env)
         health_status = _http_status(f"http://127.0.0.1:{api_port}/api/v1/health")
         if health_status != 200:
             raise ValueError(f"Packaged API health endpoint returned HTTP {health_status}")
         ui_status = _http_status(f"http://127.0.0.1:{ui_port}/")
         if ui_status != 200:
             raise ValueError(f"Packaged UI root returned HTTP {ui_status}")
-        protected_status = _http_status(
+        wrong_host_status, wrong_host_body = _http_response(
+            f"http://127.0.0.1:{api_port}/api/v1/workflow",
+            host="wrong.customer.example.invalid",
+        )
+        if wrong_host_status != 402 or "This domain is not licensed" not in wrong_host_body:
+            raise ValueError(
+                "A protected request with a mismatched Host must fail the signed domain binding; "
+                f"received HTTP {wrong_host_status}: {wrong_host_body[:240]}"
+            )
+        valid_host_status, valid_host_body = _http_response(
             f"http://127.0.0.1:{api_port}/api/v1/workflow",
             host="smoke.customer.example.invalid",
         )
-        if protected_status != 402:
+        if owner is None and (
+            valid_host_status != 402 or "Owner installation check has not succeeded" not in valid_host_body
+        ):
             raise ValueError(
-                "Invalid client license must reject a protected API request with HTTP 402; "
-                f"received HTTP {protected_status}"
+                "A correctly licensed Host must pass license validation and reach the owner-status gate; "
+                f"received HTTP {valid_host_status}: {valid_host_body[:240]}"
             )
+        if owner is not None:
+            # Wait for the API's background signed owner poll to populate Redis.
+            owner_gate_status, owner_gate_body = valid_host_status, valid_host_body
+            deadline = time.monotonic() + 45
+            while time.monotonic() < deadline:
+                owner_gate_status, owner_gate_body = _http_response(
+                    f"http://127.0.0.1:{api_port}/api/v1/workflow",
+                    host="smoke.customer.example.invalid",
+                )
+                if owner_gate_status != 402:
+                    break
+                time.sleep(1)
+            if owner_gate_status != 404 or "Not Found" not in owner_gate_body:
+                raise ValueError(
+                    "Enrolled owner status must pass licensing and reach the expected unauthenticated route boundary; "
+                    f"received HTTP {owner_gate_status}: {owner_gate_body[:240]}"
+                )
+            bootstrap_script = (
+                "import asyncio,json,sys; from api.services.bootstrap_client_admin import bootstrap_client_admin; "
+                "d=json.load(sys.stdin); i=asyncio.run(bootstrap_client_admin(d['email'],d['password'])); "
+                "print(json.dumps({'administrator_id':i}))"
+            )
+            credentials = json.dumps({
+                "email": "ci-owner@example.invalid", "password": secrets.token_urlsafe(32) + "Aa1!",
+            })
+            bootstrap = subprocess.run(
+                [*compose_command, "exec", "-T", "api", "python", "-c", bootstrap_script],
+                cwd=root, check=True, env=command_env, timeout=60,
+                input=credentials, capture_output=True, text=True,
+            )
+            admin_data = json.loads(bootstrap.stdout.strip().splitlines()[-1])
+            if type(admin_data.get("administrator_id")) is not int:
+                raise ValueError("First-admin bootstrap did not return a created administrator")
+            # Verify persisted owner privileges and workspace membership using
+            # a stdin-driven script; credentials never appear in process argv.
+            verify_admin_script = textwrap.dedent("""
+                import asyncio, json
+                from sqlalchemy import select
+                from api.db import db_client
+                from api.db.models import UserModel, organization_users_association
+
+                async def main():
+                    async with db_client.async_session() as session:
+                        user = (await session.execute(
+                            select(UserModel).where(UserModel.email == 'ci-owner@example.invalid')
+                        )).scalar_one()
+                        organizations = (await session.execute(
+                            select(organization_users_association.c.organization_id).where(
+                                organization_users_association.c.user_id == user.id
+                            )
+                        )).scalars().all()
+                        print(json.dumps({
+                            'is_superuser': user.is_superuser, 'active': user.is_active,
+                            'workspace_memberships': len(organizations),
+                        }))
+
+                asyncio.run(main())
+            """)
+            admin_check = subprocess.run(
+                [*compose_command, "exec", "-T", "api", "python", "-c", verify_admin_script],
+                cwd=root, check=True, env=command_env, timeout=30, capture_output=True, text=True,
+            )
+            admin_evidence = json.loads(admin_check.stdout.strip().splitlines()[-1])
+            if admin_evidence != {"is_superuser": True, "active": True, "workspace_memberships": 1}:
+                raise ValueError("First-admin bootstrap did not create one active superuser with a workspace")
+            repeat_bootstrap = subprocess.run(
+                [*compose_command, "exec", "-T", "api", "python", "-c", bootstrap_script],
+                cwd=root, check=False, env=command_env, timeout=60,
+                input=credentials, capture_output=True, text=True,
+            )
+            if repeat_bootstrap.returncode == 0 or "only before the first account" not in (
+                repeat_bootstrap.stdout + repeat_bootstrap.stderr
+            ):
+                raise ValueError("First-admin bootstrap must reject attempts after the first account exists")
+            valid_host_status = owner_gate_status
         image_inspect = subprocess.run(
             ["docker", "image", "inspect", "--format", "{{.Id}}", minio_image],
             check=True, capture_output=True, text=True,
@@ -382,13 +755,21 @@ def _verify_compose_runtime(
         result = {
             "api_health": "passed",
             "ui_root": "passed",
-            "invalid_license_protected_route": "rejected_with_http_402",
+            "mismatched_host": "rejected_by_signed_domain_binding",
+            "valid_host_owner_gate": (
+                "license_accepted_owner_enrollment_required" if owner is None
+                else f"owner_status_accepted_http_{valid_host_status}"
+            ),
             "dependency_images": {
                 "postgres": _CI_POSTGRES_IMAGE,
                 "redis": _CI_REDIS_IMAGE,
                 "minio_image_id": image_inspect.stdout.strip(),
             },
         }
+        if owner is not None:
+            result["owner_enrollment"] = "passed_signed_one_time_enrollment_and_status"
+            result["first_admin_bootstrap"] = "passed_active_superuser_with_workspace"
+            result["first_admin_replay"] = "rejected_after_initial_account"
     except BaseException as exc:
         failure = exc
         primary_output = ""
@@ -470,42 +851,49 @@ def verify(caddy_image: str, report: Path) -> None:
         directory = Path(temporary)
         if directory.resolve().is_relative_to(root):
             raise ValueError("Temporary signing keys must be outside the Docker build context")
-        _, license_public = _temporary_keypair(directory, "license")
+        license_private, license_public = _temporary_keypair(directory, "license")
         release_private, release_public = _temporary_keypair(directory, "release")
         manifest = directory / "client-release-manifest.json"
         inventory_metrics_file = directory / "protected-inventory-metrics.json"
         api_image, ui_image = "kodewaves-client-api:ci-check", "kodewaves-client-ui:ci-check"
-        subprocess.run([
-            sys.executable, str(root / "deploy/client/build_and_verify.py"),
-            "--api-tag", api_image, "--ui-tag", ui_image,
-            "--caddy-image", caddy_image,
-            "--license-public-key-file", str(license_public),
-            "--release-public-key-file", str(release_public),
-            "--owner-status-url", "https://owner-ci.invalid/api/v1/admin/client-installations/check",
-            "--owner-private-key", str(release_private),
-            "--manifest-output", str(manifest),
-            "--public-key-output", str(directory / "signed-release-public.key"),
-            "--inventory-metrics-output", str(inventory_metrics_file),
-        ], cwd=root, check=True)
-        inventory_metrics = _read_inventory_metrics(inventory_metrics_file)
-        _verify_installer_config(root, directory, caddy_image)
-        image_ids = {}
-        for name, image in (("api", api_image), ("ui", ui_image)):
-            inspected = subprocess.run(
-                ["docker", "image", "inspect", "--format", "{{.Id}}", image],
-                check=True, capture_output=True, text=True,
-            )
-            image_id = inspected.stdout.strip()
-            if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
-                raise ValueError(f"Missing immutable {name} image ID")
-            image_ids[name] = image_id
-        _verify_manifest_evidence(manifest, inventory_metrics, image_ids)
-        runtime_smoke = _verify_compose_runtime(
-            root, directory, api_image=api_image, ui_image=ui_image, manifest=manifest,
+        license_token = _runtime_smoke_license(
+            license_private.read_bytes(), license_public.read_text(encoding="ascii")
         )
+        with _OwnerAcceptanceServer(
+            directory, license_token, license_private.read_bytes(), license_public.read_text(encoding="ascii")
+        ) as owner:
+            subprocess.run([
+                sys.executable, str(root / "deploy/client/build_and_verify.py"),
+                "--api-tag", api_image, "--ui-tag", ui_image,
+                "--caddy-image", caddy_image,
+                "--license-public-key-file", str(license_public),
+                "--release-public-key-file", str(release_public),
+                "--owner-status-url", owner.url,
+                "--owner-private-key", str(release_private),
+                "--manifest-output", str(manifest),
+                "--public-key-output", str(directory / "signed-release-public.key"),
+                "--inventory-metrics-output", str(inventory_metrics_file),
+            ], cwd=root, check=True)
+            inventory_metrics = _read_inventory_metrics(inventory_metrics_file)
+            _verify_installer_config(root, directory, caddy_image)
+            image_ids = {}
+            for name, image in (("api", api_image), ("ui", ui_image)):
+                inspected = subprocess.run(
+                    ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+                    check=True, capture_output=True, text=True,
+                )
+                image_id = inspected.stdout.strip()
+                if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+                    raise ValueError(f"Missing immutable {name} image ID")
+                image_ids[name] = image_id
+            _verify_manifest_evidence(manifest, inventory_metrics, image_ids)
+            runtime_smoke = _verify_compose_runtime(
+                root, directory, api_image=api_image, ui_image=ui_image, manifest=manifest,
+                license_token=license_token, owner=owner,
+            )
         evidence = {
             "status": "passed", "production_release": False,
-            "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation, enrolled identity overlay, and disposable API/UI Compose runtime smoke",
+            "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation, HTTPS owner enrollment, signed status, first-admin bootstrap, and disposable API/UI Compose runtime smoke",
             "installer_preflight": "passed", "compose_config": "passed",
             "installer_manifest_scope": "Unsigned configuration fixture; signed build inventories and image IDs verified separately",
             "custom_network_proxy_config": "passed",
@@ -514,7 +902,6 @@ def verify(caddy_image: str, report: Path) -> None:
             "runtime_compose_smoke": runtime_smoke,
             "protected_inventory": inventory_metrics,
             "not_verified": [
-                "owner-enrolled clean installation and first-admin acceptance",
                 "upgrade/rollback", "live owner alerts", "browser audio", "telephone",
             ],
             "image_ids": image_ids, "caddy_image": caddy_image,

@@ -1,6 +1,4 @@
 "use client";
-import chrome from "@/components/layout/WorkspaceChrome.module.css";
-
 import { format } from 'date-fns';
 import { AlertCircle, AlertTriangle, ArrowLeft, CalendarIcon, Check, Clock, Download, Info, Pause, Pencil, Phone, Play, RefreshCw, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -17,6 +15,7 @@ import {
     startCampaignApiV1CampaignCampaignIdStartPost,
 } from '@/client/sdk.gen';
 import type { CampaignResponse } from '@/client/types.gen';
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -382,7 +381,7 @@ export default function CampaignDetailPage() {
             case 'warning':
                 return <AlertTriangle className="h-4 w-4 text-amber-500" />;
             default:
-                return <Info className="h-4 w-4 text-blue-500" />;
+                return <Info className="h-4 w-4 text-primary" />;
         }
     };
 

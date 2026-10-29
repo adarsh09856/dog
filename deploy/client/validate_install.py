@@ -87,10 +87,9 @@ def validate_identity_key(env: dict[str, str]) -> list[str]:
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_size != 32:
         return ["CLIENT_IDENTITY_KEY_FILE must be a regular 32-byte private key, not a symlink"]
     if os.name != "nt" and (
-        metadata.st_gid != int(group) or not metadata.st_mode & stat.S_IRGRP
-        or metadata.st_mode & (stat.S_IWGRP | stat.S_IXGRP | stat.S_IRWXO)
+        metadata.st_gid != int(group) or stat.S_IMODE(metadata.st_mode) != 0o640
     ):
-        return ["CLIENT_IDENTITY_KEY_FILE must be group-readable by CLIENT_IDENTITY_GID and inaccessible to others"]
+        return ["CLIENT_IDENTITY_KEY_FILE must have mode 0640, be owned by CLIENT_IDENTITY_GID, and be inaccessible to others"]
     return []
 
 

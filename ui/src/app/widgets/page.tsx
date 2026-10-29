@@ -1,24 +1,19 @@
 "use client";
-import panel from "@/components/layout/PanelWorkspace.module.css";
-
 import {
   Check,
   CheckCircle2,
   Code,
   Copy,
   Edit,
-  Globe,
-  Loader2,
-  MessageSquare,
   Plus,
-  Radio,
   RefreshCw,
-  Sparkles,
   Trash2,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import { getWorkflowsApiV1WorkflowFetchGet } from "@/client/sdk.gen";
+import type { WorkflowListResponse } from "@/client/types.gen";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,13 +44,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { WebsiteWidget, widgetsApi } from "@/lib/kodewavesApi";
-import { getWorkflowsApiV1WorkflowFetchGet } from "@/client/sdk.gen";
-import type { WorkflowListResponse } from "@/client/types.gen";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { detailFromError } from "@/lib/apiError";
+import { useAuth } from "@/lib/auth";
+import { WebsiteWidget, widgetsApi } from "@/lib/kodewavesApi";
 
 export default function WidgetsPage() {
   const { user, loading: authLoading } = useAuth();
+  const branding = useClientBranding();
+  const defaultWidgetColor = branding.primary_color || "#426b57";
   const [widgets, setWidgets] = useState<WebsiteWidget[]>([]);
   const [agents, setAgents] = useState<WorkflowListResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +71,7 @@ export default function WidgetsPage() {
   const listRequest = useRef(0);
   const embedRequest = useRef(0);
 
-  const fetchWidgets = async () => {
+  const fetchWidgets = useCallback(async () => {
     if (authLoading || !user) return;
     const request = ++listRequest.current;
     setLoadError(null);
@@ -93,7 +90,7 @@ export default function WidgetsPage() {
     } finally {
       if (request === listRequest.current) setLoading(false);
     }
-  };
+  }, [authLoading, user]);
 
   useEffect(() => {
     setWidgets([]);
@@ -107,7 +104,7 @@ export default function WidgetsPage() {
       listRequest.current += 1;
       embedRequest.current += 1;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user, fetchWidgets]);
 
   const handleSaveWidget = async () => {
     if (!editingWidget || !editingWidget.name) {
@@ -123,7 +120,7 @@ export default function WidgetsPage() {
     try {
       const payload = {
         name: editingWidget.name, workflow_id: workflowId,
-        primary_color: editingWidget.primary_color || "#6366f1",
+        primary_color: editingWidget.primary_color || defaultWidgetColor,
         welcome_message: editingWidget.welcome_message || "Talk to our AI Agent",
         bubble_subtitle: editingWidget.bubble_subtitle ?? "Click to start voice call",
         position: editingWidget.position || "bottom-right",
@@ -137,8 +134,8 @@ export default function WidgetsPage() {
       setModalOpen(false);
       setEditingWidget(null);
       await fetchWidgets();
-    } catch (err: any) {
-      alert(err.message || "Failed to save widget");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save widget");
     } finally {
       setSaving(false);
     }
@@ -149,8 +146,8 @@ export default function WidgetsPage() {
     try {
       await widgetsApi.deleteWidget(id);
       await fetchWidgets();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete widget");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete widget");
     }
   };
 
@@ -200,7 +197,7 @@ export default function WidgetsPage() {
               setAllowedDomainsText("");
               setEditingWidget({
                 name: "Homepage Voice Assistant",
-                primary_color: "#6366f1",
+                primary_color: defaultWidgetColor,
                 position: "bottom-right",
                 welcome_message: "Hi! How can I help you today? Tap to talk with our voice AI.",
                 is_active: true,
@@ -362,7 +359,7 @@ export default function WidgetsPage() {
                 <Label className="text-xs">Position on Screen</Label>
                 <Select
                   value={editingWidget?.position || "bottom-right"}
-                  onValueChange={(val: any) => setEditingWidget((prev) => prev ? { ...prev, position: val } : null)}
+                  onValueChange={(value) => setEditingWidget((prev) => prev ? { ...prev, position: value } : null)}
                 >
                   <SelectTrigger className="text-xs">
                     <SelectValue />
@@ -379,12 +376,12 @@ export default function WidgetsPage() {
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
-                    value={editingWidget?.primary_color || "#6366f1"}
+                    value={editingWidget?.primary_color || defaultWidgetColor}
                     onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, primary_color: e.target.value } : null)}
                     className="h-9 w-10 rounded border border-border cursor-pointer bg-transparent"
                   />
                   <Input
-                    value={editingWidget?.primary_color || "#6366f1"}
+                    value={editingWidget?.primary_color || defaultWidgetColor}
                     onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, primary_color: e.target.value } : null)}
                     className="font-mono text-xs"
                   />

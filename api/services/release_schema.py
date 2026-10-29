@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import re
+import sys
 from pathlib import Path
 
 from sqlalchemy import text
@@ -78,7 +79,15 @@ async def verify_client_schema_before_migration() -> None:
 
 
 def main() -> int:
-    asyncio.run(verify_client_schema_before_migration())
+    if sys.argv[1:] == ["--preflight-deploy"]:
+        from api.constants import DATABASE_URL
+
+        revisions = asyncio.run(current_database_revisions(DATABASE_URL))
+        verify_deployment_migration_history(Path(__file__).resolve().parents[1] / "alembic" / "versions", revisions)
+    elif not sys.argv[1:]:
+        asyncio.run(verify_client_schema_before_migration())
+    else:
+        raise SystemExit("Usage: python -m api.services.release_schema [--preflight-deploy]")
     return 0
 
 
@@ -156,6 +165,16 @@ def migration_compatibility(
         "upgrade_from": sorted(approved | {heads[0]}),
         "rollback_to": [],
     }
+
+
+def verify_deployment_migration_history(migrations_dir: Path, current_revisions: tuple[str, ...]) -> None:
+    """Reject a candidate that cannot upgrade the running database history."""
+    if len(current_revisions) > 1:
+        raise SchemaCompatibilityError("Database has multiple Alembic revisions; refusing deployment")
+    try:
+        migration_compatibility(migrations_dir, current_revisions)
+    except ValueError as exc:
+        raise SchemaCompatibilityError(f"Candidate migration history is incompatible: {exc}") from exc
 
 
 if __name__ == "__main__":

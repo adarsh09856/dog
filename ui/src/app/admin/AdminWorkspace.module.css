@@ -16,13 +16,14 @@
   overflow: hidden;
   min-height: 12rem;
   padding: clamp(1.5rem, 3vw, 2.5rem);
-  border: 1px solid color-mix(in oklab, var(--primary) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-primary-color, #426b57) 32%, #35504b);
   border-radius: 1.5rem;
-  color: #f3f6fa;
+  color: #f2f7f1;
   background:
-    radial-gradient(circle at 90% 15%, color-mix(in oklab, var(--primary) 30%, transparent), transparent 33%),
-    linear-gradient(120deg, #111d31 0%, #15233b 58%, #1c3550 100%);
-  box-shadow: 0 22px 50px -38px rgba(11, 23, 39, .8);
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--brand-primary-color, #426b57) 27%, transparent), transparent 34%),
+    linear-gradient(118deg, #102523 0%, #15322f 58%, #1c4039 100%);
+  box-shadow: 0 24px 54px -38px rgba(8, 27, 24, .82);
+  animation: admin-hero-in 420ms cubic-bezier(.2,.75,.25,1) both;
 }
 
 .hero::after {
@@ -30,8 +31,8 @@
   z-index: -1;
   inset: 0;
   content: "";
-  opacity: .22;
-  background: repeating-linear-gradient(108deg, transparent 0, transparent 32px, rgba(255,255,255,.13) 33px, transparent 34px);
+  opacity: .2;
+  background: repeating-linear-gradient(108deg, transparent 0, transparent 32px, rgba(205,233,212,.16) 33px, transparent 34px);
   mask-image: linear-gradient(to left, #000, transparent 65%);
   pointer-events: none;
 }
@@ -43,7 +44,7 @@
 .kicker {
   display: block;
   margin-bottom: .85rem;
-  color: #a8d8cb;
+  color: #b8d9c1;
   font-size: .66rem;
   font-weight: 750;
   letter-spacing: .18em;
@@ -62,7 +63,7 @@
 .hero p {
   max-width: 56rem;
   margin-top: .85rem;
-  color: #bdcbdc;
+  color: #bfd0c6;
   line-height: 1.55;
 }
 
@@ -71,24 +72,24 @@
 }
 
 .hero :global(button[data-variant="outline"]) {
-  color: #f3f6fa;
+  color: #f2f7f1;
   background: rgba(255,255,255,.07);
 }
 
 .hero :global(input) {
-  color: #f3f6fa;
+  color: #f2f7f1;
   border-color: rgba(255,255,255,.25);
   background: rgba(255,255,255,.09);
 }
 
 .hero :global(input::placeholder) {
-  color: #b7c7d9;
+  color: #b8cbbf;
 }
 
 .surface :global([data-slot="card"]) {
   border-color: color-mix(in oklab, var(--primary) 9%, var(--border));
   border-radius: 1.1rem;
-  box-shadow: 0 6px 25px -22px rgba(15, 23, 42, .4);
+  box-shadow: 0 6px 25px -22px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
 .surface :global([data-slot="tabs-list"]) {
@@ -109,6 +110,11 @@
 
 .surface :global(table tbody tr:hover) {
   background: color-mix(in oklab, var(--primary) 4%, var(--background));
+}
+
+@keyframes admin-hero-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .formSection {
@@ -181,5 +187,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .hero { animation: none; }
   .surface :global(table tr) { transition: none; }
 }

@@ -192,6 +192,21 @@ describe("public pricing", () => {
     expect(screen.queryByText("Free")).toBeNull();
   });
 
+  it.each([undefined, null, -1, 1.5])("hides malformed plan prices (%s)", async (price) => {
+    mocks.getPublicPlans.mockResolvedValue([{
+      id: "incomplete", name: "Incomplete plan", code: "incomplete",
+      monthly_price_cents: price, annual_price_cents: 0, currency: "INR",
+      included_minutes: null, max_agents: 3, max_concurrent_calls: 1,
+      features: [], is_active: true,
+    }]);
+    mocks.getPublicCreditOffers.mockResolvedValue([]);
+    render(<PricingPage />);
+    expect(await screen.findByText("Price unavailable")).toBeTruthy();
+    expect(screen.queryByText("Free")).toBeNull();
+    expect(screen.queryByText("No payment required for this plan")).toBeNull();
+    expect(screen.getByText(/— included minutes/)).toBeTruthy();
+  });
+
   it("keeps the selected credit bundle through the sign-in link", async () => {
     mocks.getPublicPlans.mockResolvedValue([]);
     mocks.getPublicCreditOffers.mockResolvedValue([{

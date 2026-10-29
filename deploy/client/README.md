@@ -120,13 +120,15 @@ preflight result, and the result of the actual `docker compose config --quiet`
 command. On the Docker runner it also builds the repository's version-pinned
 MinIO service image, starts API/UI with disposable Postgres, Redis and MinIO
 dependencies, and checks API health, the UI root, and HTTP 402 for a protected
-API request with an invalid license. A unique Compose project, loopback-only
-ephemeral host ports, and an internal-only network isolate the smoke; the
-Compose project volumes/network/containers and temporary MinIO image are
-removed in `finally`. Postgres and Redis use immutable CI image digests. The
-smoke's invalid license fails before any owner HTTP request, and the internal
-network blocks egress. It does not prove an owner-enrolled installation or
-owner alert delivery.
+API request with an invalid license. The acceptance run also starts a temporary
+HTTPS owner peer, enrolls a disposable installation identity with the packaged
+API helper, verifies signed owner status, and exercises first-admin bootstrap
+and replay rejection against the running image. A unique Compose project,
+loopback-only ephemeral host ports, and an internal-only network isolate the
+smoke; the Compose project volumes/network/containers and temporary MinIO image
+are removed in `finally`. Postgres and Redis use immutable CI image digests.
+The temporary peer and signing material are test-only; this does not prove
+production owner alert delivery, customer DNS/IP binding, or upgrade/rollback.
 
 The report also records the protected API/UI inventory file counts and scan
 durations measured while the build tool creates the signed release manifest.
@@ -137,12 +139,13 @@ not themselves Docker/Compose execution evidence.
 The check also renders a custom subnet with `docker compose config --format json`
 and verifies that the API trusts the resulting Caddy address. Its report records
 this separately as `custom_network_proxy_config`.
-Images produced by this check use disposable trust keys and an invalid test
-owner URL. They are verification artifacts and cannot serve as customer releases.
-The runtime smoke is not full clean-install acceptance: owner enrollment, the
-first-administrator journey, real domain/IP binding, updates/rollback, live
-alerts, and browser/telephone acceptance remain separate release gates. The
-next branch push or manual verification run executes this runtime smoke.
+Images produced by this check use disposable trust keys and a temporary test
+owner peer. They are verification artifacts and cannot serve as customer
+releases. The runtime smoke covers test-host owner enrollment, signed status,
+and first-administrator bootstrap; real customer domain/IP binding,
+updates/rollback, production alert delivery, and browser/telephone acceptance
+remain separate release gates. The workflow must complete successfully before
+the disposable acceptance evidence can be treated as verified.
 
 ### Production release
 

@@ -1,7 +1,5 @@
 "use client";
 
-import admin from "../AdminWorkspace.module.css";
-
 import {
   Building2,
   CheckCircle2,
@@ -30,10 +28,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { notifyBrandingChanged } from "@/context/ClientBrandingContext";
+import { notifyBrandingChanged, useClientBranding } from "@/context/ClientBrandingContext";
 import { useAuth } from "@/lib/auth";
 import { adminApi, apiFetch, PlatformSettings } from "@/lib/kodewavesApi";
 
+import admin from "../AdminWorkspace.module.css";
 import IndicSttTest from "./IndicSttTest";
 
 const POPULAR_OLLAMA_MODELS = [
@@ -48,6 +47,7 @@ function errorMessage(error: unknown, fallback = "Request failed") { return erro
 
 export default function AdminSettingsPage() {
   const { user, loading: authLoading } = useAuth();
+  const branding = useClientBranding();
   const [settings, setSettings] = useState<PlatformSettings>({
     company_name: "Kodewaves",
     tagline: "Voice agents for web and phone",
@@ -55,7 +55,7 @@ export default function AdminSettingsPage() {
     font: "geist",
     logo_url: "",
     support_email: "support@kodewaves.ai",
-    primary_color: "#6366f1",
+    primary_color: branding.primary_color || "#426b57",
     allow_user_byok: false,
     enforce_wallet_balance: true,
     enable_local_ai_engine: false,
@@ -158,7 +158,7 @@ export default function AdminSettingsPage() {
           logo_url: settings.logo_url || "",
           favicon_url: settings.favicon_url || "",
           support_email: settings.support_email || "",
-          primary_color: settings.primary_color || "#304c73",
+          primary_color: settings.primary_color || branding.primary_color || "#426b57",
           font: settings.font || "geist",
         }),
       });
@@ -319,12 +319,12 @@ export default function AdminSettingsPage() {
               <div className="flex items-center gap-3">
                 <input
                   type="color"
-                  value={settings.primary_color || "#6366f1"}
+                  value={settings.primary_color || branding.primary_color || "#426b57"}
                   onChange={(e) => setSettings({ ...settings, primary_color: e.target.value })}
                   className="h-9 w-12 rounded border border-border cursor-pointer bg-transparent"
                 />
                 <Input
-                  value={settings.primary_color || "#6366f1"}
+                  value={settings.primary_color || branding.primary_color || "#426b57"}
                   onChange={(e) => setSettings({ ...settings, primary_color: e.target.value })}
                   className="font-mono text-xs"
                 />
@@ -394,7 +394,7 @@ export default function AdminSettingsPage() {
                   Self-Hosted AI Engine (CPU Stack)
                 </CardTitle>
                 <CardDescription>
-                  Runs speech recognition, response generation, and speech synthesis on the Kodewaves server. Models and voices are discovered from configured services; actual inference hardware depends on the server runtime.
+                  Runs speech recognition, response generation, and speech synthesis on the {branding.company_name} server. Models and voices are discovered from configured services; actual inference hardware depends on the server runtime.
                 </CardDescription>
               </div>
               <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">
@@ -410,7 +410,7 @@ export default function AdminSettingsPage() {
                   Enable Sovereign Self-hosted AI Engine
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Allows opted-in tenants to use inference on the Kodewaves server. Access can be granted per user in User Management to control server load.
+                  Allows opted-in tenants to use inference on the {branding.company_name} server. Access can be granted per user in User Management to control server load.
                 </div>
               </div>
               <Switch

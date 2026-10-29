@@ -316,10 +316,18 @@ def create_archive(
     identity_uid = None
     identity_mode = None
     if identity_key is not None:
+        configured_key = Path(key_path or "")
+        if not configured_key.is_absolute():
+            raise ValueError("CLIENT_IDENTITY_KEY_FILE must be an absolute path")
+        _check_regular_file(configured_key, "configured installation identity key")
+        if configured_key.read_bytes() != resolved_inputs["config/installation.key"].read_bytes():
+            raise ValueError("Identity key input differs from CLIENT_IDENTITY_KEY_FILE")
         try:
             identity_gid = int(configured_gid or "")
         except ValueError as exc:
             raise ValueError("Archived .env must include a numeric CLIENT_IDENTITY_GID") from exc
+        if not 1 <= identity_gid <= 2**31 - 1:
+            raise ValueError("CLIENT_IDENTITY_GID must be between 1 and 2147483647")
         identity_stat = identity_key.stat()
         identity_uid = getattr(identity_stat, "st_uid", 0)
         if identity_key.stat().st_size != 32:
@@ -843,8 +851,8 @@ def _restore_to_docker_volumes_locked(
             # A failed stop may have stopped only part of the project. Restore
             # the exact previous mapping first, then restart only its services.
             if running:
-                current_command, _current_model, _ = _compose_context(compose_dir, env_file)
                 try:
+                    current_command, _current_model, _ = _compose_context(compose_dir, env_file)
                     _run([*current_command, "stop"], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
                 except Exception:
                     pass

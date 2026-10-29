@@ -16,9 +16,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { useClientBranding } from "@/context/ClientBrandingContext";
-import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
 
 const platformAreas = [
   {
@@ -266,7 +266,7 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-        <section className="border-t border-border bg-muted/40 px-5 py-20 text-center sm:px-8 sm:py-24">
+        <section className="public-final-cta border-t border-border px-5 py-20 text-center sm:px-8 sm:py-24">
           <div className="mx-auto max-w-3xl">
             <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
               {branding.company_name} voice agent workspace

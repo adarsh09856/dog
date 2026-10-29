@@ -17,6 +17,8 @@ describe("Stack auth brand theme", () => {
     const invalidBrand = createStackAuthTheme("amber");
     expect(lightBrand.light?.primaryForeground).toBe("#07111b");
     expect(darkBrand.dark?.primaryForeground).toBe("#ffffff");
-    expect(invalidBrand.dark?.primary).toBe("#2563eb");
+    expect(invalidBrand.dark?.primary).toBe("#426b57");
+    expect(invalidBrand.light?.background).toBe("#f2f4ed");
+    expect(invalidBrand.dark?.background).toBe("#111e20");
   });
 });

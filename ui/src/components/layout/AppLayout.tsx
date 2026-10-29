@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import React, { ReactNode } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
+import { BrandTagline } from "@/components/BrandTagline";
 import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { useAppConfig } from "@/context/AppConfigContext";
@@ -31,7 +32,7 @@ function AppHeader() {
         <Link href="/" className="md:hidden" aria-label="Home"><BrandLogo className="h-6" /></Link>
         <div className="hidden items-center gap-3 text-xs md:flex"><span className="text-muted-foreground">Workspace</span><span aria-hidden="true" className="text-muted-foreground/50">/</span><span className="font-semibold capitalize text-foreground">{sectionLabel}</span></div>
       </div>
-      <span className="hidden font-mono text-[9px] tracking-[.12em] text-muted-foreground sm:inline">VOICE OPERATIONS</span>
+      <BrandTagline className="hidden font-mono text-[9px] tracking-[.12em] text-muted-foreground sm:inline" />
     </header>
   );
 }

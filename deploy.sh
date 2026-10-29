@@ -148,6 +148,8 @@ if [ "$ENABLE_LOCAL" = "true" ]; then
         docker compose "${COMPOSE_ARGS[@]}" $PROFILE_FLAGS $INDIC_MIO_PROFILE_FLAGS build indic-mio-tts
     fi
 fi
+echo "Checking the candidate migration history against the running database..."
+docker compose "${COMPOSE_ARGS[@]}" $PROFILE_FLAGS run --rm --no-deps --entrypoint python api -m api.services.release_schema --preflight-deploy
 docker compose "${COMPOSE_ARGS[@]}" $PROFILE_FLAGS up -d --no-deps api ui
 
 # The API entrypoint runs migrations before starting its services. Wait for

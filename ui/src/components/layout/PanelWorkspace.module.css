@@ -68,3 +68,116 @@
 .collectionHeader > div:first-child { min-width: min(100%,260px); flex: 1 1 330px; }
 .collectionHeader > div:last-child { max-width: 100%; flex-shrink: 1; flex-wrap: wrap; }
 .collectionHeader h1 { overflow-wrap: anywhere; }
+
+/* Editorial page masthead shared by workspace, operations and admin lists.
+   Give these screens a real surface and a clear action rail so each panel
+   reads as a purpose-built workspace, not a heading followed by a divider. */
+.collectionHeader {
+  position: relative;
+  isolation: isolate;
+  align-items: center;
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  min-height: 132px;
+  margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
+  padding: clamp(1.25rem, 2.5vw, 2rem);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 12px 30px -26px color-mix(in srgb, var(--foreground) 48%, transparent);
+  animation: workspace-masthead-in 420ms cubic-bezier(.2,.75,.25,1) both;
+}
+.collectionHeader::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--cta);
+  content: "";
+}
+.collectionHeader > div:first-child { padding-left: .25rem; }
+.collectionHeader .eyebrow,
+.collectionHeader :global([class*="eyebrow"]) {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  margin-bottom: .65rem;
+  color: var(--primary);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.collectionHeader h1 {
+  max-width: 20ch;
+  font-size: clamp(1.8rem, 3.2vw, 2.75rem);
+  font-weight: 620;
+  letter-spacing: -.055em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+.collectionHeader p {
+  max-width: 58ch;
+  margin-top: .7rem;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.collectionHeader > div:not(:first-child) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .6rem;
+}
+.collectionHeader > div:not(:first-child) :global(button),
+.collectionHeader > div:not(:first-child) :global(a) {
+  min-height: 40px;
+  border-radius: 9px;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.collectionHeader > div:not(:first-child) :global(button:hover),
+.collectionHeader > div:not(:first-child) :global(a:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px -10px color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+.metricRail,
+.billingMetrics {
+  border-radius: 15px;
+  box-shadow: 0 14px 32px -28px color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+.metricRail > div,
+.billingMetrics > div {
+  transition: background-color 160ms ease;
+}
+.metricRail > div:hover,
+.billingMetrics > div:hover {
+  background-color: color-mix(in srgb, var(--primary) 5%, var(--card));
+}
+.adminLaunchpad {
+  border-radius: 15px;
+  background: var(--card);
+  box-shadow: 0 14px 32px -28px color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+.adminLaunchpad > div { transition: background-color 160ms ease; }
+.adminLaunchpad > div:hover { background-color: color-mix(in srgb, var(--primary) 4%, var(--card)); }
+
+@keyframes workspace-masthead-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 700px) {
+  .collectionHeader { min-height: 0; padding: 1.25rem; border-radius: 13px; }
+  .collectionHeader > div:not(:first-child) { justify-content: flex-start; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collectionHeader { animation: none; }
+  .collectionHeader > div:not(:first-child) :global(button),
+  .collectionHeader > div:not(:first-child) :global(a),
+  .metricRail > div,
+  .billingMetrics > div,
+  .adminLaunchpad > div { transition: none; }
+  .collectionHeader > div:not(:first-child) :global(button:hover),
+  .collectionHeader > div:not(:first-child) :global(a:hover) { transform: none; box-shadow: none; }
+}

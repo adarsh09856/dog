@@ -4,6 +4,13 @@ import { DEFAULT_BRANDING } from "./branding";
 import { brandingCssVariables } from "./brandingTheme";
 
 describe("server and client branding theme variables", () => {
+  it("uses the Kodewaves forest brand as the shared default", () => {
+    expect(DEFAULT_BRANDING.primary_color).toBe("#426b57");
+    expect(brandingCssVariables(DEFAULT_BRANDING, "light")["--primary"]).toBe(
+      DEFAULT_BRANDING.primary_color,
+    );
+  });
+
   it("keeps accent text readable when the configured brand color is very light or dark", () => {
     const luminance = (hex: string) => {
       const channels = [1, 3, 5].map((index) => {
@@ -13,7 +20,7 @@ describe("server and client branding theme variables", () => {
       return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
     };
     for (const primary_color of ["#ffff00", "#111111"]) {
-      for (const [theme, background] of [["light", "#ededed"], ["dark", "#303840"]] as const) {
+      for (const [theme, background] of [["light", "#f2f4ed"], ["dark", "#111e20"]] as const) {
         const text = brandingCssVariables({ ...DEFAULT_BRANDING, primary_color }, theme)["--cta-text"];
         expect(text).toMatch(/^#[0-9a-f]{6}$/i);
         const values = [luminance(text), luminance(background)].sort((a, b) => b - a);
@@ -28,6 +35,8 @@ describe("server and client branding theme variables", () => {
     const dark = brandingCssVariables(branding, "dark");
 
     expect(light["--primary"]).toBe("#123456");
+    expect(light["--brand-primary-color"]).toBe(light["--primary"]);
+    expect(dark["--brand-primary-color"]).toBe(dark["--primary"]);
     expect(dark["--primary"]).not.toBe("#123456");
     expect(light["--cta"]).toBe(light["--primary"]);
     expect(dark["--sidebar-primary"]).toBe(dark["--primary"]);

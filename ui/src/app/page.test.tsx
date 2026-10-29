@@ -32,17 +32,21 @@ describe("public home branding", () => {
     );
   });
 
-  it("describes the real agent lifecycle without a fabricated conversation preview", () => {
+  it("describes the product lifecycle and labels its workflow schematic as illustrative", () => {
     render(<HomePage />);
 
-    expect(screen.getByRole("heading", { name: "Build, test and operate voice agents." })).toBeTruthy();
-    expect(screen.getByText("Operating lifecycle")).toBeTruthy();
-    expect(screen.getByText("Test the conversation")).toBeTruthy();
-    expect(screen.getByText("Operate and improve")).toBeTruthy();
+    const heroHeading = screen.getByRole("heading", { level: 1 });
+    expect(heroHeading.textContent).toContain("Every conversation.");
+    expect(heroHeading.textContent).toContain("A clear next step.");
+    expect(screen.getByText("Configure the full call lifecycle")).toBeTruthy();
+    expect(screen.getByText("Workflow builder")).toBeTruthy();
+    expect(screen.getByText("Web and telephone")).toBeTruthy();
+    expect(screen.getByText("Conversation review")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Shape the work before the call." })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Choose how people reach you." })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Review what happened." })).toBeTruthy();
-    expect(screen.queryByText("Illustrative workflow")).toBeNull();
+    expect(screen.getByLabelText("Illustration of a voice workflow from caller to action")).toBeTruthy();
+    expect(screen.getByText("Illustrative workflow")).toBeTruthy();
     expect(screen.queryByRole("group", { name: "Conversation examples" })).toBeNull();
   });
 });

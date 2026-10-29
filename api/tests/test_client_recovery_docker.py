@@ -52,6 +52,14 @@ def _installation(directory: Path) -> tuple[Path, Path, Path]:
     _write_volume_tar(minio, "minio")
     identity = inputs_dir / "installation.key"
     identity.write_bytes(b"k" * 32)
+    if os.name != "nt":
+        identity.chmod(0o640)
+    # Windows filesystems report no POSIX group ID. Recovery requires a
+    # nonzero configured group, so use an illustrative Linux value in these
+    # Windows-only mocked tests; Linux tests retain the real file group.
+    identity_gid = identity.stat().st_gid
+    if os.name == "nt" and identity_gid == 0:
+        identity_gid = 1234
     env = inputs_dir / ".env"
     identity_value = str(identity.resolve())
     manifest_ref = "./client-release-manifest.json"
@@ -71,7 +79,7 @@ def _installation(directory: Path) -> tuple[Path, Path, Path]:
             "KODEWAVES_INSTALLATION_ID=customer-123",
             "KODEWAVES_LICENSE_TOKEN=payload.signature",
             "CLIENT_IDENTITY_KEY_FILE=" + identity_value,
-            "CLIENT_IDENTITY_GID=1234",
+            "CLIENT_IDENTITY_GID=" + str(identity_gid),
             "CLIENT_RELEASE_MANIFEST_FILE=" + manifest_ref,
             "CLIENT_API_IMAGE=registry.example.com/kodewaves/api@sha256:" + "a" * 64,
             "CLIENT_UI_IMAGE=registry.example.com/kodewaves/ui@sha256:" + "b" * 64,
@@ -242,7 +250,7 @@ def test_restore_to_new_volumes_and_rollback_keeps_both_volume_sets(monkeypatch,
     assert Path(rolled_back["rollback_state"]).is_dir()
 
 
-@pytest.mark.parametrize("failure_point", ["volume_import", "partial_stop", "override_write", "unhealthy_up", "rollback_failure"])
+@pytest.mark.parametrize("failure_point", ["volume_import", "partial_stop", "override_write", "unhealthy_up", "context_during_rollback", "rollback_failure"])
 def test_restore_failure_restores_old_selection_and_retains_original_volumes(monkeypatch, tmp_path, failure_point):
     compose_dir = tmp_path / "client"
     compose_dir.mkdir()
@@ -258,8 +266,16 @@ def test_restore_failure_restores_old_selection_and_retains_original_volumes(mon
     switched = 0
     stop_attempts = 0
     override_writes = 0
+    context_calls = 0
 
-    monkeypatch.setattr(recovery, "_compose_context", lambda *_: (["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)))
+    def compose_context(*_args):
+        nonlocal context_calls
+        context_calls += 1
+        if failure_point == "context_during_rollback" and context_calls == 2:
+            raise RuntimeError("injected invalid Compose configuration")
+        return ["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)
+
+    monkeypatch.setattr(recovery, "_compose_context", compose_context)
     monkeypatch.setattr(recovery, "_running_services", lambda *_: list(running))
     monkeypatch.setattr(recovery, "_docker_volume_exists", lambda *_: False)
     monkeypatch.setattr(recovery, "_create_volume", lambda name, *_: created.append(name))
@@ -301,7 +317,7 @@ def test_restore_failure_restores_old_selection_and_retains_original_volumes(mon
         nonlocal switched
         switched += 1
         events.append(["up", *services])
-        if failure_point == "unhealthy_up" and switched == 1:
+        if failure_point in {"unhealthy_up", "context_during_rollback"} and switched == 1:
             raise RuntimeError("injected unhealthy startup")
         if failure_point == "rollback_failure" and switched <= 2:
             raise RuntimeError("injected unhealthy startup")

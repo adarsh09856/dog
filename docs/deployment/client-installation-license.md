@@ -1,13 +1,14 @@
 # Client installation license
 
-> **Implementation status:** the client/server verification path and read-only
-> settings status, owner issuance/revocation records and DNS challenge verification
-> are implemented. Owner-issued one-time installation-key enrollment, the client
-> enrollment CLI and read-only identity overlay are also implemented in code.
-> Renewal and staged key rotation are supported in code, but customer-image
-> enrollment, live key-rotation checks, complete worker/provider limits, pushed
-> owner alerts and full upgrade acceptance remain unverified.
-> Do not use this as a production sales or onboarding procedure yet.
+> **Implementation status:** owner issuance/revocation records, DNS challenge
+> verification, one-time installation-key enrollment, the client enrollment
+> CLI, signed owner status checks, and first-administrator bootstrap are
+> implemented. The CI acceptance harness exercises enrollment and bootstrap
+> against a disposable HTTPS owner peer and the built client image; its Docker
+> runtime result is not verified until the release workflow passes. Production
+> owner alert delivery, live key rotation/renewal, real customer domain/IP
+> binding, complete provider enforcement, and upgrade/rollback acceptance still
+> require separate acceptance before customer onboarding.
 
 ## License fields
 

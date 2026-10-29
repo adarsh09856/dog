@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -8,11 +9,19 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@/lib/kodewavesApi', () => ({ widgetsApi: mocks }));
 vi.mock('@/client/sdk.gen', () => ({ getWorkflowsApiV1WorkflowFetchGet: mocks.agents }));
+vi.mock('@/context/ClientBrandingContext', () => ({
+  useClientBranding: () => ({ primary_color: '#116b4b' }),
+}));
+type MockSelectProps = {
+  value?: string;
+  onValueChange?: (value: string) => void;
+  children?: ReactNode;
+};
 vi.mock('@/components/ui/select', () => ({
-  Select: ({ value, onValueChange, children }: any) => <select value={value} onChange={(event) => onValueChange(event.target.value)}>{children}</select>,
+  Select: ({ value, onValueChange, children }: MockSelectProps) => <select value={value} onChange={(event) => onValueChange?.(event.target.value)}>{children}</select>,
   SelectTrigger: () => null, SelectValue: () => null,
-  SelectContent: ({ children }: any) => <>{children}</>,
-  SelectItem: ({ value, children }: any) => <option value={value}>{children}</option>,
+  SelectContent: ({ children }: MockSelectProps) => <>{children}</>,
+  SelectItem: ({ value, children }: MockSelectProps) => <option value={value}>{children}</option>,
 }));
 import WidgetsPage from './page';
 
@@ -35,6 +44,7 @@ describe('website widget flows', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save Widget' }));
     await waitFor(() => expect(mocks.createWidget).toHaveBeenCalledWith(expect.objectContaining({
       workflow_id: 10, allowed_domains: ['example.test', 'support.test'], is_active: true,
+      primary_color: '#116b4b',
     })));
   });
 

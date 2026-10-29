@@ -21,7 +21,8 @@ vi.mock("@/components/workflow/conversation", () => ({
 
 vi.mock("../../run/[runId]/components", () => ({
     ApiKeyErrorDialog: () => null,
-    ConnectionStatus: () => null,
+    ConnectionStatus: ({ connectionStatus }: { connectionStatus: string }) =>
+        connectionStatus === "connecting" ? <div>Establishing Connection...</div> : null,
     WorkflowConfigErrorDialog: () => null,
 }));
 
@@ -37,12 +38,13 @@ function baseHookReturn(opts: {
     appConfigLoading: boolean;
     backendStatus?: BackendStatus;
     isStarting?: boolean;
+    connectionActive?: boolean;
     connectionStatus?: string;
     isCompleted?: boolean;
 }) {
     return {
         audioRef: { current: null },
-        connectionActive: false,
+        connectionActive: opts.connectionActive ?? false,
         permissionError: null,
         isCompleted: opts.isCompleted ?? false,
         apiKeyModalOpen: false,
@@ -80,6 +82,47 @@ describe("EmbeddedVoiceTester auto-start", () => {
         render(<EmbeddedVoiceTester {...props} />);
 
         expect(start).not.toHaveBeenCalled();
+        expect(screen.getByRole("button", { name: /start test/i }).disabled).toBe(true);
+    });
+
+    it("shows one connecting indicator and prevents duplicate starts during signaling", () => {
+        const start = vi.fn();
+        useWebSocketRTCMock.mockReturnValue(
+            baseHookReturn({
+                start,
+                refreshAppConfig: vi.fn(),
+                appConfigLoading: false,
+                backendStatus: "reachable",
+                isStarting: false,
+                connectionStatus: "connecting",
+            })
+        );
+
+        render(<EmbeddedVoiceTester {...props} />);
+
+        const button = screen.getByRole("button", { name: /connecting/i }) as HTMLButtonElement;
+        expect(button.disabled).toBe(true);
+        expect(screen.queryByText("Establishing Connection...")).toBeNull();
+    });
+
+    it("keeps the active-call end action available if app config becomes unavailable", () => {
+        const stop = vi.fn();
+        useWebSocketRTCMock.mockReturnValue({
+            ...baseHookReturn({
+                start: vi.fn(),
+                refreshAppConfig: vi.fn(),
+                appConfigLoading: true,
+                connectionActive: true,
+            }),
+            stop,
+        });
+
+        render(<EmbeddedVoiceTester {...props} />);
+
+        const endButton = screen.getByRole("button", { name: /end call/i }) as HTMLButtonElement;
+        expect(endButton.disabled).toBe(false);
+        fireEvent.click(endButton);
+        expect(stop).toHaveBeenCalledTimes(1);
     });
 
     it("calls start() once appConfig finishes loading with a reachable backend", () => {

@@ -14,6 +14,6 @@ export const DEFAULT_BRANDING: PlatformBranding = {
   logo_url: "",
   favicon_url: "",
   support_email: "",
-  primary_color: "#304c73",
+  primary_color: "#426b57",
   font: "geist",
 };

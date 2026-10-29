@@ -87,7 +87,10 @@ def required_feature_for_request(path: str, query_string: bytes = b"") -> str | 
     route_path = path.removeprefix("/api/v1") if path.startswith("/api/v1/") else path
     if route_path in {"/s3/signed-url", "/s3/file-metadata"}:
         query = parse_qs(query_string.decode("latin-1"), keep_blank_values=True)
-        key = query.get("key", [""])[0]
+        keys = query.get("key", [""])
+        if len(keys) != 1:
+            raise ValueError("Multiple storage keys are not allowed")
+        key = keys[0]
         if key.startswith("campaigns/"):
             return "campaigns"
         if key.startswith("knowledge_base/"):

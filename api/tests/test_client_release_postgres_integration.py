@@ -43,6 +43,7 @@ from api.db.kodewaves_models import (
 from api.db.user_client import UserClient
 from api.db.client_user_management import list_workspace_users, set_workspace_user_active
 from api.db import db_client
+from api.services import bootstrap_client_admin
 from api.services import client_creation_limits
 from api.services import installation_license
 from api.routes.admin import client_installation_check
@@ -453,6 +454,115 @@ async def test_concurrent_client_signups_cannot_exceed_signed_seat_limit(monkeyp
         assert sum(user is not None for user in users) == 2
         async with engine.connect() as conn:
             assert (await conn.execute(text("SELECT count(*) FROM users"))).scalar_one() == 2
+    finally:
+        await engine.dispose()
+        if schema_created:
+            async with admin_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_signed_client_license_bootstraps_first_admin_and_workspace_in_postgres(monkeypatch):
+    """Exercise the real first-admin transaction with a verified client license."""
+    database_url = _disposable_database_url()
+    schema = f"client_bootstrap_{uuid.uuid4().hex}"
+    admin_engine = create_async_engine(database_url)
+    engine = create_async_engine(
+        database_url, connect_args={"server_settings": {"search_path": schema}}
+    )
+    schema_created = False
+    try:
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "CREATE TYPE quota_type AS ENUM ('monthly', 'annual')"
+            ))
+            await conn.execute(text("""CREATE TABLE organizations (
+                id SERIAL PRIMARY KEY, provider_id VARCHAR NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ, status VARCHAR NOT NULL DEFAULT 'active',
+                quota_type quota_type NOT NULL DEFAULT 'monthly',
+                quota_dograh_tokens INTEGER NOT NULL DEFAULT 0,
+                quota_reset_day INTEGER NOT NULL DEFAULT 1,
+                quota_start_date TIMESTAMPTZ,
+                quota_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                price_per_second_usd FLOAT
+            )"""))
+            await conn.execute(text("""CREATE TABLE users (
+                id SERIAL PRIMARY KEY, provider_id VARCHAR NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ,
+                selected_organization_id INTEGER REFERENCES organizations(id),
+                is_superuser BOOLEAN, is_active BOOLEAN NOT NULL,
+                email VARCHAR, password_hash VARCHAR
+            )"""))
+            await conn.execute(text("""CREATE TABLE organization_users (
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                organization_id INTEGER NOT NULL REFERENCES organizations(id),
+                PRIMARY KEY (user_id, organization_id)
+            )"""))
+
+        key = Ed25519PrivateKey.generate()
+        private_key = key.private_bytes(
+            serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+            serialization.NoEncryption(),
+        )
+        public_key = base64.urlsafe_b64encode(key.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+        )).rstrip(b"=").decode("ascii")
+        now = int(time.time())
+        installation_id = "bootstrap-integration-1"
+        token = issue_license_token({
+            "iat": now - 1, "exp": now + 3600, "edition": "client",
+            "installation_id": installation_id, "customer_id": "customer-1",
+            "domains": ["customer.example"], "features": ["voice"],
+            "limits": {"max_seats": 3, "max_workspaces": 1},
+        }, private_key)
+        monkeypatch.setenv("KODEWAVES_INSTALLATION_ID", installation_id)
+        verified_license = installation_license.load_license(
+            token, public_key=public_key, now=now,
+        )
+        monkeypatch.setattr(bootstrap_client_admin, "KODEWAVES_EDITION", "client")
+        monkeypatch.setattr(bootstrap_client_admin, "AUTH_PROVIDER", "local")
+        monkeypatch.setattr(bootstrap_client_admin, "load_license", lambda: verified_license)
+        monkeypatch.setattr(
+            bootstrap_client_admin, "validate_installation_license",
+            lambda license_data: installation_license.validate_installation_license(
+                license_data, request_hostname="customer.example",
+            ),
+        )
+        monkeypatch.setattr(bootstrap_client_admin, "verify_configured_release", lambda: None)
+        monkeypatch.setattr(
+            bootstrap_client_admin, "enforce_client_creation_limit", AsyncMock(),
+        )
+        monkeypatch.setattr(bootstrap_client_admin.db_client, "async_session", async_sessionmaker(engine))
+        administrator_id = await bootstrap_client_admin.bootstrap_client_admin(
+            "Admin@Customer.Example", "long-enough-password-123",
+        )
+
+        async with engine.connect() as conn:
+            user = (await conn.execute(text(
+                "SELECT email, is_superuser, is_active, selected_organization_id "
+                "FROM users WHERE id = :id"
+            ), {"id": administrator_id})).one()
+            workspace = (await conn.execute(text(
+                "SELECT provider_id FROM organizations WHERE id = :id"
+            ), {"id": user.selected_organization_id})).one()
+            membership_count = (await conn.execute(text(
+                "SELECT count(*) FROM organization_users "
+                "WHERE user_id = :user_id AND organization_id = :organization_id"
+            ), {"user_id": administrator_id, "organization_id": user.selected_organization_id})).scalar_one()
+            assert tuple(user[:3]) == ("admin@customer.example", True, True)
+            assert workspace.provider_id.startswith("org_oss_bootstrap_")
+            assert membership_count == 1
+            assert (await conn.execute(text("SELECT count(*) FROM users"))).scalar_one() == 1
+            assert (await conn.execute(text("SELECT count(*) FROM organizations"))).scalar_one() == 1
+
+        with pytest.raises(ValueError, match="only before the first account"):
+            await bootstrap_client_admin.bootstrap_client_admin(
+                "second@customer.example", "long-enough-password-123",
+            )
     finally:
         await engine.dispose()
         if schema_created:

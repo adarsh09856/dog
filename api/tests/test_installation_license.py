@@ -640,6 +640,13 @@ def test_client_http_and_websocket_requests_are_gated(monkeypatch):
     assert middleware.required_feature_for_request(
         "/api/v1/s3/signed-url", b"key=recordings%2F22.wav"
     ) == "voice"
+    for path in ("/api/v1/s3/signed-url", "/api/v1/s3/file-metadata"):
+        passed, messages = asyncio.run(run(dict(
+            base, path=path,
+            query_string=b"key=recordings%2F22.wav&key=campaigns%2F2%2Fcontacts.csv",
+        )))
+        assert not passed
+        assert messages[0]["status"] == 402
 
     for widget_path in ("/api/v1/workflow/21/embed-token", "/api/v1/ws/public/signaling/session"):
         scope = dict(base, path=widget_path, type="websocket" if "/ws/" in widget_path else "http")

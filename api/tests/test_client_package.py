@@ -83,6 +83,10 @@ def test_identity_preflight_requires_an_existing_private_key_and_group(tmp_path,
     values = {"CLIENT_IDENTITY_KEY_FILE": str(path), "CLIENT_IDENTITY_GID": group}
     assert validate_install.validate_identity_key(values) == []
     if os.name != "nt":
+        path.chmod(0o440)
+        assert any("0640" in error for error in validate_install.validate_identity_key(values))
+        path.chmod(0o740)
+        assert any("0640" in error for error in validate_install.validate_identity_key(values))
         path.chmod(0o644)
         assert any("inaccessible to others" in error for error in validate_install.validate_identity_key(values))
     path.write_bytes(b"short")

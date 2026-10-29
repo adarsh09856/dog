@@ -47,7 +47,7 @@ jobs:
           python-version: "3.13"
       - name: Install API and test dependencies
         run: |
-          python -m pip install -r api/requirements.txt pytest pytest-asyncio httpx cryptography
+          python -m pip install -r api/requirements.txt pytest pytest-asyncio httpx cryptography aiosqlite==0.22.1
           # Keep the route-import test environment aligned with api/Dockerfile.
           python -m pip install './pipecat[cartesia,deepgram,openai,elevenlabs,groq,google,azure,sarvam,soundfile,silero,webrtc,speechmatics,openrouter,camb,mcp,inworld,smallest,aws-nova-sonic]'
           python -m pip uninstall -y opencv-python
@@ -58,10 +58,31 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://kodewaves_test:disposable_ci_password@127.0.0.1:5432/kodewaves_client_release_test
           REDIS_URL: redis://127.0.0.1:6379/15
         run: python -m pytest --noconftest api/tests/test_client_release_postgres_integration.py -q
+      - name: Verify owner issuance, identity and signed installation checks
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test
+          REDIS_URL: redis://127.0.0.1:1/15
+        run: >-
+          python -m pytest --noconftest
+          api/tests/test_client_installation_features.py
+          api/tests/test_client_installation_issuance.py
+          api/tests/test_client_installation_check.py
+          api/tests/test_installation_identity.py
+          api/tests/test_owner_installation_database.py -q
+      - name: Verify migration graph has one head
+        run: |
+          python scripts/check_alembic_single_head.py
+          python -m pytest --noconftest api/tests/test_release_schema.py -q
       - name: Verify installer and image-verification orchestration
         run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py -q
+      - name: Verify client backup and recovery failure handling
+        run: |
+          sudo setpriv --reuid 0 --regid 1234 --clear-groups "$(command -v python)" -m pytest --noconftest -p no:cacheprovider api/tests/test_client_recovery_archive.py api/tests/test_client_recovery_docker.py -q
       - name: Verify owner-route authorization
         run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_deployment_edition.py -q
+      - name: Verify storage metadata tenant isolation
+        run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_s3_signed_url.py -q
       - name: Verify client startup failure handling
         run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_client_startup_entrypoint.py -q
       - name: Verify signed license and feature boundaries
@@ -119,9 +140,21 @@ jobs:
       - name: Install UI dependencies
         working-directory: ui
         run: npm ci
-      - name: Verify owner installation renewal and revocation UI
+      - name: Verify owner installation, shared theme and workflow UI
         working-directory: ui
-        run: npm test -- --run src/app/admin/client-installations/page.test.tsx
+        run: >-
+          npm test -- --config vitest.panel-check.mts --run
+          'src/app/handler/[...stack]/stack-theme.test.ts'
+          src/app/admin/client-installations/page.test.tsx
+          src/app/page.test.tsx
+          src/app/pricing/page.test.tsx
+          src/app/widgets/page.test.tsx
+          src/components/BrandTagline.test.tsx
+          src/components/telephony/SipConnectivityCard.test.tsx
+          src/components/layout/AppLayout.test.tsx
+          'src/app/workflow/[workflowId]/run/[runId]/components/ConnectionStatus.test.tsx'
+          'src/app/workflow/[workflowId]/components/workflow-tester/EmbeddedVoiceTester.test.tsx'
+          src/lib/brandingTheme.test.ts
 
   verify:
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/codex/client-bundle-theme'

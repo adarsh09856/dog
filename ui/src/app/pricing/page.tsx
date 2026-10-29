@@ -11,6 +11,7 @@ import {
   type PublicCreditPackage,
   type PublicSaaSPlan,
 } from "@/lib/kodewavesApi";
+
 import styles from "./PricingSurface.module.css";
 
 function money(cents: number, currency: string) {
@@ -26,6 +27,12 @@ function money(cents: number, currency: string) {
   } catch {
     return `${currency} ${(cents / 100).toFixed(2)}`;
   }
+}
+
+function formatCount(value: number | null | undefined) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value.toLocaleString()
+    : "—";
 }
 
 const faqs = [
@@ -205,7 +212,11 @@ export default function PricingPage() {
             const price = billingCycle === "annual"
               ? plan.annual_price_cents
               : plan.monthly_price_cents;
-            const available = billingCycle !== null && Number.isFinite(price) && Boolean(plan.currency);
+            const pricingDataAvailable =
+              Number.isSafeInteger(plan.monthly_price_cents) && plan.monthly_price_cents >= 0 &&
+              Number.isSafeInteger(plan.annual_price_cents) && plan.annual_price_cents >= 0 &&
+              typeof plan.currency === "string" && /^[A-Za-z]{3}$/.test(plan.currency);
+            const available = pricingDataAvailable && billingCycle !== null;
             return (
               <article
                 key={plan.id}
@@ -221,28 +232,38 @@ export default function PricingPage() {
                 </p>
                 <div className="my-7 border-y border-border py-5">
                   <p className="text-4xl font-semibold tracking-tight tabular-nums">
-                    {available ? money(price, plan.currency) : billingCycle ? "Price unavailable" : "Free"}
+                    {!pricingDataAvailable
+                      ? "Price unavailable"
+                      : available
+                        ? money(price, plan.currency)
+                        : billingCycle
+                          ? "Price unavailable"
+                          : "Free"}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {billingCycle
-                      ? `${plan.currency} · one-time payment for ${billingCycle === "annual" ? "365 days" : "30 days"} of access`
-                      : "No payment required for this plan"}
+                    {!pricingDataAvailable
+                      ? "Payment terms unavailable"
+                      : billingCycle
+                        ? `${plan.currency} · one-time payment for ${billingCycle === "annual" ? "365 days" : "30 days"} of access`
+                        : "No payment required for this plan"}
                   </p>
                 </div>
                 <ul className="mb-8 space-y-3 text-sm">
                   <li className="flex gap-3">
                     <Check className="size-4 shrink-0 text-cta-text" />
-                    {plan.included_minutes.toLocaleString()} {billingCycle
+                    {formatCount(plan.included_minutes)} {pricingDataAvailable && billingCycle
                       ? "minutes credited per payment"
-                      : "one-time trial minutes on activation"}
+                      : pricingDataAvailable
+                        ? "one-time trial minutes on activation"
+                        : "included minutes"}
                   </li>
                   <li className="flex gap-3">
                     <Check className="size-4 shrink-0 text-cta-text" />
-                    {plan.max_agents.toLocaleString()} agents
+                    {formatCount(plan.max_agents)} agents
                   </li>
                   <li className="flex gap-3">
                     <Check className="size-4 shrink-0 text-cta-text" />
-                    {plan.max_concurrent_calls.toLocaleString()} concurrent
+                    {formatCount(plan.max_concurrent_calls)} concurrent
                     calls
                   </li>
                   {plan.features?.map((feature) => (

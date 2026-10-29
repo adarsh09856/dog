@@ -89,6 +89,38 @@ def _archive(path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str
             archive.addfile(member, io.BytesIO(data))
 
 
+@pytest.mark.parametrize("gid", ["0", "-1", "2147483648"])
+def test_backup_rejects_group_ids_that_restore_cannot_accept(tmp_path, gid):
+    inputs = _create_archive_inputs(tmp_path)
+    inputs["env"].write_bytes(inputs["env"].read_bytes().replace(
+        b"CLIENT_IDENTITY_GID=1234", f"CLIENT_IDENTITY_GID={gid}".encode()
+    ))
+    output = tmp_path / "invalid.tar.gz"
+    with pytest.raises(ValueError, match="CLIENT_IDENTITY_GID must be between"):
+        recovery.create_archive(
+            postgres_tar=inputs["postgres"], minio_tar=inputs["minio"],
+            env_file=inputs["env"], manifest=inputs["manifest"],
+            release_public_key=inputs["public_key"], identity_key=inputs["identity"],
+            output=output, writers_stopped=True,
+        )
+    assert not output.exists()
+
+
+def test_backup_rejects_a_different_installation_key(tmp_path):
+    inputs = _create_archive_inputs(tmp_path)
+    wrong_key = tmp_path / "wrong.key"
+    wrong_key.write_bytes(b"x" * 32)
+    output = tmp_path / "wrong-key.tar.gz"
+    with pytest.raises(ValueError, match="differs from CLIENT_IDENTITY_KEY_FILE"):
+        recovery.create_archive(
+            postgres_tar=inputs["postgres"], minio_tar=inputs["minio"],
+            env_file=inputs["env"], manifest=inputs["manifest"],
+            release_public_key=inputs["public_key"], identity_key=wrong_key,
+            output=output, writers_stopped=True,
+        )
+    assert not output.exists()
+
+
 def test_recovery_archive_validates_without_extracting(tmp_path):
     path = tmp_path / "backup.tar.gz"
     _archive(path)
