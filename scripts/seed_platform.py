@@ -42,10 +42,11 @@ async def seed_global_settings():
             "category": "branding",
             "value": {
                 "platform_name": "Kodewaves Sovereign Platform",
-                "company_name": "Kodewaves Inc.",
+                "company_name": "Kodewaves",
+                "tagline": "Voice agents for web and phone",
                 "logo_url": "",
                 "favicon_url": "/kodewaves-mark.svg",
-                "primary_color": "#0284c7",
+                "primary_color": "#426b57",
                 "support_email": "support@kodewaves.in",
             },
         },

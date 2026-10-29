@@ -4,7 +4,7 @@ import re
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class PlatformBranding(BaseModel):
@@ -13,8 +13,34 @@ class PlatformBranding(BaseModel):
     logo_url: str = Field(default="", max_length=500)
     favicon_url: str = Field(default="/kodewaves-mark.svg", max_length=500)
     support_email: str = Field(default="", max_length=254)
-    primary_color: str = "#304c73"
+    primary_color: str = "#426b57"
     font: Literal["geist", "system"] = "geist"
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_seed_brand(cls, value: object) -> object:
+        # Upgrade the exact original Kodewaves seed tuple, not customer-selected
+        # colors or branding. Existing seeded installs otherwise keep the old
+        # blue logo identity after the new shared theme is deployed.
+        if not isinstance(value, dict):
+            return value
+        legacy_seed = {
+            "platform_name": "Kodewaves Sovereign Platform",
+            "company_name": "Kodewaves Inc.",
+            "logo_url": "/logo.png",
+            "favicon_url": "/favicon.ico",
+            "primary_color": "#0284c7",
+            "support_email": "support@kodewaves.in",
+        }
+        if all(value.get(key) == expected for key, expected in legacy_seed.items()):
+            value = {
+                **value,
+                "company_name": "Kodewaves",
+                "logo_url": "",
+                "favicon_url": "/kodewaves-mark.svg",
+                "primary_color": "#426b57",
+            }
+        return value
 
     @field_validator("company_name", "tagline")
     @classmethod

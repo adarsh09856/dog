@@ -22,7 +22,7 @@ class PlatformSettingsResponse(BaseModel):
     font: str = "geist"
     logo_url: Optional[str] = ""
     support_email: Optional[str] = ""
-    primary_color: Optional[str] = "#304c73"
+    primary_color: Optional[str] = "#426b57"
     allow_user_byok: bool = False
     enforce_wallet_balance: bool = True
     enable_local_ai_engine: bool = False
@@ -84,8 +84,8 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
         return "••••••••" + val[-4:]
 
     return PlatformSettingsResponse(
-        company_name=branding.get("company_name", "Kodewaves"),
-        tagline=branding.get("tagline", "Voice agents for web and phone"),
+        company_name=normalized_branding.company_name,
+        tagline=normalized_branding.tagline,
         favicon_url=normalized_branding.favicon_url,
         font=normalized_branding.font,
         logo_url=normalized_branding.logo_url,

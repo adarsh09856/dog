@@ -4,16 +4,58 @@ from unittest.mock import AsyncMock
 import pytest
 
 from api.routes import installation
+from api.routes.admin import settings as admin_settings
 from api.schemas.branding import PlatformBranding
 
 
 def test_legacy_seed_branding_uses_current_kodewaves_assets():
     branding = PlatformBranding.model_validate(
-        {"logo_url": "/logo.png", "favicon_url": "/favicon.ico"}
+        {
+            "platform_name": "Kodewaves Sovereign Platform",
+            "company_name": "Kodewaves Inc.",
+            "logo_url": "/logo.png",
+            "favicon_url": "/favicon.ico",
+            "primary_color": "#0284c7",
+            "support_email": "support@kodewaves.in",
+        }
     )
 
+    assert branding.company_name == "Kodewaves"
     assert branding.logo_url == ""
     assert branding.favicon_url == "/kodewaves-mark.svg"
+    assert branding.primary_color == "#426b57"
+
+
+def test_defaults_match_the_shared_kodewaves_theme():
+    branding = PlatformBranding()
+
+    assert branding.company_name == "Kodewaves"
+    assert branding.primary_color == "#426b57"
+    assert branding.favicon_url == "/kodewaves-mark.svg"
+
+
+@pytest.mark.asyncio
+async def test_admin_settings_read_normalizes_only_the_legacy_platform_seed(monkeypatch):
+    get_settings = AsyncMock(
+        return_value={
+            "branding": {
+                "platform_name": "Kodewaves Sovereign Platform",
+                "company_name": "Kodewaves Inc.",
+                "logo_url": "/logo.png",
+                "favicon_url": "/favicon.ico",
+                "primary_color": "#0284c7",
+                "support_email": "support@kodewaves.in",
+            }
+        }
+    )
+    monkeypatch.setattr(admin_settings.kodewaves_db_client, "get_settings_map", get_settings)
+
+    result = await admin_settings.get_all_platform_settings(_user=SimpleNamespace(id=1))
+
+    assert result.company_name == "Kodewaves"
+    assert result.logo_url == ""
+    assert result.favicon_url == "/kodewaves-mark.svg"
+    assert result.primary_color == "#426b57"
 
 
 def test_custom_brand_assets_are_preserved():
