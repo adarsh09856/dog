@@ -160,7 +160,7 @@ export default function AdminPlansPage() {
           <CardTitle className="text-base flex items-center justify-between">
             <span>Available Tiers ({plans.length})</span>
             <Badge variant="outline" className="text-xs">
-              Direct Local Wallet Billing
+              Wallet access
             </Badge>
           </CardTitle>
           <CardDescription>

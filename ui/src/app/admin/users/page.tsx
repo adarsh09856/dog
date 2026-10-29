@@ -349,7 +349,7 @@ export default function AdminUsersPage() {
           <span className={admin.kicker}>IDENTITY / ACCOUNTS</span>
           <h1 className={admin.title}>User Management & Platform Governance</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Complete AgentLabs-grade controls: provision users, grant promo credits, adjust quotas, reset passwords, and manage status.
+            Provision accounts, adjust balances and quotas, reset access, and review account status.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -424,12 +424,10 @@ export default function AdminUsersPage() {
               <Users className="h-5 w-5 text-primary" />
               <span>Registered Accounts ({users.length})</span>
             </div>
-            <Badge variant="secondary" className="text-xs">
-              100% Real PostgreSQL Data
-            </Badge>
+            <Badge variant="secondary" className="text-xs">Account directory</Badge>
           </CardTitle>
           <CardDescription>
-            Live tenant registry with minute balances, call logs, and instant superadmin control actions.
+            Account records, usage, wallet balances, and owner actions in one place.
           </CardDescription>
         </CardHeader>
         <CardContent>
