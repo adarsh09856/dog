@@ -290,9 +290,10 @@ def test_known_caller_details_do_not_mutate_cached_system_prefix():
         and "Caller name explicitly provided:" in message.get("content", "")
         for message in prepared
     )
-    assert "My name is Adarsh." in [
-        message.get("content") for message in prepared if message.get("role") == "user"
-    ]
+    assert any(
+        "My name is Adarsh." in message.get("content", "")
+        for message in prepared if message.get("role") == "user"
+    )
 
 
 def test_first_caller_reply_preserves_configured_handoff_but_hides_unconfirmed_booking():

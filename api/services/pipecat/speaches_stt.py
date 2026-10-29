@@ -99,6 +99,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         self._stable_detected_language: str | None = None
         self._latest_language_confidence: float | None = None
         self._recognizing_segment = False
+        self.phone_capture_pending = None
 
     async def select_caller_language(self, language: str) -> bool:
         """Honor a caller language choice without disabling automatic STT.
@@ -235,12 +236,16 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         language_confidence = None
         language_route = "configured"
         self.latest_tts_language = None
+        phone_capture = bool(
+            callable(self.phone_capture_pending) and self.phone_capture_pending()
+        )
+        local_indic = settings is not None and settings.model == "indicconformer-ctc-int8"
+        auto_language = settings is not None and _is_auto_language(settings.language)
         if (
             settings is not None
-            and _is_auto_language(settings.language)
             and (
-                str(settings.model).startswith("Systran/faster-whisper-")
-                or settings.model == "indicconformer-ctc-int8"
+                (auto_language and str(settings.model).startswith("Systran/faster-whisper-"))
+                or (local_indic and (auto_language or phone_capture))
             )
         ):
             kwargs = {
@@ -248,12 +253,19 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 "model": settings.model,
                 "response_format": "verbose_json",
             }
-            if settings.prompt is not None:
+            if local_indic and not auto_language:
+                kwargs["language"] = str(settings.language).split("-", 1)[0]
+            if settings.prompt is not None and not local_indic:
                 kwargs["prompt"] = settings.prompt
             if settings.temperature is not None:
                 kwargs["temperature"] = settings.temperature
-            if settings.model == "indicconformer-ctc-int8" and self._stable_detected_language:
-                kwargs["extra_body"] = {"fallback_language": self._stable_detected_language}
+            extra_body = {}
+            if local_indic and auto_language and self._stable_detected_language:
+                extra_body["fallback_language"] = self._stable_detected_language
+            if local_indic and phone_capture:
+                extra_body["phone_capture"] = True
+            if extra_body:
+                kwargs["extra_body"] = extra_body
             result = await self._client.audio.transcriptions.create(**kwargs)
             response_extra = getattr(result, "model_extra", None) or {}
             raw_confidence = response_extra.get("language_confidence")
@@ -265,7 +277,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             detected_language = response_extra.get("detected_language") or selected
             if isinstance(detected_language, str):
                 detected_language = detected_language.strip().lower()
-            if settings.model == "indicconformer-ctc-int8":
+            if local_indic:
                 self.latest_detected_language = (
                     selected.strip().lower() if isinstance(selected, str) and selected.strip() else None
                 )

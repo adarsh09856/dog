@@ -135,11 +135,22 @@ def test_completed_booking_phone_advances_to_date_without_repeating_digits():
         {"role": "user", "content": "मेरा नंबर 9999999999 है।"},
     ]
     state = {"caller_name": "आदर्श"}
-    assert caller_phone_fragment_reply(messages, state) is None
+    confirmation = caller_phone_fragment_reply(messages, state)
+    assert confirmation == (
+        "मैंने नंबर एक-एक अंक करके सुना: नौ, नौ, नौ, नौ, नौ, नौ, नौ, नौ, नौ, नौ। "
+        "क्या यह सही है? हाँ कहें या नंबर दोहराएँ।"
+    )
+    assert state["caller_phone_confirmation_pending"] == "9999999999"
+    messages.extend([
+        {"role": "assistant", "content": confirmation},
+        {"role": "user", "content": "हाँ"},
+    ])
+    assert caller_phone_fragment_reply(messages, state) == (
+        "धन्यवाद। किस तारीख और समय के लिए बुक करना चाहेंगे?"
+    )
     assert state["caller_phone"] == "9999999999"
     reply = booking_phone_date_question(messages, state)
     assert reply == "धन्यवाद। किस तारीख और समय के लिए बुक करना चाहेंगे?"
-    assert "9999999999" not in reply
     assert booking_phone_date_question(messages, state) is None
     assert booking_phone_date_question(messages[2:], {
         "caller_phone": "9999999999", "phone_just_completed": "9999999999"

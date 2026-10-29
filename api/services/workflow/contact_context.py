@@ -430,8 +430,10 @@ def booking_date_time_question(
         stated_date = _explicit_caller_booking_date([latest], reference_date=today)
     if not stated_date:
         return None
-    if state.get("booking_time_question_date") == stated_date:
-        return None
+    # A caller may repeat the same relative date after an unclear time (for
+    # example, ASR text such as "Tomorrow's telepm"). Returning None here lets
+    # the LLM fill the missing time with a plausible but invented default.
+    # Keep the date and ask only for the still-missing time again.
     state["booking_time_question_date"] = stated_date
     parsed = date.fromisoformat(stated_date)
     hindi = state.get("reply_language") == "Hindi" or bool(

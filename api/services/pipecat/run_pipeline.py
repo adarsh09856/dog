@@ -931,6 +931,18 @@ async def _run_pipeline_impl(
             keyterms=keyterms,
             correlation_id=mps_correlation_id,
         )
+        if (
+            stt is not None
+            and getattr(user_config.stt, "model", None) == "indicconformer-ctc-int8"
+            and getattr(user_config.stt, "api_key", None)
+            in {"sovereign-local-cpu", "local-cpu-token"}
+        ):
+            # Local STT can try its already-warm English decoder during phone
+            # capture. This stays per segment and does not change the selected
+            # language for the rest of the call.
+            stt.phone_capture_pending = lambda: bool(
+                getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+            )
         tts = create_tts_service(
             user_config,
             audio_config,

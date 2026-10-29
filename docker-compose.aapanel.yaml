@@ -239,6 +239,11 @@ services:
       - --fingerprint
       - --lt-cred-mech
       - --realm=${PUBLIC_HOST:-localhost}
+      # Coturn runs behind Docker NAT. SERVER_IP is the mapped public IPv4;
+      # the published relay port range preserves each port number.
+      - --external-ip=${SERVER_IP:?Set SERVER_IP to this server's public IPv4}
+      - --min-port=49152
+      - --max-port=49350
       - --static-auth-secret=${TURN_SECRET:-coturn_shared_secret}
     environment:
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"

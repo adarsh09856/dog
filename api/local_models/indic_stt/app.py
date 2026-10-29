@@ -12,6 +12,7 @@ import asyncio
 import io
 import logging
 import os
+import re
 import time
 from collections import OrderedDict
 from pathlib import Path
@@ -67,6 +68,76 @@ PREWARM = os.environ.get("INDIC_STT_PREWARM_LANGUAGES", "").strip().lower()
 THREADS = max(1, int(os.environ.get("INDIC_STT_THREADS", "2")))
 LID_ENABLED = os.environ.get("INDIC_STT_AUTO_DETECT", "1").strip().lower() not in {"0", "false", "no"}
 LID_THREADS = max(1, int(os.environ.get("INDIC_STT_LID_THREADS", "2")))
+
+_PHONE_DIGIT_WORDS = {
+    "zero": "0", "oh": "0", "shunya": "0", "शून्य": "0", "जीरो": "0",
+    "one": "1", "एक": "1", "वन": "1", "ओन": "1", "two": "2", "दो": "2", "टू": "2", "three": "3",
+    "तीन": "3", "थ्री": "3", "four": "4", "चार": "4", "फोर": "4",
+    "five": "5", "पांच": "5", "पाँच": "5", "फाइव": "5", "six": "6",
+    "छह": "6", "सिक्स": "6", "seven": "7", "सात": "7", "सेवन": "7",
+    "eight": "8", "आठ": "8", "एट": "8", "ऐट": "8", "nine": "9", "नौ": "9", "ज़ीरो": "0",
+    "नाइन": "9", "double": "double", "डबल": "double", "ડબલ": "double", "டபுள்": "double",
+    # Keep the rescue scorer aligned with the call-side phone parser: Hindi
+    # ASR often renders English digit names phonetically in Devanagari.
+    "नीन": "9", "निन": "9", "नान": "9", "नाईन": "9",
+    "थी": "3", "आइट": "8", "आईट": "8",
+    # Match the call-scoped phone parser's explicit regional spellings. Without
+    # these, a valid regional-script primary decode can look like zero digits
+    # and incorrectly lose to a poorer English rescue candidate.
+    "শূন্য": "0", "এক": "1", "দুই": "2", "তিন": "3", "চার": "4",
+    "পাঁচ": "5", "ছয়": "6", "সাত": "7", "আট": "8", "নয়": "9",
+    "பூஜ்யம்": "0", "ஒன்று": "1", "இரண்டு": "2", "மூன்று": "3", "நான்கு": "4",
+    "ஐந்து": "5", "ஆறு": "6", "ஏழு": "7", "எட்டு": "8", "ஒன்பது": "9",
+    "సున్నా": "0", "ఒకటి": "1", "రెండు": "2", "మూడు": "3", "నాలుగు": "4",
+    "ఐదు": "5", "ఆరు": "6", "ఏడు": "7", "ఎనిమిది": "8", "తొమ్మిది": "9",
+    "ಸೊನ್ನೆ": "0", "ಒಂದು": "1", "ಎರಡು": "2", "ಮೂರು": "3", "ನಾಲ್ಕು": "4",
+    "ಐದು": "5", "ಆರು": "6", "ಏಳು": "7", "ಎಂಟು": "8", "ಒಂಬತ್ತು": "9",
+    "പൂജ്യം": "0", "ഒന്ന്": "1", "രണ്ട്": "2", "മൂന്ന്": "3", "നാല്": "4",
+    "അഞ്ച്": "5", "ആറ്": "6", "ഏഴ്": "7", "എട്ട്": "8", "ഒൻപത്": "9",
+    "ਸਿਫ਼ਰ": "0", "ਇੱਕ": "1", "ਦੋ": "2", "ਤਿੰਨ": "3", "ਚਾਰ": "4",
+    "ਪੰਜ": "5", "ਛੇ": "6", "ਸੱਤ": "7", "ਅੱਠ": "8", "ਨੌਂ": "9",
+    "दोन": "2", "पाच": "5", "सहा": "6", "नऊ": "9",
+    # Phonetic Gujarati and Tamil renderings of English digit words accepted
+    # by the call-side parser must count as primary-recognizer evidence too.
+    "નાઇન": "9", "નાઈટ": "9", "ફાઇવ": "5", "ફાઈવ": "5",
+    "થ્રી": "3", "એઇટ": "8", "એઈટ": "8", "ફોર": "4", "વન": "1",
+    "જીરો": "0", "ઝીરો": "0",
+    "நைன்": "9",
+    "ஜீரோ": "0", "ஜிரோ": "0", "ஃபோர்": "4", "ஃபைவ்": "5",
+    "பைவ்": "5", "த்ரீ": "3", "எய்ட்": "8", "ஏய்ட்": "8",
+    "ஏஐட்": "8",
+}
+
+
+def _phone_digit_count(text: str) -> int:
+    """Count explicit digit groups without interpreting general number words."""
+    tokens = [
+        token.strip("()[]{}\"'")
+        for token in re.split(r"[\s,.!?।॥:;\-–—]+", str(text or "").casefold())
+        if token.strip("()[]{}\"'")
+    ]
+    count = 0
+    repeat_next = False
+    for token in tokens:
+        if token.isdecimal():
+            count += len(token)
+            repeat_next = False
+            continue
+        value = _PHONE_DIGIT_WORDS.get(token)
+        if value == "double":
+            repeat_next = True
+        elif value is not None:
+            count += 2 if repeat_next else 1
+            repeat_next = False
+        else:
+            repeat_next = False
+    return count
+
+
+def _phone_rescue_is_better(primary: str, english: str) -> bool:
+    """Use an English candidate only when it recovers a clear digit sequence."""
+    english_digits = _phone_digit_count(english)
+    return english_digits >= 3 and english_digits > _phone_digit_count(primary)
 
 app = FastAPI(title="Kodewaves Indic CPU STT")
 _loaded: OrderedDict[str, sherpa_onnx.OfflineRecognizer] = OrderedDict()
@@ -442,6 +513,7 @@ async def transcribe(
     model: str = Form(MODEL_ID),
     language: str | None = Form(None),
     fallback_language: str | None = Form(None),
+    phone_capture: bool = Form(False),
 ) -> dict:
     if model != MODEL_ID:
         raise HTTPException(status_code=404, detail="Unknown local STT model")
@@ -476,8 +548,8 @@ async def transcribe(
         # remain idle rather than sending invented speech to the agent.
         return {"text": "", "language": lang if not auto_detect else "", "duration_ms": 0}
 
-    def decode() -> str:
-        recognizer = _load(lang)
+    def decode(language_code: str) -> str:
+        recognizer = _load(language_code)
         stream = recognizer.create_stream()
         stream.accept_waveform(sample_rate, waveform)
         recognizer.decode_stream(stream)
@@ -504,7 +576,23 @@ async def transcribe(
                 raise HTTPException(status_code=503, detail="Selected STT language is not installed on this engine")
         lid_ms = round((time.monotonic() - lid_started) * 1000) if auto_detect else 0
         decode_started = time.monotonic()
-        text = await asyncio.to_thread(decode)
+        text = await asyncio.to_thread(decode, lang)
+        primary_phone_digits = _phone_digit_count(text) if phone_capture else 0
+        primary_number_complete = 10 <= primary_phone_digits <= 15
+        if (
+            phone_capture
+            and lang == "hi"
+            and not primary_number_complete
+            and "en" in installed
+            and "en" in _loaded
+        ):
+            # English digit words are frequently code-switched into Hindi calls.
+            # The primary Hindi result remains the fallback unless the already
+            # resident Moonshine decoder recovers more explicit digit content.
+            english_text = await asyncio.to_thread(decode, "en")
+            if _phone_rescue_is_better(text, english_text):
+                text = english_text
+                language_route = "phone_english_rescue"
         decode_ms = round((time.monotonic() - decode_started) * 1000)
     duration_ms = round((time.monotonic() - started) * 1000)
     _logger.info(
