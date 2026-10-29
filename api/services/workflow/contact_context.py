@@ -412,16 +412,19 @@ def booking_date_time_question(
         return None
     if not any(new_booking_requested(message["content"]) for message in users[:-1]):
         return None
-    if re.search(
+    relative_date = re.search(r"\b(?:tomorrow|today)\b|कल|आज", latest, re.I)
+    if state.get("booking_confirmation_slot"):
+        return None
+    if not relative_date and re.search(
         r"\b(?:at|time|am|pm)\b|\d{1,2}:\d{2}|समय|बजे|सुबह|दोपहर|शाम|रात",
         latest,
         re.IGNORECASE,
     ):
         return None
     today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
-    if re.fullmatch(r"\s*(?:अः\s*)?(?:कल(?:\s+का)?|tomorrow)(?:\s+(?:please|कृपया))?[.!?।\s]*", latest, re.I):
+    if relative_date and re.search(r"\b(?:tomorrow)\b|कल", latest, re.I):
         stated_date = (today + timedelta(days=1)).isoformat()
-    elif re.fullmatch(r"\s*(?:अः\s*)?(?:आज(?:\s+का)?|today)(?:\s+(?:please|कृपया))?[.!?।\s]*", latest, re.I):
+    elif relative_date:
         stated_date = today.isoformat()
     else:
         stated_date = _explicit_caller_booking_date([latest], reference_date=today)
@@ -570,12 +573,39 @@ _SPOKEN_DIGITS = {
     "ஜீரோ": "0", "ஜிரோ": "0", "ஃபோர்": "4",
 }
 _DOUBLE_DIGIT_WORDS = {"double", "डबल", "ડબલ", "டபுள்"}
+_PHONE_DIGIT_READBACKS = {
+    "English": ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"),
+    "Hindi": ("शून्य", "एक", "दो", "तीन", "चार", "पाँच", "छह", "सात", "आठ", "नौ"),
+}
+
+
+def _phone_confirmation_reply(digits: str, *, hindi: bool) -> str:
+    """Read every phone digit separately, including repeated zeroes."""
+    names = _PHONE_DIGIT_READBACKS["Hindi" if hindi else "English"]
+    spoken_digits = ", ".join(names[int(digit)] for digit in digits)
+    if hindi:
+        return f"मैंने नंबर एक-एक अंक करके सुना: {spoken_digits}। क्या यह सही है? हाँ कहें या नंबर दोहराएँ।"
+    return f"I heard: {spoken_digits}. Is that correct? Say yes, or repeat the number."
+
+
 _PHONE_INTRO = re.compile(
     r"(?:(?:अः|अह|uh|um)\s+)?(?:मेरा\s+(?:मोबाइल|फोन)?\s*(?:नंबर|नम्बर)\s*(?:है)?|"
     r"(?:फोन\s+)?(?:नंबर|नम्बर)\s+(?:है|हैं)|"
     r"my\s+(?:mobile|phone)?\s*number\s*(?:is)?|"
     r"(?:phone\s+)?number\s+is)[,:\s]*", re.IGNORECASE
 )
+
+
+def _booking_was_requested(messages: list) -> bool:
+    from api.services.workflow.confirmed_booking import new_booking_requested
+
+    return any(
+        isinstance(message, dict)
+        and message.get("role") == "user"
+        and isinstance(message.get("content"), str)
+        and new_booking_requested(message["content"])
+        for message in messages
+    )
 
 
 def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
@@ -851,7 +881,9 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
     else:
         accumulated = previous_digits + current_digits
     if 10 <= len(accumulated) <= 15 and not unknown and not trailing_double:
-        if state.pop("caller_phone_uncertain_one", False):
+        uncertain_one = state.pop("caller_phone_uncertain_one", False)
+        booking_requested = _booking_was_requested(messages[:latest_index])
+        if uncertain_one or booking_requested:
             # A newly spoken, uncertain number supersedes any older value only
             # after the caller confirms the readback.
             for key in (
@@ -861,6 +893,11 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
                 state.pop(key, None)
             state["caller_phone_confirmation_pending"] = accumulated
             state["awaiting_phone"] = True
+            if booking_requested:
+                hindi = state.get("reply_language") != "English" and bool(
+                    re.search(r"[\u0900-\u097f]", text + str(assistant_text))
+                )
+                return _phone_confirmation_reply(accumulated, hindi=hindi)
             suffix = accumulated[-4:]
             hindi = state.get("reply_language") != "English" and bool(
                 re.search(r"[\u0900-\u097f]", text + str(assistant_text))
