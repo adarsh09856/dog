@@ -26,7 +26,7 @@ async def test_long_followup_releases_a_coherent_phrase_before_sentence_end():
         if tail:
             parts.append(tail)
         assert len(parts) >= 2
-        assert all(len(part.text.strip()) >= 48 for part in parts[:-1])
+        assert all(len(part.text.strip()) >= 24 for part in parts[:-1])
         assert ''.join(part.text for part in parts).strip() == sentence.strip()
     finally:
         await service._client.close()
@@ -46,6 +46,31 @@ async def test_first_phrase_releases_at_16_chars_on_a_safe_word_boundary():
             break
 
     assert emitted == ["I can help you today, "]
+
+
+@pytest.mark.asyncio
+async def test_followup_phrase_releases_before_48_chars_to_reduce_audio_gaps():
+    service = SpeachesLiveTTSService(
+        api_key='test', base_url='http://localhost:8000/v1',
+        settings=SpeachesTTSSettings(model='indic-vits-rasa-13', voice='HIN_F'),
+    )
+    aggregator = service._text_aggregator
+    try:
+        assert aggregator._streaming_phrase_characters == 24
+        first = [part async for part in aggregator.aggregate("I can help you today, ")]
+        assert first == ["I can help you today, "]
+
+        followup = [
+            part async for part in aggregator.aggregate("please tell me your name and number ")
+        ]
+
+        assert len(followup) == 1
+        assert followup[0].text == "please tell me your name "
+        tail = await aggregator.flush()
+        assert tail is not None
+        assert tail.text == "and number"
+    finally:
+        await service._client.close()
 
 
 @pytest.mark.asyncio

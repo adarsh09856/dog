@@ -66,7 +66,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # is less likely to leave silence after the current audio ends.
                 # Keep a moderate phrase length to limit extra synthesis calls;
                 # the aggregator still preserves text and guards known numbers.
-                streaming_phrase_characters=48,
+                streaming_phrase_characters=24,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
