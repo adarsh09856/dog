@@ -221,7 +221,7 @@ def test_client_install_preflight_accepts_valid_inputs_and_rejects_common_mistak
         sys.path.remove(str(client_dir))
 
     manifest = tmp_path / "client-release-manifest.json"
-    manifest.write_text("{}", encoding="utf-8")
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
     lines = [
         f"{key}=registry.example.com/kodewaves/{key.lower()}@sha256:{'a' * 64}"
         for key in sorted(validate_install.IMAGE_KEYS)
@@ -254,13 +254,34 @@ def test_client_install_preflight_accepts_valid_inputs_and_rejects_common_mistak
     }}}), encoding="utf-8")
     assert validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")[0].startswith("preflight passed;")
     manifest.write_text(json.dumps({"payload": {"images": {
+        "api": {"kind": "registry_digest", "reference": api_ref},
+    }}}), encoding="utf-8")
+    assert any("manifest must contain API and UI image entries" in error for error in validate_install.validate(
+        env_file, client_dir / "docker-compose.client.yaml"
+    ))
+    manifest.write_text(json.dumps({"payload": {"images": {}}}), encoding="utf-8")
+    assert any("manifest must contain API and UI image entries" in error for error in validate_install.validate(
+        env_file, client_dir / "docker-compose.client.yaml"
+    ))
+    manifest.write_text(json.dumps({"payload": {"images": {
+        "api": None,
+        "ui": {"kind": "registry_digest", "reference": ui_ref},
+    }}}), encoding="utf-8")
+    assert any("CLIENT_API_IMAGE does not match" in error for error in validate_install.validate(
+        env_file, client_dir / "docker-compose.client.yaml"
+    ))
+    manifest.write_text(json.dumps({"payload": []}), encoding="utf-8")
+    assert any("manifest must contain a payload object" in error for error in validate_install.validate(
+        env_file, client_dir / "docker-compose.client.yaml"
+    ))
+    manifest.write_text(json.dumps({"payload": {"images": {
         "api": {"kind": "registry_digest", "reference": api_ref[:-1] + "b"},
         "ui": {"kind": "registry_digest", "reference": ui_ref},
     }}}), encoding="utf-8")
     assert any("CLIENT_API_IMAGE does not match" in error for error in validate_install.validate(
         env_file, client_dir / "docker-compose.client.yaml"
     ))
-    manifest.write_text("{}", encoding="utf-8")
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
 
     for extra, expected in [
         (["API_PORT=0"], "API_PORT"),
@@ -322,7 +343,7 @@ def test_client_install_preflight_rejects_untrusted_or_insecure_forwarded_proxy_
         sys.path.remove(str(client_dir))
 
     manifest = tmp_path / "client-release-manifest.json"
-    manifest.write_text("{}", encoding="utf-8")
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
     lines = [
         f"{key}=registry.example.com/kodewaves/{key.lower()}@sha256:{'a' * 64}"
         for key in sorted(validate_install.IMAGE_KEYS)
@@ -370,7 +391,7 @@ def test_client_install_preflight_runs_without_third_party_python_packages(tmp_p
     client_dir = root / "deploy/client"
     compose = client_dir / "docker-compose.client.yaml"
     manifest = tmp_path / "client-release-manifest.json"
-    manifest.write_text("{}", encoding="utf-8")
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
     lines = [
         f"{key}=registry.example.com/kodewaves/{key.lower()}@sha256:{'e' * 64}"
         for key in (
@@ -436,7 +457,7 @@ def test_client_install_preflight_rejects_ipv6_turn_and_bad_license_and_server_i
         sys.path.remove(str(client_dir))
 
     manifest = tmp_path / "manifest.json"
-    manifest.write_text("{}", encoding="utf-8")
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
     lines = [f"{key}=registry.example.com/kodewaves/{key.lower()}@sha256:{'b' * 64}" for key in sorted(validate_install.IMAGE_KEYS)]
     lines += [
         "COMPOSE_PROFILES=",
@@ -478,7 +499,7 @@ def test_client_install_preflight_rejects_malformed_credential_encryption_key(tm
         sys.path.remove(str(client_dir))
 
     manifest = tmp_path / "manifest.json"
-    manifest.write_text("{}", encoding="utf-8")
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
     lines = [
         f"{name}=registry.example.com/kodewaves/{name.lower()}@sha256:{'f' * 64}"
         for name in sorted(validate_install.IMAGE_KEYS)
@@ -513,7 +534,7 @@ def test_client_install_preflight_rejects_non_dns_caddy_host_values(tmp_path, ho
         sys.path.remove(str(client_dir))
 
     manifest = tmp_path / "manifest.json"
-    manifest.write_text("{}", encoding="utf-8")
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
     lines = [f"{key}=registry.example.com/kodewaves/{key.lower()}@sha256:{'c' * 64}" for key in sorted(validate_install.IMAGE_KEYS)]
     lines += [
         "COMPOSE_PROFILES=direct-ingress",
@@ -542,7 +563,7 @@ def test_client_install_preflight_accepts_idn_hostname_normalized_for_license(tm
         sys.path.remove(str(client_dir))
 
     manifest = tmp_path / "manifest.json"
-    manifest.write_text("{}", encoding="utf-8")
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
     lines = [f"{key}=registry.example.com/kodewaves/{key.lower()}@sha256:{'d' * 64}" for key in sorted(validate_install.IMAGE_KEYS)]
     lines += [
         "COMPOSE_PROFILES=direct-ingress",

@@ -278,17 +278,26 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
         else:
             try:
                 signed = json.loads(manifest_path.read_text(encoding="utf-8"))
-                images = signed.get("payload", {}).get("images", {})
-                if not isinstance(images, dict):
-                    raise ValueError("invalid image inventory")
-                for component, variable in (("api", "CLIENT_API_IMAGE"), ("ui", "CLIENT_UI_IMAGE")):
-                    image = images.get(component)
-                    if image and (
-                        not isinstance(image, dict)
-                        or image.get("kind") != "registry_digest"
-                        or image.get("reference") != env.get(variable)
-                    ):
-                        errors.append(f"{variable} does not match the signed release manifest")
+                payload = signed.get("payload") if isinstance(signed, dict) else None
+                if not isinstance(payload, dict):
+                    errors.append("signed release manifest must contain a payload object")
+                else:
+                    images = payload.get("images")
+                    # Older signed manifests may omit the inventory. If they include it,
+                    # require both protected images and exact digest references so a
+                    # partial inventory cannot pass preflight and fail only at startup.
+                    if images is not None:
+                        if not isinstance(images, dict) or set(images) != {"api", "ui"}:
+                            errors.append("signed release manifest must contain API and UI image entries")
+                        else:
+                            for component, variable in (("api", "CLIENT_API_IMAGE"), ("ui", "CLIENT_UI_IMAGE")):
+                                image = images[component]
+                                if (
+                                    not isinstance(image, dict)
+                                    or image.get("kind") != "registry_digest"
+                                    or image.get("reference") != env.get(variable)
+                                ):
+                                    errors.append(f"{variable} does not match the signed release manifest")
             except (OSError, ValueError, AttributeError):
                 errors.append("signed release manifest must contain valid JSON")
 

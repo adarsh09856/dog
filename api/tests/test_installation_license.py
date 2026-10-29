@@ -255,6 +255,19 @@ def test_signed_license_is_canonical_and_domain_and_ip_bound():
     )
 
 
+@pytest.mark.parametrize("installation_ip", ["198.51.100.9", None, "not-an-ip"])
+def test_signed_license_rejects_missing_or_out_of_range_installation_ip(installation_ip):
+    private_key, public_key = _key_material()
+    license_data = load_license(issue_license_token(_claims(), private_key), public_key, now=150)
+
+    with pytest.raises(InstallationLicenseError, match="IP"):
+        validate_request_binding(
+            license_data,
+            hostname="example.com",
+            installation_ip=installation_ip,
+        )
+
+
 def test_client_image_trust_key_cannot_be_replaced_by_environment(monkeypatch, tmp_path):
     from api.services import owner_installation_status, owner_trust
 
