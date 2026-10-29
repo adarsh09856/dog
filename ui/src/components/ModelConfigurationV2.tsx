@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import { ExternalLink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -109,9 +110,9 @@ export default function ModelConfigurationV2({ docsUrl }: { docsUrl?: string }) 
 
     return (
         <div className="w-full max-w-4xl mx-auto space-y-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className={panel.collectionHeader}>
                 <div>
-                    <h1 className="text-3xl font-bold">AI Models Configuration</h1>
+                    <span className={panel.eyebrow}>BUILD / VOICE STACK</span><h1>AI Models Configuration</h1>
                     <p className="mt-2 text-sm text-muted-foreground">
                         Organization-scoped model settings.{" "}
                         {docsUrl && (

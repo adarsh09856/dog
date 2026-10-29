@@ -1,4 +1,5 @@
 "use client";
+import { WorkspacePageHeader } from "@/components/layout/WorkspacePageHeader";
 
 import { ExternalLink, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -37,14 +38,7 @@ export default function RecordingsPage() {
 
     return (
         <div className="container mx-auto px-4 py-8">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold mb-2">Recordings</h1>
-                <p className="text-muted-foreground">
-                    Manage audio recordings for your organization. Use{" "}
-                    <code className="rounded bg-muted px-1 text-xs">@</code> in prompt fields to insert them,
-                    or as transition messages in tool calls.
-                </p>
-            </div>
+            <WorkspacePageHeader area="OPERATIONS / AUDIO LIBRARY" title="Recordings" description="Manage audio recordings for your organization." />
 
             <Tabs defaultValue="recordings" key={`${user.id}:${"selectedTeam" in user ? user.selectedTeam?.id : user.organizationId}`}>
                 <TabsList className="mb-4">

@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -99,9 +100,9 @@ export default function CampaignsPage() {
 
     return (
         <div className="container mx-auto p-6 space-y-6">
-            <div className="flex justify-between items-center">
+            <div className={panel.collectionHeader}>
                 <div>
-                    <h1 className="text-3xl font-bold mb-2">Campaigns</h1>
+                    <h1>Campaigns</h1>
                     <p>Manage your bulk workflow execution campaigns</p>
                 </div>
                     <Button onClick={handleCreateCampaign}>

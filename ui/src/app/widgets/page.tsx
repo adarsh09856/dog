@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import {
   Check,
@@ -183,9 +184,9 @@ export default function WidgetsPage() {
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className={panel.collectionHeader}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Website Voice Calling Widgets</h1>
+          <span className={panel.eyebrow}>CHANNELS / WEBSITE</span><h1>Website Voice Calling Widgets</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Embed an interactive WebRTC voice button on your website for instant 1-click customer calls.
           </p>
@@ -214,7 +215,7 @@ export default function WidgetsPage() {
             Refresh
           </Button>
         </div>
-      </div>
+      </header>
 
       <Card className="border-border/60">
         <CardHeader>

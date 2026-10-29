@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import {
   CheckCircle2,
@@ -169,9 +170,9 @@ export default function FormsPage() {
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className={panel.collectionHeader}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dynamic Forms & Questionnaires</h1>
+          <span className={panel.eyebrow}>GROWTH / INTAKE</span><h1>Dynamic Forms & Questionnaires</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Build conversational intake forms for voice agents to collect structured customer information.
           </p>
@@ -202,7 +203,7 @@ export default function FormsPage() {
             Refresh
           </Button>
         </div>
-      </div>
+      </header>
 
       <Card className="border-border/60">
         <CardHeader>

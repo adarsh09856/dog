@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import {
   AlertTriangle,
@@ -181,9 +182,9 @@ export default function TelephonyConfigurationsPage() {
   return (
     <div className="min-h-screen">
       <div className="container mx-auto px-4 py-8">
-        <div className="flex items-start justify-between gap-4 mb-6">
+        <div className={panel.collectionHeader}>
           <div>
-            <h1 className="text-3xl font-bold mb-2">Telephony configurations</h1>
+            <span className={panel.eyebrow}>CHANNELS / TELEPHONE</span><h1>Telephony configurations</h1>
             <p className="text-muted-foreground">
               Connect one or more telephony provider accounts. Each campaign uses one
               configuration; inbound calls are routed to the right one by account ID.

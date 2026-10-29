@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import {
   BookOpen,
@@ -146,9 +147,9 @@ export default function PromptTemplatesPage() {
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className={panel.collectionHeader}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Voice Prompt Templates Gallery</h1>
+          <span className={panel.eyebrow}>BUILD / PROMPTS</span><h1>Voice Prompt Templates Gallery</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Reusable prompts and greetings for your workspace’s voice agents.
           </p>
@@ -175,7 +176,7 @@ export default function PromptTemplatesPage() {
             Refresh
           </Button>
         </div>
-      </div>
+      </header>
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">

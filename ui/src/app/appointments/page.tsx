@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import {
   Calendar as CalendarIcon,
@@ -118,9 +119,9 @@ export default function AppointmentsPage() {
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className={panel.collectionHeader}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Calendar Bookings & Appointments</h1>
+          <span className={panel.eyebrow}>GROWTH / SCHEDULING</span><h1>Calendar Bookings & Appointments</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage customer callbacks, demos, and site visits in your workspace.
           </p>
@@ -153,7 +154,7 @@ export default function AppointmentsPage() {
             Refresh
           </Button>
         </div>
-      </div>
+      </header>
 
       <Card className="border-border/60">
         <CardHeader className="flex flex-row items-center justify-between">

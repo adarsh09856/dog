@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import {
   ArrowDownRight,
@@ -338,9 +339,9 @@ export default function SovereignBillingPage() {
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className={panel.collectionHeader}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Billing & Minute Wallet</h1>
+          <span className={panel.eyebrow}>WORKSPACE / BILLING</span><h1>Billing & Minute Wallet</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Monitor voice minutes, review transactions, and manage your organization’s plan access.
           </p>
@@ -354,10 +355,10 @@ export default function SovereignBillingPage() {
             Refresh
           </Button>
         </div>
-      </div>
+      </header>
 
       {/* WALLET KPI CARDS */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={panel.billingMetrics}>
         <Card className="border-border/60 bg-gradient-to-br from-card to-muted/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Available Voice Balance</CardTitle>

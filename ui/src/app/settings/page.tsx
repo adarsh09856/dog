@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import { ArrowRight, Building, Cpu, Phone, ShieldAlert, ShieldCheck, User, Wallet } from "lucide-react";
 import Link from "next/link";
@@ -67,11 +68,11 @@ export default function SettingsPage() {
   return (
     <div className="flex justify-center py-12 px-4">
       <div className="w-full max-w-3xl space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Workspace & Account Settings</h1>
+        <div className={panel.collectionHeader}>
+          <div><span className={panel.eyebrow}>WORKSPACE / PREFERENCES</span><h1>Workspace & Account Settings</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage your personal profile, active workspace defaults, and integration endpoints.
-          </p>
+          </p></div>
         </div>
 
         {isClientAdmin && <InstallationLicenseCard installation={installation} />}

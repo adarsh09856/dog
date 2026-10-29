@@ -1,4 +1,5 @@
 "use client";
+import { WorkspacePageHeader } from "@/components/layout/WorkspacePageHeader";
 
 import { ExternalLink, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -48,12 +49,7 @@ export default function FilesPage() {
 
     return (
         <div key={`${user.id}:${"selectedTeam" in user ? user.selectedTeam?.id : user.organizationId}`} className="container mx-auto px-4 py-8">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold mb-2">Knowledge Base Files</h1>
-                <p className="text-muted-foreground">
-                    Upload and manage documents for your voice agents to reference.
-                </p>
-            </div>
+            <WorkspacePageHeader area="BUILD / KNOWLEDGE" title="Knowledge Base Files" description="Upload and manage documents for your voice agents to reference." />
 
             <Card>
                 <CardHeader>
