@@ -4,27 +4,22 @@
 import type { StackTheme } from "@stackframe/stack";
 import type { ComponentProps } from "react";
 
+import { DEFAULT_BRANDING } from "@/lib/branding";
+import { brandingCssVariables } from "@/lib/brandingTheme";
+
 type ThemeConfig = NonNullable<ComponentProps<typeof StackTheme>["theme"]>;
 
-function contrastForeground(hex: string): string {
-  const channels = [1, 3, 5].map((index) => {
-    const channel = parseInt(hex.slice(index, index + 2), 16) / 255;
-    return channel <= 0.04045
-      ? channel / 12.92
-      : ((channel + 0.055) / 1.055) ** 2.4;
-  });
-  const luminance =
-    channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
-  const darkContrast = (luminance + 0.05) / (0.006 + 0.05);
-  const lightContrast = 1.05 / (luminance + 0.05);
-  return darkContrast >= lightContrast ? "#07111b" : "#ffffff";
-}
-
 export function createStackAuthTheme(primaryColor: string): ThemeConfig {
-  const primary = /^#[0-9a-f]{6}$/i.test(primaryColor)
-    ? primaryColor
-    : "#426b57";
-  const foreground = contrastForeground(primary);
+  const branding = {
+    ...DEFAULT_BRANDING,
+    primary_color: /^#[0-9a-f]{6}$/i.test(primaryColor)
+      ? primaryColor
+      : DEFAULT_BRANDING.primary_color,
+  };
+  const lightTokens = brandingCssVariables(branding, "light");
+  const darkTokens = brandingCssVariables(branding, "dark");
+  const lightPrimary = lightTokens["--brand-primary-color"];
+  const darkPrimary = darkTokens["--brand-primary-color"];
 
   return {
     light: {
@@ -34,8 +29,8 @@ export function createStackAuthTheme(primaryColor: string): ThemeConfig {
       cardForeground: "#142b2c",
       popover: "#fbfcf8",
       popoverForeground: "#142b2c",
-      primary,
-      primaryForeground: foreground,
+      primary: lightPrimary,
+      primaryForeground: lightTokens["--primary-foreground"],
       secondary: "#e2e8de",
       secondaryForeground: "#28483b",
       muted: "#e8ece3",
@@ -46,7 +41,7 @@ export function createStackAuthTheme(primaryColor: string): ThemeConfig {
       destructiveForeground: "#ffffff",
       border: "#d6ded3",
       input: "#c8d4ca",
-      ring: primary,
+      ring: lightPrimary,
     },
     dark: {
       background: "#111e20",
@@ -55,8 +50,8 @@ export function createStackAuthTheme(primaryColor: string): ThemeConfig {
       cardForeground: "#e7eee7",
       popover: "#1c302d",
       popoverForeground: "#e7eee7",
-      primary,
-      primaryForeground: foreground,
+      primary: darkPrimary,
+      primaryForeground: darkTokens["--primary-foreground"],
       secondary: "#263b35",
       secondaryForeground: "#e7eee7",
       muted: "#203430",
@@ -67,7 +62,7 @@ export function createStackAuthTheme(primaryColor: string): ThemeConfig {
       destructiveForeground: "#e7eee7",
       border: "#304344",
       input: "#49615a",
-      ring: primary,
+      ring: darkPrimary,
     },
     radius: "0.625rem",
   };
