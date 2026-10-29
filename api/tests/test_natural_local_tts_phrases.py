@@ -26,7 +26,7 @@ async def test_long_followup_releases_a_coherent_phrase_before_sentence_end():
         if tail:
             parts.append(tail)
         assert len(parts) >= 2
-        assert all(len(part.text.strip()) >= 64 for part in parts[:-1])
+        assert all(len(part.text.strip()) >= 48 for part in parts[:-1])
         assert ''.join(part.text for part in parts).strip() == sentence.strip()
     finally:
         await service._client.close()
@@ -54,7 +54,7 @@ async def test_streamed_numbers_and_dates_stay_in_one_synthesis_phrase():
         aggregator = LocalSpeechAggregator(
             min_characters=24, first_chunk_characters=12,
             first_clause_characters=24, first_phrase_characters=24,
-            streaming_phrase_characters=64,
+            streaming_phrase_characters=48,
         )
         phrases = []
         for word in text.split(" "):
@@ -76,7 +76,7 @@ async def test_number_group_survives_character_stream_and_later_phrase():
     aggregator = LocalSpeechAggregator(
         min_characters=24, first_chunk_characters=12,
         first_clause_characters=24, first_phrase_characters=24,
-        streaming_phrase_characters=64,
+        streaming_phrase_characters=48,
     )
     phrases = []
     for character in text:
@@ -116,7 +116,7 @@ async def test_hindi_spoken_day_month_and_year_are_not_split_between_requests():
             aggregator = LocalSpeechAggregator(
                 min_characters=24, first_chunk_characters=12,
                 first_clause_characters=24, first_phrase_characters=24,
-                streaming_phrase_characters=64,
+                streaming_phrase_characters=48,
             )
             phrases = []
             for index in range(0, len(text), width):

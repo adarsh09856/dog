@@ -1,6 +1,12 @@
 # Kodewaves master voice and platform delivery plan
 
-Updated: 28 October 2026 (India). Status: IMPLEMENTATION RESUMED after the user's clarification: evaluate the supplied plan for real impact and apply changes that pass validation. Existing changes are preserved. Live voice acceptance and full-platform completion remain open.
+Updated: 29 October 2026 (India). Status: IMPLEMENTATION RESUMED after the user's clarification: evaluate the supplied plan for real impact and apply changes that pass validation. Existing changes are preserved. Live voice acceptance and full-platform completion remain open.
+
+### Latest verified voice-flow update — 29 October 2026
+
+- A focused local TTS streaming trial reduces the later-phrase release threshold from 64 to 48 characters. The aggregator retains the full text and waits for a safe word boundary; its existing guard keeps recognized number/date sequences together for the covered languages. The focused suite `api/tests/test_natural_local_tts_phrases.py` passed **5 tests** on this worktree. This may reduce the wait for later audio phrases, but it increases synthesis request count by roughly one third and is **not yet verified in a live WebRTC or telephone call**. Keep it as a local candidate until actual audio-gap timings and quality are checked.
+- The mixed spoken/numeric phone example `nine five 383 double zero 941` is already parsed as `9538300941` and read back one digit at a time by the current parser; its focused regression test passed. The observed live failures contain corrupted ASR words (for example, `nine-payer`), not clean input that the parser fails to handle. The self-hosted STT auto path selects one dominant-language decoder per utterance and does not decode Hindi-English code-switching inside that utterance. Do not force English for all phone capture: Hindi-spoken digits must remain valid. A temporary second English decode while a phone field is active is only a candidate; it needs real mixed-language audio and a VPS CPU/latency benchmark before implementation.
+- The live Qwen `qwen3.5:2b-q4_K_M` runner was confirmed resident on the 4-core CPU VPS with its existing 4096 context. An idle snapshot showed low API/STT/TTS CPU, so it does not explain past call spikes. No model, service or live container was changed during this investigation; the current 64-to-48 TTS trial remains local and unshipped.
 
 ## Current execution plan and limits — 27 October 2026
 

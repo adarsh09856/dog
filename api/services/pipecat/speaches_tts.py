@@ -59,10 +59,11 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # several more seconds for punctuation. The aggregator retains
                 # every character and keeps later phrases at the larger size.
                 first_phrase_characters=24,
-                # Keep each later Inaya request long enough for coherent
-                # prosody, but release it before the full sentence ends so the
-                # next synthesis can overlap the current audio playback.
-                streaming_phrase_characters=64,
+                # Release later phrases sooner so slow CPU LLM token generation
+                # is less likely to leave silence after the current audio ends.
+                # Keep a moderate phrase length to limit extra synthesis calls;
+                # the aggregator still preserves text and guards known numbers.
+                streaming_phrase_characters=48,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
