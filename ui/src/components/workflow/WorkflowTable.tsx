@@ -2,6 +2,7 @@
 
 import {
     Archive,
+    AudioLines,
     Check,
     Folder as FolderIcon,
     FolderInput,
@@ -41,6 +42,7 @@ import {
 } from "@/components/ui/table";
 import { useOrganizationTimezone } from '@/hooks/useOrganizationTimezone';
 import { formatDate } from '@/lib/dateTime';
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 interface Workflow {
     id: number;
@@ -155,7 +157,7 @@ export function WorkflowTable({
                     <span>No active models found in catalog. Agents will fail until a provider key is configured in Admin or Model Settings.</span>
                 </div>
             )}
-            <Card className="overflow-hidden">
+            <Card className={chrome.agentTable}>
                 <CardContent className="p-0">
                     <Table>
                         <TableHeader>
@@ -188,8 +190,8 @@ export function WorkflowTable({
                                         {workflow.id}
                                     </TableCell>
                                     <TableCell className="font-medium">
-                                        <div className="flex items-center gap-2">
-                                            <span>{workflow.name}</span>
+                                        <div className={chrome.agentIdentity}>
+                                            <AudioLines size={19} /><div><strong>{workflow.name}</strong><small>{showArchived ? "Archived agent" : "Voice workflow"}</small></div>
                                             {isCatalogEmpty && workflow.status === 'active' && (
                                                 <Badge variant="destructive" className="text-[10px] px-1.5 py-0 h-4">
                                                     Catalog Inactive

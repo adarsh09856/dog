@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/popover";
 import { useSidebar } from "@/components/ui/sidebar";
 import { copyTextToClipboard } from "@/lib/clipboard";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 interface WorkflowEditorHeaderProps {
     workflowName: string;
@@ -231,7 +232,7 @@ export const WorkflowEditorHeader = ({
     };
 
     return (
-        <div className="flex items-center justify-between w-full h-14 px-4 bg-background text-foreground border-b border-border">
+        <div className={`${chrome.editorHeader} flex items-center justify-between w-full bg-background text-foreground border-b border-border`}>
             {/* Left section: Mobile menu + Back button + Workflow name */}
             <div className="flex items-center gap-3 mr-4">
                 <button

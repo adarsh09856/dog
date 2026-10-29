@@ -8,8 +8,9 @@ const Card = React.forwardRef<
 >(({ className, ...props }, ref) => (
     <div
         ref={ref}
+        data-slot="card"
         className={cn(
-            "card-weave rounded-xl border border-border/60 bg-card text-card-foreground shadow-sm dark:shadow-md dark:shadow-black/25",
+            "card-weave rounded-xl border border-border bg-card text-card-foreground shadow-[0_2px_8px_-5px_color-mix(in_srgb,var(--foreground)_20%,transparent)]",
             className
         )}
         {...props}

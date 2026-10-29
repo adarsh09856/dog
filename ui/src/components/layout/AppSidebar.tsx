@@ -32,6 +32,7 @@ import { usePathname, useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
+import chrome from "./WorkspaceChrome.module.css";
 import { SidebarTeamSwitcher } from "@/components/layout/SidebarTeamSwitcher";
 import ThemeToggle from "@/components/ThemeSwitcher";
 import { Button } from "@/components/ui/button";
@@ -287,6 +288,7 @@ export function AppSidebar() {
       <SidebarMenuButton
         asChild
         tooltip={tooltip}
+        isActive={isItemActive}
         className={cn(
           "rounded-xl transition-colors hover:bg-accent hover:text-accent-foreground",
           isItemActive &&
@@ -308,7 +310,7 @@ export function AppSidebar() {
           <Icon
             className={cn(
               "h-4 w-4 shrink-0",
-              isItemActive && "text-cta-text drop-shadow-[0_0_6px_rgba(240,170,70,0.8)]"
+              isItemActive && "text-primary"
             )}
           />
           <span
@@ -391,7 +393,7 @@ export function AppSidebar() {
   );
 
   return (
-    <Sidebar collapsible="icon" variant="floating" className="app-sidebar-dock py-4">
+    <Sidebar collapsible="icon" variant="sidebar" className={cn("app-sidebar-dock", chrome.navigation)}>
       <SidebarHeader className="px-2 py-3 notranslate" translate="no">
         <div className="flex items-center justify-between">
           <div className={cn("flex items-center gap-2", isCollapsed && "hidden")}>
@@ -400,7 +402,7 @@ export function AppSidebar() {
               className="notranslate flex items-center gap-2 px-1"
               translate="no"
             >
-              <BrandLogo mark className="h-6" />
+              <div className={chrome.identity}><BrandLogo className="h-7 max-w-[150px]" /><span>VOICE OPERATIONS WORKSPACE</span></div>
               {versionInfo && (
                 <span
                   className="notranslate text-xs font-normal text-muted-foreground"
