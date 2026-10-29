@@ -12,7 +12,7 @@ export const DEFAULT_BRANDING: PlatformBranding = {
   company_name: "Kodewaves",
   tagline: "Voice agents for web and phone",
   logo_url: "",
-  favicon_url: "",
+  favicon_url: "/kodewaves-mark.svg",
   support_email: "",
   primary_color: "#426b57",
   font: "geist",

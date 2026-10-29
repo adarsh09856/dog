@@ -106,7 +106,7 @@ export function ClientBrandingProvider({
       icon.rel = "icon";
       document.head.appendChild(icon);
     }
-    icon.href = branding.favicon_url || "/favicon.ico";
+    icon.href = branding.favicon_url || "/kodewaves-mark.svg";
     const variables = brandingCssVariables(
       branding,
       resolvedTheme === "light" ? "light" : "dark",

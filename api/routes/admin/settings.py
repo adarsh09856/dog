@@ -67,6 +67,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
         raise HTTPException(status_code=503, detail="Platform settings are unavailable. Retry before editing.") from exc
 
     branding = settings_map.get("branding") or {}
+    normalized_branding = PlatformBranding.model_validate(branding)
     byok = settings_map.get("byok_policy") or {}
     wallet = settings_map.get("wallet_policy") or {}
     local_ai = settings_map.get("local_ai") or settings_map.get("local_ai_engine") or {}
@@ -85,11 +86,11 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
     return PlatformSettingsResponse(
         company_name=branding.get("company_name", "Kodewaves"),
         tagline=branding.get("tagline", "Voice agents for web and phone"),
-        favicon_url=branding.get("favicon_url", ""),
-        font=branding.get("font", "geist"),
-        logo_url=branding.get("logo_url", ""),
-        support_email=branding.get("support_email", ""),
-        primary_color=branding.get("primary_color", "#304c73"),
+        favicon_url=normalized_branding.favicon_url,
+        font=normalized_branding.font,
+        logo_url=normalized_branding.logo_url,
+        support_email=normalized_branding.support_email,
+        primary_color=normalized_branding.primary_color,
         allow_user_byok=byok.get("allow_user_byok", False),
         enforce_wallet_balance=wallet.get("enforce_wallet_balance", True),
         enable_local_ai_engine=local_ai.get("enable_local_ai_engine", local_ai.get("enabled", False)),

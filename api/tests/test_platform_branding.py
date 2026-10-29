@@ -7,6 +7,24 @@ from api.routes import installation
 from api.schemas.branding import PlatformBranding
 
 
+def test_legacy_seed_branding_uses_current_kodewaves_assets():
+    branding = PlatformBranding.model_validate(
+        {"logo_url": "/logo.png", "favicon_url": "/favicon.ico"}
+    )
+
+    assert branding.logo_url == ""
+    assert branding.favicon_url == "/kodewaves-mark.svg"
+
+
+def test_custom_brand_assets_are_preserved():
+    branding = PlatformBranding.model_validate(
+        {"logo_url": "https://brand.example/logo.svg", "favicon_url": "/customer-icon.svg"}
+    )
+
+    assert branding.logo_url == "https://brand.example/logo.svg"
+    assert branding.favicon_url == "/customer-icon.svg"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("edition", "setting_key"),

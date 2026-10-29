@@ -44,7 +44,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { default: branding.company_name, template: `%s | ${branding.company_name}` },
     description: branding.tagline,
-    icons: { icon: branding.favicon_url || "/favicon.ico" },
+    icons: { icon: branding.favicon_url || "/kodewaves-mark.svg" },
   };
 }
 

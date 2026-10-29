@@ -11,7 +11,7 @@ class PlatformBranding(BaseModel):
     company_name: str = Field(default="Kodewaves", min_length=1, max_length=80)
     tagline: str = Field(default="Voice agents for web and phone", max_length=160)
     logo_url: str = Field(default="", max_length=500)
-    favicon_url: str = Field(default="", max_length=500)
+    favicon_url: str = Field(default="/kodewaves-mark.svg", max_length=500)
     support_email: str = Field(default="", max_length=254)
     primary_color: str = "#304c73"
     font: Literal["geist", "system"] = "geist"
@@ -30,6 +30,19 @@ class PlatformBranding(BaseModel):
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
             raise ValueError("Primary color must be a six-digit hex color")
         return value.lower()
+
+    @field_validator("logo_url", mode="before")
+    @classmethod
+    def normalize_legacy_logo(cls, value: str) -> str:
+        # This was the platform seed default, but no /logo.png is shipped.
+        # Empty tells BrandLogo to render its current inline Kodewaves mark.
+        return "" if value == "/logo.png" else value
+
+    @field_validator("favicon_url", mode="before")
+    @classmethod
+    def normalize_legacy_favicon(cls, value: str) -> str:
+        # Existing installs retain this seeded value in the database.
+        return "/kodewaves-mark.svg" if value in (None, "", "/favicon.ico") else value
 
     @field_validator("logo_url", "favicon_url")
     @classmethod

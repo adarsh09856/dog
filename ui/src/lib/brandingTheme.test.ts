@@ -6,6 +6,7 @@ import { brandingCssVariables } from "./brandingTheme";
 describe("server and client branding theme variables", () => {
   it("uses the Kodewaves forest brand as the shared default", () => {
     expect(DEFAULT_BRANDING.primary_color).toBe("#426b57");
+    expect(DEFAULT_BRANDING.favicon_url).toBe("/kodewaves-mark.svg");
     expect(brandingCssVariables(DEFAULT_BRANDING, "light")["--primary"]).toBe(
       DEFAULT_BRANDING.primary_color,
     );

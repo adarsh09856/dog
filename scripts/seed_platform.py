@@ -43,8 +43,8 @@ async def seed_global_settings():
             "value": {
                 "platform_name": "Kodewaves Sovereign Platform",
                 "company_name": "Kodewaves Inc.",
-                "logo_url": "/logo.png",
-                "favicon_url": "/favicon.ico",
+                "logo_url": "",
+                "favicon_url": "/kodewaves-mark.svg",
                 "primary_color": "#0284c7",
                 "support_email": "support@kodewaves.in",
             },
