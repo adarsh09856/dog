@@ -143,6 +143,11 @@ def _phone_decode_has_unknown_tokens(text: str) -> bool:
     ignored so callers can say "my phone number is ..." without triggering a
     rescue solely because of the preamble.
     """
+    return _phone_unknown_token_count(text) > 0
+
+
+def _phone_unknown_token_count(text: str) -> int:
+    """Count non-number tokens in a phone decode, excluding common preambles."""
     ignored = {
         "my", "mobile", "phone", "number", "is", "the", "hai", "hain",
         "mera", "मेरे", "मेरा", "फोन", "नंबर", "नम्बर", "है", "हैं",
@@ -152,8 +157,8 @@ def _phone_decode_has_unknown_tokens(text: str) -> bool:
         token.strip("()[]{}\"'")
         for token in re.split(r"[\s,.!?।॥:;\-–—]+", str(text or "").casefold())
     )
-    return any(
-        token
+    return sum(
+        bool(token)
         and not token.isdecimal()
         and token not in _PHONE_DIGIT_WORDS
         and token not in ignored
@@ -162,7 +167,7 @@ def _phone_decode_has_unknown_tokens(text: str) -> bool:
 
 
 def _phone_rescue_is_better(primary: str, english: str) -> bool:
-    """Prefer a plausible longer phone decode over an incomplete or runaway one."""
+    """Prefer a plausible longer phone decode, or a cleaner equal-length one."""
     primary_digits = _phone_digit_count(primary)
     candidate_digits = _phone_digit_count(english)
     candidate_plausible = 3 <= candidate_digits <= 15
@@ -171,7 +176,16 @@ def _phone_rescue_is_better(primary: str, english: str) -> bool:
     # overlong alternate. This keeps the chosen transcript bounded while
     # allowing a valid 10-digit alternate to replace a runaway hallucination.
     primary_score = primary_digits if primary_plausible else 0
-    return candidate_plausible and candidate_digits > primary_score
+    if candidate_plausible and candidate_digits > primary_score:
+        return True
+    # If both decode the same number of explicit digits, prefer the candidate
+    # only when it contains fewer unknown words. Do not sacrifice recognized
+    # digits for a cleaner but shorter transcript, and never infer unknown words.
+    return (
+        candidate_plausible
+        and candidate_digits == primary_digits
+        and _phone_unknown_token_count(english) < _phone_unknown_token_count(primary)
+    )
 
 app = FastAPI(title="Kodewaves Indic CPU STT")
 _loaded: OrderedDict[str, sherpa_onnx.OfflineRecognizer] = OrderedDict()

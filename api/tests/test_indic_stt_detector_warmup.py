@@ -92,6 +92,26 @@ def test_phone_english_rescue_uses_candidate_only_when_it_recovers_more_digits()
     )
 
 
+def test_phone_english_rescue_prefers_cleaner_equal_length_candidate_only():
+    noisy_primary = "nine five three eight three double zero nine four one pre-ed"
+    clean_alternate = "nine five three eight three double zero nine four one"
+    assert indic_stt._phone_digit_count(noisy_primary) == 10
+    assert indic_stt._phone_unknown_token_count(noisy_primary) == 2
+    assert indic_stt._phone_rescue_is_better(noisy_primary, clean_alternate)
+
+    # Unknown-token count breaks ties only. It cannot replace a longer primary
+    # with a shorter, cleaner candidate, nor change an equally noisy tie.
+    assert not indic_stt._phone_rescue_is_better(
+        "nine five three eight three double zero nine four one extra",
+        "nine five three eight three double zero nine four",
+    )
+    assert not indic_stt._phone_rescue_is_better(
+        "nine five three eight three double zero nine four one extra",
+        "nine five three eight three double zero nine four one other",
+    )
+    assert indic_stt._phone_unknown_token_count("my phone number is nine five pre-ed") == 2
+
+
 def test_phone_rescue_detects_unknown_mixed_script_fragments_but_ignores_preambles():
     assert indic_stt._phone_decode_has_unknown_tokens("नाइन ஃபைவ் pre-ed")
     assert not indic_stt._phone_decode_has_unknown_tokens("my phone number is nine five")
