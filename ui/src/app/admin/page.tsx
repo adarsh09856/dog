@@ -3,13 +3,11 @@
 import {
   AlertTriangle,
   ArrowUpRight,
-  CheckCircle2,
   Clock,
   Coins,
   Cpu,
   Radio,
   RefreshCw,
-  ShieldCheck,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -20,6 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { adminApi, MonitoringStats } from "@/lib/kodewavesApi";
+
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<MonitoringStats | null>(null);
@@ -61,11 +61,11 @@ export default function AdminDashboardPage() {
       : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
 
   return (
-    <div className="space-y-8">
+    <div className={`${panel.adminDashboard} space-y-8`}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={panel.adminHero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Sovereign Control Plane</h1>
+          <p className={panel.eyebrow}>PLATFORM OWNER / OPERATIONS</p><h1 className="text-2xl font-bold tracking-tight">Sovereign Control Plane</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Real-time platform overview, master provider telemetry, and margin tracking.
           </p>
@@ -126,7 +126,7 @@ export default function AdminDashboardPage() {
       )}
 
       {/* Real KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={panel.metricRail}>
         <Card className="border-border/60">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Active Live Calls</CardTitle>
@@ -185,7 +185,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Quick Launchpad */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className={panel.adminLaunchpad}>
         <Card className="border-border/60 hover:border-primary/50 transition-colors">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -244,47 +244,11 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Sovereign Architecture Status */}
-      <Card className="border-border/60">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-emerald-500" />
-            Sovereign Engine Health & Decoupling Checklist
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border/40">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              <div>
-                <div className="font-semibold">Local Master Keys</div>
-                <div className="text-muted-foreground text-[11px]">AES-256 Fernet Encrypted</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border/40">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              <div>
-                <div className="font-semibold">Real PostgreSQL Stats</div>
-                <div className="text-muted-foreground text-[11px]">Live Database Aggregation</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border/40">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              <div>
-                <div className="font-semibold">Indian Telephony</div>
-                <div className="text-muted-foreground text-[11px]">Exotel / Plivo / SIP Ready</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-card border border-border/40">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              <div>
-                <div className="font-semibold">Zero KYC Policy</div>
-                <div className="text-muted-foreground text-[11px]">Sovereign Platform Model</div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+      <section className={panel.governance} aria-labelledby="governance-heading">
+        <div><p className={panel.eyebrow}>GOVERNANCE</p><h2 id="governance-heading">Control access. Keep a clear record.</h2><p>Manage the commercial rules and installation boundaries that support your platform.</p></div>
+        <div className={panel.governanceLinks}>
+          {[{href:"/admin/client-installations", title:"Client installations", detail:"Licenses, domains and integrity alerts"}, {href:"/admin/plans", title:"Plans & entitlements", detail:"Available features and usage limits"}, {href:"/admin/audit-logs", title:"Audit trail", detail:"Review administrative actions"}, {href:"/admin/settings", title:"Platform identity", detail:"Brand, communications and general settings"}].map(item => <Link key={item.href} href={item.href}><div><strong>{item.title}</strong><small>{item.detail}</small></div><ArrowUpRight size={17} /></Link>)}
+        </div>
+      </section>    </div>
   );
 }

@@ -31,6 +31,8 @@ import { getUserEmail } from "@/lib/auth/userDisplay";
 import { apiFetch } from "@/lib/kodewavesApi";
 import { cn } from "@/lib/utils";
 
+import panel from "@/components/layout/PanelWorkspace.module.css";
+
 const ADMIN_NAV = [
   { section: "Overview", title: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { section: "Access & commercial", title: "Master Keys & Models", href: "/admin/models", icon: Cpu },
@@ -123,7 +125,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="flex min-h-screen bg-muted/20 text-foreground">
+    <div className={`${panel.adminShell} flex min-h-screen bg-muted/20 text-foreground`}>
       {mobileNavOpen && (
         <button
           type="button"
@@ -137,7 +139,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside
         id="admin-navigation"
         className={cn(
-          "invisible fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] shrink-0 flex-col border-r border-border/60 bg-card transition-transform duration-200 md:visible md:static md:z-auto md:max-w-none md:translate-x-0",
+          `${panel.adminNavigation} invisible fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] shrink-0 flex-col border-r border-border/60 bg-card transition-transform duration-200 md:visible md:static md:z-auto md:max-w-none md:translate-x-0`,
           mobileNavOpen ? "visible translate-x-0" : "-translate-x-full",
         )}
       >

@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import { getWorkflowsApiV1WorkflowFetchGet, listFoldersApiV1FolderGet } from '@/client/sdk.gen';
 import type { FolderResponse, WorkflowListResponse } from '@/client/types.gen';
@@ -116,8 +117,8 @@ async function PageContent() {
         <div className="container mx-auto px-4 py-8">
             {/* Your Workflows Section */}
             <div className="mb-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold">Your Agents</h1>
+                <div className={panel.collectionHeader}>
+                    <div><span className={panel.eyebrow}>BUILD / VOICE AGENTS</span><h1>Your Agents</h1><p>Shape each conversation, connect its tools, and test the workflow before taking it live.</p></div>
                     <div className="flex gap-2">
                         <UploadWorkflowButton />
                         <CreateFolderButton />

@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Contact, crmApi, LeadStage } from "@/lib/kodewavesApi";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 export default function CRMPage() {
   const { user, loading: authLoading } = useAuth();
@@ -137,9 +138,9 @@ export default function CRMPage() {
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={panel.collectionHeader}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Lead CRM & Contacts</h1>
+          <span className={panel.eyebrow}>GROWTH / RELATIONSHIPS</span><h1>Lead CRM &amp; Contacts</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Track voice campaign prospects, qualify inbound leads, and sync appointment outcomes.
           </p>

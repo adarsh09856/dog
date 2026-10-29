@@ -35,6 +35,8 @@ import { useClientBranding } from "@/context/ClientBrandingContext";
 import { useAuth } from "@/lib/auth";
 import { overviewApi, OverviewStatsResponse } from "@/lib/kodewavesApi";
 
+import panel from "@/components/layout/PanelWorkspace.module.css";
+
 export default function OverviewPage() {
   const branding = useClientBranding();
   const { user, loading: authLoading } = useAuth();
@@ -179,70 +181,30 @@ export default function OverviewPage() {
   ];
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className={`${panel.workspace} container mx-auto px-4 py-8`}>
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       <div className="max-w-6xl mx-auto space-y-8">
-        <Card className="border border-border/70 bg-card shadow-sm">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-primary text-xs font-semibold tracking-wider uppercase">
-                <Activity className="h-4 w-4" />
-                {branding.company_name} workspace
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={loadStats}
-                  disabled={loading}
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-                </Button>
-                <Badge variant="outline" className="text-muted-foreground">
-                  Workspace overview
-                </Badge>
-              </div>
+        <header className={panel.workspaceHero}>
+          <div>
+            <p className={panel.eyebrow}>{branding.company_name} / WORKSPACE OVERVIEW</p>
+            <h1>{user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}.` : `Welcome to ${branding.company_name}`}</h1>
+            <p className={panel.heroDescription}>Your voice operation, at a glance. Build the next conversation or review what happened in the last one.</p>
+            <span className="mt-3 inline-flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-primary" />Hosted or customer-managed deployment</span>
+            <div className={panel.heroActions}>
+              <Button asChild><Link href="/workflow/create"><Plus className="h-4 w-4" /> Create Agent</Link></Button>
+              <Button asChild variant="outline"><Link href="/usage">Review call activity <ArrowRight className="h-4 w-4" /></Link></Button>
+              <Button asChild variant="ghost"><Link href="/billing-sovereign"><Wallet className="h-4 w-4 text-primary" /> Top Up</Link></Button>
             </div>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-2">
-              <div>
-                <CardTitle className="text-3xl font-bold tracking-tight">
-                  {user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}!` : `Welcome to ${branding.company_name}`}
-                </CardTitle>
-                <CardDescription className="text-sm text-muted-foreground mt-1 max-w-2xl">
-                  Configure voice agents, connect speech and telephony providers, and review call activity from one workspace.
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button asChild size="sm" className="gap-1.5 shadow-sm">
-                  <Link href="/workflow/create">
-                    <Plus className="h-4 w-4" /> Create Agent
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="sm" className="gap-1.5">
-                  <Link href="/billing-sovereign">
-                    <Wallet className="h-4 w-4 text-primary" /> Top Up
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex flex-wrap items-center gap-3 border-t border-border/40 pt-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5 font-medium text-foreground">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                Hosted or customer-managed deployment
-              </span>
-              <span>•</span>
-              <span>Configure cloud or self-hosted speech models</span>
-              <span>•</span>
-              <span>Browser and telephony channels</span>
-            </div>
-          </CardContent>
-        </Card>
-
+          </div>
+          <div className={panel.workspaceSummary}>
+            <div><span>YOUR WORKSPACE</span><Button variant="ghost" size="icon" aria-label="Refresh overview" onClick={loadStats} disabled={loading}><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /></Button></div>
+            <strong>Build. Connect. Operate.</strong>
+            <p>Agent workflows, speech providers and conversation records in one place.</p>
+            <Link href="/model-configurations">Configure your voice stack <ArrowRight size={14} /></Link>
+          </div>
+        </header>
         {/* Real Dynamic Stat Tiles */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={panel.metricRail}>
           {/* Wallet Minutes */}
           <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
@@ -439,56 +401,20 @@ export default function OverviewPage() {
           </div>
         )}
 
-        {/* Section Groups */}
-        {sections.map((section) => (
-          <div key={section.category} className="space-y-4">
-            <div>
-              <h2 className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
-                {section.category}
-              </h2>
-              <p className="text-xs text-muted-foreground/80 mt-0.5">
-                {section.description}
-              </p>
+        <section aria-label="Workspace tools" className={panel.toolDirectory}>
+          {sections.map((section, index) => (
+            <div key={section.category} className={panel.toolGroup}>
+              <div className={panel.groupHeading}><span>0{index + 1}</span><h2>{section.category}</h2></div>
+              <p className={panel.groupDescription}>{section.description}</p>
+              <div>
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  return <Link key={item.href} href={item.href} className={panel.toolLink}><Icon size={17} /><div><h3>{item.title}</h3><p>{item.desc}</p></div><ArrowRight size={15} /></Link>;
+                })}
+              </div>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="group relative flex flex-col justify-between rounded-xl border border-border/60 bg-card p-5 transition-all hover:border-primary/50 hover:bg-accent/10 hover:shadow-xs"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        {item.badge && (
-                          <Badge variant="secondary" className="text-[10px] font-medium px-2 py-0.5">
-                            {item.badge}
-                          </Badge>
-                        )}
-                      </div>
-                      <h3 className="font-semibold text-sm group-hover:text-primary transition-colors">
-                        {item.title}
-                      </h3>
-                      <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
-                        {item.desc}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                      Open {item.title} <ArrowRight className="h-3.5 w-3.5" />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-
+          ))}
+        </section>
         {/* Platform administration is available only to backend superusers. */}
         {user?.is_superuser === true && <Card className="border border-border/70 bg-muted/20">
           <CardHeader className="pb-3">
