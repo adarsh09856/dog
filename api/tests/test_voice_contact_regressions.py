@@ -258,6 +258,33 @@ def test_repeated_relative_date_does_not_fall_through_and_invent_a_time(monkeypa
     assert "booking_confirmation_slot" not in state
 
 
+def test_changing_booking_date_discards_old_confirmation_slot_and_asks_for_time(monkeypatch):
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 28, 10, 0, tzinfo=tz or timezone(timedelta(hours=5, minutes=30)))
+
+    monkeypatch.setattr(contacts, "datetime", FrozenDatetime)
+    state = {
+        "caller_name": "Adarsh",
+        "caller_phone": "9538300941",
+        "reply_language": "English",
+        "booking_time_question_date": "2026-10-29",
+        "booking_confirmation_slot": "2026-10-29T10:00",
+    }
+    history = [
+        {"role": "user", "content": "I want to book an appointment"},
+        {"role": "assistant", "content": "I have 29 October at 10 AM. Should I book it?"},
+        {"role": "user", "content": "Actually, tomorrow, but I have not said the time"},
+    ]
+
+    reply = contacts.booking_contact_question(history, {}, state)
+
+    assert reply == "Okay, 29 October 2026. What time works for you?"
+    assert state["booking_time_question_date"] == "2026-10-29"
+    assert "booking_confirmation_slot" not in state
+
+
 def test_booking_combined_tomorrow_and_time_is_confirmed_without_reasking(monkeypatch):
     class FrozenDatetime(datetime):
         @classmethod

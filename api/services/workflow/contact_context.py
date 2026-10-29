@@ -413,8 +413,6 @@ def booking_date_time_question(
     if not any(new_booking_requested(message["content"]) for message in users[:-1]):
         return None
     relative_date = re.search(r"\b(?:tomorrow|today)\b|कल|आज", latest, re.I)
-    if state.get("booking_confirmation_slot"):
-        return None
     if not relative_date and re.search(
         r"\b(?:at|time|am|pm)\b|\d{1,2}:\d{2}|समय|बजे|सुबह|दोपहर|शाम|रात",
         latest,
@@ -434,6 +432,10 @@ def booking_date_time_question(
     # example, ASR text such as "Tomorrow's telepm"). Returning None here lets
     # the LLM fill the missing time with a plausible but invented default.
     # Keep the date and ask only for the still-missing time again.
+    # A new date without a time supersedes any previously proposed slot. Keep
+    # the caller on the deterministic date/time path instead of allowing the
+    # LLM to reuse or invent a time from the stale confirmation.
+    state.pop("booking_confirmation_slot", None)
     state["booking_time_question_date"] = stated_date
     parsed = date.fromisoformat(stated_date)
     hindi = state.get("reply_language") == "Hindi" or bool(
