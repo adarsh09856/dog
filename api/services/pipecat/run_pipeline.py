@@ -1009,6 +1009,17 @@ async def _run_pipeline_impl(
     # Create in-memory logs buffer early so it can be used by engine callbacks
     in_memory_logs_buffer = InMemoryLogsBuffer(workflow_run_id)
 
+    async def record_llm_stream_trace(event: dict) -> None:
+        """Persist numeric per-request model timing, never prompt or reply text."""
+        await in_memory_logs_buffer.append(event)
+
+    for service in {
+        id(value): value
+        for value in (llm, inference_llm, variable_extraction_llm)
+        if value is not None
+    }.values():
+        service._llm_trace_sink = record_llm_stream_trace
+
     # Create node transition callback (always logs to buffer, optionally streams to WS)
     ws_sender = get_ws_sender(workflow_run_id)
 
@@ -1434,6 +1445,7 @@ async def _run_pipeline_impl(
             use_draft=bool(workflow_run.extra.get("use_draft")),
             observers=[feedback_observer],
             caller_language_source=stt,
+            llm_trace_sink=record_llm_stream_trace,
         )
         engine.set_agent_factory(agent_factory)
         # The agent this call starts on. Its services were resolved above from

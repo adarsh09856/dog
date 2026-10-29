@@ -545,7 +545,10 @@ def register_event_handlers(
                 # into the completed run so latency can be inspected after calls.
                 speech_diagnostics = [
                     event for event in feedback_events
-                    if event.get("type") in {"rtf-speech-stage", "rtf-audio-health"}
+                    if event.get("type") in {
+                        "rtf-speech-stage", "rtf-audio-health",
+                        "rtf-llm-stream-trace",
+                    }
                 ]
                 if speech_diagnostics:
                     logs_update["speech_diagnostics"] = speech_diagnostics

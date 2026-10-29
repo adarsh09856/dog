@@ -221,6 +221,27 @@ class _BookingToolChoiceMixin:
                     yield chunk
                 complete = True
             finally:
+                trace_payload = {
+                    "model": getattr(getattr(self, "_settings", None), "model", None),
+                    "usage_context": getattr(self, "_usage_context", None)
+                    or "conversation_or_shared_inference",
+                    "headers_ms": round(headers_ms, 1),
+                    "first_event_ms": round(first_event_ms, 1)
+                    if first_event_ms is not None else None,
+                    "first_output_ms": round(first_output_ms, 1)
+                    if first_output_ms is not None else None,
+                    "total_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "chunks": chunks,
+                    "prompt_tokens": prompt_tokens,
+                    "cached_prompt_tokens": cached_prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "history_messages": len(messages),
+                    "history_chars": message_chars,
+                    "system_chars": system_chars,
+                    "tools": tool_count,
+                    "finish_reason": finish_reason,
+                    "complete": complete,
+                }
                 logger.info(
                     "llm_stream_trace run={} model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} total_ms={} chunks={} prompt_tokens={} cached_prompt_tokens={} completion_tokens={} history_messages={} history_chars={} system_chars={} tools={} finish_reason={} complete={}",
                     get_current_run_id(),
@@ -241,6 +262,18 @@ class _BookingToolChoiceMixin:
                     finish_reason,
                     complete,
                 )
+                trace_sink = getattr(self, "_llm_trace_sink", None)
+                if callable(trace_sink):
+                    try:
+                        await trace_sink({
+                            "type": "rtf-llm-stream-trace",
+                            "payload": trace_payload,
+                        })
+                    except Exception as exc:
+                        logger.debug(
+                            "Could not persist numeric LLM stream diagnostics ({})",
+                            type(exc).__name__,
+                        )
                 close = getattr(stream, "close", None)
                 if callable(close):
                     await close()
