@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import (
     ClientDomainChallengeModel,
+    ClientBindingRequestModel,
     ClientInstallationModel,
     ClientInstallationNonceModel,
     ClientIntegrityAlertModel,
@@ -195,6 +196,189 @@ async def renew_client_installation_record(
         record.renewed_at = now
         record.renewed_by_user_id = user_id
         record.updated_at = now
+        await session.commit()
+        return True
+
+
+async def create_client_binding_request(
+    *, installation_id: str, token_fingerprint: str, public_key: str,
+    nonce_fingerprint: str, nonce_expires_at: datetime, domains: list[str],
+    ip_ranges: list[str], reason: str,
+) -> dict | None:
+    """Persist one fresh signed request for an enrolled, active installation."""
+    async with kodewaves_db_client.get_session() as session:
+        installation = await session.get(ClientInstallationModel, installation_id, with_for_update=True)
+        now = datetime.now(UTC)
+        if (
+            installation is None
+            or installation.installation_public_key != public_key
+            or installation.revoked_at is not None
+            or installation.integrity_failed_at is not None
+            or _utc(installation.expires_at) <= now
+            or _utc(nonce_expires_at) <= now
+        ):
+            return None
+        current_token = hmac.compare_digest(installation.token_fingerprint, token_fingerprint)
+        previous_token = bool(
+            installation.previous_token_fingerprint
+            and installation.previous_token_valid_until
+            and _utc(installation.previous_token_valid_until) > now
+            and hmac.compare_digest(installation.previous_token_fingerprint, token_fingerprint)
+        )
+        if not (current_token or previous_token):
+            return None
+        await session.execute(delete(ClientInstallationNonceModel).where(
+            ClientInstallationNonceModel.installation_id == installation_id,
+            ClientInstallationNonceModel.expires_at <= now,
+        ))
+        inserted = await session.execute(
+            insert(ClientInstallationNonceModel).values(
+                installation_id=installation_id,
+                nonce_fingerprint=nonce_fingerprint,
+                expires_at=nonce_expires_at,
+            ).on_conflict_do_nothing(index_elements=["installation_id", "nonce_fingerprint"])
+        )
+        if inserted.rowcount != 1:
+            return None
+        pending = await session.execute(select(ClientBindingRequestModel.id).where(
+            ClientBindingRequestModel.installation_id == installation_id,
+            ClientBindingRequestModel.status == "pending",
+        ).limit(1))
+        if pending.scalar_one_or_none() is not None:
+            # Consume a valid proof even when another request is pending. Otherwise
+            # the same signed submission can be replayed after that request resolves.
+            await session.commit()
+            return {"conflict": True}
+        request = ClientBindingRequestModel(
+            installation_id=installation_id,
+            requested_domains=domains,
+            requested_ip_ranges=ip_ranges,
+            reason=reason,
+            status="pending",
+            created_at=now,
+        )
+        session.add(request)
+        await session.flush()
+        result = {
+            "id": request.id,
+            "installation_id": installation_id,
+            "requested_domains": domains,
+            "requested_ip_ranges": ip_ranges,
+            "reason": reason,
+            "status": "pending",
+            "created_at": now.isoformat(),
+        }
+        await session.commit()
+        return result
+
+
+async def get_client_binding_request(request_id: int) -> dict | None:
+    async with kodewaves_db_client.get_session() as session:
+        result = await session.execute(
+            select(ClientBindingRequestModel, ClientInstallationModel.customer_id)
+            .join(ClientInstallationModel)
+            .where(ClientBindingRequestModel.id == request_id)
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        request, customer_id = row
+        return {
+            "id": request.id,
+            "installation_id": request.installation_id,
+            "customer_id": customer_id,
+            "requested_domains": request.requested_domains,
+            "requested_ip_ranges": request.requested_ip_ranges,
+            "reason": request.reason,
+            "status": request.status,
+            "created_at": request.created_at.isoformat(),
+            "resolved_at": request.resolved_at.isoformat() if request.resolved_at else None,
+            "resolved_by_user_id": request.resolved_by_user_id,
+            "license_issued_at": request.license_issued_at,
+        }
+
+
+async def list_client_binding_requests(*, include_resolved: bool = False) -> list[dict]:
+    async with kodewaves_db_client.get_session() as session:
+        query = (
+            select(ClientBindingRequestModel, ClientInstallationModel.customer_id)
+            .join(ClientInstallationModel)
+            .order_by(ClientBindingRequestModel.created_at.desc())
+            .limit(200)
+        )
+        if not include_resolved:
+            query = query.where(ClientBindingRequestModel.status == "pending")
+        result = await session.execute(query)
+        return [
+            {
+                "id": request.id,
+                "installation_id": request.installation_id,
+                "customer_id": customer_id,
+                "requested_domains": request.requested_domains,
+                "requested_ip_ranges": request.requested_ip_ranges,
+                "reason": request.reason,
+                "status": request.status,
+                "created_at": request.created_at.isoformat(),
+                "resolved_at": request.resolved_at.isoformat() if request.resolved_at else None,
+                "resolved_by_user_id": request.resolved_by_user_id,
+                "license_issued_at": request.license_issued_at,
+            }
+            for request, customer_id in result.all()
+        ]
+
+
+async def resolve_client_binding_request(
+    request_id: int, *, outcome: str, user_id: int, expected_fingerprint: str | None = None,
+    new_fingerprint: str | None = None, domains: list[str] | None = None,
+    ip_ranges: list[str] | None = None, license_issued_at: int | None = None,
+) -> bool:
+    """Resolve once; approval rotates the license and binding atomically."""
+    if outcome not in {"approved", "rejected"}:
+        raise ValueError("Invalid binding request outcome")
+    async with kodewaves_db_client.get_session() as session:
+        installation_id = await session.scalar(
+            select(ClientBindingRequestModel.installation_id).where(ClientBindingRequestModel.id == request_id)
+        )
+        if installation_id is None:
+            return False
+        # All binding mutations lock the installation before the request.
+        installation = await session.get(ClientInstallationModel, installation_id, with_for_update=True)
+        request = await session.get(ClientBindingRequestModel, request_id, with_for_update=True)
+        if request is None or request.status != "pending":
+            return False
+        now = datetime.now(UTC)
+        if outcome == "approved":
+            if (
+                not expected_fingerprint or not new_fingerprint or domains is None
+                or ip_ranges is None or license_issued_at is None
+            ):
+                raise ValueError("Approval requires signed replacement binding data")
+            if (
+                installation is None
+                or request.requested_domains != domains
+                or request.requested_ip_ranges != ip_ranges
+                or installation.token_fingerprint != expected_fingerprint
+                or installation.revoked_at is not None
+                or installation.integrity_failed_at is not None
+                or _utc(installation.expires_at) <= now
+                or (
+                    installation.previous_token_valid_until is not None
+                    and _utc(installation.previous_token_valid_until) > now
+                )
+            ):
+                return False
+            installation.previous_token_fingerprint = installation.token_fingerprint
+            installation.previous_token_valid_until = min(_utc(installation.expires_at), now + timedelta(hours=48))
+            installation.token_fingerprint = new_fingerprint
+            installation.domains = domains
+            installation.ip_ranges = ip_ranges
+            installation.renewed_at = now
+            installation.renewed_by_user_id = user_id
+            installation.updated_at = now
+        request.status = outcome
+        request.license_issued_at = license_issued_at
+        request.resolved_at = now
+        request.resolved_by_user_id = user_id
         await session.commit()
         return True
 

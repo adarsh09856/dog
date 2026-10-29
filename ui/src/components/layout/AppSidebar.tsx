@@ -107,23 +107,10 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         feature: "voice",
       },
       {
-        title: "Campaigns",
-        url: "/campaigns",
-        icon: Megaphone,
-        feature: "campaigns",
-      },
-      {
         title: "Models",
         url: "/model-configurations",
         icon: Brain,
         feature: "voice",
-      },
-      {
-        title: "Telephony",
-        url: "/telephony-configurations",
-        icon: Phone,
-        feature: "telephony",
-        showsTelephonyWarning: true,
       },
       {
         title: "Tools",
@@ -143,10 +130,40 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         icon: AudioLines,
         feature: "voice",
       },
+      {
+        title: "Prompt Templates",
+        url: "/prompt-templates",
+        icon: Sparkles,
+        feature: "voice",
+      },
     ],
   },
   {
-    label: "GROWTH & LEADS",
+    label: "CHANNELS",
+    items: [
+      {
+        title: "Telephony",
+        url: "/telephony-configurations",
+        icon: Phone,
+        feature: "telephony",
+        showsTelephonyWarning: true,
+      },
+      {
+        title: "Campaigns",
+        url: "/campaigns",
+        icon: Megaphone,
+        feature: "campaigns",
+      },
+      {
+        title: "Web Widgets",
+        url: "/widgets",
+        icon: Globe,
+        feature: "widgets",
+      },
+    ],
+  },
+  {
+    label: "CUSTOMER JOURNEYS",
     items: [
       {
         title: "CRM Leads",
@@ -166,25 +183,13 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         icon: LayoutList,
         feature: "forms",
       },
-      {
-        title: "Web Widgets",
-        url: "/widgets",
-        icon: Globe,
-        feature: "widgets",
-      },
-      {
-        title: "Prompt Templates",
-        url: "/prompt-templates",
-        icon: Sparkles,
-        feature: "voice",
-      },
     ],
   },
   {
-    label: "MANAGE",
+    label: "OPERATIONS",
     items: [
       {
-        title: "Agent Runs",
+        title: "Usage & Runs",
         url: "/usage",
         icon: TrendingUp,
         feature: "voice",
@@ -200,7 +205,7 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         url: "/reports",
         icon: FileText,
         feature: "voice",
-      }
+      },
     ],
   },
 ];
@@ -395,7 +400,7 @@ export function AppSidebar() {
   );
 
   return (
-    <Sidebar collapsible="icon" variant="sidebar" className={cn("app-sidebar-dock", chrome.navigation)}>
+    <Sidebar collapsible="icon" variant="sidebar" className={cn("app-workspace-nav", chrome.navigation)}>
       <SidebarHeader className="px-2 py-3 notranslate" translate="no">
         <div className="flex items-center justify-between">
           <div className={cn("flex items-center gap-2", isCollapsed && "hidden")}>

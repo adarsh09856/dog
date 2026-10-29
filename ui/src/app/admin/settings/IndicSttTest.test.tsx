@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ getModels: vi.fn(), test: vi.fn() }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: { id: "admin-1" }, loading: false }) }));
 vi.mock("@/lib/kodewavesApi", () => ({
   adminApi: { getIndicSttModels: mocks.getModels, testIndicStt: mocks.test },
 }));

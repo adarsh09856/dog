@@ -24,16 +24,22 @@ from api.db.client_installations import (
     get_client_installation_record,
     get_pending_domain_challenge,
     issue_installation_enrollment,
+    list_client_binding_requests,
     list_client_installation_records,
     list_client_integrity_alerts,
     mark_domain_verified,
     renew_client_installation_record,
+    resolve_client_binding_request,
     revoke_client_installation_record,
     save_domain_challenge,
     unverified_license_domains,
 )
 from api.db.models import UserModel
 from api.services.auth.depends import get_superuser
+from api.services.client_binding_requests import (
+    approve_binding_request as approve_binding_change,
+    recover_approved_binding_token,
+)
 from api.services.domain_challenge import challenge_record_name, dns_proves_domain
 from api.services.installation_license import (
     InstallationLicenseError,
@@ -147,6 +153,10 @@ class InstallationEnrollmentTokenResponse(BaseModel):
     expires_at: int
 
 
+class RejectBindingRequest(BaseModel):
+    note: str = Field(default="", max_length=1000)
+
+
 def _read_owner_signing_key(key_path: str) -> tuple[bytes, str]:
     if not key_path:
         raise HTTPException(status_code=503, detail="Owner license signer is not configured")
@@ -192,6 +202,43 @@ async def get_client_integrity_alerts(
     _user: Annotated[UserModel, Depends(get_superuser)],
 ) -> list[dict]:
     return await list_client_integrity_alerts()
+
+
+@router.get("/binding-requests")
+async def get_binding_requests(
+    _user: Annotated[UserModel, Depends(get_superuser)],
+    include_resolved: bool = False,
+) -> list[dict]:
+    return await list_client_binding_requests(include_resolved=include_resolved)
+
+
+@router.post("/binding-requests/{request_id}/reject")
+async def reject_binding_request(
+    request_id: int,
+    _request: RejectBindingRequest,
+    user: Annotated[UserModel, Depends(get_superuser)],
+) -> dict:
+    if not await resolve_client_binding_request(request_id, outcome="rejected", user_id=user.id):
+        raise HTTPException(status_code=404, detail="Pending binding request not found")
+    return {"request_id": request_id, "status": "rejected"}
+
+
+@router.post("/binding-requests/{request_id}/approve")
+async def approve_binding_request(
+    request_id: int,
+    user: Annotated[UserModel, Depends(get_superuser)],
+) -> dict:
+    """Approve only DNS-verified domains and issue the replacement token once."""
+    return await approve_binding_change(request_id, user.id, _owner_signing_key)
+
+
+@router.post("/binding-requests/{request_id}/recover-token")
+async def recover_binding_request_token(
+    request_id: int,
+    _user: Annotated[UserModel, Depends(get_superuser)],
+) -> dict:
+    """Recover the exact token from an approved request without rotating it."""
+    return await recover_approved_binding_token(request_id, _owner_signing_key)
 
 
 @router.post("/alerts/{alert_id}/acknowledge")

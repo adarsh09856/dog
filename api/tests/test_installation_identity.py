@@ -14,10 +14,12 @@ from api.services.installation_identity import (
     InstallationIdentityError,
     owner_check_message,
     owner_check_payload,
+    sign_binding_request,
     sign_enrollment,
     sign_owner_check,
     verify_enrollment,
     verify_owner_check,
+    verify_binding_request,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -98,6 +100,33 @@ def test_enrollment_binds_one_time_token_license_and_key(identity):
             verify_enrollment(signature=signature, now=fields["issued_at"], **{**enrollment, **changes})
     with pytest.raises(InstallationIdentityError):
         verify_enrollment(signature=signature, now=fields["issued_at"] + 91, **enrollment)
+
+
+def test_binding_request_proof_binds_domains_ips_reason_and_freshness(identity):
+    private, public, base = identity
+    fields = {
+        "installation_id": base["installation_id"],
+        "license_token": base["license_token"],
+        "nonce": base["nonce"],
+        "issued_at": base["issued_at"],
+        "domains": ["app.customer.example", "customer.example"],
+        "ip_ranges": ["203.0.113.10/32"],
+        "reason": "Move to the new host",
+    }
+    signature = sign_binding_request(private, **fields)
+    verify_binding_request(public, signature, now=fields["issued_at"], **fields)
+    for change in (
+        {"domains": ["other.example"]},
+        {"ip_ranges": ["203.0.113.11/32"]},
+        {"reason": "different request"},
+        {"license_token": "different-license"},
+    ):
+        with pytest.raises(InstallationIdentityError):
+            verify_binding_request(public, signature, now=fields["issued_at"], **{**fields, **change})
+    with pytest.raises(InstallationIdentityError):
+        verify_binding_request(public, signature, now=fields["issued_at"] + 301, **fields)
+    with pytest.raises(InstallationIdentityError):
+        sign_binding_request(private, **{**fields, "domains": ["Customer.example"]})
 
 
 @pytest.mark.parametrize("finding", [None, {"reason": "modified_file", "component": "ui/server.js"}])

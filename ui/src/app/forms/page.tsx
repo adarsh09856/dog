@@ -167,7 +167,7 @@ export default function FormsPage() {
   };
 
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 md:p-8">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
       <header className={panel.collectionHeader}>
@@ -205,6 +205,29 @@ export default function FormsPage() {
         </div>
       </header>
 
+      <div className={panel.metricRail} aria-label="Voice form overview">
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Configured forms</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{forms.length.toLocaleString()}</span><FileText className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Intake flows available to your agents</p>
+        </Card>
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active forms</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{forms.filter((form) => form.is_active).length}</span><CheckCircle2 className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Enabled for conversational intake</p>
+        </Card>
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Questions</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{forms.reduce((total, form) => total + (form.fields?.length || 0), 0)}</span><ListPlus className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Fields configured across all forms</p>
+        </Card>
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Submissions</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{forms.reduce((total, form) => total + (form.submission_count || 0), 0)}</span><FileSpreadsheet className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Responses collected by your agents</p>
+        </Card>
+      </div>
+
       <Card className="border-border/60">
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">
@@ -218,8 +241,8 @@ export default function FormsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="rounded-lg overflow-hidden">
-            <Table>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[820px]">
               <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead className="text-xs">Form Title</TableHead>

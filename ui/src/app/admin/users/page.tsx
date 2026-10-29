@@ -431,7 +431,7 @@ export default function AdminUsersPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="overflow-x-auto rounded-xl border border-border/60">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>

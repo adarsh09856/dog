@@ -93,7 +93,7 @@ export default function AdminMonitoringPage() {
             Live monitoring of voice sessions and run records.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             {error ? 'Refresh failed' : 'Live Polling (3s)'}
@@ -186,7 +186,7 @@ export default function AdminMonitoringPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="overflow-x-auto rounded-xl border border-border/60">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>

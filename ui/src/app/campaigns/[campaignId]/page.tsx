@@ -461,7 +461,7 @@ export default function CampaignDetailPage() {
 
     if (isLoadingCampaign) {
         return (
-            <div className={`${chrome.detailPage} container mx-auto p-6 space-y-6`}>
+            <div className={`${chrome.detailPage} container mx-auto max-w-screen-2xl space-y-6 px-4 py-6 sm:px-6 lg:px-8`}>
                 <div className="animate-pulse">
                     <div className="h-8 bg-muted rounded w-1/4 mb-4"></div>
                     <div className="h-64 bg-muted rounded"></div>
@@ -472,14 +472,14 @@ export default function CampaignDetailPage() {
 
     if (!campaign) {
         return (
-            <div className={`${chrome.detailPage} container mx-auto p-6 space-y-6`}>
+            <div className={`${chrome.detailPage} container mx-auto max-w-screen-2xl space-y-6 px-4 py-6 sm:px-6 lg:px-8`}>
                 <p className="text-center text-muted-foreground">Campaign not found</p>
             </div>
         );
     }
 
     return (
-        <div className={`${chrome.detailPage} container mx-auto p-6 space-y-6`}>
+        <div className={`${chrome.detailPage} container mx-auto max-w-screen-2xl space-y-6 px-4 py-6 sm:px-6 lg:px-8`}>
             <div>
                 <Button
                     variant="ghost"
@@ -489,10 +489,11 @@ export default function CampaignDetailPage() {
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Campaigns
                 </Button>
-                <div className="flex justify-between items-start">
-                    <div>
-                        <h1 className={chrome.detailTitle}>{campaign.name}</h1>
-                            <div className="flex items-center gap-4">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Outbound · Campaigns</p>
+                        <h1 className={`${chrome.detailTitle} break-words`}>{campaign.name}</h1>
+                            <div className="flex flex-wrap items-center gap-3">
                                 <Badge variant={getStateBadgeVariant(campaign.state)}>
                                     {campaign.state}
                                 </Badge>
@@ -501,7 +502,7 @@ export default function CampaignDetailPage() {
                                 </span>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                             <Popover open={isReportPopoverOpen} onOpenChange={setIsReportPopoverOpen}>
                                 <PopoverTrigger asChild>
                                     <Button variant="outline" disabled={isDownloadingReport}>

@@ -17,6 +17,14 @@ import { requiredFeatureForUiPath } from "@/lib/clientEntitlements";
 
 import { AppSidebar } from "./AppSidebar";
 
+const PUBLIC_MARKETING_PATHS = ["/", "/pricing", "/platform", "/deployment", "/auth", "/handler", "/embed"];
+
+function isPublicMarketingPath(pathname: string | null): boolean {
+  return PUBLIC_MARKETING_PATHS.some((path) =>
+    path === "/" ? pathname === path : pathname === path || pathname?.startsWith(`${path}/`),
+  );
+}
+
 function AppHeader() {
   const { toggleSidebar } = useSidebar();
   const pathname = usePathname();
@@ -44,10 +52,7 @@ function BackendStatusBanner() {
   if (
     !config ||
     config.backendStatus === "reachable" ||
-    pathname === "/" ||
-    pathname?.startsWith("/auth") ||
-    pathname?.startsWith("/pricing") ||
-    pathname?.startsWith("/embed") ||
+    isPublicMarketingPath(pathname) ||
     pathname?.startsWith("/admin") ||
     pathname?.startsWith("/superadmin")
   ) {
@@ -104,12 +109,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({
   const requiredFeature = requiredFeatureForUiPath(pathname);
 
   // Public marketing & embedding routes: Never render sidebar or internal app chrome
-  const isPublicOrMarketing =
-    pathname === "/" ||
-    pathname.startsWith("/pricing") ||
-    pathname.startsWith("/auth") ||
-    pathname.startsWith("/handler") ||
-    pathname.startsWith("/embed");
+  const isPublicOrMarketing = isPublicMarketingPath(pathname);
 
   // Admin and superadmin control plane routes have their own layout and sidebar
   const isAdminRoute =

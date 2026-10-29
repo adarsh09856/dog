@@ -65,17 +65,31 @@ interface IntegrityAlert {
   occurrence_count: number;
 }
 
+interface BindingRequest {
+  id: number;
+  installation_id: string;
+  customer_id: string;
+  requested_domains: string[];
+  requested_ip_ranges: string[];
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+}
+
 const DEFAULT_FEATURES = "voice, telephony, campaigns, crm, appointments, forms, widgets, knowledge_base, billing";
 
 export default function ClientInstallationsPage() {
   const { user, loading: authLoading } = useAuth();
   const [records, setRecords] = useState<InstallationRecord[]>([]);
   const [alerts, setAlerts] = useState<IntegrityAlert[]>([]);
+  const [bindingRequests, setBindingRequests] = useState<BindingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [renewingId, setRenewingId] = useState<string | null>(null);
   const [enrollingId, setEnrollingId] = useState<string | null>(null);
+  const [resolvingBindingId, setResolvingBindingId] = useState<number | null>(null);
+  const [recoveringBindingId, setRecoveringBindingId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [signerUnavailable, setSignerUnavailable] = useState(false);
   const [issued, setIssued] = useState<IssuedLicense | null>(null);
@@ -98,12 +112,14 @@ export default function ClientInstallationsPage() {
   const refresh = useCallback(async () => {
     try {
       setError("");
-      const [nextRecords, nextAlerts] = await Promise.all([
+      const [nextRecords, nextAlerts, nextBindingRequests] = await Promise.all([
         apiFetch<InstallationRecord[]>("/admin/client-installations"),
         apiFetch<IntegrityAlert[]>("/admin/client-installations/alerts"),
+        apiFetch<BindingRequest[]>("/admin/client-installations/binding-requests?include_resolved=true"),
       ]);
       setRecords(nextRecords);
       setAlerts(nextAlerts);
+      setBindingRequests(nextBindingRequests);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load installations.");
     } finally {
@@ -248,6 +264,75 @@ export default function ClientInstallationsPage() {
     }
   };
 
+  const createRequestedDomainChallenge = async (request: BindingRequest, requestedDomain: string) => {
+    setChallengeBusy(true);
+    setError("");
+    setCustomerId(request.customer_id);
+    setDomain(requestedDomain);
+    setDomainVerified(false);
+    try {
+      setChallenge(await apiFetch<DomainChallenge>("/admin/client-installations/domain-challenges", {
+        method: "POST",
+        body: JSON.stringify({ customer_id: request.customer_id, domain: requestedDomain }),
+      }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to create the requested domain challenge.");
+    } finally {
+      setChallengeBusy(false);
+    }
+  };
+
+  const approveBindingRequest = async (requestId: number) => {
+    setResolvingBindingId(requestId);
+    setIssued(null);
+    setError("");
+    try {
+      const result = await apiFetch<IssuedLicense>(
+        "/admin/client-installations/binding-requests/" + requestId + "/approve",
+        { method: "POST" },
+      );
+      setIssued(result);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to approve this binding request.");
+    } finally {
+      setResolvingBindingId(null);
+    }
+  };
+
+  const rejectBindingRequest = async (requestId: number) => {
+    setResolvingBindingId(requestId);
+    setError("");
+    try {
+      await apiFetch("/admin/client-installations/binding-requests/" + requestId + "/reject", {
+        method: "POST",
+        body: JSON.stringify({ note: "" }),
+      });
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to reject this binding request.");
+    } finally {
+      setResolvingBindingId(null);
+    }
+  };
+
+  const recoverBindingToken = async (requestId: number) => {
+    setRecoveringBindingId(requestId);
+    setIssued(null);
+    setError("");
+    try {
+      const result = await apiFetch<IssuedLicense>(
+        "/admin/client-installations/binding-requests/" + requestId + "/recover-token",
+        { method: "POST" },
+      );
+      setIssued(result);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to recover this approved license.");
+    } finally {
+      setRecoveringBindingId(null);
+    }
+  };
+
   return (
     <div className={admin.surface} data-area="DISTRIBUTION / INSTALLATIONS">
       <div className={admin.hero}>
@@ -313,9 +398,57 @@ export default function ClientInstallationsPage() {
           </div>)}
         </CardContent>
       </Card>}
+      {bindingRequests.length > 0 && <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Domain and IP change requests ({bindingRequests.length})</CardTitle>
+          <CardDescription>Verify control of every requested domain before approving. Approved binding licenses can be recovered by an owner without rotating them.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {bindingRequests.map((request) => <div key={request.id} className="rounded-lg border border-border/70 p-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <strong>Request #{request.id} · {request.installation_id}</strong>
+              <span className="text-xs text-muted-foreground">{request.status} · {new Date(request.created_at).toLocaleString()}</span>
+            </div>
+            <p className="mt-2"><strong>Domains:</strong> {request.requested_domains.join(", ")}</p>
+            <p className="mt-1"><strong>Source IP/CIDR:</strong> {request.requested_ip_ranges.join(", ") || "No IP restriction"}</p>
+            <p className="mt-1 text-muted-foreground"><strong>Reason:</strong> {request.reason}</p>
+            {request.status === "pending" && <div className="mt-3 flex flex-wrap gap-2">
+              {request.requested_domains.map((requestedDomain) => <Button
+                key={requestedDomain}
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={challengeBusy || resolvingBindingId === request.id}
+                onClick={() => void createRequestedDomainChallenge(request, requestedDomain)}
+              >Create DNS challenge · {requestedDomain}</Button>)}
+              <Button
+                type="button"
+                size="sm"
+                disabled={resolvingBindingId === request.id}
+                onClick={() => void approveBindingRequest(request.id)}
+              >{resolvingBindingId === request.id ? "Approving…" : "Approve and issue token"}</Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={resolvingBindingId === request.id}
+                onClick={() => void rejectBindingRequest(request.id)}
+              >{resolvingBindingId === request.id ? "Saving…" : "Reject request"}</Button>
+            </div>}
+            {request.status === "approved" && <Button
+              className="mt-3"
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={recoveringBindingId === request.id}
+              onClick={() => void recoverBindingToken(request.id)}
+            >{recoveringBindingId === request.id ? "Recovering…" : "Recover approved license"}</Button>}
+          </div>)}
+        </CardContent>
+      </Card>}
       {issued && (
         <Card className="border-amber-500/50">
-          <CardHeader><CardTitle className="flex items-center gap-2 text-base"><KeyRound className="h-4 w-4" />Issued: {issued.installation_id}</CardTitle><CardDescription>Copy these values into the client installation configuration now. The token cannot be retrieved from this screen later.</CardDescription></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2 text-base"><KeyRound className="h-4 w-4" />Issued: {issued.installation_id}</CardTitle><CardDescription>Copy these values into the client installation configuration. Binding-approval tokens can be recovered from their approved request without changing the license.</CardDescription></CardHeader>
           <CardContent className="space-y-3">
             <div><Label htmlFor="issued-token">Signed license token</Label><textarea id="issued-token" readOnly value={issued.token} className="mt-1 h-24 w-full rounded-md border bg-background p-2 font-mono text-xs" /></div>
             <div><Label htmlFor="issued-public-key">Public verification key</Label><Input id="issued-public-key" readOnly value={issued.public_key} className="font-mono text-xs" /></div>

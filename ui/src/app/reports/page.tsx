@@ -12,6 +12,7 @@ import {
 } from '@/client/sdk.gen';
 import type { WorkflowRunDetail } from '@/client/types.gen';
 import { Button } from '@/components/ui/button';
+import panel from '@/components/layout/PanelWorkspace.module.css';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Card } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -219,18 +220,18 @@ export default function ReportsPage() {
   const isToday = format(selectedDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold">Daily Reports</h1>
-        </div>
+    <main className="container mx-auto space-y-5 px-4 py-8 md:px-6">
+      <header className={panel.collectionHeader}>
+        <div><span className={panel.eyebrow}>ANALYTICS / DAILY REPORTS</span><h1>Daily reports</h1><p>Review call outcomes and duration trends for a selected workflow and date.</p></div>
+      </header>
 
-        {/* Date Navigation & Workflow Selector */}
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+      {/* Date and workflow controls stay grouped so the report scope is visible. */}
+      <section aria-label="Report filters" className="flex flex-col justify-between gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center">
+        <p className="text-sm font-medium">Report scope</p>
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
           {/* Workflow Selector */}
           <Select value={selectedWorkflow} onValueChange={setSelectedWorkflow}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="Select workflow" />
             </SelectTrigger>
             <SelectContent>
@@ -244,7 +245,7 @@ export default function ReportsPage() {
           </Select>
 
           {/* Date Navigation */}
-          <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
             <Button
               variant="outline"
               size="icon"
@@ -256,7 +257,7 @@ export default function ReportsPage() {
 
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className="w-[200px]">
+                <Button variant="outline" className="w-[180px] sm:w-[200px]">
                   <Calendar className="mr-2 h-4 w-4" />
                   {format(selectedDate, 'MMM dd, yyyy')}
                 </Button>
@@ -282,10 +283,10 @@ export default function ReportsPage() {
             </Button>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Timezone Display and Download Button */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+      <div className="flex flex-col justify-between gap-2 rounded-lg border border-border/70 bg-muted/20 px-4 py-3 text-sm sm:flex-row sm:items-center">
         <div className="text-sm text-muted-foreground">
           {preferencesReady ? `Showing data for ${timezone} timezone` : 'Loading workspace timezone…'}
           {selectedWorkflow !== 'all' && (
@@ -356,6 +357,6 @@ export default function ReportsPage() {
           )}
         </>
       )}
-    </div>
+    </main>
   );
 }

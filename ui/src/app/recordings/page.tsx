@@ -1,7 +1,7 @@
 "use client";
 import { WorkspacePageHeader } from "@/components/layout/WorkspacePageHeader";
 
-import { ExternalLink, Upload } from "lucide-react";
+import { AudioLines, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -38,7 +38,17 @@ export default function RecordingsPage() {
 
     return (
         <div className="container mx-auto px-4 py-8">
-            <WorkspacePageHeader area="OPERATIONS / AUDIO LIBRARY" title="Recordings" description="Manage audio recordings for your organization." />
+            <WorkspacePageHeader
+                area="OPERATIONS / AUDIO LIBRARY"
+                title="Audio library"
+                description="Keep reusable audio and generated speech together. Uploaded recordings and cached TTS have separate controls, so refreshing generated speech does not alter source files."
+                actions={<Button onClick={() => setIsUploadOpen(true)}><Upload className="mr-2 h-4 w-4" />Upload recording</Button>}
+            />
+
+            <div className="mb-5 flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4">
+                <AudioLines className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                <div><p className="text-sm font-semibold">Choose a library</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Manage source recordings or review cached speech reused by workflows. Playback controls stay available on each item.</p></div>
+            </div>
 
             <Tabs defaultValue="recordings" key={`${user.id}:${"selectedTeam" in user ? user.selectedTeam?.id : user.organizationId}`}>
                 <TabsList className="mb-4">
@@ -48,17 +58,14 @@ export default function RecordingsPage() {
                 <TabsContent value="recordings">
                     <Card>
                         <CardHeader>
-                            <div className="flex justify-between items-center">
+                            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                                 <div>
                                     <CardTitle>All Recordings</CardTitle>
                                     <CardDescription>
                                         Audio recordings shared across all agents in your organization
                                     </CardDescription>
                                 </div>
-                                <Button onClick={() => setIsUploadOpen(true)}>
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    Upload Recording
-                                </Button>
+                                <span className="text-xs text-muted-foreground">Organization library</span>
                             </div>
                         </CardHeader>
                         <CardContent>

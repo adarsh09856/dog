@@ -445,8 +445,9 @@ export default function UsagePage() {
             <div>
                 <div className={panel.collectionHeader}>
                     <div>
-                        <h1>Agent Runs</h1>
-                        <p className="text-muted-foreground">See all your Agent Runs across all Voice Agents. You can use filters to filter out required Agent Runs.</p>
+                        <span className={panel.eyebrow}>OPERATIONS / USAGE</span>
+                        <h1>Call usage</h1>
+                        <p className="text-muted-foreground">Inspect organization call activity, duration, outcomes, and usage charges. Filter the run history to find the conversations you need.</p>
                     </div>
                         <div className="flex items-center gap-2">
                             <Globe className="h-4 w-4 text-muted-foreground" />

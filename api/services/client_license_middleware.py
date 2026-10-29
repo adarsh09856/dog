@@ -157,6 +157,13 @@ class ClientLicenseMiddleware:
         "/api/v1/installation/license",
         "/installation/features",
         "/api/v1/installation/features",
+        # Identity-signed recovery request must still reach the owner when the
+        # current hostname or optional source-IP binding has changed.
+    }
+
+    _OWNER_RECOVERY_METHODS: ClassVar[set[tuple[str, str]]] = {
+        ("POST", "/installation/binding-requests"),
+        ("POST", "/api/v1/installation/binding-requests"),
     }
 
     def __init__(self, app: ASGIApp) -> None:
@@ -168,7 +175,7 @@ class ClientLicenseMiddleware:
             return
 
         path = scope.get("path", "")
-        if path in self._PUBLIC_PATHS or (
+        if path in self._PUBLIC_PATHS or (scope.get("method", "GET").upper(), path) in self._OWNER_RECOVERY_METHODS or (
             scope.get("method") == "GET"
             and path in {"/installation/branding", "/api/v1/installation/branding"}
         ):

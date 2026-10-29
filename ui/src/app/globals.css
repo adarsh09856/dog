@@ -70,14 +70,16 @@
   --chart-3: #214743;
   --chart-4: #8aa875;
   --chart-5: #c07d55;
-  --sidebar: #e9eee6;
-  --sidebar-foreground: #142b2c;
-  --sidebar-primary: #426b57;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #dee8da;
-  --sidebar-accent-foreground: #2f5442;
-  --sidebar-border: #d6ded3;
-  --sidebar-ring: #a88446;
+  /* The workspace rail stays deep green in both content themes, so light mode
+     is not the same pale, detached sidebar treatment as the legacy console. */
+  --sidebar: #10231f;
+  --sidebar-foreground: #e5eee8;
+  --sidebar-primary: #9bc9aa;
+  --sidebar-primary-foreground: #10231f;
+  --sidebar-accent: #1d3931;
+  --sidebar-accent-foreground: #f2f7f3;
+  --sidebar-border: #29433a;
+  --sidebar-ring: #9bc9aa;
   --foreground: #142b2c;
   --background: #f2f4ed;
   /* Single restrained warm accent — used only on primary CTAs + focus rings. */
@@ -113,14 +115,14 @@
   --chart-3: #6eaaa0;
   --chart-4: #c07d55;
   --chart-5: #a5a875;
-  --sidebar: #132523;
-  --sidebar-foreground: #e7eee7;
-  --sidebar-primary: #b7d3b3;
-  --sidebar-primary-foreground: #142b2c;
-  --sidebar-accent: #254137;
-  --sidebar-accent-foreground: #e7eee7;
-  --sidebar-border: #304344;
-  --sidebar-ring: #d1b367;
+  --sidebar: #0f201d;
+  --sidebar-foreground: #e5eee8;
+  --sidebar-primary: #9bc9aa;
+  --sidebar-primary-foreground: #10231f;
+  --sidebar-accent: #1d3931;
+  --sidebar-accent-foreground: #f2f7f3;
+  --sidebar-border: #29433a;
+  --sidebar-ring: #9bc9aa;
   /* Warm accent, slightly brighter against the near-black surfaces. */
   --cta: #d1b367;
   --cta-text: #18352d;
@@ -304,21 +306,15 @@
    layer than @layer components — un-layered author CSS beats both.
 --------------------------------------------------------------------------- */
 
-/* Floating-dock sidebar: detached rounded panel. Targets the shadcn sidebar's
-   inner panel; applied via .app-sidebar-dock on <Sidebar variant="floating">. */
-.app-sidebar-dock [data-slot="sidebar-inner"] {
-  border-radius: 1.25rem;
+/* The workspace navigation is a full-height product rail, not a floating
+   mini-card. Keep the same treatment in light and dark content themes. */
+.app-workspace-nav [data-slot="sidebar-inner"] {
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid var(--sidebar-border);
   overflow: hidden;
-}
-/* Flat carbon-charcoal panel with a soft light glow along the LEFT edge:
-   a 1px highlight line plus an inner bloom fading rightwards. */
-.dark .app-sidebar-dock [data-slot="sidebar-inner"] {
-  border-color: rgb(255 255 255 / 0.1);
-  background-color: oklch(0.18 0.002 80);
-  box-shadow:
-    inset 1px 0 0 rgb(255 255 255 / 0.1),
-    inset 3px 0 6px -4px rgb(255 255 255 / 0.08),
-    0 24px 50px -14px rgb(0 0 0 / 0.85);
+  background: var(--sidebar);
+  box-shadow: none;
 }
 
 /* Card surface ("Crosshatch + Top-Lit Edge", user-approved 2026-06-11 after a
@@ -504,11 +500,9 @@
 .public-pricing section[aria-label="Subscription plans"] { padding-top: 2rem; gap: 1.25rem; }
 .public-pricing section[aria-label="Subscription plans"] > article { box-shadow: 0 8px 24px -20px #142b2c60; border-radius: 12px; }
 /* Authenticated workspace: quieter canvas, stronger navigation, clear selection. */
-.app-sidebar-dock [data-slot="sidebar-inner"] { border-radius: 12px; border: 1px solid var(--sidebar-border); background: var(--sidebar); box-shadow: 0 8px 30px -23px #122b2c70; }
-.dark .app-sidebar-dock [data-slot="sidebar-inner"] { box-shadow: none; }
-.app-sidebar-dock [data-slot="sidebar-group-label"] { font-size: 9px; font-weight: 650; letter-spacing: .14em; padding-left: 12px; opacity: .8; }
-.app-sidebar-dock [data-slot="sidebar-menu-button"] { border-radius: 7px; min-height: 36px; font-size: 12px; transition: background-color 160ms ease, color 160ms ease; }
-.app-sidebar-dock [data-slot="sidebar-menu-button"][data-active="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); box-shadow: inset 3px 0 0 var(--cta); font-weight: 650; }
+.app-workspace-nav [data-slot="sidebar-group-label"] { font-size: 9px; font-weight: 700; letter-spacing: .16em; padding-left: 12px; color: #91aa9c; opacity: 1; }
+.app-workspace-nav [data-slot="sidebar-menu-button"] { border-radius: 10px; min-height: 40px; font-size: 13px; transition: background-color 160ms ease, color 160ms ease; }
+.app-workspace-nav [data-slot="sidebar-menu-button"][data-active="true"] { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); box-shadow: inset 3px 0 0 var(--sidebar-primary); font-weight: 650; }
 .app-surface [data-slot="card"] { background-image: none; border-color: var(--border); box-shadow: 0 3px 12px -9px color-mix(in srgb, var(--foreground) 20%, transparent); }
 @keyframes voice-level { from { transform: scaleY(.45); opacity: .55; } to { transform: scaleY(1); opacity: 1; } }
 @keyframes console-enter { from { opacity: 0; transform: translateY(18px) rotate(0); } to { opacity: 1; transform: translateY(0) rotate(-1.5deg); } }

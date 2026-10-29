@@ -5,10 +5,11 @@ import {
   AlertTriangle,
   ChevronRight,
   Copy,
-  ExternalLink,
   Pencil,
+  PhoneCall,
   Plus,
   RotateCcw,
+  ShieldCheck,
   Star,
   Trash2,
 } from "lucide-react";
@@ -179,15 +180,19 @@ export default function TelephonyConfigurationsPage() {
     }
   };
 
+  const phoneNumberCount = items.reduce((total, item) => total + (item.phone_number_count ?? 0), 0);
+  const readyCount = items.filter((item) => !item.inactive && item.is_ready_for_outbound === true).length;
+  const attentionCount = items.filter((item) => item.inactive || item.is_ready_for_outbound === false).length;
+
   return (
     <div className="min-h-screen">
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto max-w-screen-2xl px-4 py-7 sm:px-6 lg:px-8">
         <div className={panel.collectionHeader}>
           <div>
-            <span className={panel.eyebrow}>CHANNELS / TELEPHONE</span><h1>Telephony configurations</h1>
-            <p className="text-muted-foreground">
-              Connect one or more telephony provider accounts. Each campaign uses one
-              configuration; inbound calls are routed to the right one by account ID.
+            <span className={panel.eyebrow}>CHANNELS / TELEPHONY</span>
+            <h1>Telephony</h1>
+            <p>
+              Connect carriers, manage phone numbers, and choose the outbound account for your workflows.
             </p>
           </div>
           <Button onClick={() => setCreateOpen(true)}>
@@ -238,13 +243,27 @@ export default function TelephonyConfigurationsPage() {
           </div>
         )}
 
+        <section aria-label="Telephony overview" className="mb-6 grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-card sm:grid-cols-4">
+          {[
+            { label: "Provider accounts", value: loading ? "—" : items.length, icon: PhoneCall },
+            { label: "Phone numbers", value: loading ? "—" : phoneNumberCount, icon: PhoneCall },
+            { label: "Ready for outbound", value: loading ? "—" : readyCount, icon: ShieldCheck },
+            { label: "Needs attention", value: loading ? "—" : attentionCount, icon: AlertTriangle },
+          ].map(({ label, value, icon: Icon }, index) => (
+            <div key={label} className={`flex items-start gap-3 border-border p-4 sm:p-5 ${index % 2 === 0 ? "border-r" : ""} ${index < 3 ? "sm:border-r" : ""} ${index < 2 ? "border-b sm:border-b-0" : ""}`}>
+              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icon className="size-4" aria-hidden="true" /></span>
+              <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-muted-foreground">{label}</p><p className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{value}</p></div>
+            </div>
+          ))}
+        </section>
+
         {loading ? (
           <div className="grid gap-3">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-24 w-full" />
           </div>
         ) : items.length === 0 ? (
-          <Card>
+          <Card className="overflow-hidden rounded-xl border-border shadow-sm">
             <CardHeader>
               <CardTitle>No telephony configurations yet</CardTitle>
               <CardDescription>
@@ -260,7 +279,7 @@ export default function TelephonyConfigurationsPage() {
         ) : (
           <div className="grid gap-3">
             {items.map((item) => (
-              <Card key={item.id}>
+              <Card key={item.id} className="overflow-hidden rounded-xl border-border shadow-sm transition-colors hover:border-primary/35 hover:bg-muted/10">
                 <CardContent className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center">
                   <Link
                     href={`/telephony-configurations/${item.id}`}

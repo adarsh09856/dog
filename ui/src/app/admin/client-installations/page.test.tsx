@@ -34,22 +34,113 @@ describe("owner integrity alert refresh", () => {
     ));
     const view = render(<ClientInstallationsPage />);
     await act(async () => { await Promise.resolve(); });
-    expect(mocks.apiFetch).toHaveBeenCalledTimes(2);
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(3);
     expect(screen.queryByText(/installation-1/)).toBeNull();
 
     alertAvailable = true;
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
-    expect(mocks.apiFetch).toHaveBeenCalledTimes(4);
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(6);
     expect(screen.getByText(/installation-1/)).toBeTruthy();
 
     view.unmount();
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
-    expect(mocks.apiFetch).toHaveBeenCalledTimes(4);
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(6);
+  });
+
+  it("verifies requested domains before owner approval and displays the replacement token once", async () => {
+    mocks.apiFetch.mockImplementation((endpoint: string, options?: { method?: string }) => {
+      if (endpoint.includes("/binding-requests") && !options?.method) {
+        return Promise.resolve([{
+          id: 23,
+          installation_id: "client-23",
+          customer_id: "customer-23",
+          requested_domains: ["voice.new-customer.example"],
+          requested_ip_ranges: ["198.51.100.10/32"],
+          reason: "Moving servers",
+          status: "pending",
+          created_at: "2026-10-29T10:00:00Z",
+        }]);
+      }
+      if (endpoint.endsWith("/domain-challenges") && options?.method === "POST") {
+        return Promise.resolve({
+          customer_id: "customer-23",
+          domain: "voice.new-customer.example",
+          record_name: "_kodewaves-verification.voice.new-customer.example",
+          record_type: "TXT",
+          record_value: "kodewaves-verification=challenge",
+          expires_at: 1_900_000_000,
+        });
+      }
+      if (endpoint.endsWith("/binding-requests/23/approve") && options?.method === "POST") {
+        return Promise.resolve({
+          installation_id: "client-23",
+          token: "replacement-license-token",
+          public_key: "owner-public-key",
+          expires_at: 1_900_000_000,
+        });
+      }
+      if (endpoint.endsWith("/alerts")) return Promise.resolve([]);
+      return Promise.resolve([]);
+    });
+    render(<ClientInstallationsPage />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText("Moving servers")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Create DNS challenge · voice.new-customer.example" }));
+    });
+    expect(screen.getByText("kodewaves-verification=challenge")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Approve and issue token" }));
+    });
+    expect(mocks.apiFetch).toHaveBeenCalledWith(
+      "/admin/client-installations/binding-requests/23/approve",
+      { method: "POST" },
+    );
+    expect(screen.getByDisplayValue("replacement-license-token")).toBeTruthy();
+  });
+
+  it("lets an owner recover the exact token from an approved binding request", async () => {
+    mocks.apiFetch.mockImplementation((endpoint: string, options?: { method?: string }) => {
+      if (endpoint.includes("/binding-requests") && !options?.method) return Promise.resolve([{
+        id: 24,
+        installation_id: "client-24",
+        customer_id: "customer-24",
+        requested_domains: ["voice.customer.example"],
+        requested_ip_ranges: [],
+        reason: "Approval response was lost",
+        status: "approved",
+        created_at: "2026-10-29T10:00:00Z",
+      }]);
+      if (endpoint.endsWith("/binding-requests/24/recover-token") && options?.method === "POST") {
+        return Promise.resolve({
+          installation_id: "client-24",
+          token: "recovered-license-token",
+          public_key: "owner-public-key",
+          expires_at: 1_900_000_000,
+          recovered: true,
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<ClientInstallationsPage />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText(/approved ·/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Recover approved license" }));
+    });
+    expect(screen.getByDisplayValue("recovered-license-token")).toBeTruthy();
+    expect(mocks.apiFetch).toHaveBeenCalledWith(
+      "/admin/client-installations/binding-requests/24/recover-token",
+      { method: "POST" },
+    );
   });
 
   it("explains safe recovery and disables renewal after an integrity failure", async () => {
     mocks.apiFetch.mockImplementation((endpoint: string) => Promise.resolve(
-      endpoint.endsWith("/alerts") ? [] : [{
+      endpoint.endsWith("/alerts") || endpoint.includes("/binding-requests") ? [] : [{
         installation_id: "installation-compromised", customer_id: "customer-1",
         domains: ["customer.example"], ip_ranges: [], features: ["voice"],
         limits: { max_concurrent_calls: 1 }, expires_at: 1_800_000_000,
@@ -72,6 +163,7 @@ describe("owner integrity alert refresh", () => {
         return Promise.resolve({ installation_id: "client-1", enrollment_token: "temporary-secret", expires_at: 1_800_000_000 });
       }
       if (endpoint.endsWith("/alerts")) return Promise.resolve([]);
+      if (endpoint.includes("/binding-requests")) return Promise.resolve([]);
       return Promise.resolve([{
         installation_id: "client-1", customer_id: "customer-1", domains: ["customer.example"],
         ip_ranges: [], features: ["voice"], limits: { max_concurrent_calls: 1 },
@@ -100,6 +192,7 @@ describe("owner integrity alert refresh", () => {
     };
     mocks.apiFetch.mockImplementation((endpoint: string) => {
       if (endpoint.endsWith("/alerts")) return Promise.resolve([]);
+      if (endpoint.includes("/binding-requests")) return Promise.resolve([]);
       if (endpoint.endsWith("/renew")) {
         return Promise.resolve({
           installation_id: "client-1", token: "replacement-token", public_key: "verification-key",
@@ -133,6 +226,7 @@ describe("owner integrity alert refresh", () => {
     };
     mocks.apiFetch.mockImplementation((endpoint: string, options?: { method?: string }) => {
       if (endpoint.endsWith("/alerts")) return Promise.resolve([]);
+      if (endpoint.includes("/binding-requests")) return Promise.resolve([]);
       if (endpoint.endsWith("/revoke") && options?.method === "POST") {
         revoked = true;
         record.revoked_at = "2026-10-28T00:00:00Z";

@@ -14,7 +14,11 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.db import client_installations
-from api.db.kodewaves_models import ClientInstallationModel, ClientInstallationNonceModel
+from api.db.kodewaves_models import (
+    ClientBindingRequestModel,
+    ClientInstallationModel,
+    ClientInstallationNonceModel,
+)
 from api.routes.admin import client_installation_check, client_installations as owner_routes
 from api.services.installation_identity import sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status
@@ -25,6 +29,7 @@ async def owner_database(monkeypatch):
     async with engine.begin() as connection:
         await connection.run_sync(lambda sync: ClientInstallationModel.__table__.create(sync))
         await connection.run_sync(lambda sync: ClientInstallationNonceModel.__table__.create(sync))
+        await connection.run_sync(lambda sync: ClientBindingRequestModel.__table__.create(sync))
     sessions = async_sessionmaker(engine)  # Mirrors the production default: expire_on_commit=True.
     monkeypatch.setattr(client_installations.kodewaves_db_client, "get_session", sessions)
     async with sessions() as session:
@@ -73,6 +78,129 @@ async def test_owner_revocation_returns_status_and_is_idempotent_after_commit(ow
     async with owner_database() as session:
         stored = await session.get(ClientInstallationModel, "client-test")
         assert stored.revoked_by_user_id == 1
+
+
+@pytest.mark.asyncio
+async def test_binding_request_is_nonce_protected_and_approval_rotates_license_binding(owner_database):
+    async with owner_database() as session:
+        installation = await session.get(ClientInstallationModel, "client-test")
+        installation.installation_public_key = "A" * 43
+        await session.commit()
+
+    now = datetime.now(UTC)
+    request = await client_installations.create_client_binding_request(
+        installation_id="client-test",
+        token_fingerprint="a" * 64,
+        public_key="A" * 43,
+        nonce_fingerprint="nonce-fingerprint-1",
+        nonce_expires_at=now + timedelta(minutes=5),
+        domains=["new.customer.example"],
+        ip_ranges=["203.0.113.10/32"],
+        reason="Moving the installation to a new host",
+    )
+    assert request is not None and request["status"] == "pending"
+    assert request["requested_domains"] == ["new.customer.example"]
+
+    replay = await client_installations.create_client_binding_request(
+        installation_id="client-test",
+        token_fingerprint="a" * 64,
+        public_key="A" * 43,
+        nonce_fingerprint="nonce-fingerprint-1",
+        nonce_expires_at=now + timedelta(minutes=5),
+        domains=["other.example"],
+        ip_ranges=[],
+        reason="Replay attempt",
+    )
+    assert replay is None
+
+    duplicate = await client_installations.create_client_binding_request(
+        installation_id="client-test",
+        token_fingerprint="a" * 64,
+        public_key="A" * 43,
+        nonce_fingerprint="nonce-fingerprint-2",
+        nonce_expires_at=now + timedelta(minutes=5),
+        domains=["other.example"],
+        ip_ranges=[],
+        reason="Second pending request",
+    )
+    assert duplicate == {"conflict": True}
+
+    assert not await client_installations.resolve_client_binding_request(
+        request["id"], outcome="approved", user_id=7,
+        expected_fingerprint="a" * 64, new_fingerprint="b" * 64,
+        domains=["not-requested.example"], ip_ranges=["203.0.113.10/32"],
+        license_issued_at=int(now.timestamp()),
+    )
+    assert not await client_installations.resolve_client_binding_request(
+        request["id"], outcome="approved", user_id=7,
+        expected_fingerprint="stale-fingerprint", new_fingerprint="b" * 64,
+        domains=["new.customer.example"], ip_ranges=["203.0.113.10/32"],
+        license_issued_at=int(now.timestamp()),
+    )
+
+    assert await client_installations.resolve_client_binding_request(
+        request["id"],
+        outcome="approved",
+        user_id=7,
+        expected_fingerprint="a" * 64,
+        new_fingerprint="b" * 64,
+        domains=["new.customer.example"],
+        ip_ranges=["203.0.113.10/32"],
+        license_issued_at=int(now.timestamp()),
+    )
+    async with owner_database() as session:
+        installation = await session.get(ClientInstallationModel, "client-test")
+        assert installation.domains == ["new.customer.example"]
+        assert installation.ip_ranges == ["203.0.113.10/32"]
+        assert installation.token_fingerprint == "b" * 64
+        assert installation.previous_token_fingerprint == "a" * 64
+        assert installation.previous_token_valid_until is not None
+        saved_request = await session.get(ClientBindingRequestModel, request["id"])
+        assert saved_request.status == "approved"
+        assert saved_request.resolved_by_user_id == 7
+        assert saved_request.license_issued_at == int(now.timestamp())
+
+    # A conflicting submission is consumed too, so it cannot be replayed after approval.
+    replay_conflict = await client_installations.create_client_binding_request(
+        installation_id="client-test", token_fingerprint="a" * 64, public_key="A" * 43,
+        nonce_fingerprint="nonce-fingerprint-2", nonce_expires_at=now + timedelta(minutes=5),
+        domains=["other.example"], ip_ranges=[], reason="Second pending request",
+    )
+    assert replay_conflict is None
+
+    assert not await client_installations.resolve_client_binding_request(
+        request["id"], outcome="rejected", user_id=7,
+    )
+
+
+@pytest.mark.asyncio
+async def test_binding_request_rejects_expired_nonce_and_rejection_preserves_license(owner_database):
+    async with owner_database() as session:
+        installation = await session.get(ClientInstallationModel, "client-test")
+        installation.installation_public_key = "A" * 43
+        await session.commit()
+    fields = dict(
+        installation_id="client-test", token_fingerprint="a" * 64, public_key="A" * 43,
+        nonce_fingerprint="expired-nonce", domains=["new.customer.example"],
+        ip_ranges=[], reason="Moving servers",
+    )
+    assert await client_installations.create_client_binding_request(
+        **fields, nonce_expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    ) is None
+    request = await client_installations.create_client_binding_request(
+        **fields, nonce_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    assert await client_installations.resolve_client_binding_request(
+        request["id"], outcome="rejected", user_id=7,
+    )
+    async with owner_database() as session:
+        installation = await session.get(ClientInstallationModel, "client-test")
+        assert installation.domains == ["customer.example"]
+        assert installation.token_fingerprint == "a" * 64
+        assert installation.previous_token_fingerprint is None
+        saved = await session.get(ClientBindingRequestModel, request["id"])
+        assert saved.status == "rejected"
+        assert saved.resolved_by_user_id == 7
 
 
 @pytest.mark.asyncio

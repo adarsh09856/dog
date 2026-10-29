@@ -251,7 +251,7 @@ export default function AdminSettingsPage() {
             Configure the platform name and public theme, email delivery, self-hosted model services, and payment settings.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {savedSuccess && (
             <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" /> Settings Saved Successfully

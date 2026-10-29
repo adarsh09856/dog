@@ -22,6 +22,13 @@ export function AuthShell({ children, enterpriseSlot }: { children: ReactNode; e
           <Link href="/" aria-label="Back to home" className={styles.brand}><BrandLogo className="h-8" /></Link>
           <Link href="/" className={styles.homeLink}>Back to site <ArrowUpRight aria-hidden className="size-4" /></Link>
         </div>
+        <section className={styles.mobileStory} aria-label="Voice operations overview">
+          <span className={styles.mobileStoryLabel}>VOICE OPERATIONS</span>
+          <p className={styles.mobileStoryTitle}>{branding.tagline || "Every conversation. A clear next step."}</p>
+          <p className={styles.mobileStoryDescription}>
+            Build the conversation, connect your channels, and review what happened after every call.
+          </p>
+        </section>
         <div className={styles.formWrap}>
           <div className={styles.formIntro}><span className={styles.eyebrow}>YOUR WORKSPACE</span><span aria-hidden className={styles.rule} /></div>
           <div className={styles.formCard}>{children}</div>

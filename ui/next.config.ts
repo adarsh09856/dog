@@ -17,7 +17,10 @@ const isClientEdition = process.env.KODEWAVES_EDITION === "client";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  output: 'standalone',
+  // Linux Docker images need the standalone server bundle. Windows cannot
+  // recreate pnpm's dependency symlinks in `.next/standalone`, so keep local
+  // Windows builds in the default Next.js layout for validation.
+  output: process.platform === "win32" ? undefined : "standalone",
   typescript: {
     ignoreBuildErrors: true,
   },

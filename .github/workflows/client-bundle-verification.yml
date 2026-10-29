@@ -5,6 +5,9 @@ on:
     branches:
       - codex/client-bundle-verification-*
       - codex/client-bundle-theme
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       caddy_image:
@@ -68,12 +71,21 @@ jobs:
           api/tests/test_client_installation_features.py
           api/tests/test_client_installation_issuance.py
           api/tests/test_client_installation_check.py
+          api/tests/test_client_binding_request.py
           api/tests/test_installation_identity.py
           api/tests/test_owner_installation_database.py -q
       - name: Verify migration graph has one head
         run: |
           python scripts/check_alembic_single_head.py
           python -m pytest --noconftest api/tests/test_release_schema.py -q
+      - name: Apply the full migration chain to disposable PostgreSQL
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://kodewaves_test:disposable_ci_password@127.0.0.1:5432/kodewaves_client_release_test
+          REDIS_URL: redis://127.0.0.1:6379/15
+        run: |
+          python -m alembic -c api/alembic.ini upgrade head
+          python -m alembic -c api/alembic.ini current
       - name: Verify installer and image-verification orchestration
         run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py -q
       - name: Verify client backup and recovery failure handling
@@ -147,6 +159,7 @@ jobs:
           'src/app/handler/[...stack]/stack-theme.test.ts'
           src/app/admin/client-installations/page.test.tsx
           src/app/admin/settings/page.test.tsx
+          src/app/settings/page.test.tsx
           src/app/page.test.tsx
           src/app/pricing/page.test.tsx
           src/app/widgets/page.test.tsx
@@ -158,7 +171,7 @@ jobs:
           src/lib/brandingTheme.test.ts
 
   verify:
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/codex/client-bundle-theme'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.ref == 'refs/heads/codex/client-bundle-theme'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

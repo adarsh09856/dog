@@ -110,42 +110,54 @@ export default function PricingPage() {
     <div className="public-site public-pricing min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content" className="mx-auto max-w-7xl px-5 pb-24 sm:px-8">
-        <section className={`${styles.intro} grid gap-8 border-b border-border py-14 sm:py-20 md:grid-cols-[minmax(0,1fr)_auto] md:items-end`}>
+        <section className={`${styles.intro} relative isolate mb-12 grid gap-8 overflow-hidden rounded-[2rem] border-b-0 bg-sidebar px-6 py-10 text-sidebar-foreground shadow-[0_28px_80px_-48px_rgba(16,35,31,.85)] sm:px-10 sm:py-14 md:grid-cols-[minmax(0,1fr)_minmax(240px,0.55fr)] md:items-end lg:px-14`}>
+          <div className="pointer-events-none absolute -right-24 -top-36 -z-10 size-[26rem] rounded-full border border-sidebar-foreground/10" aria-hidden="true" />
+          <div className="pointer-events-none absolute -right-6 -top-20 -z-10 size-[18rem] rounded-full border border-sidebar-foreground/10" aria-hidden="true" />
           <div className="max-w-2xl">
-            <p className="mb-5 inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              <span className="h-px w-8 bg-cta" aria-hidden="true" />
+            <p className="mb-5 inline-flex items-center gap-3 rounded-full border border-sidebar-foreground/20 bg-sidebar-foreground/[0.06] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/75">
+              <span className="size-1.5 rounded-full bg-cta" aria-hidden="true" />
               Plans and deployment
             </p>
-            <h1 className="text-4xl font-semibold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-6xl">
-              Compare plans for your voice operation.
+            <h1 className="max-w-3xl text-4xl font-semibold leading-[1.04] tracking-[-0.045em] sm:text-5xl lg:text-[4.25rem]">
+              Choose a plan.<br /><span className="text-cta">Know what it covers.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
+            <p className="mt-6 max-w-xl text-base leading-7 text-sidebar-foreground/75 sm:text-lg sm:leading-8">
               See the configured price, included usage and enabled features for each workspace plan. Provider and deployment costs are shown separately.
             </p>
           </div>
-          {hasCycleChoice && (
-            <div
-              className="inline-flex h-fit rounded-md border border-border bg-muted/60 p-1 md:mb-1"
-              aria-label="Billing period"
-            >
-              <button
-                type="button"
-                aria-pressed={!annual}
-                onClick={() => setAnnual(false)}
-                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${!annual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                Monthly
-              </button>
-              <button
-                type="button"
-                aria-pressed={annual}
-                onClick={() => setAnnual(true)}
-                className={`rounded px-4 py-2 text-sm font-medium transition-colors ${annual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                Annual
-              </button>
+          <aside className="grid gap-5 rounded-2xl border border-sidebar-foreground/15 bg-sidebar-foreground/[0.05] p-5 sm:p-6 md:mb-1" aria-label="Plan payment terms">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/60">Clear plan terms</p>
+              <ul className="mt-3 space-y-2 text-sm text-sidebar-foreground/85">
+                <li className="flex items-center gap-2"><Check className="size-4 shrink-0 text-cta" />Configured prices and limits</li>
+                <li className="flex items-center gap-2"><Check className="size-4 shrink-0 text-cta" />No automatic renewal</li>
+                <li className="flex items-center gap-2"><Check className="size-4 shrink-0 text-cta" />Provider costs shown separately</li>
+              </ul>
             </div>
-          )}
+            {hasCycleChoice && (
+              <div className="border-t border-sidebar-foreground/15 pt-4">
+                <p className="mb-2 text-xs text-sidebar-foreground/65">Compare the configured payment term</p>
+                <div className="inline-flex rounded-lg border border-sidebar-foreground/15 bg-sidebar p-1" role="group" aria-label="Billing period">
+                  <button
+                    type="button"
+                    aria-pressed={!annual}
+                    onClick={() => setAnnual(false)}
+                    className={`rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta ${!annual ? "bg-cta text-cta-foreground shadow-sm" : "text-sidebar-foreground/70 hover:text-sidebar-foreground"}`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={annual}
+                    onClick={() => setAnnual(true)}
+                    className={`rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta ${annual ? "bg-cta text-cta-foreground shadow-sm" : "text-sidebar-foreground/70 hover:text-sidebar-foreground"}`}
+                  >
+                    Annual
+                  </button>
+                </div>
+              </div>
+            )}
+          </aside>
         </section>
 
         <section
@@ -220,7 +232,7 @@ export default function PricingPage() {
             return (
               <article
                 key={plan.id}
-                className={`${styles.planCard} flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-foreground/20 sm:p-7`}
+                className={`${styles.planCard} flex flex-col rounded-2xl border border-border bg-card p-6 transition-colors hover:border-foreground/20 focus-within:ring-2 focus-within:ring-ring sm:p-7`}
               >
                 <span className={styles.planIndex}>WORKSPACE PLAN / {String(plans.indexOf(plan) + 1).padStart(2, "0")}</span>
                 <h2 className="text-xl font-semibold tracking-tight">
@@ -275,7 +287,7 @@ export default function PricingPage() {
                 </ul>
                 <Link
                   href={`/auth/login?plan=${encodeURIComponent(plan.code)}${billingCycle ? `&billing_cycle=${billingCycle}` : ""}`}
-                  className="mt-auto inline-flex items-center justify-between gap-3 rounded-md border border-border px-4 py-3 text-sm font-semibold transition-colors hover:border-cta/50 hover:bg-muted"
+                  className="mt-auto inline-flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 text-sm font-semibold transition-colors hover:border-cta/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   Review in your account
                   <ArrowRight className="size-4" />

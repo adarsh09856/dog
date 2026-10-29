@@ -178,7 +178,7 @@ export default function WidgetsPage() {
   };
 
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 md:p-8">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
       <header className={panel.collectionHeader}>
@@ -214,6 +214,29 @@ export default function WidgetsPage() {
         </div>
       </header>
 
+      <div className={panel.metricRail} aria-label="Website widget overview">
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Configured widgets</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{widgets.length.toLocaleString()}</span><Code className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Voice entry points for your websites</p>
+        </Card>
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active widgets</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{widgets.filter((widget) => widget.is_active).length}</span><CheckCircle2 className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Available for visitors to launch</p>
+        </Card>
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Connected agents</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{agents.length}</span><Code className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Active workflows available to connect</p>
+        </Card>
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Embed code ready</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{widgets.filter((widget) => Boolean(widget.embed_code || widget.embed_snippet)).length}</span><Copy className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Widgets with a provisioned script</p>
+        </Card>
+      </div>
+
       <Card className="border-border/60">
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">
@@ -227,8 +250,8 @@ export default function WidgetsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="rounded-lg overflow-hidden">
-            <Table>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[980px]">
               <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead className="text-xs">Widget Name</TableHead>

@@ -69,6 +69,16 @@ def test_admin_routes_require_superuser_except_signed_installation_status():
                 assert required <= called_names
                 continue
 
+            if source_path.name == "client_installation_check.py" and function.name == "submit_client_binding_request":
+                parameter_names = {argument.arg for argument in function.args.args}
+                called_names = {
+                    node.func.id for node in calls if isinstance(node.func, ast.Name)
+                }
+                assert {"request", "authorization"} <= parameter_names
+                assert "HTTPException" in called_names
+                assert "accept_binding_request" in called_names
+                continue
+
             assert any(
                 isinstance(node.func, ast.Name)
                 and node.func.id == "Depends"

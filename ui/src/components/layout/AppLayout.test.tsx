@@ -1,19 +1,22 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   valid: null as boolean | null,
   message: "Unable to reach license service",
   refresh: vi.fn(),
+  pathname: "/workflow",
+  isAuthenticated: true,
+  backendConfig: null as null | { backendStatus: string; backendUrl?: string; backendMessage?: string },
 }));
-vi.mock("next/navigation", () => ({ usePathname: () => "/workflow" }));
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ isAuthenticated: true }) }));
+vi.mock("next/navigation", () => ({ usePathname: () => state.pathname }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ isAuthenticated: state.isAuthenticated }) }));
 vi.mock("@/context/ClientEntitlementsContext", () => ({ useClientEntitlements: () => ({
   isClientEdition: true, loading: false, valid: state.valid, message: state.message,
   hasFeature: () => false, refresh: state.refresh,
 }) }));
-vi.mock("@/context/AppConfigContext", () => ({ useAppConfig: () => ({ config: null }) }));
+vi.mock("@/context/AppConfigContext", () => ({ useAppConfig: () => ({ config: state.backendConfig, loading: false, refresh: state.refresh }) }));
 vi.mock("@/context/ClientBrandingContext", () => ({
   useClientBranding: () => ({ tagline: "Calls answered in your brand voice" }),
 }));
@@ -30,7 +33,25 @@ import AppLayout from "./AppLayout";
 
 afterEach(() => { cleanup(); state.refresh.mockReset(); });
 
+describe.each(["/platform", "/deployment"])('%s public page chrome', (pathname) => {
+  it.each([true, false])("does not render workspace chrome or backend warnings for auth=%s", (isAuthenticated) => {
+    state.pathname = pathname;
+    state.isAuthenticated = isAuthenticated;
+    state.backendConfig = { backendStatus: "unreachable", backendUrl: "api.example", backendMessage: "not available" };
+    render(<AppLayout><p>public marketing content</p></AppLayout>);
+    expect(screen.getByText("public marketing content")).toBeTruthy();
+    expect(screen.queryByText("Workspace")).toBeNull();
+    expect(screen.queryByText("Calls answered in your brand voice")).toBeNull();
+    expect(screen.queryByText("Backend connection failed")).toBeNull();
+  });
+});
+
 describe("client installation access", () => {
+  beforeEach(() => {
+    state.pathname = "/workflow";
+    state.isAuthenticated = true;
+    state.backendConfig = null;
+  });
   it("uses the configured tagline in the authenticated workspace header", () => {
     state.valid = true;
     render(<AppLayout><p>protected content</p></AppLayout>);

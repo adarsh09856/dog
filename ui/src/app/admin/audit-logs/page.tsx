@@ -85,7 +85,7 @@ export default function AdminAuditLogsPage() {
             Immutable log of all administrative actions, key rotations, credit adjustments, and kill-switch executions.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <div className="relative w-64">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -120,7 +120,7 @@ export default function AdminAuditLogsPage() {
         </CardHeader>
         <CardContent>
           {error && <p role="alert" className="mb-3 text-sm text-destructive">{error} Use Refresh to retry.</p>}
-          <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="overflow-x-auto rounded-xl border border-border/60">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>

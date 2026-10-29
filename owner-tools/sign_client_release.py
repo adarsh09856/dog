@@ -59,7 +59,7 @@ def main() -> int:
     ):
         parser.error("Protected-file hash inventory is invalid")
     ui_files = json.loads(args.ui_files_json.read_text(encoding="utf-8")) if args.ui_files_json else {}
-    if not isinstance(ui_files, dict) or not all(
+    if not isinstance(ui_files, dict) or not ui_files or not all(
         isinstance(path, str) and isinstance(digest, str)
         and re.fullmatch(r"[0-9a-f]{64}", digest)
         for path, digest in ui_files.items()

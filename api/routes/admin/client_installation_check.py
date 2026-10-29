@@ -23,7 +23,13 @@ from api.services.installation_license import (
     issue_license_token,
     load_license,
 )
-from api.services.installation_identity import InstallationIdentityError, verify_enrollment, verify_owner_check
+from api.services.client_binding_requests import accept_binding_request
+from api.services.installation_identity import (
+    InstallationIdentityError,
+    verify_enrollment,
+    verify_owner_check,
+)
+from api.services.installation_license import _canonical_domain
 
 router = APIRouter(prefix="/client-installations", tags=["client-installation-check"])
 
@@ -104,6 +110,31 @@ class InstallationEnrollmentRequest(BaseModel):
     nonce: str = Field(min_length=32, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     issued_at: int = Field(strict=True, ge=0, le=2**53 - 1)
     signature: str = Field(pattern=r"^[A-Za-z0-9_-]{86}$")
+
+
+class InstallationBindingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nonce: str = Field(min_length=32, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    issued_at: int = Field(strict=True, ge=0, le=2**53 - 1)
+    signature: str = Field(pattern=r"^[A-Za-z0-9_-]{86}$")
+    domains: list[str] = Field(min_length=1, max_length=20)
+    ip_ranges: list[str] = Field(default_factory=list, max_length=20)
+    reason: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def canonical_bindings(self):
+        try:
+            domains = sorted({_canonical_domain(item) for item in self.domains})
+            ip_ranges = sorted({str(ipaddress.ip_network(item.strip(), strict=False)) for item in self.ip_ranges})
+        except (InstallationLicenseError, ValueError, AttributeError) as exc:
+            raise ValueError("Binding request domains or IP ranges are invalid") from exc
+        self.domains = domains
+        self.ip_ranges = ip_ranges
+        self.reason = self.reason.strip()
+        if not self.reason:
+            raise ValueError("A reason is required")
+        return self
 
 
 @router.post("/enroll")
@@ -216,3 +247,15 @@ async def check_client_installation(
         "expires_at": min(now + 300, record["expires_at"]),
     }
     return {"signed_status": issue_license_token(status, private_key)}
+
+
+@router.post("/binding-requests", status_code=201)
+async def submit_client_binding_request(
+    request: InstallationBindingRequest,
+    authorization: str | None = Header(default=None),
+) -> dict:
+    """Accept a domain/IP request only from the enrolled installation key."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Installation bearer token required")
+    token = authorization.removeprefix("Bearer ").strip()
+    return await accept_binding_request(request.model_dump(), token, _owner_verification_signers())

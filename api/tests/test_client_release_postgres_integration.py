@@ -8,6 +8,7 @@ only the tables needed for each check, not a fully migrated installation.
 import asyncio
 import base64
 import hashlib
+import json
 import os
 import secrets
 import time
@@ -28,14 +29,19 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.db.client_installations import (
     create_client_installation_record,
+    get_client_binding_request,
+    get_client_installation_record,
     issue_installation_enrollment,
     list_client_integrity_alerts,
     record_client_installation_check,
+    resolve_client_binding_request,
     renew_client_installation_record,
     revoke_client_installation_record,
 )
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import (
+    ClientBindingRequestModel,
+    ClientDomainChallengeModel,
     ClientInstallationModel,
     ClientInstallationNonceModel,
     ClientIntegrityAlertModel,
@@ -46,8 +52,9 @@ from api.db import db_client
 from api.services import bootstrap_client_admin
 from api.services import client_creation_limits
 from api.services import installation_license
+from api.services.client_binding_requests import accept_binding_request, approve_binding_request
 from api.routes.admin import client_installation_check
-from api.services.installation_identity import sign_enrollment, sign_owner_check
+from api.services.installation_identity import sign_binding_request, sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status_claims
 
 
@@ -348,6 +355,191 @@ async def test_renewal_handover_and_revocation_persist(monkeypatch):
         )
         assert old_status is not None and old_status["revoked_at"] is not None
         assert new_status is not None and new_status["revoked_at"] is not None
+    finally:
+        await engine.dispose()
+        if schema_created:
+            async with admin_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_binding_request_nonce_conflict_and_atomic_approval_persist(monkeypatch):
+    """Exercise binding proof replay, pending conflicts and approval on PostgreSQL."""
+    database_url = _disposable_database_url()
+    schema = f"client_binding_{uuid.uuid4().hex}"
+    admin_engine = create_async_engine(database_url)
+    engine = create_async_engine(database_url, connect_args={"server_settings": {"search_path": schema}})
+    schema_created = False
+    try:
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY)"))
+            await conn.execute(text("INSERT INTO users (id) VALUES (1)"))
+            for model in (
+                ClientInstallationModel,
+                ClientInstallationNonceModel,
+                ClientBindingRequestModel,
+                ClientDomainChallengeModel,
+            ):
+                await conn.run_sync(model.__table__.create)
+        monkeypatch.setattr(kodewaves_db_client, "async_session", async_sessionmaker(engine))
+
+        owner = Ed25519PrivateKey.generate()
+        client = Ed25519PrivateKey.generate()
+
+        def private_bytes(key):
+            return key.private_bytes(
+                serialization.Encoding.Raw,
+                serialization.PrivateFormat.Raw,
+                serialization.NoEncryption(),
+            )
+
+        def public_string(key):
+            public = key.public_key().public_bytes(
+                serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+            )
+            return base64.urlsafe_b64encode(public).rstrip(b"=").decode("ascii")
+
+        owner_private, owner_public = private_bytes(owner), public_string(owner)
+        client_private, client_public = private_bytes(client), public_string(client)
+        now = int(time.time())
+        installation_id = "client-binding-integration-1"
+        old_domains = ["old-customer.example"]
+        old_ip_ranges = ["192.0.2.0/24"]
+        token = issue_license_token({
+            "iat": now - 1,
+            "exp": now + 3600,
+            "edition": "client",
+            "installation_id": installation_id,
+            "customer_id": "buyer-binding-1",
+            "domains": old_domains,
+            "ip_ranges": old_ip_ranges,
+            "features": ["voice"],
+            "limits": {"max_concurrent_calls": 2},
+        }, owner_private)
+        old_fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
+        await create_client_installation_record(
+            installation_id=installation_id,
+            customer_id="buyer-binding-1",
+            domains=old_domains,
+            ip_ranges=old_ip_ranges,
+            features=["voice"],
+            limits={"max_concurrent_calls": 2},
+            expires_at=datetime.fromtimestamp(now + 3600, UTC),
+            token_fingerprint=old_fingerprint,
+            issued_by_user_id=1,
+            installation_public_key=client_public,
+        )
+
+        requested = client_installation_check.InstallationBindingRequest(
+            nonce=secrets.token_urlsafe(32),
+            issued_at=now,
+            signature="A" * 86,
+            domains=["Voice.New-Customer.Example", "new-customer.example"],
+            ip_ranges=["198.51.100.10", "203.0.113.0/24"],
+            reason="Move to a new server",
+        )
+        fields = {
+            "installation_id": installation_id,
+            "license_token": token,
+            "nonce": requested.nonce,
+            "issued_at": requested.issued_at,
+            "domains": requested.domains,
+            "ip_ranges": requested.ip_ranges,
+            "reason": requested.reason,
+        }
+
+        async def submit(proof_fields):
+            request = {
+                "nonce": proof_fields["nonce"],
+                "issued_at": proof_fields["issued_at"],
+                "domains": proof_fields["domains"],
+                "ip_ranges": proof_fields["ip_ranges"],
+                "reason": proof_fields["reason"],
+                "signature": sign_binding_request(client_private, **proof_fields),
+            }
+            return await accept_binding_request(request, token, [(owner_private, owner_public)])
+
+        accepted = await submit(fields)
+        assert accepted["status"] == "pending"
+        request_id = accepted["id"]
+
+        # A valid signature and nonce are one-use even before approval.
+        with pytest.raises(HTTPException) as replay:
+            await submit(fields)
+        assert replay.value.status_code == 401
+
+        # A distinct valid proof conflicts with the pending request, but its
+        # nonce is consumed so the same proof cannot be retried after resolution.
+        conflicting_fields = {**fields, "nonce": secrets.token_urlsafe(32)}
+        with pytest.raises(HTTPException) as conflict:
+            await submit(conflicting_fields)
+        assert conflict.value.status_code == 409
+        with pytest.raises(HTTPException) as consumed_conflict:
+            await submit(conflicting_fields)
+        assert consumed_conflict.value.status_code == 401
+
+        async with engine.begin() as conn:
+            verified_at = datetime.now(UTC)
+            for domain in requested.domains:
+                await conn.execute(text("""INSERT INTO client_domain_challenges
+                    (customer_id, domain, token_sha256, expires_at, verified_at, created_at)
+                    VALUES (:customer_id, :domain, :token_sha256, :expires_at, :verified_at, :created_at)
+                """), {
+                    "customer_id": "buyer-binding-1",
+                    "domain": domain,
+                    "token_sha256": hashlib.sha256(domain.encode("ascii")).hexdigest(),
+                    "expires_at": verified_at + timedelta(days=1),
+                    "verified_at": verified_at,
+                    "created_at": verified_at,
+                })
+
+        approved = await approve_binding_request(
+            request_id, 1, lambda: (owner_private, owner_public),
+        )
+        assert approved["status"] == "approved"
+        replacement = installation_license.load_license(
+            approved["token"], owner_public, now=int(time.time()),
+        )
+        assert replacement.domains == tuple(requested.domains)
+        assert replacement.ip_ranges == tuple(requested.ip_ranges)
+        assert replacement.installation_id == installation_id
+
+        async with engine.connect() as conn:
+            installation = (await conn.execute(text("""SELECT token_fingerprint,
+                previous_token_fingerprint, domains, ip_ranges
+                FROM client_installations WHERE installation_id = :installation_id
+            """), {"installation_id": installation_id})).one()
+        assert installation.token_fingerprint == hashlib.sha256(
+            approved["token"].encode("ascii")
+        ).hexdigest()
+        assert installation.previous_token_fingerprint == old_fingerprint
+        assert installation.domains == requested.domains
+        assert installation.ip_ranges == requested.ip_ranges
+        persisted_request = await get_client_binding_request(request_id)
+        assert persisted_request["status"] == "approved"
+        assert persisted_request["requested_domains"] == requested.domains
+        assert persisted_request["requested_ip_ranges"] == requested.ip_ranges
+        token_claims = json.loads(installation_license._b64url_decode(approved["token"].split(".", 1)[0]))
+        assert persisted_request["license_issued_at"] == token_claims["iat"]
+
+        # Resolution is one-shot; a second approval cannot change the token or
+        # the binding after the first transaction has committed.
+        with pytest.raises(HTTPException) as second_resolution:
+            await approve_binding_request(
+                request_id, 1, lambda: (owner_private, owner_public),
+            )
+        assert second_resolution.value.status_code == 404
+        assert not await resolve_client_binding_request(
+            request_id, outcome="rejected", user_id=1,
+        )
+        unchanged = await get_client_installation_record(installation_id)
+        assert unchanged["token_fingerprint"] == installation.token_fingerprint
+        assert unchanged["domains"] == requested.domains
+        assert unchanged["ip_ranges"] == requested.ip_ranges
     finally:
         await engine.dispose()
         if schema_created:

@@ -2,12 +2,9 @@
 import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import {
-  BookOpen,
   Check,
-  CheckCircle2,
   Copy,
   ExternalLink,
-  Filter,
   Plus,
   RefreshCw,
   Search,
@@ -178,6 +175,12 @@ export default function PromptTemplatesPage() {
         </div>
       </header>
 
+      <section aria-label="Template library summary" className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
+        <div className="bg-card p-5"><span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Templates</span><p className="mt-2 text-3xl font-semibold tabular-nums">{templates.length}</p><p className="mt-1 text-xs text-muted-foreground">Reusable agent starting points</p></div>
+        <div className="bg-card p-5"><span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Categories</span><p className="mt-2 flex items-center gap-2 text-2xl font-semibold"><Tag className="h-5 w-5 text-primary" />{new Set(templates.map((template) => template.category)).size}</p><p className="mt-1 text-xs text-muted-foreground">Browse by business use case</p></div>
+        <div className="bg-card p-5"><span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Featured</span><p className="mt-2 text-3xl font-semibold tabular-nums">{templates.filter((template) => template.is_featured).length}</p><p className="mt-1 text-xs text-muted-foreground">Recommended starting points</p></div>
+      </section>
+
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="relative w-full sm:w-80">
@@ -206,7 +209,19 @@ export default function PromptTemplatesPage() {
       </div>
 
       {/* Templates Grid */}
-      <div className="grid gap-6 md:grid-cols-2">
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2" role="status" aria-live="polite">
+          <span className="sr-only">Loading prompt templates…</span>
+          {[0, 1, 2, 3].map((item) => <div className="h-64 animate-pulse rounded-2xl border border-border bg-muted/40" key={item} />)}
+        </div>
+      ) : filteredTemplates.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
+          <p className="text-base font-semibold">No matching templates</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Try another search or category. You can also create a custom template for your team.</p>
+          <Button className="mt-5" onClick={() => { setSearch(""); setCategory("all"); }} variant="outline">Clear filters</Button>
+        </div>
+      ) : (
+      <div className="grid gap-5 md:grid-cols-2">
         {filteredTemplates.map((t) => (
           <Card key={t.id} className="border-border/60 flex flex-col justify-between hover:border-primary/40 transition-colors">
             <CardHeader>
@@ -271,6 +286,7 @@ export default function PromptTemplatesPage() {
           </Card>
         ))}
       </div>
+      )}
 
       {/* CREATE TEMPLATE MODAL */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

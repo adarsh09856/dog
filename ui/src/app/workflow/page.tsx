@@ -81,14 +81,23 @@ async function WorkflowList() {
         return (
             <>
                 {/* Active Workflows Section */}
-                <div className="mb-8">
-                    <h2 className="text-xl font-semibold mb-4">Active Agents</h2>
+                <section className="mb-10" aria-labelledby="active-agents-heading">
+                    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+                        <div>
+                            <h2 id="active-agents-heading" className="text-xl font-semibold tracking-tight">Active agents</h2>
+                            <p className="mt-1 text-sm text-muted-foreground">Organize workflows, make edits, and test before publishing.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="rounded-full border border-border bg-card px-3 py-1.5 text-muted-foreground"><strong className="mr-1.5 font-semibold tabular-nums text-foreground">{activeWorkflows.length}</strong>active</span>
+                            <span className="rounded-full border border-border bg-card px-3 py-1.5 text-muted-foreground"><strong className="mr-1.5 font-semibold tabular-nums text-foreground">{folders.length}</strong>folders</span>
+                        </div>
+                    </div>
                     {activeWorkflows.length > 0 || folders.length > 0 ? (
                         <AgentFolderView workflows={activeWorkflows} folders={folders} />
                     ) : (
                         <EmptyWorkflowState />
                     )}
-                </div>
+                </section>
 
                 {/* Archived Section — collapsible, same design as the folder/Uncategorized sections */}
                 {archivedWorkflows.length > 0 && (
@@ -118,7 +127,7 @@ async function PageContent() {
             {/* Your Workflows Section */}
             <div className="mb-6">
                 <div className={panel.collectionHeader}>
-                    <div><span className={panel.eyebrow}>BUILD / VOICE AGENTS</span><h1>Your Agents</h1><p>Shape each conversation, connect its tools, and test the workflow before taking it live.</p></div>
+                    <div><span className={panel.eyebrow}>BUILD / AGENT WORKFLOWS</span><h1>Your Agents</h1><p>Design conversations, connect business tools, and validate every workflow before it goes live.</p></div>
                     <div className="flex max-w-full flex-wrap items-center gap-2 [&>*]:max-w-full">
                         <UploadWorkflowButton />
                         <CreateFolderButton />

@@ -6,6 +6,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { WorkspacePageHeader } from "@/components/layout/WorkspacePageHeader";
 import {
   Card,
   CardContent,
@@ -109,16 +110,30 @@ export default function ApiKeysPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-6 px-4 py-10">
-      <header className={chrome.detailHeader}>
-        <div className="flex items-center gap-2">
-          <KeyRound className="h-5 w-5 text-primary" />
-          <h1 className={chrome.detailTitle}>API Keys</h1>
+    <main className={`${chrome.workspace} mx-auto w-full max-w-6xl px-4 py-8`}>
+      <WorkspacePageHeader
+        area="WORKSPACE / DEVELOPER ACCESS"
+        title="API keys"
+        description="Issue and revoke credentials for public-agent and MCP integrations. Full secrets are shown once; workspace keys remain isolated from other organizations."
+      />
+
+      <section aria-label="API key summary" className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
+        <div className="bg-card p-5">
+          <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Active credentials</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">{keys.filter((key) => key.is_active).length}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Enabled for integrations</p>
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Create and manage keys for this workspace&apos;s public-agent and MCP integrations.
-        </p>
-      </header>
+        <div className="bg-card p-5">
+          <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Archived</p>
+          <p className="mt-2 text-3xl font-semibold tabular-nums">{keys.filter((key) => !key.is_active).length}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Can be reactivated when needed</p>
+        </div>
+        <div className="bg-card p-5">
+          <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Secret handling</p>
+          <p className="mt-2 flex items-center gap-2 text-lg font-semibold"><KeyRound className="h-4 w-4 text-primary" />Shown once</p>
+          <p className="mt-1 text-xs text-muted-foreground">Only prefixes are retained here</p>
+        </div>
+      </section>
 
       <Card>
         <CardHeader>
@@ -208,6 +223,6 @@ export default function ApiKeysPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }

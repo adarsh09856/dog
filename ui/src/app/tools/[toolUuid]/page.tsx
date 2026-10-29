@@ -934,17 +934,18 @@ const data = await response.json();`;
             <div className="container mx-auto px-4 py-8">
                 <div className="max-w-4xl mx-auto">
                     {/* Header */}
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-4">
+                    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-2 sm:gap-4">
                             <Button
                                 variant="ghost"
                                 size="sm"
+                                className="shrink-0"
                                 onClick={() => router.push("/tools")}
                             >
                                 <ArrowLeft className="w-4 h-4 mr-2" />
                                 Back
                             </Button>
-                            <div className="flex items-center gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
                                 <div
                                     className="w-10 h-10 rounded-lg flex items-center justify-center"
                                     style={{
@@ -953,15 +954,15 @@ const data = await response.json();`;
                                 >
                                     {renderToolIcon(tool.category)}
                                 </div>
-                                <div>
-                                    <h1 className={chrome.detailTitle}>{name}</h1>
+                                <div className="min-w-0">
+                                    <h1 className={`${chrome.detailTitle} break-words`}>{name}</h1>
                                     <p className="text-sm text-muted-foreground">
                                         {getToolTypeLabel(tool.category)}
                                     </p>
                                 </div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                             {isHttpApiTool && (
                                 <Button
                                     variant="outline"
@@ -976,7 +977,7 @@ const data = await response.json();`;
                                     href={TOOL_DOCUMENTATION_URLS[tool.category]}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                                    className="flex min-h-9 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 >
                                     Docs
                                     <ExternalLink className="h-3.5 w-3.5" />

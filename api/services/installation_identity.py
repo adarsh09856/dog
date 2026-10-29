@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import json
 import re
 import time
@@ -19,6 +20,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 
 _DOMAIN = b"kodewaves-owner-check-v1\n"
 _ENROLLMENT_DOMAIN = b"kodewaves-installation-enrollment-v1\n"
+_BINDING_REQUEST_DOMAIN = b"kodewaves-installation-binding-request-v1\n"
 _REASONS = frozenset({
     "unknown", "modified_file", "missing_file", "added_file",
     "invalid_manifest", "missing_manifest", "missing_trust_root",
@@ -171,6 +173,73 @@ def verify_owner_check(
 ) -> None:
     """Verify proof contents and freshness; the caller must also reject nonce replay."""
     message = owner_check_message(**fields)
+    current = int(time.time()) if now is None else now
+    if not current - max_age_seconds <= fields["issued_at"] <= current + future_skew_seconds:
+        raise InstallationIdentityError("Installation proof is outside its validity window")
+    try:
+        Ed25519PublicKey.from_public_bytes(_decode_urlsafe(public_key, 32)).verify(
+            _decode_urlsafe(signature, 64), message
+        )
+    except InvalidSignature as exc:
+        raise InstallationIdentityError("Installation proof signature is invalid") from exc
+
+
+def binding_request_message(
+    *, installation_id: str, license_token: str, nonce: str, issued_at: int,
+    domains: list[str], ip_ranges: list[str], reason: str,
+) -> bytes:
+    """Canonical proof for a customer-requested binding change."""
+    # Reuse the common identity, token, nonce and timestamp validation.
+    owner_check_message(
+        installation_id=installation_id, license_token=license_token, nonce=nonce,
+        issued_at=issued_at, integrity_ok=True, integrity_finding=None,
+    )
+    if not isinstance(domains, list) or not domains or not all(isinstance(item, str) for item in domains):
+        raise InstallationIdentityError("A binding request must include a licensed domain")
+    normalized_domains = sorted(set(domains))
+    if normalized_domains != domains or any(
+        not re.fullmatch(r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*", item)
+        for item in domains
+    ):
+        raise InstallationIdentityError("Binding request domains must be canonical and sorted")
+    if not isinstance(ip_ranges, list) or not all(isinstance(item, str) for item in ip_ranges):
+        raise InstallationIdentityError("Binding request IP ranges are invalid")
+    try:
+        normalized_ranges = sorted({str(ipaddress.ip_network(item, strict=False)) for item in ip_ranges})
+    except ValueError as exc:
+        raise InstallationIdentityError("Binding request IP ranges are invalid") from exc
+    if normalized_ranges != ip_ranges:
+        raise InstallationIdentityError("Binding request IP ranges must be canonical and sorted")
+    if not isinstance(reason, str) or not reason.strip() or len(reason.strip()) > 1000:
+        raise InstallationIdentityError("Binding request reason must be 1–1000 characters")
+    payload = {
+        "installation_id": installation_id,
+        "license_sha256": hashlib.sha256(license_token.encode("ascii")).hexdigest(),
+        "nonce": nonce,
+        "issued_at": issued_at,
+        "domains": domains,
+        "ip_ranges": ip_ranges,
+        "reason": reason.strip(),
+    }
+    return _BINDING_REQUEST_DOMAIN + json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+
+
+def sign_binding_request(private_key: bytes, **fields: Any) -> str:
+    try:
+        key = Ed25519PrivateKey.from_private_bytes(private_key)
+    except (TypeError, ValueError) as exc:
+        raise InstallationIdentityError("Invalid installation private key") from exc
+    return _encode_urlsafe(key.sign(binding_request_message(**fields)))
+
+
+def verify_binding_request(
+    public_key: str, signature: str, *, now: int | None = None,
+    max_age_seconds: int = 300, future_skew_seconds: int = 30, **fields: Any,
+) -> None:
+    """Verify a fresh binding-change proof; caller must also consume its nonce."""
+    message = binding_request_message(**fields)
     current = int(time.time()) if now is None else now
     if not current - max_age_seconds <= fields["issued_at"] <= current + future_skew_seconds:
         raise InstallationIdentityError("Installation proof is outside its validity window")

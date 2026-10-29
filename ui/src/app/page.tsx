@@ -59,49 +59,58 @@ export default function HomePage() {
       <PublicHeader />
       <main id="main-content">
         <section className="public-hero relative overflow-hidden border-b border-border">
-          <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[1fr_0.82fr] lg:gap-20 lg:py-24">
-            <div>
-              <p className="mb-6 inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                <span className="h-px w-8 bg-cta" aria-hidden="true" />
-                Voice operations platform
+          <div className="mx-auto max-w-[1480px] px-4 py-5 sm:px-8 sm:py-8 lg:px-10">
+            <div className="relative isolate grid items-center gap-10 overflow-hidden rounded-[2rem] bg-sidebar px-6 py-10 text-sidebar-foreground shadow-[0_32px_90px_-48px_rgba(16,35,31,.8)] sm:px-10 sm:py-14 lg:grid-cols-[0.94fr_1.06fr] lg:gap-12 lg:px-14 lg:py-16">
+              <div className="pointer-events-none absolute -right-28 -top-36 -z-10 size-[28rem] rounded-full border border-sidebar-foreground/10" aria-hidden="true" />
+              <div className="pointer-events-none absolute -right-12 -top-20 -z-10 size-[20rem] rounded-full border border-sidebar-foreground/10" aria-hidden="true" />
+              <div>
+              <p className="mb-6 inline-flex items-center gap-3 rounded-full border border-sidebar-foreground/20 bg-sidebar-foreground/[0.06] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/80">
+                <span className="size-1.5 rounded-full bg-cta" aria-hidden="true" />
+                Voice operations, connected
               </p>
-              <h1 className="max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-6xl">
-                Every conversation.<br /><span className="public-heading-accent">A clear next step.</span>
+              <h1 className="max-w-3xl text-4xl font-semibold leading-[1.04] tracking-[-0.045em] sm:text-5xl lg:text-[4.25rem]">
+                Every conversation.<br /><span className="text-cta">A clear next step.</span>
               </h1>
-              <p className="mt-7 max-w-xl text-lg leading-8 text-foreground/80">
+              <p className="mt-7 max-w-xl text-lg leading-8 text-sidebar-foreground/85">
                 {branding.tagline}
               </p>
-              <p className="mt-3 max-w-xl text-[15px] leading-7 text-muted-foreground">
+              <p className="mt-3 max-w-xl text-[15px] leading-7 text-sidebar-foreground/65">
                 Design the conversation, validate it before launch, and operate it across browser and telephone channels.
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link
                   href="/auth/login"
-                  className="inline-flex items-center gap-3 rounded-md bg-cta px-5 py-3 text-sm font-semibold text-cta-foreground shadow-sm transition-colors hover:bg-cta/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="inline-flex items-center gap-3 rounded-lg bg-cta px-5 py-3.5 text-sm font-semibold text-cta-foreground shadow-sm transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
                 >
                   Sign in to your workspace <ArrowRight className="size-4" />
                 </Link>
                 <Link
                   href="/pricing"
-                  className="rounded-md border border-border bg-background/70 px-5 py-3 text-sm font-medium transition-colors hover:bg-background"
+                  className="rounded-lg border border-sidebar-foreground/25 bg-sidebar-foreground/[0.06] px-5 py-3.5 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
                 >
                   View plans and deployment
                 </Link>
               </div>
-              <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 border-t border-border pt-5 text-xs text-muted-foreground">
+              <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 border-t border-sidebar-foreground/15 pt-5 text-xs text-sidebar-foreground/70">
                 {[
                   "Workflow editor",
                   "Browser testing",
                   "Web and telephony",
                 ].map((item) => (
                   <span key={item} className="flex items-center gap-2">
-                    <Check className="size-3.5 text-cta-text" />
+                    <Check className="size-3.5 text-cta" />
                     {item}
                   </span>
                 ))}
               </div>
             </div>
-            <VoiceOperationsIllustration />
+            <div className="rounded-[1.5rem] border border-sidebar-foreground/15 bg-[#172f2a] p-2 shadow-2xl sm:p-3">
+              <VoiceOperationsIllustration />
+              <p className="px-3 pb-2 pt-3 text-center text-[10px] font-medium uppercase tracking-[0.18em] text-sidebar-foreground/55">
+                One workflow across browser and telephone
+              </p>
+            </div>
+            </div>
           </div>
         </section>
         <section

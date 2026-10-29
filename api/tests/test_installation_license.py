@@ -216,11 +216,12 @@ async def test_client_license_status_reports_owner_grace_and_last_check(monkeypa
         return OwnerStatusSnapshot(last_owner_check=12345, using_outage_grace=True)
 
     monkeypatch.setattr(installation, "KODEWAVES_EDITION", "client")
+    monkeypatch.setenv("KODEWAVES_INSTALLATION_ID", "client-1")
     monkeypatch.setattr(installation, "load_license", lambda: InstallationLicense(
         "client-1", "buyer-1", "client", ("example.com",), 99999,
         frozenset({"voice"}), {"max_concurrent_calls": 2},
     ))
-    monkeypatch.setattr(installation, "validate_installation_license", lambda _license: None)
+    monkeypatch.setattr(installation, "get_installation_binding", lambda: "example.com")
     monkeypatch.setattr(installation, "require_current_owner_status", owner_snapshot)
 
     result = await installation.installation_license_status(SimpleNamespace(is_superuser=True))
@@ -820,3 +821,44 @@ def test_client_middleware_hides_owner_control_routes_even_if_mounted(monkeypatc
     called, messages = asyncio.run(run("/api/v1/admin/client-installations", "websocket"))
     assert not called
     assert messages[0]["code"] == 4404
+
+
+def test_only_post_binding_request_bypasses_a_stale_client_license(monkeypatch):
+    from api.services import client_license_middleware as middleware
+
+    monkeypatch.setattr(middleware, "KODEWAVES_EDITION", "client")
+    monkeypatch.setattr(
+        middleware, "load_license",
+        lambda: (_ for _ in ()).throw(InstallationLicenseError("license unavailable")),
+    )
+
+    async def run(method):
+        called = False
+        messages = []
+
+        async def app(_scope, _receive, _send):
+            nonlocal called
+            called = True
+
+        async def send(message):
+            messages.append(message)
+
+        await middleware.ClientLicenseMiddleware(app)(
+            {
+                "type": "http",
+                "method": method,
+                "path": "/api/v1/installation/binding-requests",
+                "headers": [(b"host", b"customer.example")],
+                "client": ("198.51.100.2", 1234),
+            },
+            lambda: None,
+            send,
+        )
+        return called, messages
+
+    called, messages = asyncio.run(run("POST"))
+    assert called
+    assert messages == []
+    called, messages = asyncio.run(run("GET"))
+    assert not called
+    assert messages[0]["status"] == 402

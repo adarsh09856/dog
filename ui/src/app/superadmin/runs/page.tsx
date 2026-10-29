@@ -370,7 +370,7 @@ export default function RunsPage() {
                             </div>
                         ) : (
                             <>
-                                <div className="bg-card border rounded-lg overflow-hidden shadow-sm">
+                                <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
                                     <Table>
                                         <TableHeader>
                                             <TableRow className="bg-muted">

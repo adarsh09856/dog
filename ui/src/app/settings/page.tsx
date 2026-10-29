@@ -25,6 +25,8 @@ import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
 import { useAuth } from "@/lib/auth";
 import { getUserEmail } from "@/lib/auth/userDisplay";
 import { apiFetch } from "@/lib/kodewavesApi";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface InstallationLicenseStatus {
   edition: string;
@@ -39,11 +41,12 @@ interface InstallationLicenseStatus {
   ip_ranges?: string[];
   owner_status?: "current" | "outage_grace";
   last_owner_check?: number;
+  binding_request_available?: boolean;
   message?: string;
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { hasFeature, isClientEdition } = useClientEntitlements();
   const canUseVoice = !isClientEdition || hasFeature("voice");
   const canUseBilling = !isClientEdition || hasFeature("billing");
@@ -55,7 +58,7 @@ export default function SettingsPage() {
   const [installation, setInstallation] = useState<InstallationLicenseStatus | null>(null);
 
   useEffect(() => {
-    if (!isClientAdmin) return;
+    if (authLoading || !user || !isClientAdmin) return;
     apiFetch<InstallationLicenseStatus>("/installation/license")
       .then(setInstallation)
       .catch((error: unknown) => setInstallation({
@@ -63,7 +66,7 @@ export default function SettingsPage() {
         valid: false,
         message: error instanceof Error ? error.message : "Unable to read installation status.",
       }));
-  }, [isClientAdmin]);
+  }, [authLoading, user, isClientAdmin]);
 
   return (
     <div className="flex justify-center py-12 px-4">
@@ -241,6 +244,44 @@ function InstallationLicenseCard({
   installation: InstallationLicenseStatus | null;
 }) {
   const valid = installation?.valid === true;
+  const [domains, setDomains] = useState("");
+  const [ipRanges, setIpRanges] = useState("");
+  const [reason, setReason] = useState("");
+  const [sendingRequest, setSendingRequest] = useState(false);
+  const [requestError, setRequestError] = useState("");
+  const [requestSent, setRequestSent] = useState("");
+
+  useEffect(() => {
+    setDomains(installation?.domains?.join("\n") || "");
+    setIpRanges(installation?.ip_ranges?.join(", ") || "");
+  }, [installation?.installation_id, installation?.domains, installation?.ip_ranges]);
+
+  const submitBindingRequest = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSendingRequest(true);
+    setRequestError("");
+    setRequestSent("");
+    try {
+      const result = await apiFetch<{ request_id: number; submitted_at: string; message: string }>(
+        "/installation/binding-requests",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            domains: domains.split(/[\n,]/).map((value) => value.trim()).filter(Boolean),
+            ip_ranges: ipRanges.split(/[\n,]/).map((value) => value.trim()).filter(Boolean),
+            reason,
+          }),
+        },
+      );
+      setRequestSent("Request #" + result.request_id + " was sent to Kodewaves for review.");
+      setReason("");
+    } catch (cause) {
+      setRequestError(cause instanceof Error ? cause.message : "Unable to submit the binding request.");
+    } finally {
+      setSendingRequest(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -284,6 +325,32 @@ function InstallationLicenseCard({
               <LicenseValue label="Approved server IP ranges" value={installation.ip_ranges!.join(", ")} />
             )}
             </div>}
+            {installation.installation_id && <form onSubmit={submitBindingRequest} className="space-y-3 border-t border-border/60 pt-4">
+              <div>
+                <h3 className="text-sm font-semibold">Request a domain or server IP change</h3>
+                <p className="mt-1 text-xs text-muted-foreground">The Kodewaves owner reviews this request. New domains need DNS verification; approval returns a replacement license token once.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="binding-request-domains">Requested public domains</Label>
+                  <textarea id="binding-request-domains" required value={domains} onChange={(event) => setDomains(event.target.value)} placeholder="voice.customer.example" className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="binding-request-ips">Requested source IPs/CIDRs (optional)</Label>
+                  <Input id="binding-request-ips" value={ipRanges} onChange={(event) => setIpRanges(event.target.value)} placeholder="198.51.100.10/32" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="binding-request-reason">Reason for the change</Label>
+                <Input id="binding-request-reason" required maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} />
+              </div>
+              {requestError && <p className="text-sm text-destructive" role="alert">{requestError}</p>}
+              {requestSent && <p className="text-sm text-emerald-700 dark:text-emerald-300" role="status">{requestSent}</p>}
+              <Button type="submit" size="sm" disabled={sendingRequest || !installation.binding_request_available}>
+                {sendingRequest ? "Sending request…" : "Request owner review"}
+              </Button>
+              {!installation.binding_request_available && <p className="text-xs text-muted-foreground">This server has no installation signing key available. Ask the Kodewaves owner to check its identity configuration and enrollment.</p>}
+            </form>}
           </div>
         )}
       </CardContent>

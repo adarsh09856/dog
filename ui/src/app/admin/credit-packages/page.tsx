@@ -113,7 +113,7 @@ export default function AdminCreditPackagesPage() {
             Create on-demand minute packages with bonus credits and one explicitly configured currency price.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <Button
             size="sm"
             className="gap-2"
@@ -152,7 +152,7 @@ export default function AdminCreditPackagesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="overflow-x-auto rounded-xl border border-border/60">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>

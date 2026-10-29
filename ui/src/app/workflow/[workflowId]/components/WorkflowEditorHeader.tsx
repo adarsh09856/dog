@@ -232,7 +232,7 @@ export const WorkflowEditorHeader = ({
     };
 
     return (
-        <div className={`${chrome.editorHeader} flex items-center justify-between w-full bg-background text-foreground border-b border-border`}>
+        <div className={`${chrome.editorHeader} relative z-20 flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/80 bg-card/95 text-foreground shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85`}>
             {/* Left section: Mobile menu + Back button + Workflow name */}
             <div className="flex items-center gap-3 mr-4">
                 <button
@@ -244,6 +244,7 @@ export const WorkflowEditorHeader = ({
                 </button>
                 <button
                     onClick={handleBack}
+                    aria-label="Back to workflows"
                     className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
                     <ArrowLeft className="w-5 h-5" />
@@ -300,7 +301,7 @@ export const WorkflowEditorHeader = ({
             </div>
 
             {/* Right section: Version + status + tester/call actions + save */}
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-2.5">
                 {/* Read-only banner when viewing a historical version */}
                 {isViewingHistoricalVersion && (
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-primary/30 bg-primary/10">
@@ -324,7 +325,8 @@ export const WorkflowEditorHeader = ({
                 {/* Version history button */}
                 <button
                     onClick={onHistoryClick}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border text-foreground hover:bg-muted transition-colors cursor-pointer"
+                    aria-label={activeVersionLabel ? `Version history, ${activeVersionLabel}` : "Version history"}
+                    className="flex h-9 items-center gap-2 rounded-lg border border-border/80 bg-background px-3 text-foreground shadow-sm transition-colors hover:bg-muted"
                 >
                     <History className="w-4 h-4 text-muted-foreground" />
                     {activeVersionLabel && !isViewingHistoricalVersion && (
@@ -392,7 +394,7 @@ export const WorkflowEditorHeader = ({
                         onClick={handlePublish}
                         disabled={isDirty || publishing || hasValidationErrors}
                         variant="outline"
-                        className="border-border bg-transparent hover:bg-muted text-foreground px-4"
+                        className="h-9 rounded-lg border-border bg-background px-4 text-foreground shadow-sm hover:bg-muted"
                     >
                         {publishing ? (
                             <>
@@ -411,7 +413,7 @@ export const WorkflowEditorHeader = ({
                 {!isViewingHistoricalVersion && (
                     <Button
                         variant="outline"
-                        className="flex items-center gap-2 bg-transparent border-border hover:bg-muted text-foreground"
+                        className="h-9 rounded-lg border-border bg-background text-foreground shadow-sm hover:bg-muted"
                         disabled={isCallDisabled}
                         onClick={onPhoneCallClick}
                     >
@@ -422,7 +424,7 @@ export const WorkflowEditorHeader = ({
 
                 <Button
                     variant="outline"
-                    className="flex items-center gap-2 bg-transparent border-border hover:bg-muted text-foreground"
+                    className="h-9 rounded-lg border-border bg-background text-foreground shadow-sm hover:bg-muted"
                     onClick={onTestAgentClick}
                 >
                     <Bot className="w-4 h-4" />
@@ -453,7 +455,8 @@ export const WorkflowEditorHeader = ({
                         <Button
                             variant="ghost"
                             size="icon"
-                    className="text-muted-foreground hover:text-foreground hover:bg-muted"
+                            aria-label="More workflow actions"
+                            className="h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
                         >
                             <MoreVertical className="w-5 h-5" />
                         </Button>

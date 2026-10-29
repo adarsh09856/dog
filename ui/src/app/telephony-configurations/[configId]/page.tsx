@@ -224,7 +224,7 @@ export default function TelephonyConfigurationDetailPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8 space-y-3">
+      <div className="container mx-auto max-w-screen-2xl space-y-3 px-4 py-6 sm:px-6 lg:px-8">
         <Skeleton className="h-10 w-1/3" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -234,7 +234,7 @@ export default function TelephonyConfigurationDetailPage() {
 
   if (!config) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8">
         <Button variant="ghost" onClick={() => router.push("/telephony-configurations")}>
           <ArrowLeft className="h-4 w-4 mr-2" /> Back
         </Button>
@@ -244,7 +244,7 @@ export default function TelephonyConfigurationDetailPage() {
   }
 
   return (
-    <div className={`${chrome.detailPage} container mx-auto px-4 py-8 space-y-6`}>
+    <div className={`${chrome.detailPage} container mx-auto max-w-screen-2xl space-y-6 px-4 py-6 sm:px-6 lg:px-8`}>
       <div>
         <Link
           href="/telephony-configurations"
@@ -255,7 +255,7 @@ export default function TelephonyConfigurationDetailPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <CardHeader className="flex flex-col items-start justify-between gap-4 sm:flex-row">
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <CardTitle className={`${chrome.detailTitle} truncate`}>{config.name}</CardTitle>
@@ -285,7 +285,7 @@ export default function TelephonyConfigurationDetailPage() {
               <Copy className="h-3 w-3 shrink-0" />
             </button>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             {config.inactive && (
               <Button variant="outline" size="sm" onClick={onReactivate}>
                 <RotateCcw className="h-4 w-4 mr-2" /> Reactivate
@@ -327,7 +327,7 @@ export default function TelephonyConfigurationDetailPage() {
               </div>
             </div>
           )}
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
             {Object.entries(config.credentials ?? {})
               .filter(([key]) => key !== "external_pbx" || externalPbxIntegrationsEnabled)
               .filter(([key]) => key !== "stasis_app_name")
@@ -411,7 +411,7 @@ export default function TelephonyConfigurationDetailPage() {
       ) : null}
 
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <CardHeader className="flex flex-col items-start justify-between gap-4 sm:flex-row">
           <div className="space-y-1">
             <CardTitle>Phone numbers</CardTitle>
             <CardDescription>
@@ -419,18 +419,21 @@ export default function TelephonyConfigurationDetailPage() {
               SIP URIs and extensions are supported alongside PSTN numbers.
             </CardDescription>
           </div>
-          <Button size="sm" onClick={() => openPhoneDialog(null)}>
+          <Button size="sm" onClick={() => openPhoneDialog(null)} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" /> Add phone number
           </Button>
         </CardHeader>
         <CardContent>
           {phoneNumbers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No phone numbers yet. Add one to start placing or receiving calls on this
-              configuration.
-            </p>
+            <div className="rounded-xl border border-dashed bg-muted/20 px-5 py-8 text-center">
+              <p className="font-medium">No phone numbers connected</p>
+              <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
+                Add a number to place outbound calls or match incoming calls to an inbound workflow.
+              </p>
+            </div>
           ) : (
-            <Table>
+            <div className="w-full overflow-x-auto rounded-md border">
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Address</TableHead>
@@ -561,6 +564,7 @@ export default function TelephonyConfigurationDetailPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -5,6 +5,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -95,6 +96,32 @@ class ClientIntegrityAlertModel(Base):
     acknowledged_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     __table_args__ = (UniqueConstraint("installation_id", "event_fingerprint", name="uq_client_integrity_alert_event"),)
+
+
+class ClientBindingRequestModel(Base):
+    """Owner-reviewed domain or IP change requested by an enrolled installation."""
+
+    __tablename__ = "client_binding_requests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    installation_id = Column(
+        String(100), ForeignKey("client_installations.installation_id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    requested_domains = Column(JSON, nullable=False)
+    requested_ip_ranges = Column(JSON, nullable=False)
+    reason = Column(String(1000), nullable=False)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    license_issued_at = Column(Integer, nullable=True)
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected')",
+            name="ck_client_binding_requests_status",
+        ),
+    )
 
 # ============================================================================
 # 1. PLATFORM MASTER CREDENTIALS (Centralized Sovereign Keys)

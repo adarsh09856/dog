@@ -1,9 +1,12 @@
 """Client installation entitlement status and permitted customer branding."""
 
+import ipaddress
+import os
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from api.constants import AUTH_PROVIDER, KODEWAVES_EDITION
 from api.db.client_user_management import (
@@ -20,8 +23,11 @@ from api.db.kodewaves_client import kodewaves_db_client
 from api.db.models import UserModel
 from api.schemas.branding import PlatformBranding as ClientBranding
 from api.services.auth.depends import get_superuser, get_user
+from api.services.client_binding_requests import send_binding_request
 from api.services.installation_license import (
     InstallationLicenseError,
+    _canonical_domain,
+    get_installation_binding,
     load_license,
     validate_installation_license,
 )
@@ -41,6 +47,36 @@ class ClientUserStatus(BaseModel):
 
 class ClientWorkspaceCreate(BaseModel):
     name: str = Field(min_length=2, max_length=80)
+
+
+class ClientBindingChangeRequest(BaseModel):
+    domains: list[str] = Field(min_length=1, max_length=20)
+    ip_ranges: list[str] = Field(default_factory=list, max_length=20)
+    reason: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("domains")
+    @classmethod
+    def canonical_domains(cls, values: list[str]) -> list[str]:
+        try:
+            return sorted({_canonical_domain(value) for value in values})
+        except (InstallationLicenseError, ValueError) as exc:
+            raise ValueError("Enter valid public hostnames") from exc
+
+    @field_validator("ip_ranges")
+    @classmethod
+    def canonical_ip_ranges(cls, values: list[str]) -> list[str]:
+        try:
+            return sorted({str(ipaddress.ip_network(value.strip(), strict=False)) for value in values})
+        except (ValueError, AttributeError) as exc:
+            raise ValueError("Enter valid IP addresses or CIDR ranges") from exc
+
+    @field_validator("reason")
+    @classmethod
+    def clean_reason(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("A reason is required")
+        return value
 
 
 def _require_client_workspace(user: UserModel) -> int:
@@ -168,13 +204,20 @@ async def installation_license_status(_user: Annotated[UserModel, Depends(get_us
         raise HTTPException(status_code=403, detail="Client administrator access required")
     try:
         license_data = load_license()
-        validate_installation_license(license_data)
+        expected_id = os.getenv("KODEWAVES_INSTALLATION_ID", "").strip()
+        if license_data.installation_id != expected_id:
+            raise InstallationLicenseError("The license belongs to a different installation")
     except InstallationLicenseError as exc:
         return {
             "edition": "client",
             "valid": False,
+            "binding_request_available": False,
             "message": str(exc),
         }
+    try:
+        domain_matches = _canonical_domain(get_installation_binding()) in license_data.domains
+    except InstallationLicenseError:
+        domain_matches = False
     details = {
         "edition": "client",
         "installation_id": license_data.installation_id,
@@ -184,14 +227,31 @@ async def installation_license_status(_user: Annotated[UserModel, Depends(get_us
         "features": sorted(license_data.features),
         "limits": license_data.limits,
         "ip_ranges": list(license_data.ip_ranges),
+        "binding_request_available": bool(
+            os.getenv("KODEWAVES_INSTALLATION_KEY_FILE", "")
+            and Path(os.getenv("KODEWAVES_INSTALLATION_KEY_FILE", "")).is_file()
+        ),
     }
     try:
         owner_status = await require_current_owner_status(license_data)
     except InstallationLicenseError as exc:
         return {**details, "valid": False, "message": str(exc)}
+    if not domain_matches:
+        return {**details, "valid": False, "message": "The configured public domain is not in this installation license."}
     return {
         **details,
         "valid": True,
         "owner_status": "outage_grace" if owner_status.using_outage_grace else "current",
         "last_owner_check": owner_status.last_owner_check,
     }
+
+
+@router.post("/binding-requests", status_code=201)
+async def request_installation_binding_change(
+    request: ClientBindingChangeRequest,
+    user: Annotated[UserModel, Depends(get_superuser)],
+) -> dict:
+    """Send a signed owner-reviewed binding change request from the installation."""
+    if KODEWAVES_EDITION != "client":
+        raise HTTPException(status_code=404, detail="Not found")
+    return await send_binding_request(request.model_dump())

@@ -101,14 +101,14 @@ export default function SuperadminPage() {
 
     return (
         <>
-            <main className={`${admin.surface} mx-auto max-w-5xl`}>
+            <main className={`${admin.surface} mx-auto w-full max-w-6xl`}>
                 <div className={admin.hero}>
                     <span className={admin.kicker}>Owner control / access</span>
                     <h1 className={admin.title}>Superadmin Dashboard</h1>
                     <p>Manage access across customers and inspect platform-wide activity.</p>
                 </div>
 
-                <div className="p-4 rounded-xl border border-primary/40 bg-primary/5 flex items-center justify-between">
+                <div className="flex flex-col gap-4 rounded-2xl border border-primary/30 bg-primary/[0.04] p-5 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <div className="font-bold text-sm text-primary">Platform administration</div>
                         <div className="text-xs text-muted-foreground">Manage master provider keys, retail margins, credit bundles, live calls, and content moderation.</div>
@@ -120,7 +120,7 @@ export default function SuperadminPage() {
                     </Link>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2">
+                <div className="grid gap-5 lg:grid-cols-2">
                         <Card>
                             <CardHeader>
                                 <CardTitle>Provider User ID</CardTitle>

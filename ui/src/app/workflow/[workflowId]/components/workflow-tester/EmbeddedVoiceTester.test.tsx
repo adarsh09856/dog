@@ -82,7 +82,7 @@ describe("EmbeddedVoiceTester auto-start", () => {
         render(<EmbeddedVoiceTester {...props} />);
 
         expect(start).not.toHaveBeenCalled();
-        expect(screen.getByRole("button", { name: /start test/i }).disabled).toBe(true);
+        expect((screen.getByRole("button", { name: /start test/i }) as HTMLButtonElement).disabled).toBe(true);
     });
 
     it("shows one connecting indicator and prevents duplicate starts during signaling", () => {

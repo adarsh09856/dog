@@ -41,29 +41,6 @@ import {
   WalletLedgerItem,
 } from "@/lib/kodewavesApi";
 
-interface RazorpayCheckoutResult {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
-}
-
-interface RazorpayCheckoutOptions {
-  key: string;
-  amount: number;
-  currency: string;
-  name: string;
-  description: string;
-  order_id: string;
-  handler: (result: RazorpayCheckoutResult) => void;
-  modal: { ondismiss: () => void };
-}
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: RazorpayCheckoutOptions) => { open: () => void };
-  }
-}
-
 function loadRazorpayCheckout() {
   if (window.Razorpay) return Promise.resolve(true);
   return new Promise<boolean>((resolve) => {
