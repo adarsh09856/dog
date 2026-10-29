@@ -248,11 +248,9 @@ class _BookingToolChoiceMixin:
         return traced_stream()
 
     async def _emit_direct_reply(self, text: str):
-        # OpenAI's process_frame owns the response start/end pair. Nested
-        # boundaries here leave aggregators waiting for an extra completion
-        # and can close a TTS context before the parent response finishes.
-        await self.start_ttfb_metrics()
-        await self.stop_ttfb_metrics()
+        # Fast replies bypass the model, so do not emit an LLM TTFB sample of
+        # zero. That value is misleading in the live transcript; real model
+        # requests still report their own TTFB through the normal service.
         await self._push_llm_text(text)
 
     def can_speculate_caller_turn(self, text: str) -> bool:
