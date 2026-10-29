@@ -11,6 +11,26 @@ from api.services.campaign.campaign_event_publisher import (
 from api.services.campaign.source_sync_factory import get_sync_service
 
 
+async def _finish_source_sync(
+    campaign_id: int,
+    state: str,
+    *,
+    values: dict,
+    paused_values: dict,
+) -> bool:
+    """Finalize an import without overwriting a concurrent pause/cancel."""
+    if await db_client.update_campaign_if_state(
+        campaign_id, "syncing", state=state, **values
+    ):
+        return True
+
+    campaign = await db_client.get_campaign_by_id(campaign_id)
+    if campaign is not None and campaign.state == "paused":
+        # Preserve the operator's pause while recording that import finished.
+        await db_client.update_campaign(campaign_id, **paused_values)
+    return False
+
+
 async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
     """
     Phase 1: Syncs data from configured source to queued_runs table
@@ -38,23 +58,41 @@ async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
 
         if rows_synced == 0:
             # No data to process
-            await db_client.update_campaign(
-                campaign_id=campaign_id,
+            await _finish_source_sync(
+                campaign_id,
                 state="completed",
-                completed_at=datetime.now(UTC),
-                source_sync_status="completed",
-                source_last_synced_at=datetime.now(UTC),
+                values={
+                    "completed_at": datetime.now(UTC),
+                    "source_sync_status": "completed",
+                    "source_last_synced_at": datetime.now(UTC),
+                },
+                paused_values={
+                    "source_sync_status": "completed",
+                    "source_last_synced_at": datetime.now(UTC),
+                },
             )
             logger.info(f"Campaign {campaign_id} completed with no data to process")
             return
 
         # Update campaign state to running
-        await db_client.update_campaign(
-            campaign_id=campaign_id,
+        transitioned = await _finish_source_sync(
+            campaign_id,
             state="running",
-            source_sync_status="completed",
-            source_last_synced_at=datetime.now(UTC),
+            values={
+                "source_sync_status": "completed",
+                "source_last_synced_at": datetime.now(UTC),
+            },
+            paused_values={
+                "source_sync_status": "completed",
+                "source_last_synced_at": datetime.now(UTC),
+            },
         )
+        if not transitioned:
+            logger.info(
+                f"Campaign {campaign_id} left syncing during import; "
+                "preserving its current state and not dispatching contacts"
+            )
+            return
 
         # Publish sync completed event - orchestrator will schedule first batch
         publisher = await get_campaign_event_publisher()
@@ -72,13 +110,22 @@ async def sync_campaign_source(ctx: Dict, campaign_id: int) -> None:
     except Exception as e:
         logger.error(f"Error syncing campaign {campaign_id} source: {e}")
 
-        # Update campaign with error
-        await db_client.update_campaign(
-            campaign_id=campaign_id,
+        # Do not replace a concurrent pause/cancel with a stale failure state.
+        failed_transition = await db_client.update_campaign_if_state(
+            campaign_id,
+            "syncing",
             state="failed",
             source_sync_status="failed",
             source_sync_error=str(e),
         )
+        if not failed_transition:
+            campaign = await db_client.get_campaign_by_id(campaign_id)
+            if campaign is not None and campaign.state == "paused":
+                await db_client.update_campaign(
+                    campaign_id=campaign_id,
+                    source_sync_status="failed",
+                    source_sync_error=str(e),
+                )
         await db_client.append_campaign_log(
             campaign_id=campaign_id,
             level="error",

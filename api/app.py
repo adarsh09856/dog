@@ -1,5 +1,6 @@
 """Set up logging before importing anything else"""
 
+import asyncio
 import sentry_sdk
 
 from api.constants import (
@@ -56,6 +57,13 @@ mcp_app = mcp.http_app(path="/", stateless_http=True)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with mcp_app.lifespan(app):
+        # PipelineWorker otherwise imports Pipecat's sentence tokenizer on
+        # the first caller turn. This cold import can outlast text chat's
+        # worker-readiness budget, so finish the cheap one-time warmup during
+        # service startup while readiness is already being established.
+        from pipecat.utils.prewarm import warm_deferred_imports
+        await asyncio.to_thread(warm_deferred_imports)
+
         # Refuse to start if telephony signature verification is bypassed in production
         import os
         from api.constants import ENVIRONMENT
@@ -77,6 +85,10 @@ async def lifespan(app: FastAPI):
         )
         from api.services.catalog.catalog_service import handle_catalog_sync
         sync_manager.register(WorkerSyncEventType.MODEL_CATALOG, handle_catalog_sync)
+        from api.services.pipecat.active_runtime import handle_worker_termination
+        sync_manager.register(
+            WorkerSyncEventType.CALL_TERMINATION, handle_worker_termination
+        )
         await sync_manager.start()
         set_worker_sync_manager(sync_manager)
 

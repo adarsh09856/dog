@@ -37,7 +37,7 @@ _HINDI_WHEN = re.compile(
 _BOOKING_REQUEST = re.compile(
     r"\b(?:book|schedule|make|set\s+up)\b.{0,45}\b(?:appointment|booking|consultation)\b"
     r"|\b(?:appointment|booking|consultation)\b.{0,30}\b(?:book|schedule)\b"
-    r"|अपॉइंटमेंट.{0,24}(?:बुक|रख)|बुकिंग.{0,24}(?:कर|चाहत)|"
+    r"|अपॉइंटमेंट.{0,24}(?:बुक|रख|चाहिए|चाहिये)|बुकिंग.{0,24}(?:कर|चाहत)|"
     r"(?:बुक|बुकिंग)\s+(?:कर|करना|करनी|करने|करना\s+था|करनी\s+है)|"
     r"\b(?:appointment|booking)\s+(?:book|schedule)\s+kar(?:na|ni)?\b",
     re.IGNORECASE,

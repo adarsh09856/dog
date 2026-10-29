@@ -65,8 +65,8 @@ def _warm_openai_stream(model: str) -> None:
     """Prime Ollama's OpenAI-compatible streaming path used by voice turns.
 
     The native generate endpoint can report the model as resident while the
-    first /v1/chat/completions stream still pays cold adapter/stream setup.
-    Consume a tiny warmup stream without logging its generated text.
+    first ``/v1/chat/completions`` stream still pays cold adapter/stream setup.
+    Consume a tiny, private warmup stream without logging its generated text.
     """
     payload = {
         "model": model,
@@ -117,7 +117,8 @@ def keep_models_warm() -> None:
                         status = "warmed"
                 elif model in installed and model not in stream_warmed:
                     # The model may already be resident from the previous
-                    # sidecar. Prime the app's streaming endpoint once anyway.
+                    # warmup sidecar. Still prime the endpoint the app streams
+                    # through once after this process starts.
                     _warm_openai_stream(model)
                     stream_warmed.add(model)
                     status = "stream warmed"

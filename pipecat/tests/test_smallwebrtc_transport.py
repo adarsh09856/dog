@@ -50,13 +50,17 @@ pytest.importorskip("av")
 from aiortc.mediastreams import MediaStreamError  # noqa: E402
 from av import AudioFrame, VideoFrame  # noqa: E402
 
-from pipecat.frames.frames import OutputTransportMessageUrgentFrame  # noqa: E402
+from pipecat.frames.frames import (  # noqa: E402
+    OutputAudioRawFrame,
+    OutputTransportMessageUrgentFrame,
+)
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection  # noqa: E402
 from pipecat.transports.smallwebrtc.transport import (  # noqa: E402
     CAM_VIDEO_SOURCE,
     SCREEN_VIDEO_SOURCE,
     SmallWebRTCCallbacks,
     SmallWebRTCClient,
+    RawAudioTrack,
 )
 
 
@@ -100,6 +104,100 @@ def _make_client():
 
 def _message(message_type):
     return OutputTransportMessageUrgentFrame(message={"type": message_type})
+
+
+class TestRawAudioTrackUnderrunMetrics(unittest.IsolatedAsyncioTestCase):
+    async def test_counts_empty_slots_and_closes_after_end_marker_and_drain(self):
+        from collections import deque
+
+        def make_track():
+            track = object.__new__(RawAudioTrack)
+            track._bytes_per_10ms = 480
+            track._chunk_queue = deque()
+            track._bot_speaking = False
+            track._underrun_frames = 0
+            track._underrun_streak = 0
+            track._max_underrun_streak = 0
+            track._speech_started_at = None
+            track._speech_end_pending = False
+            track._speech_summary = None
+            return track
+
+        track = make_track()
+
+        first = track.add_audio_bytes(bytes(960))
+        self.assertTrue(track._bot_speaking)
+        track._chunk_queue.clear()
+        if not first.done():
+            first.set_result(True)
+        track._underrun_frames = 3
+        track._underrun_streak = 3
+        track._max_underrun_streak = 3
+
+        second = track.add_audio_bytes(bytes(480))
+        self.assertFalse(track._speech_end_pending)
+        track._chunk_queue.clear()
+        if not second.done():
+            second.set_result(True)
+        track.mark_speech_end()
+        self.assertFalse(track._bot_speaking)
+        self.assertFalse(track._speech_end_pending)
+        self.assertEqual(track._max_underrun_streak, 3)
+
+    async def test_end_marker_waits_until_queued_audio_is_consumed(self):
+        from collections import deque
+
+        track = object.__new__(RawAudioTrack)
+        track._bytes_per_10ms = 480
+        track._chunk_queue = deque()
+        track._bot_speaking = True
+        track._underrun_frames = 2
+        track._underrun_streak = 0
+        track._max_underrun_streak = 2
+        track._speech_started_at = 1.0
+        track._speech_end_pending = False
+        track._speech_summary = None
+        track._chunk_queue.extend([(bytes(480), None), (bytes(480), None)])
+
+        track.mark_speech_end()
+        self.assertTrue(track._bot_speaking)
+        self.assertIsNone(track._speech_summary)
+
+        track._chunk_queue.popleft()
+        self.assertIsNone(track._speech_summary)
+        track._chunk_queue.popleft()
+        track._finish_speech_metrics()
+        self.assertEqual(track._speech_summary[:2], (2, 2))
+        self.assertFalse(track._bot_speaking)
+
+
+class TestPreconnectAudioOutput(unittest.IsolatedAsyncioTestCase):
+    async def test_drops_preconnect_mixer_audio_without_failing_output_worker(self):
+        client, connection = _make_client()
+        self.addAsyncCleanup(connection._pc.close)
+        frame = OutputAudioRawFrame(
+            audio=bytes(320), sample_rate=16_000, num_channels=1
+        )
+
+        self.assertTrue(await client.write_audio_frame(frame))
+        self.assertEqual(client._audio_write_failure_count, 0)
+
+        # After a real peer connection has existed, loss of output remains a
+        # failure and must still cancel/report through the normal path.
+        client._client_connected_once = True
+        self.assertFalse(await client.write_audio_frame(frame))
+        self.assertEqual(client._audio_write_failure_count, 1)
+
+    async def test_connection_closed_before_ice_establishes_still_fails_output(self):
+        client, connection = _make_client()
+        self.addAsyncCleanup(connection._pc.close)
+        client._client_closed_before_connect = True
+        frame = OutputAudioRawFrame(
+            audio=bytes(320), sample_rate=16_000, num_channels=1
+        )
+
+        self.assertFalse(await client.write_audio_frame(frame))
+        self.assertEqual(client._audio_write_failure_count, 1)
 
 
 class TestSendMessage(unittest.IsolatedAsyncioTestCase):

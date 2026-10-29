@@ -30,6 +30,7 @@ VOICE: Any = None
 _stream_speech: Any = None
 WORKER_COUNT = max(1, min(2, int(os.environ.get("INDUS_WORKERS", "1"))))
 # Bound per-call decoder batches so queued audio does not become one large chunk.
+# One latent per decode keeps playback incremental when a backlog develops.
 MAX_DECODER_FRAMES = max(1, min(8, int(os.environ.get("INDUS_DECODER_FRAMES", "1"))))
 MODEL_POOL: list[tuple[Any, Any]] = []
 AVAILABLE_MODELS: asyncio.Queue[int] = asyncio.Queue()

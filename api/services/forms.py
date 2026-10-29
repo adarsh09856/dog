@@ -60,14 +60,10 @@ async def submit_answers(
     organization_id, form_id, data, *, contact_id=None, call_id=None
 ):
     try:
-        form_uuid = uuid.UUID(form_id)
-    except ValueError as exc:
-        raise ValueError("Invalid form ID") from exc
-    try:
         contact_uuid = uuid.UUID(contact_id) if contact_id else None
     except ValueError as exc:
         raise ValueError("Invalid contact ID") from exc
-    form = await form_db.get_form(organization_id, form_uuid)
+    form = await form_db.get_form(organization_id, form_id)
     if form is None:
         raise LookupError("Form not found")
     if not form.is_active:
@@ -85,7 +81,7 @@ async def submit_answers(
     answers = validate_answers(fields, supplied)
     return await form_db.create_submission(
         organization_id,
-        form_uuid,
+        form.id,
         answers,
         contact_id=contact_uuid,
         call_id=call_id,

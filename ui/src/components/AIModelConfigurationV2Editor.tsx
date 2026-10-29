@@ -1484,6 +1484,11 @@ export function AIModelConfigurationV2Editor({
                                             <SelectValue placeholder="Select language" />
                                         </SelectTrigger>
                                         <SelectContent>
+                                            {kodewaves.stt_engine_type === "local_cpu" && !supportsRecognitionAutoDetect && (
+                                                <SelectItem value={MULTILINGUAL_LANGUAGE_CODE} disabled>
+                                                    Auto detection unavailable for this STT model
+                                                </SelectItem>
+                                            )}
                                             {recognitionLanguages.map((language) => (
                                                 <SelectItem key={language} value={language}>
                                                     {recognitionLanguageLabel(language)}
@@ -1493,7 +1498,7 @@ export function AIModelConfigurationV2Editor({
                                     </Select>
                                     {kodewaves.stt_engine_type === "local_cpu" && selectedSttModel?.supports_auto_detect !== true && (
                                         <p className="text-xs text-amber-600 dark:text-amber-400">
-                                            This installed CPU recognizer has not reported automatic detection. Select one of its installed recognition languages.
+                                            Automatic detection is unavailable for this installed CPU recognizer. Select one of its installed recognition languages.
                                         </p>
                                     )}
                                     {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (

@@ -46,35 +46,45 @@ LID_LANGUAGE_CODES = (
     "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai",
     "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 )
+# Keep the recognizer's product language inventory explicit. The LID model has
+# extra classes, but these eight languages are intentionally not exposed in
+# Kodewaves. Detection of an excluded class falls back to the caller's last
+# supported language (or Hindi) rather than returning Urdu text or a 422.
 AUTO_DETECT_LANGUAGES = frozenset({
     "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
     "ne", "pa", "sa", "ta", "te",
 })
+SCHEDULED_INDIAN_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
 AUTO_ENGLISH_MIN_CONFIDENCE = 0.50
 # CIIL's Anuvani-LID paper calibrates the released 23-class logits with T=0.674.
 # The ONNX graph returns logits, so calibration must happen before softmax.
 LID_TEMPERATURE = 0.674
-INDIC_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
+INDIC_LANGUAGES = SCHEDULED_INDIAN_LANGUAGES
 LANGUAGES = AUTO_DETECT_LANGUAGES
 MODEL_DIR = Path(os.environ.get("INDIC_STT_MODEL_DIR", "/models/indicconformer"))
 PRELOAD = os.environ.get("INDIC_STT_LANGUAGES", "hi").strip().lower()
+PREWARM = os.environ.get("INDIC_STT_PREWARM_LANGUAGES", "").strip().lower()
 THREADS = max(1, int(os.environ.get("INDIC_STT_THREADS", "2")))
 LID_ENABLED = os.environ.get("INDIC_STT_AUTO_DETECT", "1").strip().lower() not in {"0", "false", "no"}
 LID_THREADS = max(1, int(os.environ.get("INDIC_STT_LID_THREADS", "2")))
 
 _PHONE_DIGIT_WORDS = {
     "zero": "0", "oh": "0", "shunya": "0", "शून्य": "0", "जीरो": "0",
-    "one": "1", "एक": "1", "वन": "1", "two": "2", "दो": "2", "three": "3",
+    "one": "1", "एक": "1", "वन": "1", "ओन": "1", "two": "2", "दो": "2", "टू": "2", "three": "3",
     "तीन": "3", "थ्री": "3", "four": "4", "चार": "4", "फोर": "4",
     "five": "5", "पांच": "5", "पाँच": "5", "फाइव": "5", "six": "6",
     "छह": "6", "सिक्स": "6", "seven": "7", "सात": "7", "सेवन": "7",
-    "eight": "8", "आठ": "8", "एट": "8", "nine": "9", "नौ": "9",
-    "नाइन": "9", "double": "double", "डबल": "double",
-    # Hindi ASR phonetic spellings of English digit words.
+    "eight": "8", "आठ": "8", "एट": "8", "ऐट": "8", "nine": "9", "नौ": "9", "ज़ीरो": "0",
+    "नाइन": "9", "double": "double", "डबल": "double", "ડબલ": "double", "டபுள்": "double",
+    # Keep the rescue scorer aligned with the call-side phone parser: Hindi
+    # ASR often renders English digit names phonetically in Devanagari.
     "नीन": "9", "निन": "9", "नान": "9", "नाईन": "9",
     "थी": "3", "आइट": "8", "आईट": "8",
-    "নয়": "9", "double": "double", "ডবল": "double",
+    # Match the call-scoped phone parser's explicit regional spellings. Without
+    # these, a valid regional-script primary decode can look like zero digits
+    # and incorrectly lose to a poorer English rescue candidate.
+    "ডবল": "double",
     "শূন্য": "0", "এক": "1", "দুই": "2", "তিন": "3", "চার": "4",
     "পাঁচ": "5", "ছয়": "6", "সাত": "7", "আট": "8", "নয়": "9",
     "பூஜ்யம்": "0", "ஒன்று": "1", "இரண்டு": "2", "மூன்று": "3", "நான்கு": "4",
@@ -88,15 +98,24 @@ _PHONE_DIGIT_WORDS = {
     "ਸਿਫ਼ਰ": "0", "ਇੱਕ": "1", "ਦੋ": "2", "ਤਿੰਨ": "3", "ਚਾਰ": "4",
     "ਪੰਜ": "5", "ਛੇ": "6", "ਸੱਤ": "7", "ਅੱਠ": "8", "ਨੌਂ": "9",
     "दोन": "2", "पाच": "5", "सहा": "6", "नऊ": "9",
+    # Phonetic Gujarati and Tamil renderings of English digit words accepted
+    # by the call-side parser must count as primary-recognizer evidence too.
+    "નાઇન": "9", "નાઈટ": "9", "ફાઇવ": "5", "ફાઈવ": "5",
+    "થ્રી": "3", "એઇટ": "8", "એઈટ": "8", "ફોર": "4", "વન": "1",
+    "જીરો": "0", "ઝીરો": "0",
+    "நைன்": "9",
+    "ஜீரோ": "0", "ஜிரோ": "0", "ஃபோர்": "4", "ஃபைவ்": "5",
+    "பைவ்": "5", "த்ரீ": "3", "எய்ட்": "8", "ஏய்ட்": "8",
+    "ஏஐட்": "8",
 }
 
 
 def _phone_digit_count(text: str) -> int:
     """Count explicit digit groups without interpreting general number words."""
     tokens = [
-        token.strip("()[]{}\"'") for token in re.split(
-            r"[\s,.!?।॥:;\-–—]+", str(text or "").casefold()
-        ) if token.strip("()[]{}\"'")
+        token.strip("()[]{}\"'")
+        for token in re.split(r"[\s,.!?।॥:;\-–—]+", str(text or "").casefold())
+        if token.strip("()[]{}\"'")
     ]
     count = 0
     repeat_next = False
@@ -116,11 +135,58 @@ def _phone_digit_count(text: str) -> int:
     return count
 
 
-def _phone_rescue_is_better(primary: str, english: str) -> bool:
-    """Use an English candidate only when it recovers a clear digit sequence."""
-    english_digits = _phone_digit_count(english)
-    return english_digits >= 3 and english_digits > _phone_digit_count(primary)
+def _phone_decode_has_unknown_tokens(text: str) -> bool:
+    """Return whether a phone-slot decode contains non-digit, unknown words.
 
+    Phone speech is often code-switched, so a partial Hindi decode with an
+    English phonetic fragment (or vice versa) is a useful signal to try the
+    already-resident alternate decoder. Common number-introduction words are
+    ignored so callers can say "my phone number is ..." without triggering a
+    rescue solely because of the preamble.
+    """
+    return _phone_unknown_token_count(text) > 0
+
+
+def _phone_unknown_token_count(text: str) -> int:
+    """Count non-number tokens in a phone decode, excluding common preambles."""
+    ignored = {
+        "my", "mobile", "phone", "number", "is", "the", "hai", "hain",
+        "mera", "मेरे", "मेरा", "फोन", "नंबर", "नम्बर", "है", "हैं",
+        "uh", "um", "and", "plus", "और", "तथा",
+    }
+    tokens = (
+        token.strip("()[]{}\"'")
+        for token in re.split(r"[\s,.!?।॥:;\-–—]+", str(text or "").casefold())
+    )
+    return sum(
+        bool(token)
+        and not token.isdecimal()
+        and token not in _PHONE_DIGIT_WORDS
+        and token not in ignored
+        for token in tokens
+    )
+
+
+def _phone_rescue_is_better(primary: str, english: str) -> bool:
+    """Prefer a plausible longer phone decode, or a cleaner equal-length one."""
+    primary_digits = _phone_digit_count(primary)
+    candidate_digits = _phone_digit_count(english)
+    candidate_plausible = 3 <= candidate_digits <= 15
+    primary_plausible = 3 <= primary_digits <= 15
+    # Treat an overlong primary as unusable (score 0), but never select an
+    # overlong alternate. This keeps the chosen transcript bounded while
+    # allowing a valid 10-digit alternate to replace a runaway hallucination.
+    primary_score = primary_digits if primary_plausible else 0
+    if candidate_plausible and candidate_digits > primary_score:
+        return True
+    # If both decode the same number of explicit digits, prefer the candidate
+    # only when it contains fewer unknown words. Do not sacrifice recognized
+    # digits for a cleaner but shorter transcript, and never infer unknown words.
+    return (
+        candidate_plausible
+        and candidate_digits == primary_digits
+        and _phone_unknown_token_count(english) < _phone_unknown_token_count(primary)
+    )
 
 app = FastAPI(title="Kodewaves Indic CPU STT")
 _loaded: OrderedDict[str, sherpa_onnx.OfflineRecognizer] = OrderedDict()
@@ -205,18 +271,50 @@ def _load(lang: str) -> sherpa_onnx.OfflineRecognizer:
     return recognizer
 
 
+def _warm_recognizer(lang: str) -> None:
+    """Run one short synthetic decode so first callers avoid cold graph setup."""
+    recognizer = _load(lang)
+    sample_rate = 16_000
+    index = np.arange(sample_rate, dtype=np.float32)
+    waveform = (
+        0.01 * np.sin(2 * np.pi * 173 * index / sample_rate)
+        + 0.005 * np.sin(2 * np.pi * 431 * index / sample_rate)
+    ).astype(np.float32, copy=False)
+    stream = recognizer.create_stream()
+    stream.accept_waveform(sample_rate, waveform)
+    recognizer.decode_stream(stream)
+
+
 @app.on_event("startup")
 async def startup() -> None:
     global _lid_session, _english_lid
     languages = LANGUAGES if PRELOAD == "all" else set(PRELOAD.split(","))
     if not languages or not languages <= LANGUAGES:
         raise RuntimeError("INDIC_STT_LANGUAGES contains an unsupported language")
+    # Installed languages and resident languages are different budgets. Allow
+    # regional deployments to choose their warm decoders without restricting
+    # the installed inventory or silently evicting one during startup.
+    if PREWARM:
+        warm_languages = list(dict.fromkeys(code.strip() for code in PREWARM.split(",")))
+        if not set(warm_languages) <= languages:
+            raise RuntimeError("INDIC_STT_PREWARM_LANGUAGES must contain installed languages")
+        if len(warm_languages) > _max_resident_models:
+            raise RuntimeError("INDIC_STT_PREWARM_LANGUAGES exceeds INDIC_STT_RESIDENT_MODELS")
+    else:
+        warm_languages = ["hi" if "hi" in languages else sorted(languages)[0]]
+        if "en" in languages and "en" not in warm_languages and _max_resident_models > 1:
+            warm_languages.append("en")
     await asyncio.to_thread(_download_models, languages)
-    # A small CPU host must not keep 22 recognizers resident simultaneously.
-    await asyncio.to_thread(_load, "hi" if "hi" in languages else sorted(languages)[0])
-    if "en" in languages and _max_resident_models > 1:
-        # Keep both main caller languages ready without first-call model loading.
-        await asyncio.to_thread(_load, "en")
+    for lang in warm_languages:
+        await asyncio.to_thread(_load, lang)
+    for lang in warm_languages:
+        warmup_started = time.monotonic()
+        await asyncio.to_thread(_warm_recognizer, lang)
+        _logger.info(
+            "stt_decoder_warmup_ms=%s language=%s",
+            round((time.monotonic() - warmup_started) * 1000),
+            lang,
+        )
     if LID_ENABLED:
         try:
             await asyncio.to_thread(_load_language_identifier)
@@ -237,27 +335,39 @@ async def startup() -> None:
 
 @app.get("/health")
 async def health() -> dict:
-    installed = _installed_languages()
+    installed = [
+        language for language in _installed_languages()
+        if language in AUTO_DETECT_LANGUAGES
+    ]
     return {
         "status": "ok" if _loaded else "starting",
         "installed_languages": installed,
         "resident_languages": list(_loaded),
         "supports_auto_detect": _lid_session is not None,
-        "auto_detect_languages": [code for code in LID_LANGUAGE_CODES if code in installed]
+        "auto_detect_languages": [
+            code for code in LID_LANGUAGE_CODES
+            if code in installed and code in AUTO_DETECT_LANGUAGES
+        ]
         if _lid_session is not None else [],
     }
 
 
 @app.get("/v1/models")
 async def models() -> dict:
-    installed = _installed_languages()
+    installed = [
+        language for language in _installed_languages()
+        if language in AUTO_DETECT_LANGUAGES
+    ]
     return {"object": "list", "data": [{
         "id": MODEL_ID,
         "task": "automatic-speech-recognition",
         "installed": bool(installed),
         "languages": [f"{lang}-IN" for lang in installed],
         "supports_auto_detect": _lid_session is not None,
-        "auto_detect_languages": [code for code in LID_LANGUAGE_CODES if code in installed]
+        "auto_detect_languages": [
+            code for code in LID_LANGUAGE_CODES
+            if code in installed and code in AUTO_DETECT_LANGUAGES
+        ]
         if _lid_session is not None else [],
     }] if installed else []}
 
@@ -291,7 +401,8 @@ def _load_language_identifier() -> None:
                 whisper=sherpa_onnx.SpokenLanguageIdentificationWhisperConfig(
                     encoder=str(encoder), decoder=str(decoder),
                 ),
-                num_threads=1, provider="cpu",
+                num_threads=1,
+                provider="cpu",
             )
         )
 
@@ -301,8 +412,8 @@ def _warm_language_identifiers() -> None:
     if _lid_session is None:
         raise RuntimeError("The local language identifier is not available")
 
-    # Deterministic non-speech audio warms CPU/ONNX kernels without storing or
-    # logging a caller sample. Four seconds matches common short turns.
+    # Use a deterministic non-speech signal; never store or log caller audio.
+    # Four seconds exercises the primary ONNX graph at ordinary turn lengths.
     sample_rate = 16_000
     index = np.arange(sample_rate * 4, dtype=np.float32)
     audio = (
@@ -311,12 +422,13 @@ def _warm_language_identifiers() -> None:
     ).astype(np.float32, copy=False)
     _detected, _confidence, detection_route = _detect_language(audio, sample_rate)
 
-    # The English rescue normally runs inside _detect_language for non-English
-    # predictions. Exercise it directly only if the primary prediction skipped it.
-    if _english_lid is not None and _detected == "en" and detection_route not in {
+    # The English rescue normally runs only when the primary model predicts a
+    # non-English class. Warm it explicitly so readiness does not depend on the
+    # synthetic signal's predicted class.
+    if _english_lid is not None and detection_route not in {
         "whisper_english_rescue",
         "competitive_indian_english",
-    }:
+    } and _detected == "en":
         stream = _english_lid.create_stream()
         stream.accept_waveform(sample_rate, audio)
         _english_lid.compute(stream)
@@ -370,15 +482,18 @@ def _detect_language(waveform: np.ndarray, sample_rate: int) -> tuple[str, float
     probabilities /= float(np.sum(probabilities))
     index = int(np.argmax(probabilities))
     detected = LID_LANGUAGE_CODES[index]
-    # Rescue English only; retain Anuvani for all regional decisions.
+    # Anuvani often classifies Indian-accented English as Hindi or Telugu.
+    # A second, independent detector may rescue English, while its regional
+    # predictions are deliberately ignored because they are less reliable.
     if detected != "en" and _english_lid is not None and audio.size >= 16000:
         stream = _english_lid.create_stream()
         stream.accept_waveform(16000, audio[: 10 * 16000])
         if _english_lid.compute(stream) == "en":
             english_probability = float(probabilities[LID_LANGUAGE_CODES.index("en")])
             return "en", english_probability, "whisper_english_rescue"
-    # Indian-accented English sometimes ranks just below Hindi. Only rescue
-    # a close hi/en result; strong Hindi and regional predictions stay intact.
+    # Indian-accented English can rank just below Hindi even in a clearly
+    # English utterance. Strong Hindi examples have negligible English mass;
+    # rescue only this close hi/en pair, leaving regional routes untouched.
     if detected == "hi" and audio.size >= 16000:
         english_probability = float(probabilities[LID_LANGUAGE_CODES.index("en")])
         if float(probabilities[index]) < 0.85 and english_probability >= 0.10:
@@ -393,13 +508,37 @@ def _resolve_decode_language(
     installed: set[str],
     detection_route: str | None = None,
 ) -> tuple[str, str]:
-    """Choose only a decoder whose language has an installed reply voice."""
+    """Choose an installed decoder without silently relabeling clear speech."""
     detected = str(detected or "").lower().replace("_", "-").split("-", 1)[0]
     fallback = str(fallback_language or "").lower().replace("_", "-").split("-", 1)[0]
     supported = installed & AUTO_DETECT_LANGUAGES
-    if detected == "ur" and "hi" in supported:
-        return "hi", "urdu_routed_to_hindi"
     if detected not in supported:
+        if detected in LID_LANGUAGE_CODES and detected not in AUTO_DETECT_LANGUAGES:
+            # Do not expose or decode excluded languages. Reuse the established
+            # supported language when available; otherwise use Hindi, then
+            # English, so an auto-detected utterance still receives a final.
+            if fallback in supported:
+                return fallback, "excluded_language_to_previous_supported"
+            if "hi" in supported:
+                return "hi", "excluded_language_to_hindi"
+            if "en" in supported:
+                return "en", "excluded_language_to_english"
+            if supported:
+                return sorted(supported)[0], "excluded_language_to_first_supported"
+            raise RuntimeError("No supported automatic STT language is installed")
+        threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
+        if confidence >= threshold:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "unsupported_detected_language",
+                    "language": detected,
+                    "message": (
+                        "Speech was confidently detected in a language that is not "
+                        "enabled for this self-hosted speech route."
+                    ),
+                },
+            )
         if fallback in supported:
             return fallback, "unsupported_language_held_previous"
         if "hi" in supported:
@@ -415,6 +554,7 @@ def _resolve_decode_language(
     if confidence < threshold and fallback in supported:
         return fallback, "held_previous_low_confidence"
     return detected, "detector_english" if detected == "en" else "detector"
+
 
 @app.post("/v1/audio/transcriptions")
 async def transcribe(
@@ -436,7 +576,9 @@ async def transcribe(
     if fallback not in installed:
         fallback = ""
     if not auto_detect and lang not in installed:
-        raise HTTPException(status_code=400, detail="Selected language is not installed on this engine")
+        raise HTTPException(status_code=400, detail="Selected Indic STT language is not installed")
+    if not auto_detect and lang not in AUTO_DETECT_LANGUAGES:
+        raise HTTPException(status_code=400, detail="Selected Indic STT language is not enabled")
     payload = await file.read(5_000_001)
     if len(payload) > 5_000_000:
         raise HTTPException(status_code=413, detail="Audio exceeds 5 MB")
@@ -480,25 +622,39 @@ async def transcribe(
                 detected_language, language_confidence, fallback or None, set(installed), detection_route
             )
             if lang not in installed:
-                raise HTTPException(status_code=503, detail="Selected language is not installed on this engine")
+                raise HTTPException(status_code=503, detail="Selected STT language is not installed on this engine")
         lid_ms = round((time.monotonic() - lid_started) * 1000) if auto_detect else 0
         decode_started = time.monotonic()
         text = await asyncio.to_thread(decode, lang)
         primary_phone_digits = _phone_digit_count(text) if phone_capture else 0
-        primary_number_complete = 10 <= primary_phone_digits <= 15
+        primary_phone_has_unknown_tokens = (
+            phone_capture and _phone_decode_has_unknown_tokens(text)
+        )
         if (
             phone_capture
-            and lang == "hi"
-            and not primary_number_complete
-            and "en" in installed
-            and "en" in _loaded
+            and lang in {"hi", "en"}
+            # Keep the normal phone-slot path to one decode. Running both
+            # recognizers for every phone utterance serializes two CPU-heavy
+            # inference passes under _inference_lock and made routine turns
+            # needlessly slow. The alternate decoder is a rescue only when
+            # the primary produced no digits, an implausible runaway, or a
+            # partial (<15 digit) decode containing unknown words.
+            and (
+                primary_phone_digits == 0
+                or primary_phone_digits > 15
+                or (primary_phone_digits < 15 and primary_phone_has_unknown_tokens)
+            )
+            and all(candidate in installed and candidate in _loaded for candidate in {"hi", "en"})
         ):
-            # Use only the already-resident English decoder; keep Hindi as the
-            # primary result unless English recovers more explicit digits.
-            english_text = await asyncio.to_thread(decode, "en")
-            if _phone_rescue_is_better(text, english_text):
-                text = english_text
-                language_route = "phone_english_rescue"
+            # Phone strings are commonly spoken in English inside Hindi calls,
+            # and LID can route an English digit utterance to Moonshine. Try
+            # the other warm decoder only when the first result cannot be used;
+            # reject overlong hallucinations instead of carrying fake digits.
+            other_language = "en" if lang == "hi" else "hi"
+            other_text = await asyncio.to_thread(decode, other_language)
+            if _phone_rescue_is_better(text, other_text):
+                text = other_text
+                language_route = f"phone_{other_language}_rescue"
         decode_ms = round((time.monotonic() - decode_started) * 1000)
     duration_ms = round((time.monotonic() - started) * 1000)
     _logger.info(

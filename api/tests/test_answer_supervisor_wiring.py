@@ -114,6 +114,13 @@ async def test_readiness_arms_before_fetch_and_opens_only_after_permission(monke
                 if connected.done():
                     await connected
                 await asyncio.sleep(0)
+        # Child-agent attachment runs alongside the still-pending external
+        # fetch, but no start-node render/opening happens until fetch context is
+        # merged below.
+        async with asyncio.timeout(1):
+            while not engine.start_initial_agent.await_count:
+                await asyncio.sleep(0)
+        engine.start_initial_agent.assert_awaited_once()
         engine.set_node.assert_not_awaited()
         fetched.set()
         async with asyncio.timeout(1):

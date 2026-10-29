@@ -11999,7 +11999,7 @@
                 "type": "null"
               }
             ],
-            "default": "/kodewaves-logo.png",
+            "default": "/kodewaves-brand.svg",
             "title": "Logo Url"
           },
           "ollama_endpoint": {

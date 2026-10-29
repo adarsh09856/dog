@@ -264,6 +264,7 @@ services:
       # Set the local LLM's inference thread budget independently of API workers.
       OLLAMA_NUM_THREADS: "${OLLAMA_NUM_THREADS:-3}"
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
+      INDIC_STT_ENDPOINT: "${INDIC_STT_ENDPOINT:-http://indic-stt:8000/v1}"
       INDIC_MIO_TTS_ENDPOINT: "${INDIC_MIO_TTS_ENDPOINT:-http://indic-mio-tts:8000/v1}"
       INDIC_PARLER_TTS_ENDPOINT: "${INDIC_PARLER_TTS_ENDPOINT:-http://indic-parler-tts:8000/v1}"
       INDIC_VITS_TTS_ENDPOINT: "${INDIC_VITS_TTS_ENDPOINT:-http://indic-vits-tts:8000/v1}"
@@ -443,6 +444,37 @@ services:
     networks:
       - app-network
 
+  # IndicConformer regional decoders and English Moonshine on CPU.
+  indic-stt:
+    build:
+      context: ./api/local_models/indic_stt
+    image: kodewaves-indic-stt:v1.0.0
+    container_name: kodewaves_indic_stt
+    restart: unless-stopped
+    profiles: ["local"]
+    environment:
+      INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-all}"
+      INDIC_STT_PREWARM_LANGUAGES: "${INDIC_STT_PREWARM_LANGUAGES:-}"
+      INDIC_STT_THREADS: "${INDIC_STT_THREADS:-2}"
+      INDIC_STT_AUTO_DETECT: "${INDIC_STT_AUTO_DETECT:-1}"
+      INDIC_STT_LID_THREADS: "${INDIC_STT_LID_THREADS:-2}"
+      INDIC_STT_RESIDENT_MODELS: "${INDIC_STT_RESIDENT_MODELS:-4}"
+    volumes:
+      - indic_stt_models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+    networks:
+      - app-network
+
   # Optional bilingual Inaya backend behind the combined speech endpoint.
   indus-tts:
     build:
@@ -601,6 +633,8 @@ volumes:
   coturn-generated:
     driver: local
   ollama_data:
+    driver: local
+  indic_stt_models:
     driver: local
   indic_mio_tts_models:
     driver: local

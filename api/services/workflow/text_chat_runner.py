@@ -793,10 +793,9 @@ async def execute_text_chat_pending_turn(
     )
 
     try:
+        await engine.initialize()
         await wait_for_pipeline_worker_started(task, timeout=5.0, run_task=runner_task)
         pipeline_ready_at = time.monotonic()
-
-        await engine.initialize()
 
         current_node_id = base_checkpoint.get("current_node_id")
         target_node_id = current_node_id or workflow_graph.start_node_id

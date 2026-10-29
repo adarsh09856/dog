@@ -1381,7 +1381,7 @@ class PipecatEngine:
         # mapping-less view of a run is read from.
         self.record_call_tags([call_disposition])
 
-        if call_status not in (
+        if not abort_immediately and call_status not in (
             EndTaskReason.PIPELINE_ERROR.value,
             EndTaskReason.VOICEMAIL_DETECTED.value,
             *ANSWER_TERMINAL_REASONS,

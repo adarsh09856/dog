@@ -79,6 +79,7 @@ class AgentRuntimeFactory:
         use_draft: bool = False,
         observers: list[BaseObserver] | None = None,
         caller_language_source=None,
+        llm_trace_sink: Callable[[dict], Any] | None = None,
     ):
         self._on_agent_error = on_agent_error
         self._use_draft = use_draft
@@ -92,6 +93,7 @@ class AgentRuntimeFactory:
         self._mps_correlation_id = mps_correlation_id
         self._observers = observers
         self._caller_language_source = caller_language_source
+        self._llm_trace_sink = llm_trace_sink
 
     @property
     def organization_id(self) -> int:
@@ -200,6 +202,14 @@ class AgentRuntimeFactory:
             and user_config.llm.provider == ServiceProviders.DOGRAH.value
             else llm
         )
+        if self._llm_trace_sink is not None:
+            services = {
+                id(value): value
+                for value in (llm, variable_extraction_llm)
+                if value is not None
+            }
+            for service in services.values():
+                service._llm_trace_sink = self._llm_trace_sink
 
         recording_router = None
         if self._has_recordings and self._fetch_recording_audio is not None:

@@ -535,11 +535,10 @@ class SmallWebRTCClient:
                 self._last_audio_write_failure_log_at = 0.0
             return True
 
-        # Ignore mixer silence while the initial ICE connection is negotiating.
-        # Treating these pre-connect frames as write failures cancels the call
-        # worker long before the configured WebRTC connection timeout. Initial
-        # assistant speech is gated on on_client_connected; after a peer has
-        # connected or has closed, keep the normal write-failure behavior.
+        # The output pipeline may start before ICE finishes, and its mixer can
+        # emit silence frames. Drop only frames before the initial connection;
+        # initial speech waits for on_client_connected. Once connected or closed,
+        # preserve normal write-failure handling so real output errors still surface.
         if (
             not connected
             and not self.is_closing
