@@ -17,7 +17,7 @@ import { formatDate } from "@/lib/dateTime";
 
 const stateStyles: Record<string, string> = {
     running: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    completed: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    completed: "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300",
     paused: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
     failed: "border-destructive/30 bg-destructive/10 text-destructive",
     created: "border-border bg-muted text-muted-foreground",
@@ -89,7 +89,7 @@ export default function CampaignsPage() {
                 {[
                     { label: "All campaigns", value: campaignRows.length, note: "Across this workspace", icon: Megaphone, tone: "text-primary bg-primary/10" },
                     { label: "Running now", value: runningCampaigns, note: "Actively reaching contacts", icon: Zap, tone: "text-emerald-600 bg-emerald-500/10" },
-                    { label: "Completed", value: completedCampaigns, note: "Finished campaign runs", icon: Workflow, tone: "text-emerald-600 bg-emerald-500/10" },
+                    { label: "Completed", value: completedCampaigns, note: "Finished campaign runs", icon: Workflow, tone: "text-sky-600 bg-sky-500/10" },
                     { label: "Contacts queued", value: queuedCalls, note: "Total scheduled outreach", icon: Users, tone: "text-amber-600 bg-amber-500/10" },
                 ].map((metric) => <Card key={metric.label} className="rounded-2xl border-border/70 shadow-sm"><CardContent className="p-4 sm:p-5"><div className="flex items-start justify-between gap-2"><span className="text-xs font-medium text-muted-foreground sm:text-sm">{metric.label}</span><span className={`rounded-xl p-2 ${metric.tone}`}><metric.icon className="h-4 w-4" /></span></div><p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight sm:text-3xl">{metric.value.toLocaleString()}</p><p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">{metric.note}</p></CardContent></Card>)}
             </section>
