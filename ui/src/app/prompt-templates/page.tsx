@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Tag,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";

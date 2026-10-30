@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { getWorkflowsApiV1WorkflowFetchGet } from "@/client/sdk.gen";
 import type { WorkflowListResponse } from "@/client/types.gen";
