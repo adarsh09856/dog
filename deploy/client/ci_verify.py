@@ -69,6 +69,7 @@ class _OwnerAcceptanceServer:
         self.license_fingerprint = hashlib.sha256(license_token.encode("ascii")).hexdigest()
         self.enrollment_token = secrets.token_urlsafe(40)
         self.public_key: str | None = None
+        self.binding_valid = True
         self.used_nonces: set[str] = set()
         self._lock = threading.Lock()
         self.ca_file = directory / "ci-owner-ca.pem"
@@ -191,14 +192,20 @@ class _OwnerAcceptanceServer:
                 integrity_ok=body["integrity_ok"], integrity_finding=body["integrity_finding"],
             )
             self.used_nonces.add(nonce)
+            binding_valid = self.binding_valid
         now = int(time.time())
         status = {
             "kind": "installation_status", "installation_id": self.installation_id,
             "license_sha256": self.license_fingerprint, "nonce": nonce,
-            "revoked": False, "binding_valid": True, "observed_ip": "127.0.0.1",
+            "revoked": False, "binding_valid": binding_valid, "observed_ip": "127.0.0.1",
             "issued_at": now, "expires_at": now + 300,
         }
         return {"signed_status": issue_license_token(status, self.license_private)}
+
+    def set_binding_valid(self, binding_valid: bool) -> None:
+        """Control the signed IP decision in the disposable acceptance peer."""
+        with self._lock:
+            self.binding_valid = binding_valid
 
     def close(self) -> None:
         self.httpd.shutdown()
@@ -471,7 +478,9 @@ def _runtime_smoke_license(private_key: bytes, public_key: str) -> str:
         "customer_id": "ci-smoke",
         "edition": "client",
         "domains": ["smoke.customer.example.invalid"],
-        "ip_ranges": [],
+        # The runtime smoke uses this to prove it enforces the signed owner's
+        # IP-binding decision. The disposable peer simulates both decisions.
+        "ip_ranges": ["192.0.2.0/24"],
         "features": ["voice"],
         "limits": {"max_concurrent_calls": 1, "max_seats": 1, "max_workspaces": 1},
     }
@@ -603,6 +612,7 @@ def _verify_compose_runtime(
         "      ARQ_WORKERS: \"0\"\n"
         "      ENABLE_ARI_MANAGER: \"false\"\n"
         "      ENABLE_CAMPAIGN_ORCHESTRATOR: \"false\"\n"
+        "      KODEWAVES_OWNER_STATUS_POLL_SECONDS: \"1\"\n"
         "networks:\n"
         "  internal:\n"
         "    internal: true\n",
@@ -690,6 +700,40 @@ def _verify_compose_runtime(
                     "Enrolled owner status must pass licensing and reach the expected unauthenticated route boundary; "
                     f"received HTTP {owner_gate_status}: {owner_gate_body[:240]}"
                 )
+            # Exercise the client data-plane gate with a freshly signed owner
+            # denial, then prove it recovers only after a fresh signed allow.
+            owner.set_binding_valid(False)
+            denied_status, denied_body = owner_gate_status, owner_gate_body
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                denied_status, denied_body = _http_response(
+                    f"http://127.0.0.1:{api_port}/api/v1/workflow",
+                    host="smoke.customer.example.invalid",
+                )
+                if denied_status == 402 and "outside the licensed ranges" in denied_body:
+                    break
+                time.sleep(0.25)
+            if denied_status != 402 or "outside the licensed ranges" not in denied_body:
+                raise ValueError(
+                    "A fresh signed owner IP-binding denial must block protected API requests; "
+                    f"received HTTP {denied_status}: {denied_body[:240]}"
+                )
+            owner.set_binding_valid(True)
+            recovered_status, recovered_body = denied_status, denied_body
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                recovered_status, recovered_body = _http_response(
+                    f"http://127.0.0.1:{api_port}/api/v1/workflow",
+                    host="smoke.customer.example.invalid",
+                )
+                if recovered_status == 404 and "Not Found" in recovered_body:
+                    break
+                time.sleep(0.25)
+            if recovered_status != 404 or "Not Found" not in recovered_body:
+                raise ValueError(
+                    "A fresh signed owner IP-binding allow must restore the normal API auth boundary; "
+                    f"received HTTP {recovered_status}: {recovered_body[:240]}"
+                )
             bootstrap_script = (
                 "import asyncio,json,sys; from api.services.bootstrap_client_admin import bootstrap_client_admin; "
                 "d=json.load(sys.stdin); i=asyncio.run(bootstrap_client_admin(d['email'],d['password'])); "
@@ -767,6 +811,7 @@ def _verify_compose_runtime(
             },
         }
         if owner is not None:
+            result["ip_binding_denial_and_recovery"] = "rejected_false_binding_and_recovered_on_true_binding"
             result["owner_enrollment"] = "passed_signed_one_time_enrollment_and_status"
             result["first_admin_bootstrap"] = "passed_active_superuser_with_workspace"
             result["first_admin_replay"] = "rejected_after_initial_account"

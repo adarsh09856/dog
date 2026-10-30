@@ -180,6 +180,7 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
         "api_health": "passed", "ui_root": "passed",
         "mismatched_host": "rejected_by_signed_domain_binding",
         "valid_host_owner_gate": "owner_status_accepted_http_404",
+        "ip_binding_denial_and_recovery": "rejected_false_binding_and_recovered_on_true_binding",
         "owner_enrollment": "passed_signed_one_time_enrollment_and_status",
         "first_admin_bootstrap": "passed_active_superuser_with_workspace",
         "first_admin_replay": "rejected_after_initial_account",
@@ -200,6 +201,9 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
     assert evidence["runtime_compose_smoke"]["ui_root"] == "passed"
     assert evidence["runtime_compose_smoke"]["mismatched_host"] == "rejected_by_signed_domain_binding"
     assert evidence["runtime_compose_smoke"]["valid_host_owner_gate"] == "owner_status_accepted_http_404"
+    assert evidence["runtime_compose_smoke"]["ip_binding_denial_and_recovery"] == (
+        "rejected_false_binding_and_recovered_on_true_binding"
+    )
     assert evidence["runtime_compose_smoke"]["first_admin_bootstrap"] == "passed_active_superuser_with_workspace"
     assert "@sha256:" in evidence["runtime_compose_smoke"]["dependency_images"]["postgres"]
     assert "@sha256:" in evidence["runtime_compose_smoke"]["dependency_images"]["redis"]
@@ -228,6 +232,7 @@ def test_runtime_smoke_license_is_short_lived_and_bound_to_the_smoke_host(verifi
     assert license_data.installation_id == "ci-installation-smoke"
     assert license_data.customer_id == "ci-smoke"
     assert license_data.domains == ("smoke.customer.example.invalid",)
+    assert license_data.ip_ranges == ("192.0.2.0/24",)
     assert license_data.features == frozenset({"voice"})
     assert license_data.limits == {
         "max_concurrent_calls": 1,
@@ -282,28 +287,43 @@ def test_disposable_owner_peer_requires_one_time_signed_enrollment_and_returns_b
         with pytest.raises(ValueError, match="one-time"):
             owner.enroll(enrollment)
 
-        check_nonce = secrets.token_urlsafe(32)
-        check_issued_at = int(time.time())
-        check = {
-            "nonce": check_nonce, "integrity_ok": True, "integrity_finding": None,
-            "proof_issued_at": check_issued_at,
-            "proof_signature": sign_owner_check(
-                install_key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
-                                          serialization.NoEncryption()),
-                installation_id=owner.installation_id, license_token=token,
-                nonce=check_nonce, issued_at=check_issued_at,
-                integrity_ok=True, integrity_finding=None,
-            ),
-        }
-        signed = owner.check(check)["signed_status"]
+        def signed_owner_status():
+            check_nonce = secrets.token_urlsafe(32)
+            check_issued_at = int(time.time())
+            check = {
+                "nonce": check_nonce, "integrity_ok": True, "integrity_finding": None,
+                "proof_issued_at": check_issued_at,
+                "proof_signature": sign_owner_check(
+                    install_key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                                              serialization.NoEncryption()),
+                    installation_id=owner.installation_id, license_token=token,
+                    nonce=check_nonce, issued_at=check_issued_at,
+                    integrity_ok=True, integrity_finding=None,
+                ),
+            }
+            return check_nonce, owner.check(check)["signed_status"]
+
+        check_nonce, signed = signed_owner_status()
         status = verify_installation_status_claims(
             signed, public_key=license_public_text, installation_id=owner.installation_id,
             license_token=token, nonce=check_nonce,
         )
         assert status["revoked"] is False
         assert status["binding_valid"] is True
-        with pytest.raises(ValueError, match="replay"):
-            owner.check(check)
+        owner.set_binding_valid(False)
+        denied_nonce, denied_signed = signed_owner_status()
+        denied = verify_installation_status_claims(
+            denied_signed, public_key=license_public_text, installation_id=owner.installation_id,
+            license_token=token, nonce=denied_nonce,
+        )
+        assert denied["binding_valid"] is False
+        owner.set_binding_valid(True)
+        recovered_nonce, recovered_signed = signed_owner_status()
+        recovered = verify_installation_status_claims(
+            recovered_signed, public_key=license_public_text, installation_id=owner.installation_id,
+            license_token=token, nonce=recovered_nonce,
+        )
+        assert recovered["binding_valid"] is True
 
 
 def test_ci_failure_does_not_write_success_report_and_removes_keys(verifier, monkeypatch, tmp_path):

@@ -17,6 +17,14 @@ from api.services.installation_license import (
 )
 
 
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [("invalid", 60), ("0", 1), ("-5", 1), ("5", 5), ("99999", 3600)],
+)
+def test_owner_status_poll_interval_is_bounded(configured, expected):
+    assert owner_status._owner_status_poll_seconds(configured) == expected
+
+
 class FakeRedis:
     def __init__(self):
         self.fields = {}
