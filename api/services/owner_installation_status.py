@@ -33,7 +33,17 @@ from api.services.release_integrity import (
     verify_configured_release,
 )
 
-POLL_SECONDS = 60
+def _owner_status_poll_seconds(value: str | None = None) -> int:
+    """Return a bounded owner-check interval; default to one minute."""
+    raw = os.getenv("KODEWAVES_OWNER_STATUS_POLL_SECONDS", "60") if value is None else value
+    try:
+        seconds = int(raw)
+    except (TypeError, ValueError):
+        return 60
+    return min(max(seconds, 1), 3600)
+
+
+POLL_SECONDS = _owner_status_poll_seconds()
 OUTAGE_GRACE_SECONDS = 24 * 60 * 60
 _logged_initial_owner_check = False
 

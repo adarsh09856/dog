@@ -1,5 +1,7 @@
 "use client";
 
+import styles from "./ModelsWorkspace.module.css";
+
 import {
   AlertCircle,
   CheckCircle2,

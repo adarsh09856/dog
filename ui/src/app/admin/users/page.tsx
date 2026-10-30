@@ -1,5 +1,7 @@
 "use client";
 
+import styles from "./UsersWorkspace.module.css";
+
 import {
   AlertTriangle,
   Coins,
