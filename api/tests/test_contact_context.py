@@ -266,6 +266,44 @@ def test_explicit_correction_replaces_name_and_phone_is_not_a_name():
     assert "caller_name" not in state
 
 
+def test_name_after_request_sentence_is_remembered_and_recalled():
+    for utterance, expected_name in (
+        ("मुझे अपॉइंटमेंट चाहिए। मेरा नाम परीक्षण ग्राहक है। कृपया अभी बुक मत करना।", "परीक्षण ग्राहक"),
+        ("I'd like an appointment. My name is Jane Smith. Do not book it yet.", "Jane Smith"),
+        ("I need help; my name is Ravi.", "Ravi"),
+        ("Mujhe help chahiye. Mera naam Adarsh hai.", "Adarsh"),
+    ):
+        state = {}
+        first_turn = [{"role": "user", "content": utterance}]
+        assert remember_explicit_caller_name(first_turn, state) is None
+        assert state["caller_name"] == expected_name
+        assert remember_explicit_caller_name([
+            *first_turn,
+            {"role": "user", "content": "Please speak English. What name did I give you?"},
+        ], state) == f"You told me your name is {expected_name}."
+
+
+def test_name_sentence_correction_uses_latest_self_identification():
+    state = {}
+    remember_explicit_caller_name([{
+        "role": "user",
+        "content": "My name is Ravi. Actually, my name is Rohan.",
+    }], state)
+    assert state["caller_name"] == "Rohan"
+
+
+def test_later_sentence_does_not_turn_third_party_or_language_into_name():
+    for utterance in (
+        "I need help. My friend's name is Ravi.",
+        "मुझे मदद चाहिए। मेरे दोस्त का नाम आदर्श है।",
+        "I need help. I am ready.",
+        "I need help. My name is nine five three.",
+    ):
+        state = {}
+        remember_explicit_caller_name([{"role": "user", "content": utterance}], state)
+        assert "caller_name" not in state
+
+
 def test_name_is_captured_from_a_compound_request():
     state = {}
     assert remember_explicit_caller_name(

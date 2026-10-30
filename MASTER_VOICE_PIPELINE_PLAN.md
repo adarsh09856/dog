@@ -1,5 +1,17 @@
 # Kodewaves master voice and platform delivery plan
 
+### Authoritative release and acceptance status — 30 October 2026, IST
+
+- [x] Reconciled production speech source at `4c61330b38f78d4fc9edc37bd884afa7952172b8`; packaged API passed 301 isolated regressions; 25 separate transport tests passed before packaging.
+- [x] Deployed API image `kodewaves-api:reconciled-4c61330b3` at approximately 08:21 IST, with both workers idle before recreation. Database is at `f2a3b4c5d6e7`, both workers started, Docker is healthy, and public health returns 200. Rollback database/image/config evidence: `/root/kodewaves-rollbacks/api-release-20261030-025029`.
+- [x] Fresh browser text test, run 452, reproduced two remaining faults: a name supplied in sentence two was missed, and the reply requested the name again. English switching worked, but the model incorrectly claimed it lacked prior messages.
+- [ ] Fix reproduced cold-prefix latency: this run took 27,299 ms to first LLM output and 30,345 ms for its full text request. Ollama reported 26,523 ms processing 969 uncached prompt tokens; this was not model loading. The follow-up reused 965 prompt tokens and took approximately 3.8 seconds. These are text/LLM timings, not audible response timings.
+- [ ] Shared caller-name extraction/recall correction is in progress; apply across workflows, not a Workflow 22 exception.
+- [ ] Browser microphone/caller-heard speech, interruption continuity, inbound/outbound telephone acceptance, all supported language quality, and 1–1.5 second speech-end-to-playback targets remain open.
+- [ ] No new UI theme deployed. The separate theme chat owns branding/shell/public pages and must supply a scoped patch plus API dependencies; voice source stays owned here. Common branch base reported as `b45d766a0f428209fd08b329f4a2a588b5c848cc`; do not blindly merge divergent branch histories.
+
+This section supersedes earlier live-image and completion claims below. The live API contains the reconciled source; model containers and the UI image were not replaced in this release. No GitHub push.
+
 ### Current execution checklist — 29 October 2026, 14:33 UTC
 
 This section supersedes older status claims below. Reports and diagnostic artifacts remain local; do not include them in a GitHub push.

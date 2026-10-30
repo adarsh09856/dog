@@ -850,8 +850,13 @@ class _BookingToolChoiceMixin:
             if isinstance(messages, list):
                 from api.services.pipecat.caller_state_context import CallerStateContext
 
+                contact_state = getattr(self, "_contact_conversation_state", None)
+                if not isinstance(contact_state, dict):
+                    contact_state = {}
+                    self._contact_conversation_state = contact_state
+                state = contact_state.setdefault("_caller_state_context", {})
                 if not hasattr(self, "_caller_state_context"):
-                    self._caller_state_context = CallerStateContext()
+                    self._caller_state_context = CallerStateContext(state)
                 params["messages"] = self._caller_state_context.apply(messages, reminder)
         messages = params.get("messages")
         if isinstance(messages, list) and not getattr(self, "_kodewaves_local_ollama", False):
