@@ -105,6 +105,7 @@ services:
       KODEWAVES_EDITION: client
       KODEWAVES_INSTALLATION_ID: ${KODEWAVES_INSTALLATION_ID:?Set installation ID}
       KODEWAVES_LICENSE_TOKEN: ${KODEWAVES_LICENSE_TOKEN:?Set signed license}
+      KODEWAVES_OWNER_STATUS_POLL_SECONDS: ${KODEWAVES_OWNER_STATUS_POLL_SECONDS:-60}
       KODEWAVES_RELEASE_MANIFEST: /app/client-release-manifest.json
       KODEWAVES_API_IMAGE: ${CLIENT_API_IMAGE:?Set pinned client API image digest}
       KODEWAVES_UI_IMAGE: ${CLIENT_UI_IMAGE:?Set pinned client UI image digest}

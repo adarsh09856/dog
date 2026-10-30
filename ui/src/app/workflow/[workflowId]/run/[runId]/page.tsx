@@ -41,6 +41,8 @@ import { formatDateTime } from '@/lib/dateTime';
 import { downloadFile, getSignedUrl } from '@/lib/files';
 import { cn } from '@/lib/utils';
 
+import styles from './RunWorkspace.module.css';
+
 interface WorkflowRunResponse {
     mode: string;
     created_at: string | null;
@@ -209,7 +211,7 @@ function WaveformLane({
                         key={`${track}-${index}`}
                         className={cn(
                             'min-h-1 flex-1 rounded-full',
-                            track === 'user' ? 'bg-sky-500' : 'bg-emerald-500'
+                            track === 'user' ? 'bg-amber-500' : 'bg-emerald-500'
                         )}
                         style={{ height: `${Math.round(peak * 100)}%` }}
                     />
@@ -452,7 +454,7 @@ function SplitTracksSection({
                             className={cn(
                                 'gap-1.5',
                                 userTrackActive
-                                    ? 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300'
+                                    ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300'
                                     : 'text-muted-foreground opacity-60'
                             )}
                         >
@@ -548,6 +550,9 @@ function RunMetricsSection({
     gatheredContext: Record<string, string | number | boolean | object> | null;
 }) {
     const metrics = getTranscriptMetrics(logs, gatheredContext);
+    const speechDiagnostics = logs?.speech_diagnostics ?? [];
+    const audioHealth = speechDiagnostics.filter((event) => event.type === 'rtf-audio-health');
+    const formatMs = (value?: number | null) => value == null ? 'N/A' : `${Math.round(value)} ms`;
 
     return (
         <Card className="border-border">
@@ -561,6 +566,31 @@ function RunMetricsSection({
                 <MetricCard label="Tool Calls" value={String(metrics.toolCalls)} />
                 <MetricCard label="Nodes Visited" value={String(metrics.visitedNodes)} />
             </CardContent>
+            {audioHealth.length > 0 && (
+                <CardContent className="border-t border-border pt-4">
+                    <h3 className="mb-3 text-sm font-semibold">Speech timing and audio continuity</h3>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {audioHealth.map((event, index) => {
+                            const payload = event.payload;
+                            const stage = payload.stage ?? 'audio';
+                            const isPlayback = stage === 'transport_playback';
+                            const label = `Turn ${event.turn ?? index + 1} ${isPlayback ? 'playback' : 'TTS'}`;
+                            const value = isPlayback
+                                ? `First frame ${formatMs(payload.first_frame_ms)} · first audible ${formatMs(payload.first_speech_frame_ms)} · max silence ${formatMs(payload.max_internal_silence_ms)} · ${payload.gaps_over_750ms ?? 0} frame gaps >750 ms`
+                                : payload.no_audio
+                                    ? 'No audio'
+                                    : `First PCM ${formatMs(payload.first_audio_ms)} · synthesis ${formatMs(payload.synthesis_wall_ms)} · max gap ${formatMs(payload.max_gap_ms)} · ${payload.gaps_over_750ms ?? 0} gaps >750 ms`;
+                            return (
+                                <MetricCard
+                                    key={`${event.turn ?? index}-${stage}-${index}`}
+                                    label={label}
+                                    value={value}
+                                />
+                            );
+                        })}
+                    </div>
+                </CardContent>
+            )}
         </Card>
     );
 }
@@ -747,9 +777,9 @@ export default function WorkflowRunPage() {
                                     <CardTitle className="min-w-0 text-2xl">
                                         {isTextChatRun ? 'Text Chat Session' : 'Agent Run Completed'}
                                     </CardTitle>
-                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isTextChatRun ? 'bg-sky-500/15' : 'bg-emerald-500/20'}`}>
+                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isTextChatRun ? 'bg-primary/15' : 'bg-emerald-500/20'}`}>
                                         {isTextChatRun ? (
-                                            <FileText className="h-5 w-5 text-sky-500" />
+                                            <FileText className="h-5 w-5 text-primary" />
                                         ) : (
                                             <svg className="h-5 w-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />

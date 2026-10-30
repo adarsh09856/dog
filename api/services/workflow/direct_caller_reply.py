@@ -244,17 +244,17 @@ def direct_caller_reply(text: str, *, has_lookup_tools: bool) -> str | None:
     if not has_lookup_tools:
         if not _ROOM_BOOKING_NEGATION.search(text):
             if _HINDI_ROOM_BOOKING.fullmatch(text):
-                return "माफ़ कीजिए, मैं यहाँ कमरे की उपलब्धता या बुकिंग की पुष्टि नहीं कर सकती। कृपया सहायता टीम से संपर्क करें।"
+                return "माफ़ कीजिए, यहाँ कमरे की उपलब्धता या बुकिंग की सुविधा उपलब्ध नहीं है। कृपया सहायता टीम से संपर्क करें।"
             if _ENGLISH_ROOM_BOOKING.fullmatch(text):
                 return "Sorry, I can’t check room availability or make a booking here. Please contact the support team."
             if _ROMAN_HINDI_ROOM_BOOKING.fullmatch(text):
-                return "माफ़ कीजिए, मैं यहाँ कमरे की उपलब्धता या बुकिंग की पुष्टि नहीं कर सकती। कृपया सहायता टीम से संपर्क करें।"
+                return "माफ़ कीजिए, यहाँ कमरे की उपलब्धता या बुकिंग की सुविधा उपलब्ध नहीं है। कृपया सहायता टीम से संपर्क करें।"
         if _HINDI_UNAVAILABLE_BOOKING.fullmatch(text):
-            return "माफ़ कीजिए, यहाँ अपॉइंटमेंट बुक करने की सुविधा जुड़ी नहीं है। कृपया आधिकारिक सपोर्ट से बुकिंग करें।"
+            return "माफ़ कीजिए, यहाँ अपॉइंटमेंट बुक करने की सुविधा उपलब्ध नहीं है। कृपया आधिकारिक सपोर्ट से बुकिंग करें।"
         if _ENGLISH_UNAVAILABLE_BOOKING.fullmatch(text):
             return "I can't book an appointment here yet. Please contact the official support team to arrange it."
         if _ROMAN_HINDI_UNAVAILABLE_BOOKING.fullmatch(text):
-            return "माफ़ कीजिए, यहाँ अपॉइंटमेंट बुक करने की सुविधा जुड़ी नहीं है। कृपया आधिकारिक सपोर्ट से बुकिंग करें।"
+            return "माफ़ कीजिए, यहाँ अपॉइंटमेंट बुक करने की सुविधा उपलब्ध नहीं है। कृपया आधिकारिक सपोर्ट से बुकिंग करें।"
         if _HINDI_NEW_ORDER_REQUEST.fullmatch(text):
             return "\u091c\u093c\u0930\u0942\u0930, \u0906\u092a \u0915\u094d\u092f\u093e \u0911\u0930\u094d\u0921\u0930 \u0915\u0930\u0928\u093e \u091a\u093e\u0939\u0947\u0902\u0917\u0947?"
         if _ENGLISH_NEW_ORDER_REQUEST.fullmatch(text):

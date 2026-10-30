@@ -1,5 +1,7 @@
 """Workspace-scoped persistence for captured form answers."""
 
+import uuid
+
 from sqlalchemy import select
 
 from api.db.kodewaves_client import kodewaves_db_client
@@ -8,10 +10,15 @@ from api.db.models import WorkflowModel, WorkflowRunModel
 
 
 async def get_form(organization_id, form_id):
+    try:
+        form_id = uuid.UUID(str(form_id))
+    except (ValueError, TypeError, AttributeError):
+        form_id = str(form_id)
     async with kodewaves_db_client.get_session() as session:
+        identifier_column = FormModel.id if isinstance(form_id, uuid.UUID) else FormModel.slug
         result = await session.execute(
             select(FormModel).where(
-                FormModel.id == form_id,
+                identifier_column == form_id,
                 FormModel.organization_id == organization_id,
             )
         )

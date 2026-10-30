@@ -19,6 +19,8 @@ import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 import { formatDateTime } from "@/lib/dateTime";
 
+import styles from "./RecordingsWorkspace.module.css";
+
 const PAGE_SIZE = 25;
 const SORT_OPTIONS = [
     { value: "recent", label: "Recently used", sort: "last_used", order: "desc" },
@@ -154,8 +156,8 @@ export default function TtsCacheList() {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="flex flex-wrap items-end gap-3">
+        <div className={styles.list}>
+            <div className={styles.cacheToolbar}>
                 <div className="relative min-w-48 flex-1">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input aria-label="Search cached speech" placeholder="Search phrase, model, or voice…" maxLength={200}
@@ -189,18 +191,18 @@ export default function TtsCacheList() {
             <p className="text-xs text-muted-foreground">
                 Reuses count speech requests served from cache. Listening here does not count as reuse or extend expiry.
             </p>
-            {error ? <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-destructive">{error}</div>
+            {error ? <div role="alert" className={styles.error}>{error}</div>
                 : loading ? <Skeleton className="h-40 w-full" />
-                    : entries.length === 0 ? <div className="py-12 text-center text-muted-foreground">
+                    : entries.length === 0 ? <div className={styles.empty}>
                         <AudioLines className="mx-auto mb-3 h-10 w-10" />
                         <p>No cached speech found.</p>
                         <p className="mt-1 text-sm">Speech appears here after a successful synthesis in a workflow with Speech Caching enabled.</p>
                     </div>
                         : <>
                             <p className="text-sm text-muted-foreground">{total} cached phrase{total === 1 ? "" : "s"} matching your filters</p>
-                            <div className="space-y-3">
+                            <div className={styles.list}>
                                 {entries.map((entry) => (
-                                    <div key={entry.id} className="rounded-lg border p-4">
+                                    <div key={entry.id} className={styles.ttsRow}>
                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                             <div className="min-w-0 flex-1">
                                                 <p className="whitespace-pre-wrap break-words text-sm">{entry.text_preview || "Cached speech"}</p>

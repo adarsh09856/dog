@@ -619,8 +619,8 @@ class KodewavesDBClient(BaseDBClient):
         notes: Optional[str] = None,
         plan_assignment: Optional[Dict[str, Any]] = None,
     ) -> OrganizationWalletModel:
-        if minutes < 0:
-            raise ValueError("Wallet credit cannot be negative")
+        if minutes < 0 or (minutes == 0 and plan_assignment is None):
+            raise ValueError("Minute credits must be positive unless granting a paid plan")
         async with self.get_session() as session:
             if reference_id or plan_assignment is not None:
                 # Serialize first-time purchases and plan renewals by org; a

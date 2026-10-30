@@ -81,18 +81,6 @@ async def lifespan(app: FastAPI):
 
         await get_arq_redis()
 
-        # Purge any legacy Kodewaves/Dograh Cloudonix SIP auto-created configurations
-        try:
-            from sqlalchemy import text
-
-            from api.db import db_client
-            async with db_client.get_session() as session:
-                await session.execute(
-                    text("DELETE FROM telephony_configurations WHERE name IN ('Dograh Cloudonix SIP', 'Kodewaves Cloudonix SIP')")
-                )
-                await session.commit()
-        except Exception:
-            pass
         # Pre-register all org-specific Langfuse exporters so they're ready
         # before any pipeline runs, without per-call DB lookups.
         await load_all_org_langfuse_credentials()
@@ -104,6 +92,10 @@ async def lifespan(app: FastAPI):
         )
         from api.services.catalog.catalog_service import handle_catalog_sync
         sync_manager.register(WorkerSyncEventType.MODEL_CATALOG, handle_catalog_sync)
+        from api.services.pipecat.active_runtime import handle_worker_termination
+        sync_manager.register(
+            WorkerSyncEventType.CALL_TERMINATION, handle_worker_termination
+        )
         await sync_manager.start()
         set_worker_sync_manager(sync_manager)
 

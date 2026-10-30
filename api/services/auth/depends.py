@@ -353,6 +353,15 @@ async def get_superuser(
     Dependency to check if the authenticated user is a superuser.
     Raises HTTPException if user is not authenticated or not a superuser.
     """
+    # Organization API keys authenticate as their creator for organization
+    # scoping. That must not carry the creator's global owner privileges into
+    # superadmin endpoints (licenses, platform settings, user administration).
+    if x_api_key is not None:
+        raise HTTPException(
+            status_code=403,
+            detail="API keys cannot access owner controls; sign in as a superadmin.",
+        )
+
     user = await get_user(authorization, x_api_key, kodewaves_auth_token, dograh_auth_token, oss_token)
 
     if hasattr(user, "is_active") and user.is_active is False:

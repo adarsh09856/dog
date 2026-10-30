@@ -105,7 +105,9 @@ exposure:
 config:
   environment: production
   logLevel: INFO
-  backendApiEndpoint: ""  # public URL the browser uses to reach the API; auto-derived from exposure.host if empty in NOTES
+  publicBaseUrl: ""  # canonical public origin; if empty it is derived from the configured ingress/gateway hostname
+  uiAppUrl: ""  # optional UI origin override for split-origin deployments
+  backendApiEndpoint: ""  # optional API origin override; defaults to the derived public origin
   minioBucket: voice-audio
   minioEndpoint: ""  # internal cluster endpoint (auto-set when internalMinio)
   minioPublicEndpoint: ""  # browser-visible endpoint (auto-set when ingress/gateway path exposes MinIO)

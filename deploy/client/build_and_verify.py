@@ -7,6 +7,7 @@ import argparse
 import base64
 import binascii
 import json
+import os
 import re
 import subprocess
 import sys
@@ -201,6 +202,25 @@ def inspect_image_id(tag: str) -> str:
     return image_id
 
 
+def validate_owner_private_key_path(path: Path, repository_root: Path) -> Path:
+    """Keep the owner signing key outside every client image build context."""
+    repository_root = repository_root.resolve(strict=True)
+    lexical_path = Path(os.path.abspath(path.expanduser()))
+    try:
+        resolved_path = path.expanduser().resolve(strict=True)
+    except OSError as exc:
+        raise ValueError("Owner private key must be an existing file outside the repository") from exc
+    if not resolved_path.is_file():
+        raise ValueError("Owner private key must be a regular file")
+    # Check both the supplied path and its resolved target. This rejects a key
+    # inside the Docker build context, including one reached through a symlink.
+    if lexical_path.is_relative_to(repository_root) or resolved_path.is_relative_to(repository_root):
+        raise ValueError("Owner private key must be stored outside the repository/build context")
+    if lexical_path.is_symlink():
+        raise ValueError("Owner private key path must not be a symlink")
+    return resolved_path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--api-tag", default="kodewaves-client-api:local")
@@ -218,6 +238,12 @@ def main() -> int:
     parser.add_argument("--push", action="store_true", help="Stage, verify, then promote images to unused release tags")
     parser.add_argument("--release-env-output", type=Path, help="Write API/UI @sha256 references after verified promotion")
     args = parser.parse_args()
+    root = Path(__file__).resolve().parents[2]
+    if args.owner_private_key:
+        try:
+            args.owner_private_key = validate_owner_private_key_path(args.owner_private_key, root)
+        except ValueError as exc:
+            parser.error(str(exc))
     if any((args.owner_private_key, args.manifest_output, args.public_key_output)) and not all(
         (args.owner_private_key, args.manifest_output, args.public_key_output)
     ):
@@ -236,7 +262,6 @@ def main() -> int:
         # spending time on image builds; promotion repeats this check to catch races.
         for tag in (args.api_tag, args.ui_tag):
             _assert_final_tag_is_new(tag)
-    root = Path(__file__).resolve().parents[2]
     schema_compatibility = (
         migration_compatibility(root / "api" / "alembic" / "versions", args.approved_upgrade_from)
         if args.owner_private_key else None

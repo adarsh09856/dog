@@ -18,6 +18,8 @@ import { useOrganizationTimezone } from "@/hooks/useOrganizationTimezone";
 import { formatDateTime } from "@/lib/dateTime";
 import logger from "@/lib/logger";
 
+import styles from "./RecordingsWorkspace.module.css";
+
 export default function RecordingsList({ refreshKey }: { refreshKey?: number }) {
     const organizationTimezone = useOrganizationTimezone();
     const [recordings, setRecordings] = useState<RecordingResponseSchema[]>([]);
@@ -146,9 +148,9 @@ export default function RecordingsList({ refreshKey }: { refreshKey?: number }) 
 
     if (isLoading && recordings.length === 0) {
         return (
-            <div className="space-y-4">
+            <div className={styles.list}>
                 {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div key={i} className={styles.skeletonRow}>
                         <div className="space-y-2 flex-1">
                             <Skeleton className="h-4 w-48" />
                             <Skeleton className="h-3 w-64" />
@@ -162,28 +164,29 @@ export default function RecordingsList({ refreshKey }: { refreshKey?: number }) 
 
     if (error) {
         return (
-            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
+                <div role="alert" className={styles.error}>
                 {error}
             </div>
         );
     }
 
     return (
-        <div className="space-y-4">
+        <div className={styles.list}>
             {/* Search and Refresh */}
-            <div className="flex items-center gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className={styles.toolbar}>
+                <div className={styles.search}>
+                    <Search />
                     <Input
+                        aria-label="Search recordings"
                         placeholder="Search by filename, transcript, or ID..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10"
                     />
                 </div>
                 <Button
                     variant="outline"
                     size="icon"
+                    aria-label="Refresh recordings"
                     onClick={() => { stopPlayback(); fetchRecordings(); }}
                     disabled={isLoading}
                 >
@@ -199,8 +202,8 @@ export default function RecordingsList({ refreshKey }: { refreshKey?: number }) 
 
             {/* Recordings List */}
             {filteredRecordings.length === 0 ? (
-                <div className="text-center py-12">
-                    <AudioLines className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <div className={styles.empty}>
+                    <span className={styles.recordingIcon}><AudioLines className="h-5 w-5" /></span>
                     <p className="text-muted-foreground">
                         {searchQuery
                             ? "No recordings match your search"
@@ -208,7 +211,7 @@ export default function RecordingsList({ refreshKey }: { refreshKey?: number }) 
                     </p>
                 </div>
             ) : (
-                <div className="space-y-3">
+                <div className={styles.list}>
                     {filteredRecordings.map((rec) => {
                         const filename = (rec.metadata?.original_filename as string) || "";
                         const isEditing = editingId === rec.recording_id;
@@ -216,13 +219,13 @@ export default function RecordingsList({ refreshKey }: { refreshKey?: number }) 
                         return (
                             <div
                                 key={rec.recording_id}
-                                className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                                className={styles.recordingRow}
                             >
                                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                    <div className={styles.recordingIcon}>
                                         <AudioLines className="w-5 h-5 text-primary" />
                                     </div>
-                                    <div className="flex-1 min-w-0">
+                                    <div className={styles.recordingDetails}>
                                         {/* Recording ID (editable) */}
                                         <div className="flex items-center gap-2 mb-1">
                                             {isEditing ? (
@@ -290,10 +293,11 @@ export default function RecordingsList({ refreshKey }: { refreshKey?: number }) 
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1 shrink-0 ml-2">
+                                <div className={styles.recordingActions}>
                                     <Button
                                         variant="ghost"
                                         size="sm"
+                                        aria-label={`${playingId === rec.recording_id ? "Pause" : "Play"} ${filename || rec.recording_id}`}
                                         onClick={() => handlePlay(rec)}
                                     >
                                         {playingId === rec.recording_id ? (
@@ -305,6 +309,7 @@ export default function RecordingsList({ refreshKey }: { refreshKey?: number }) 
                                     <Button
                                         variant="ghost"
                                         size="sm"
+                                        aria-label={`Delete ${filename || rec.recording_id}`}
                                         onClick={() => handleDelete(rec.recording_id)}
                                         className="text-destructive hover:text-destructive/90"
                                     >

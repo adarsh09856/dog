@@ -896,6 +896,7 @@ class CatalogService:
         installed_local_llm: List[Dict[str, Any]] = []
         local_stt: List[Dict[str, Any]] = []
         local_tts: List[Dict[str, Any]] = []
+        local_stt_inventory_verified = False
 
         local_ai_setting = await kodewaves_db_client.get_setting("local_ai") or {}
         org_access = await kodewaves_db_client.get_setting(f"local_ai_org_{organization_id}") or {}
@@ -932,57 +933,39 @@ class CatalogService:
             try:
                 async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
                     async with session.get(f"{indic_stt_url.rstrip('/')}/models") as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            for installed_model in data.get("data", []):
-                                if (isinstance(installed_model, dict)
-                                        and installed_model.get("task") == "automatic-speech-recognition"
-                                        and installed_model.get("installed", True)
-                                        and installed_model.get("id")):
-                                    local_stt.append({
-                                        "value": installed_model["id"],
-                                        "label": (
-                                            "IndicConformer + Moonshine English + Anuvani auto-detection"
-                                            if installed_model.get("supports_auto_detect") is True
-                                            and "en-IN" in installed_model.get("languages", [])
-                                            else "IndicConformer CTC INT8 + Moonshine English (installed languages)"
-                                            if "en-IN" in installed_model.get("languages", [])
-                                            else "IndicConformer + Anuvani auto-detection"
-                                            if installed_model.get("supports_auto_detect") is True
-                                            else "IndicConformer CTC INT8 (installed languages)"
-                                        ),
-                                        "provider": "indicconformer",
-                                        "languages": installed_model.get("languages", []),
-                                        "supports_auto_detect": installed_model.get("supports_auto_detect") is True,
-                                        "auto_detect_languages": installed_model.get("auto_detect_languages", []),
-                                    })
-            except (aiohttp.ClientError, TimeoutError):
-                pass
-
-            # Advertise DhVaani only when its local checkpoint and licensed
-            # reference voices are loaded and reported by the serving engine.
-            try:
-                dhvaani_url = local_tts_api_base(local_ai_setting, "dhvaani-0.5")
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
-                    async with session.get(f"{dhvaani_url}/models") as resp:
-                        if resp.status == 200:
-                            for dhvaani_model in (await resp.json()).get("data", []):
-                                if (
-                                    isinstance(dhvaani_model, dict)
-                                    and dhvaani_model.get("id") == "dhvaani-0.5"
-                                    and dhvaani_model.get("task") == "text-to-speech"
-                                    and dhvaani_model.get("installed") is True
-                                ):
-                                    local_tts.append({
-                                        "value": dhvaani_model["id"],
-                                        "label": dhvaani_model.get("name") or "DhVaani 0.5 — Indian languages + English",
-                                        "provider": "speaches",
-                                        "languages": dhvaani_model.get("languages", []),
-                                        "voices": dhvaani_model.get("voices", []),
-                                        "streaming": dhvaani_model.get("streaming", False),
-                                    })
-            except (aiohttp.ClientError, TimeoutError):
-                pass
+                        resp.raise_for_status()
+                        data = await resp.json()
+                        if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+                            raise ValueError("Indic STT inventory returned malformed model data")
+                        models = data["data"]
+                        local_stt_inventory_verified = True
+                        for installed_model in models:
+                            if (isinstance(installed_model, dict)
+                                    and installed_model.get("task") == "automatic-speech-recognition"
+                                    and installed_model.get("installed", True)
+                                    and installed_model.get("id")):
+                                local_stt.append({
+                                    "value": installed_model["id"],
+                                    "label": (
+                                        "IndicConformer + Moonshine English + Anuvani auto-detection"
+                                        if installed_model.get("supports_auto_detect") is True
+                                        and "en-IN" in installed_model.get("languages", [])
+                                        else "IndicConformer CTC INT8 + Moonshine English (installed languages)"
+                                        if "en-IN" in installed_model.get("languages", [])
+                                        else "IndicConformer + Anuvani auto-detection"
+                                        if installed_model.get("supports_auto_detect") is True
+                                        else "IndicConformer CTC INT8 (installed languages)"
+                                    ),
+                                    "provider": "indicconformer",
+                                    "languages": installed_model.get("languages", []),
+                                    "supports_auto_detect": installed_model.get("supports_auto_detect") is True,
+                                    "auto_detect_languages": installed_model.get("auto_detect_languages", []),
+                                })
+            except (aiohttp.ClientError, TimeoutError, ValueError):
+                logger.warning(
+                    "Indic STT inventory unavailable; skipping catalog cache for organization {}",
+                    organization_id,
+                )
 
             # Advertise DhVaani only when its local checkpoint and licensed
             # reference voices are loaded and reported by the serving engine.
@@ -1134,7 +1117,11 @@ class CatalogService:
             "supported_modes": ["general", "realtime"],
         }
 
-        self._cache[cache_key] = (now, manifest)
+        # Do not cache a transient STT inventory failure as a durable catalog
+        # with Auto detection missing. A later request can immediately recover
+        # the real model capabilities once the sidecar is ready again.
+        if not local_engine_enabled or local_stt_inventory_verified:
+            self._cache[cache_key] = (now, manifest)
         return manifest
 
 

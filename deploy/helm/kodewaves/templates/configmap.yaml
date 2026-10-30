@@ -8,7 +8,15 @@ metadata:
 data:
   ENVIRONMENT: {{ .Values.config.environment | quote }}
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
-  BACKEND_API_ENDPOINT: {{ .Values.config.backendApiEndpoint | quote }}
+  {{- $publicHost := .Values.exposure.ingress.host | default .Values.exposure.gatewayApi.listenerHostname -}}
+  {{- $publicBaseUrl := .Values.config.publicBaseUrl -}}
+  {{- if and (not $publicBaseUrl) $publicHost -}}
+  {{- $scheme := ternary "https" "http" (or .Values.exposure.ingress.tls.enabled (eq .Values.exposure.mode "gatewayApi")) -}}
+  {{- $publicBaseUrl = printf "%s://%s" $scheme $publicHost -}}
+  {{- end -}}
+  PUBLIC_BASE_URL: {{ $publicBaseUrl | quote }}
+  UI_APP_URL: {{ .Values.config.uiAppUrl | default $publicBaseUrl | quote }}
+  BACKEND_API_ENDPOINT: {{ .Values.config.backendApiEndpoint | default $publicBaseUrl | quote }}
   MINIO_BUCKET: {{ .Values.config.minioBucket | quote }}
   MINIO_SECURE: {{ .Values.config.minioSecure | quote }}
   ENABLE_AWS_S3: {{ ternary "true" "false" (eq .Values.storage.mode "s3") | quote }}

@@ -10,7 +10,8 @@ production use. Packaging a release does not certify its deployment or rollback.
 
 ## Prepare the server
 
-Use a Linux server with Python 3, Docker Engine and the Docker Compose plugin.
+Use a Linux server with Python 3, `cryptography` available to the recovery
+commands, Docker Engine and the Docker Compose plugin.
 Provide the server capacity and registry access agreed for your models and call
 volume. Point the licensed hostname at this server. Allow TCP 80/443, UDP 443,
 TURN UDP/TCP 3478 and UDP 49152-49200 through its firewall. Back up an existing
@@ -179,7 +180,8 @@ kept intact and available for rollback:
 
 ```bash
 python3 recovery.py restore /secure/backups/client-recovery.tar.gz \
-  --docker-volumes --env-file .env --confirm-maintenance
+  --docker-volumes --env-file .env \
+  --release-public-key ./release-public-key.txt --confirm-maintenance
 ```
 
 The restore accepts an archive only when installation ID, `.env`, signed
@@ -218,17 +220,23 @@ python3 recovery.py create \
 Omit `--identity-key` only when identity enrollment is not configured. The tool
 refuses symlinks, non-tar volume exports, mismatched installation/image
 identities, wrong identity-key group/mode, and existing output paths. Store the
-result encrypted and access-controlled. Validate it later with:
+result encrypted and access-controlled. Validate it later with the trusted
+release key delivered in the verified installer package. The archive's own key
+is checked against this external trust key; archive checksums alone do not
+authenticate the sender. By default the command reads `release-public-key.txt`
+beside `recovery.py`. On a separate restore host, provide the trusted key copy:
 
 ```bash
-python3 recovery.py validate /secure/backups/client-recovery.tar.gz
+python3 recovery.py validate /secure/backups/client-recovery.tar.gz \
+  --release-public-key ./release-public-key.txt
 ```
 
 For an offline staging check, extract to a **new** directory:
 
 ```bash
 python3 recovery.py restore /secure/backups/client-recovery.tar.gz \
-  --destination /secure/staging/client-restore-check
+  --destination /secure/staging/client-restore-check \
+  --release-public-key ./release-public-key.txt
 ```
 
 Staging is non-destructive and never modifies live Docker volumes. It validates

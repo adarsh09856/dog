@@ -10,10 +10,12 @@ token — a trailing path segment for carriers, ``?token=`` for ARI (see
 :func:`build_media_ws_url`) — that the handler verifies. An attacker can then no
 longer connect by guessing ids. These URLs are bearer capabilities, so the
 application logging boundary redacts their tokens. Reverse proxies must also
-avoid recording token-bearing media paths. This is a stateless capability token (HMAC over the id triple); it
-deliberately does *not* attempt the one-shot redemption / state-race hardening
-the handler's ``TODO(security)`` sketches, which needs a run-creation schema
-change and is left to a follow-up.
+avoid recording token-bearing media paths. The HMAC itself is stateless, while
+the shared WebSocket handler atomically claims the workflow run's
+``initialized -> running`` transition so only one media socket can use that
+run. Authentication still depends on an operator setting the secret and
+enabling enforcement; a configured secret with enforcement disabled is only
+logged, not rejected.
 
 Backward-compatible by construction: with no secret set, :func:`build_media_ws_url`
 returns exactly the legacy URL and :func:`verify_ws_token` is never consulted, so

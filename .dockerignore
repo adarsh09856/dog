@@ -6,6 +6,10 @@ api/.env
 # Owner-side signing tools and private key material never enter image build contexts.
 owner-tools/
 **/license-private-key*
+**/*private-key*
+**/*private_key*
+**/*.pem
+**/*.key
 .git
 .github
 .claude

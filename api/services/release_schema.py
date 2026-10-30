@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import ast
+import argparse
 import asyncio
+import os
 import re
-import sys
 from pathlib import Path
 
 from sqlalchemy import text
@@ -61,9 +62,9 @@ async def current_database_revisions(database_url: str) -> tuple[str, ...]:
 
 async def verify_client_schema_before_migration() -> None:
     """Verify release files, then gate DB upgrades on signed compatibility."""
-    from api.constants import DATABASE_URL, KODEWAVES_EDITION
+    from api.constants import DATABASE_URL
 
-    if KODEWAVES_EDITION != "client":
+    if os.environ.get("KODEWAVES_EDITION", "oss") != "client":
         return
 
     from api.services.release_integrity import verify_release_before_startup
@@ -79,16 +80,33 @@ async def verify_client_schema_before_migration() -> None:
 
 
 def main() -> int:
-    if sys.argv[1:] == ["--preflight-deploy"]:
-        from api.constants import DATABASE_URL
-
-        revisions = asyncio.run(current_database_revisions(DATABASE_URL))
-        verify_deployment_migration_history(Path(__file__).resolve().parents[1] / "alembic" / "versions", revisions)
-    elif not sys.argv[1:]:
-        asyncio.run(verify_client_schema_before_migration())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--preflight-deploy",
+        action="store_true",
+        help="read the installed Alembic revision and verify it is an ancestor of this release",
+    )
+    args = parser.parse_args()
+    if args.preflight_deploy:
+        asyncio.run(preflight_deploy())
     else:
-        raise SystemExit("Usage: python -m api.services.release_schema [--preflight-deploy]")
+        asyncio.run(verify_client_schema_before_migration())
     return 0
+
+
+async def preflight_deploy() -> None:
+    """Read-only check that the installed DB can follow this release's migrations."""
+    from api.constants import DATABASE_URL
+
+    migrations_dir = Path(__file__).parents[1] / "alembic" / "versions"
+    current = await current_database_revisions(DATABASE_URL)
+    if len(current) > 1:
+        raise SchemaCompatibilityError(
+            f"Database has {len(current)} Alembic revisions; expected a single head"
+        )
+    graph = migration_compatibility(migrations_dir, approved_upgrade_from=current)
+    current_label = current[0] if current else "fresh database"
+    print(f"Schema preflight OK: current={current_label}; release_head={graph['head']}")
 
 
 def migration_compatibility(
@@ -168,14 +186,13 @@ def migration_compatibility(
 
 
 def verify_deployment_migration_history(migrations_dir: Path, current_revisions: tuple[str, ...]) -> None:
-    """Reject a candidate that cannot upgrade the running database history."""
+    """Compatibility shim for callers of the previous deployment preflight API."""
     if len(current_revisions) > 1:
         raise SchemaCompatibilityError("Database has multiple Alembic revisions; refusing deployment")
     try:
         migration_compatibility(migrations_dir, current_revisions)
     except ValueError as exc:
         raise SchemaCompatibilityError(f"Candidate migration history is incompatible: {exc}") from exc
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -844,6 +844,23 @@ def create_tts_service(
     # resolved up front and reported on the creation line.
     is_deepgram = user_config.tts.provider == ServiceProviders.DEEPGRAM.value
     deepgram_base_url = _deepgram_base_url(user_config.tts) if is_deepgram else None
+    provider_value = getattr(user_config.tts.provider, "value", user_config.tts.provider)
+    provider_key = str(provider_value or "").casefold()
+    model_value = str(getattr(user_config.tts, "model", None) or "").casefold()
+    has_dynamic_caller_language_adapter = (
+        provider_key == ServiceProviders.SARVAM.value
+        or (
+            provider_key == ServiceProviders.SPEACHES.value
+            and model_value == "indic-vits-rasa-13"
+        )
+    )
+    if not has_dynamic_caller_language_adapter:
+        logger.info(
+            "tts_caller_language_route provider={} model={} dynamic_update=not_applied "
+            "reason=no_provider_specific_adapter configured_settings_preserved=true",
+            provider_key or "unknown",
+            model_value or "default",
+        )
 
     logger.info(
         f"Creating TTS service: provider={user_config.tts.provider}, "
@@ -1131,6 +1148,7 @@ def create_tts_service(
             "kn-IN": Language.KN,
             "ml-IN": Language.ML,
             "mr-IN": Language.MR,
+            "or-IN": Language.OR_IN,
             "od-IN": Language.OR,
             "pa-IN": Language.PA,
             "ta-IN": Language.TA,
@@ -1150,10 +1168,12 @@ def create_tts_service(
 
         voice = (
             getattr(user_config.tts, "voice", None) or ""
-        ).strip().lower() or "anushka"
+        ).strip().lower() or (
+            "shubh" if model.casefold() in {"bulbul:v3", "bulbul:v3-beta"} else "anushka"
+        )
         speed = getattr(user_config.tts, "speed", None)
         settings_kwargs = {
-            "model": user_config.tts.model,
+            "model": model,
             "voice": voice,
             "language": pipecat_language,
         }

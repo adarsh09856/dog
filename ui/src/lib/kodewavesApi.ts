@@ -741,6 +741,11 @@ export const promptTemplatesApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  updateTemplate: (id: string | number, data: Partial<PromptTemplate>) =>
+    apiFetch<{ message: string; id: string; title: string }>(`/prompt-templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   deleteTemplate: (id: string | number) =>
     apiFetch<{ message: string }>(`/prompt-templates/${id}`, {
       method: 'DELETE',

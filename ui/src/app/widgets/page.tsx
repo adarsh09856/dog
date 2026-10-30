@@ -104,7 +104,7 @@ export default function WidgetsPage() {
       listRequest.current += 1;
       embedRequest.current += 1;
     };
-  }, [authLoading, user, fetchWidgets]);
+  }, [authLoading, user]);
 
   const handleSaveWidget = async () => {
     if (!editingWidget || !editingWidget.name) {
@@ -464,7 +464,7 @@ export default function WidgetsPage() {
           </DialogHeader>
 
           <div className="py-2 space-y-3">
-            <pre className="p-4 rounded-lg bg-muted font-mono text-xs overflow-x-auto text-foreground border border-border/60">
+            <pre className="min-w-0 max-w-full whitespace-pre-wrap break-all p-4 rounded-lg bg-muted font-mono text-xs overflow-x-auto text-foreground border border-border/60">
               {currentSnippet}
             </pre>
           </div>
