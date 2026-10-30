@@ -1,7 +1,5 @@
 "use client";
-import { WorkspacePageHeader } from "@/components/layout/WorkspacePageHeader";
-
-import { FileText, Layers3, Upload } from "lucide-react";
+import { BookOpenCheck, FileText, Layers3, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -18,6 +16,7 @@ import { useAuth } from "@/lib/auth";
 
 import DocumentList from "./DocumentList";
 import DocumentUpload from "./DocumentUpload";
+import styles from "./FilesWorkspace.module.css";
 
 export default function FilesPage() {
     const { user, redirectToLogin, loading } = useAuth();
@@ -38,41 +37,44 @@ export default function FilesPage() {
 
     if (loading || !user) {
         return (
-            <div className="container mx-auto px-4 py-8">
+            <main className={styles.page}>
                 <div className="space-y-4">
                     <Skeleton className="h-12 w-64" />
                     <Skeleton className="h-64 w-full" />
                 </div>
-            </div>
+            </main>
         );
     }
 
     return (
-        <div key={`${user.id}:${"selectedTeam" in user ? user.selectedTeam?.id : user.organizationId}`} className="container mx-auto px-4 py-8">
-            <WorkspacePageHeader
-                area="BUILD / KNOWLEDGE"
-                title="Knowledge base"
-                description="Give your agents verified source material. Upload documents once, monitor processing, and attach the right knowledge to each workflow."
-                actions={<Button onClick={() => setIsUploadOpen(true)}><Upload className="mr-2 h-4 w-4" />Upload files</Button>}
-            />
+        <main key={`${user.id}:${"selectedTeam" in user ? user.selectedTeam?.id : user.organizationId}`} className={styles.page}>
+            <header className={styles.hero}>
+                <div className={styles.glow} aria-hidden="true" />
+                <div className={styles.heroCopy}>
+                    <span className={styles.eyebrow}><BookOpenCheck className="h-3.5 w-3.5" /> Build / Knowledge</span>
+                    <h1>Knowledge base</h1>
+                    <p>Give agents dependable source material. Upload documents once, track indexing, and reuse verified knowledge across workflows.</p>
+                </div>
+                <Button className={styles.heroAction} onClick={() => setIsUploadOpen(true)}><Upload className="h-4 w-4" />Upload files</Button>
+            </header>
 
-            <section aria-label="Knowledge base workflow" className="mb-6 grid gap-3 md:grid-cols-3">
-                <div className="flex gap-3 rounded-xl border border-border bg-card p-4">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Upload className="h-4 w-4" /></span>
-                    <div><h2 className="text-sm font-semibold">Add source material</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Upload PDFs and supported documents for your workspace.</p></div>
+            <section aria-label="Knowledge base workflow" className={styles.stepRail}>
+                <div className={styles.step}>
+                    <span className={styles.stepIcon}><Upload className="h-4 w-4" /></span>
+                    <div><h2>Add source material</h2><p>Upload supported documents to your organization library.</p></div>
                 </div>
-                <div className="flex gap-3 rounded-xl border border-border bg-card p-4">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileText className="h-4 w-4" /></span>
-                    <div><h2 className="text-sm font-semibold">Track processing</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Review document status before relying on it in a conversation.</p></div>
+                <div className={styles.step}>
+                    <span className={styles.stepIcon}><FileText className="h-4 w-4" /></span>
+                    <div><h2>Track processing</h2><p>Check indexing status before agents rely on a document.</p></div>
                 </div>
-                <div className="flex gap-3 rounded-xl border border-border bg-card p-4">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Layers3 className="h-4 w-4" /></span>
-                    <div><h2 className="text-sm font-semibold">Reuse across agents</h2><p className="mt-1 text-xs leading-5 text-muted-foreground">Keep shared reference files organized in one library.</p></div>
+                <div className={styles.step}>
+                    <span className={styles.stepIcon}><Layers3 className="h-4 w-4" /></span>
+                    <div><h2>Reuse across agents</h2><p>Share approved reference files across your workflows.</p></div>
                 </div>
             </section>
 
-            <Card>
-                <CardHeader>
+            <Card className={styles.documentsPanel}>
+                <CardHeader className={styles.panelHeader}>
                     <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                         <div>
                             <CardTitle>Your Documents</CardTitle>
@@ -80,7 +82,7 @@ export default function FilesPage() {
                                 Documents shared across all agents in your organization
                             </CardDescription>
                         </div>
-                        <span className="text-xs text-muted-foreground">Shared at the organization level</span>
+                        <span className={styles.scopePill}>Shared at the organization level</span>
                     </div>
                 </CardHeader>
                 <CardContent>
@@ -99,6 +101,6 @@ export default function FilesPage() {
                     <DocumentUpload onUploadSuccess={handleUploadSuccess} />
                 </DialogContent>
             </Dialog>
-        </div>
+        </main>
     );
 }

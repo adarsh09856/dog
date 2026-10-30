@@ -14,11 +14,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useOrganizationTimezone } from '@/hooks/useOrganizationTimezone';
+import { detailFromError } from '@/lib/apiError';
 import { formatDateTime } from '@/lib/dateTime';
 import logger from '@/lib/logger';
-import { detailFromError } from '@/lib/apiError';
 
 import DocumentEditor, { isEditableDocument } from './DocumentEditor';
+import styles from './FilesWorkspace.module.css';
 
 interface DocumentListProps {
   refreshTrigger: number;
@@ -159,9 +160,9 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
 
   if (isLoading && documents.length === 0) {
     return (
-      <div className="space-y-4">
+      <div className={styles.list}>
         {[1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
+          <div key={i} className={styles.skeletonRow}>
             <div className="space-y-2 flex-1">
               <Skeleton className="h-4 w-48" />
               <Skeleton className="h-3 w-64" />
@@ -175,7 +176,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
 
   if (error) {
     return (
-      <div role="alert" className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
+      <div role="alert" className={styles.error}>
         {error}
         <Button variant="outline" className="ml-3" onClick={fetchDocuments}>Retry</Button>
       </div>
@@ -183,16 +184,17 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={styles.list}>
       {/* Search and Refresh */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className={styles.toolbar}>
+        <div className={styles.search}>
+          <Search />
           <Input
+            aria-label="Search documents"
             placeholder="Search documents..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className=""
           />
         </div>
         <Button
@@ -207,8 +209,8 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
 
       {/* Document List */}
       {filteredDocuments.length === 0 ? (
-        <div className="text-center py-12">
-          <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <div className={styles.empty}>
+          <span className={styles.emptyIcon}><FileText className="h-6 w-6" /></span>
           <p className="text-muted-foreground">
             {searchQuery
               ? 'No documents match your search'
@@ -223,7 +225,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
               role={canOpen(doc) ? 'button' : undefined}
               tabIndex={canOpen(doc) ? 0 : undefined}
               aria-label={canOpen(doc) ? `Edit ${doc.filename}` : undefined}
-              className={`flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors ${
+              className={`${styles.row} ${canOpen(doc) ? styles.rowClickable : ""} ${
                 canOpen(doc)
                   ? 'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
                   : ''
@@ -238,11 +240,11 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
               }}
             >
               <div className="flex items-center gap-4 flex-1">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <div className={styles.fileIcon}>
                   <FileText className="w-5 h-5 text-primary" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                <div className={styles.fileDetails}>
+                  <div className={styles.fileTitle}>
                     <span className="font-medium truncate">{doc.filename}</span>
                     {getStatusBadge(doc)}
                     {doc.retrieval_mode === 'full_document' ? (
@@ -251,7 +253,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
                       <Badge variant="outline" className="text-xs">Chunked</Badge>
                     )}
                   </div>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                  <div className={styles.fileMeta}>
                     <span>{formatFileSize(doc.file_size_bytes)}</span>
                     {doc.processing_status === 'completed' && doc.retrieval_mode !== 'full_document' && (
                       <span>{doc.total_chunks} chunks</span>
@@ -280,13 +282,14 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
                 </div>
               </div>
               <div
-                className="flex items-center gap-1"
+                className={styles.rowActions}
                 onClick={(event) => event.stopPropagation()}
               >
                 {isEditableDocument(doc.filename) && (
                   <Button
                     variant="ghost"
                     size="sm"
+                    aria-label={`Edit ${doc.filename}`}
                     onClick={() => setEditingDoc(doc)}
                     disabled={isBusy(doc)}
                     title={isBusy(doc) ? 'Available once processing finishes' : 'Edit'}
@@ -297,6 +300,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label={`Delete ${doc.filename}`}
                   onClick={() => handleDelete(doc.document_uuid, doc.filename)}
                   className="text-destructive hover:text-destructive/90"
                 >

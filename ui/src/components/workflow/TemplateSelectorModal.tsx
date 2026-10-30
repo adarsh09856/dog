@@ -237,17 +237,17 @@ export function TemplateSelectorModal({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-                <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <DialogContent className="max-w-4xl max-h-[90vh] flex min-h-0 flex-col overflow-hidden p-0">
+                <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b">
                     <div className="flex items-center gap-3">
                         <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md">
                             <Wand2 className="h-5 w-5" />
                         </div>
-                        <div>
+                        <div className="min-w-0 pr-7">
                             <DialogTitle className="text-xl font-bold">
                                 Choose an Agent Template
                             </DialogTitle>
-                            <DialogDescription className="text-sm text-muted-foreground">
+                            <DialogDescription className="text-sm leading-relaxed text-foreground/75">
                                 Select from pre-built, industry-tuned voice agents with prompts and speech logic ready to deploy.
                             </DialogDescription>
                         </div>
@@ -281,7 +281,7 @@ export function TemplateSelectorModal({
                 </DialogHeader>
 
                 {/* Templates Grid / Preview Body */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-6">
                     {selectedTemplate ? (
                         /* Selected Template Preview & Customize View */
                         <div className="space-y-6">
@@ -299,9 +299,9 @@ export function TemplateSelectorModal({
                                 </Badge>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
                                 {/* Left Column: Configuration */}
-                                <div className="space-y-4">
+                                <div className="min-w-0 space-y-4">
                                     <div className="flex items-start gap-3">
                                         <div
                                             className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 ${COLOR_MAP[selectedTemplate.color]?.iconBg || 'bg-primary text-white'}`}
@@ -311,7 +311,7 @@ export function TemplateSelectorModal({
                                                 return <IconComp className="h-6 w-6" />;
                                             })()}
                                         </div>
-                                        <div>
+                                        <div className="min-w-0">
                                             <h3 className="text-lg font-bold">
                                                 {selectedTemplate.name}
                                             </h3>
@@ -363,16 +363,16 @@ export function TemplateSelectorModal({
                                             </p>
                                         </div>
 
-                                        <div className="bg-muted/40 rounded-lg p-3 border space-y-2">
+                                        <div className="min-w-0 break-words bg-muted/40 rounded-lg p-3 border space-y-2">
                                             <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
                                                 <Volume2 className="h-3.5 w-3.5 text-primary" />
                                                 Suggested Tone & Persona
                                             </div>
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="text-xs leading-relaxed text-foreground/75">
                                                 <span className="font-semibold text-foreground">Tone:</span>{' '}
                                                 {selectedTemplate.suggestedVoiceTone}
                                             </p>
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="text-xs leading-relaxed text-foreground/75">
                                                 <span className="font-semibold text-foreground">Persona:</span>{' '}
                                                 {selectedTemplate.suggestedPersonality}
                                             </p>
@@ -385,7 +385,7 @@ export function TemplateSelectorModal({
                                                     <Badge
                                                         key={feat}
                                                         variant="secondary"
-                                                        className="text-[11px] font-normal"
+                                                        className="max-w-full whitespace-normal break-words text-left text-[11px] font-normal leading-snug"
                                                     >
                                                         <Check className="h-3 w-3 mr-1 text-emerald-600" />
                                                         {feat}
@@ -397,13 +397,13 @@ export function TemplateSelectorModal({
                                 </div>
 
                                 {/* Right Column: Prompt & Greeting Preview */}
-                                <div className="space-y-4">
+                                <div className="min-w-0 space-y-4">
                                     <div className="space-y-1.5">
                                         <Label className="text-xs font-semibold flex items-center gap-1.5">
                                             <MessageSquare className="h-3.5 w-3.5 text-primary" />
                                             Spoken First Message
                                         </Label>
-                                        <div className="bg-muted/40 p-3 rounded-lg border text-xs text-foreground italic">
+                                        <div className="min-w-0 break-words bg-muted/40 p-3 rounded-lg border text-sm leading-relaxed text-foreground italic">
                                             &ldquo;
                                             {templatePreview?.nodes[0].data.greeting || 'The agent will generate a brief greeting in the selected language when the call starts.'}
                                             &rdquo;
@@ -415,7 +415,7 @@ export function TemplateSelectorModal({
                                             <Sparkles className="h-3.5 w-3.5 text-primary" />
                                             System Instructions Preview
                                         </Label>
-                                        <div className="bg-muted/30 p-3 rounded-lg border text-xs font-mono text-muted-foreground max-h-56 overflow-y-auto whitespace-pre-wrap">
+                                        <div className="min-w-0 max-h-56 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border bg-muted/30 p-3 text-xs font-mono leading-relaxed text-foreground/80">
                                             {templatePreview?.nodes[0].data.prompt}
                                         </div>
                                     </div>
@@ -424,7 +424,7 @@ export function TemplateSelectorModal({
                         </div>
                     ) : (
                         /* Grid of Templates */
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                             {filteredTemplates.map((template) => {
                                 const IconComponent = getTemplateIcon(template.icon);
                                 const colorStyles = COLOR_MAP[template.color] || COLOR_MAP.slate;
@@ -433,10 +433,10 @@ export function TemplateSelectorModal({
                                     <Card
                                         key={template.id}
                                         onClick={() => handleSelectTemplate(template)}
-                                        className={`group relative flex flex-col justify-between p-4 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/50 border`}
+                                        className="group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-xl border p-4 transition-all duration-200 hover:border-primary/50 hover:shadow-md"
                                     >
-                                        <div>
-                                            <div className="flex items-start justify-between mb-3">
+                                        <div className="min-w-0">
+                                            <div className="mb-3 flex min-w-0 items-start justify-between gap-2">
                                                 <div
                                                     className={`h-10 w-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105 ${colorStyles.iconBg}`}
                                                 >
@@ -444,37 +444,37 @@ export function TemplateSelectorModal({
                                                 </div>
                                                 <Badge
                                                     variant="secondary"
-                                                    className={`text-[10px] uppercase font-semibold tracking-wider ${colorStyles.bg} ${colorStyles.text}`}
+                                                    className={`max-w-[65%] whitespace-normal break-words text-right text-[10px] uppercase font-semibold tracking-wider leading-snug ${colorStyles.bg} ${colorStyles.text}`}
                                                 >
                                                     {template.badge}
                                                 </Badge>
                                             </div>
 
-                                            <h4 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">
+                                            <h4 className="break-words text-sm font-semibold leading-snug text-foreground transition-colors group-hover:text-primary">
                                                 {template.name}
                                             </h4>
-                                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                            <p className="mt-1 line-clamp-3 break-words text-[13px] leading-relaxed text-foreground/75">
                                                 {template.description}
                                             </p>
 
-                                            <div className="mt-3 flex flex-wrap gap-1">
+                                            <div className="mt-3 flex min-w-0 flex-wrap gap-1">
                                                 {template.features.slice(0, 2).map((feat) => (
                                                     <span
                                                         key={feat}
-                                                        className="inline-flex items-center text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground"
+                                                        className="inline-flex max-w-full items-center break-words rounded bg-muted px-1.5 py-0.5 text-[10px] leading-snug text-foreground/80"
                                                     >
                                                         {feat}
                                                     </span>
                                                 ))}
                                                 {template.features.length > 2 && (
-                                                    <span className="text-[10px] text-muted-foreground self-center">
+                                                    <span className="self-center text-[10px] text-foreground/75">
                                                         +{template.features.length - 2} more
                                                     </span>
                                                 )}
                                             </div>
                                         </div>
 
-                                        <div className="mt-4 pt-3 border-t flex items-center justify-between text-xs text-primary font-medium">
+                                        <div className="mt-4 flex min-w-0 flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs font-medium text-primary">
                                             <span>Customize & Deploy</span>
                                             <span className="transition-transform group-hover:translate-x-1">
                                                 &rarr;
@@ -487,7 +487,7 @@ export function TemplateSelectorModal({
                     )}
                 </div>
 
-                <DialogFooter className="px-6 py-4 border-t bg-muted/20 flex items-center justify-between">
+                <DialogFooter className="shrink-0 border-t bg-muted/20 px-6 py-4 flex items-center justify-between">
                     {selectedTemplate ? (
                         <>
                             <Button

@@ -1,0 +1,62 @@
+.panel {
+  --tester-wash: color-mix(in srgb, var(--primary) 4%, var(--background));
+  background: var(--card);
+}
+.heading {
+  padding: 18px 18px 13px;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 55%),
+    var(--card);
+}
+.eyebrow {
+  color: var(--muted-foreground);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.title { margin-top: 5px; font-size: 19px; font-weight: 620; letter-spacing: -.035em; line-height: 1.25; }
+.description { max-width: 34rem; margin-top: 4px; color: var(--muted-foreground); font-size: 12px; line-height: 1.55; }
+.tabsHeader { padding: 12px 16px 14px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--card) 96%, var(--muted)); }
+.tabList { min-height: 42px; border: 1px solid var(--border); background: var(--muted); }
+.tabList button { min-height: 34px; gap: 7px; }
+.tabList button[data-state="active"] { color: var(--foreground); background: var(--card); box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 12%, transparent); }
+.audioContent,
+.textContent { background: var(--tester-wash); }
+.modeIntro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+}
+.modeIntro strong { display: block; font-size: 12px; font-weight: 620; }
+.modeIntro p { margin-top: 3px; color: var(--muted-foreground); font-size: 11px; line-height: 1.5; }
+.modeTag {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 7%, var(--card));
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.chatToolbar { min-height: 40px; gap: 12px; }
+.chatToolbarLabel { color: var(--muted-foreground); font-size: 11px; font-weight: 560; }
+.resetButton { border: 1px solid var(--border); background: var(--card); }
+@media (max-width: 520px) {
+  .heading { padding: 15px 14px 11px; }
+  .tabsHeader { padding: 10px 12px 12px; }
+  .title { font-size: 17px; }
+  .modeIntro { padding: 10px; }
+  .modeTag { font-size: 8px; }
+}

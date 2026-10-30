@@ -34,6 +34,7 @@ import { adminApi, apiFetch, PlatformSettings } from "@/lib/kodewavesApi";
 
 import admin from "../AdminWorkspace.module.css";
 import IndicSttTest from "./IndicSttTest";
+import styles from "./SettingsWorkspace.module.css";
 
 const POPULAR_OLLAMA_MODELS = [
   { value: "qwen3.5:2b-q4_K_M", label: "Qwen 3.5 2B Q4 (CPU)" },
@@ -236,11 +237,17 @@ export default function AdminSettingsPage() {
     return `${mb.toFixed(1)} MB`;
   };
 
+  const emailConfigured = Boolean(settings.smtp_host && settings.smtp_from);
+  const paymentsConfigured = Boolean(
+    (settings.razorpay_key_id && settings.razorpay_key_secret) ||
+    (settings.stripe_publishable_key && settings.stripe_secret_key),
+  );
+
   if (authLoading || loading) return <div role="status" className="flex items-center gap-3 p-8 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading platform settings…</div>;
   if (loadError) return <div role="alert" className="space-y-4 rounded-xl border border-destructive/30 p-8"><p className="text-sm text-destructive">{loadError}</p><Button variant="outline" onClick={() => void fetchSettings()}>Retry</Button></div>;
 
   return (
-    <div className={admin.surface} data-area="PLATFORM / CONFIGURATION">
+    <div className={`${admin.surface} ${styles.surface}`} data-area="PLATFORM / CONFIGURATION">
       {/* Header */}
       <div className={admin.hero}>
         <div>
@@ -250,7 +257,7 @@ export default function AdminSettingsPage() {
             White-label Kodewaves, configure sovereign SMTP credentials, manage self-hosted server Ollama models, and set payment gateways.
           </p>
         </div>
-      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+      <div className={`${styles.heroActions} flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end`}>
           {savedSuccess && (
             <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" /> Settings Saved Successfully
@@ -263,9 +270,23 @@ export default function AdminSettingsPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <section className={styles.snapshot} aria-label="Platform configuration overview">
+        <div className={styles.snapshotBrand}>
+          <span className={styles.brandMark}>{settings.company_name?.trim().slice(0, 1).toUpperCase() || "K"}</span>
+          <div className="min-w-0"><p className={styles.snapshotLabel}>Platform identity</p><p className={styles.snapshotName}>{settings.company_name || "Platform name not set"}</p></div>
+        </div>
+        <div className={styles.snapshotItem}><Cpu size={16} aria-hidden="true" /><div><p className={styles.snapshotLabel}>Self-hosted AI</p><p className={styles.snapshotValue}>{settings.enable_local_ai_engine ? "Enabled" : "Disabled"}</p></div></div>
+        <div className={styles.snapshotItem}><Mail size={16} aria-hidden="true" /><div><p className={styles.snapshotLabel}>Email dispatch</p><p className={styles.snapshotValue}>{emailConfigured ? "Configured" : "Needs setup"}</p></div></div>
+        <div className={styles.snapshotItem}><CreditCard size={16} aria-hidden="true" /><div><p className={styles.snapshotLabel}>Payments</p><p className={styles.snapshotValue}>{paymentsConfigured ? "Configured" : "Needs setup"}</p></div></div>
+      </section>
+
+      <nav className={styles.sectionNav} aria-label="Platform settings sections">
+        <a href="#settings-branding">Branding</a><a href="#settings-policies">Access policies</a><a href="#settings-local-ai">Local AI</a><a href="#settings-ollama">Ollama models</a><a href="#settings-tts">Indian TTS</a><a href="#settings-stt">Indian STT</a><a href="#settings-email">Email</a><a href="#settings-payments">Payments</a>
+      </nav>
+
+      <div className={`${styles.settingsGrid} grid gap-6 md:grid-cols-2`}>
         {/* BRANDING */}
-        <Card className="border-border/60">
+        <Card id="settings-branding" className="border-border/60">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Building2 className="h-5 w-5 text-primary" />
@@ -334,7 +355,7 @@ export default function AdminSettingsPage() {
         </Card>
 
         {/* SOVEREIGN ACCESS & POLICIES */}
-        <Card className="border-border/60">
+        <Card id="settings-policies" className="border-border/60">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-emerald-500" />
@@ -384,7 +405,7 @@ export default function AdminSettingsPage() {
         </Card>
 
         {/* LOCAL CPU AI ENGINE SETTINGS */}
-        <Card className="border-border/60 md:col-span-2">
+        <Card id="settings-local-ai" className="border-border/60 md:col-span-2">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -495,7 +516,7 @@ export default function AdminSettingsPage() {
         </Card>
 
         {/* OLLAMA MODEL MANAGER */}
-        <Card className="border-border/60 md:col-span-2">
+        <Card id="settings-ollama" className="border-border/60 md:col-span-2">
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
@@ -675,7 +696,7 @@ export default function AdminSettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 md:col-span-2">
+        <Card id="settings-tts" className="border-border/60 md:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">Self-hosted Indian TTS</CardTitle>
             <CardDescription>
@@ -689,7 +710,7 @@ export default function AdminSettingsPage() {
           </CardContent>
         </Card>
         {/* LOCAL INDIAN STT */}
-        <Card className="border-border/60 md:col-span-2">
+        <Card id="settings-stt" className="border-border/60 md:col-span-2">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Mic className="h-5 w-5 text-sky-500" />
@@ -704,7 +725,7 @@ export default function AdminSettingsPage() {
           </CardContent>
         </Card>
         {/* SMTP EMAIL SETTINGS */}
-        <Card className="border-border/60 md:col-span-2">
+        <Card id="settings-email" className="border-border/60 md:col-span-2">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Mail className="h-5 w-5 text-amber-500" />
@@ -803,7 +824,7 @@ export default function AdminSettingsPage() {
         </Card>
 
         {/* PAYMENT GATEWAY SETTINGS */}
-        <Card className="border-border/60 md:col-span-2">
+        <Card id="settings-payments" className="border-border/60 md:col-span-2">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-emerald-500" />

@@ -63,6 +63,7 @@ import { useAuth } from "@/lib/auth";
 import { adminApi, AdminUserItem, SaaSPlan } from "@/lib/kodewavesApi";
 
 import admin from "../AdminWorkspace.module.css";
+import styles from "./UsersWorkspace.module.css";
 
 function userEditValues(user?: AdminUserItem) {
   return {
@@ -340,9 +341,14 @@ export default function AdminUsersPage() {
     document.body.removeChild(link);
   };
 
+  const activeAccounts = users.filter((account) => account.is_active).length;
+  const suspendedAccounts = users.length - activeAccounts;
+  const ownerAccounts = users.filter((account) => account.is_superuser).length;
+  const frozenWallets = users.filter((account) => account.is_wallet_frozen).length;
+
   return (
-    <div className={admin.surface} data-area="IDENTITY / ACCOUNTS">
-      {plansError && <p role="alert" className="text-sm text-destructive">Plan catalog: {plansError}. Reopen the form to retry.</p>}
+    <div className={`${admin.surface} ${styles.surface}`} data-area="IDENTITY / ACCOUNTS">
+      {plansError && <p role="alert" className={styles.statusError}>Plan catalog: {plansError}. Reopen the form to retry.</p>}
       {/* Header */}
       <div className={admin.hero}>
         <div>
@@ -352,7 +358,7 @@ export default function AdminUsersPage() {
             Provision accounts, adjust balances and quotas, reset access, and review account status.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className={`${styles.heroActions} flex items-center gap-2`}>
           <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-2">
             <Download className="h-3.5 w-3.5" />
             Export CSV
@@ -364,9 +370,23 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
+      <section className={styles.metrics} aria-label="Account directory summary">
+        {[
+          { label: "Accounts in current result", value: loading ? "—" : users.length, note: "Matches active filters", icon: Users, risk: false },
+          { label: "Active workspaces", value: loading ? "—" : activeAccounts, note: "Authenticated access enabled", icon: UserCheck, risk: false },
+          { label: "Suspended accounts", value: loading ? "—" : suspendedAccounts, note: "New requests blocked", icon: ShieldAlert, risk: suspendedAccounts > 0 },
+          { label: "Frozen wallets", value: loading ? "—" : frozenWallets, note: `${ownerAccounts} superadmin${ownerAccounts === 1 ? "" : "s"} in result`, icon: Shield, risk: frozenWallets > 0 },
+        ].map(({ label, value, note, icon: Icon, risk }) => (
+          <div key={label} className={`${styles.metric} ${risk ? styles.metricRisk : ""}`}>
+            <span className={styles.metricIcon}><Icon size={16} aria-hidden="true" /></span>
+            <div><p className={styles.metricLabel}>{label}</p><p className={styles.metricValue}>{value}</p><p className={styles.metricNote}>{note}</p></div>
+          </div>
+        ))}
+      </section>
+
       {/* Error Alert */}
       {error && (
-        <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+        <div className={styles.statusError}>
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span>Database Error: {error}</span>
@@ -378,19 +398,20 @@ export default function AdminUsersPage() {
       )}
 
       {/* Filters Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-card p-3 rounded-lg border border-border/60">
-        <div className="flex flex-1 items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-80">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+      <div className={styles.filterBar} aria-label="Filter accounts">
+        <div className={styles.filters}>
+          <div className={styles.search}>
+            <Search className="h-4 w-4" aria-hidden="true" />
             <Input
+              aria-label="Search accounts"
               placeholder="Search by email, name, provider ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-9 text-xs"
+              className="h-9 text-xs"
             />
           </div>
           <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="w-32 h-9 text-xs">
+            <SelectTrigger className="w-32 h-9 text-xs" aria-label="Filter by role">
               <SelectValue placeholder="Role" />
             </SelectTrigger>
             <SelectContent>
@@ -400,7 +421,7 @@ export default function AdminUsersPage() {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-32 h-9 text-xs">
+            <SelectTrigger className="w-32 h-9 text-xs" aria-label="Filter by account status">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -410,19 +431,22 @@ export default function AdminUsersPage() {
             </SelectContent>
           </Select>
         </div>
+        <div className="flex items-center gap-3">
+        <span className={styles.resultHint}>{loading ? "Refreshing directory…" : `Showing ${users.length} account${users.length === 1 ? "" : "s"}`}</span>
         <Button variant="ghost" size="sm" onClick={fetchUsers} disabled={loading} className="gap-2 shrink-0">
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </Button>
+        </div>
       </div>
 
       {/* Users Table */}
-      <Card className="border-border/60">
+      <Card className={styles.directory}>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-primary" />
-              <span>Registered Accounts ({users.length})</span>
+              <span>Account directory</span>
             </div>
             <Badge variant="secondary" className="text-xs">Account directory</Badge>
           </CardTitle>
@@ -432,7 +456,7 @@ export default function AdminUsersPage() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-xl border border-border/60">
-            <Table>
+            <Table className={styles.table}>
               <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead className="text-xs">User / Email</TableHead>
@@ -466,10 +490,10 @@ export default function AdminUsersPage() {
                     return (
                       <TableRow key={u.id} className="hover:bg-muted/20">
                         <TableCell>
-                          <div className="font-semibold text-xs flex items-center gap-1.5">
+                          <div className={styles.accountEmail}>
                             {u.email}
                           </div>
-                          <div className="text-[11px] text-muted-foreground">
+                          <div className={styles.accountMeta}>
                             {u.name || `ID #${u.id}`} • {u.created_at ? new Date(u.created_at).toLocaleDateString() : ""}
                           </div>
                         </TableCell>
@@ -500,7 +524,7 @@ export default function AdminUsersPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-col items-end gap-0.5">
-                            <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            <span className={styles.accountBalance}>
                               {balance.toFixed(1)} mins
                             </span>
                             {u.is_wallet_frozen && (
