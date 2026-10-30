@@ -55,4 +55,17 @@ describe('TemplateSelectorModal', () => {
     })));
     expect(mocks.push).toHaveBeenCalledWith('/workflow/42?onboarding=web_call');
   });
+
+  it('keeps appointment-template accents within the workspace green palette', () => {
+    render(<TemplateSelectorModal open onOpenChange={vi.fn()} />);
+
+    const appointment = screen.getByText('Appointment Setter & Scheduling');
+    const card = appointment.closest('[data-slot="card"]');
+    const icon = card?.querySelector('.h-10.w-10');
+    const badge = screen.getByText('High Conversion');
+
+    expect(icon?.className).toContain('bg-emerald-500');
+    expect(icon?.className).not.toContain('bg-blue-500');
+    expect(badge.className).toContain('text-emerald-700');
+  });
 });
