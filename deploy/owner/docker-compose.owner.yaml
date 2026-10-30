@@ -11,11 +11,11 @@ services:
       owner-license-signer:
         condition: service_healthy
     networks:
-      - kodewaves-network
+      - app-network
       - owner-signer-network
 
   owner-license-signer:
-    image: "${KODEWAVES_API_IMAGE:-kodewaves-api:v2.0.0}"
+    image: "${REGISTRY:-kodewaves}/kodewaves-api:${VERSION:-v2.0.0}"
     command: ["python", "-m", "api.services.owner_license_signer"]
     restart: unless-stopped
     environment:
