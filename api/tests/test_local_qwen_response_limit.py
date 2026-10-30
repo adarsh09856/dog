@@ -26,6 +26,25 @@ def test_qwen3_voice_calls_disable_thinking_in_provider_request():
     assert params['temperature'] == 0.1
 
 
+def test_local_qwen_guard_keeps_booking_safety_and_requests_short_spoken_replies():
+    service = create_llm_service_from_provider(
+        'ollama', 'qwen3.5:2b', 'sovereign-local-cpu', base_url='http://localhost:11434/v1',
+    )
+    params = service.build_chat_completion_params({
+        'messages': [
+            {'role': 'system', 'content': 'Assist the caller.'},
+            {'role': 'user', 'content': 'I need to book for tomorrow.'},
+        ],
+    })
+    guard = next(
+        message['content'] for message in params['messages']
+        if message.get('role') == 'system' and 'Never claim an action succeeded' in message.get('content', '')
+    )
+    assert 'Keep spoken replies concise' in guard
+    assert 'never guess a date, year, or time' in guard
+    assert 'every caller-provided service, date, and time' in guard
+
+
 @pytest.mark.parametrize('model', ['qwen3:1.7b', 'qwen3.5:2b-q4_K_M'])
 def test_local_qwen3_prompt_disables_thinking_for_fast_speech(model):
     service = create_llm_service_from_provider(
