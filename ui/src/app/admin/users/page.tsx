@@ -63,6 +63,7 @@ import { useAuth } from "@/lib/auth";
 import { adminApi, AdminUserItem, SaaSPlan } from "@/lib/kodewavesApi";
 
 import admin from "../AdminWorkspace.module.css";
+import styles from "./UsersWorkspace.module.css";
 
 function userEditValues(user?: AdminUserItem) {
   return {

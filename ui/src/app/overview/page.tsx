@@ -399,7 +399,15 @@ export default function OverviewPage() {
           </section>
         )}
 
-        <section aria-label="Workspace tools" className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}>
+        <section
+          aria-label="Workspace tools"
+          className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}
+          style={{
+            "--tool-directory-accent": "var(--brand-primary-color, var(--primary))",
+            "--tool-directory-item-rows": toolDirectoryItemRows,
+            "--tool-directory-row-count": toolDirectoryItemRows + 2,
+          } as React.CSSProperties}
+        >
           {sections.map((section, index) => (
             <section key={section.category} className={panel.toolGroup} aria-label={section.category}>
               <div className={panel.groupHeading}><span>0{index + 1}</span><h2>{section.category}</h2></div>

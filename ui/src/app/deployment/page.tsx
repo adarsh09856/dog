@@ -7,7 +7,6 @@ import {
   Globe,
   LockKeyhole,
   Server,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -22,44 +21,21 @@ const deploymentOptions = [
     description: "Kodewaves operates the hosted application and its data services. Your signed-in workspace holds organization-scoped agent and business records; external providers receive the call data needed for the services you connect.",
     icon: Cloud,
     details: [
-      "Workspace access and enabled plan features",
-      "Connect the providers configured for your account",
-      "Review usage, runs and conversation records",
+      "Kodewaves operates the application, database and configured recording storage",
+      "Signed-in workspaces contain agents, contacts, campaigns, appointments and call records",
+      "Selected cloud speech, model or carrier providers may process the data sent to them",
     ],
   },
   {
     label: "02 / CUSTOMER ENVIRONMENT",
-    title: "Client installation",
-    description: "Run a licensed installation in an agreed customer environment, with compute, providers and support scoped to the deployment.",
+    title: "Customer-managed installation",
+    description: "Run the licensed application in your environment. The default package includes PostgreSQL, Redis and MinIO; you operate its infrastructure, backups and retention, and choose whether calls use local or connected cloud providers.",
     icon: Server,
     details: [
-      "Signed license bound to installation and approved domain",
-      "Owner-managed license and installation status",
-      "Customer-managed workspace operations and local access",
+      "Agent and business records stay in the installation database and configured object storage",
+      "Cloud providers receive conversation data only for integrations you configure",
+      "The Kodewaves owner console receives license, domain/IP, heartbeat and integrity metadata",
     ],
-  },
-];
-
-const dataVisibility = [
-  {
-    title: "Public information",
-    text: "Marketing pages and public entry points are visible without a workspace login. They do not expose private workflows or provider credentials.",
-    icon: Globe,
-  },
-  {
-    title: "Private workspace records",
-    text: "Agents, workflows, contacts, appointments, transcripts and recordings belong to the selected organization and are shown to signed-in members according to their access.",
-    icon: Users,
-  },
-  {
-    title: "Visitor submissions",
-    text: "Details a visitor provides through a form, widget or conversation are saved to the owning workspace when that flow is configured to collect them; they are not public page content.",
-    icon: Database,
-  },
-  {
-    title: "Owner and operator metadata",
-    text: "Plan, license, installation, domain, usage and service-health information supports account administration. Hosted service operators manage the infrastructure; a customer installation keeps its application data on the customer-managed server.",
-    icon: Server,
   },
 ];
 
@@ -75,6 +51,24 @@ const planningSteps = [
   ["02", "Choose providers", "List language, voice, carrier and integration requirements before sizing compute."],
   ["03", "Set operating boundaries", "Agree domain, access, retention, backup and support ownership."],
   ["04", "Validate with real traffic", "Test complete calls with representative callers and measure the configured environment."],
+];
+
+const dataScopes = [
+  {
+    title: "Public information",
+    text: "Public means available before sign-in: Kodewaves marketing pages, plans published in the public catalog, and active credit packages returned by that catalog. It does not make customer workspace records public.",
+    icon: Globe,
+  },
+  {
+    title: "Private workspace records",
+    text: "Authenticated workspace APIs read records for the signed-in user’s selected organization. This includes agent workflows, CRM contacts, campaign and appointment data, form submissions, usage, call records, transcripts and recordings.",
+    icon: LockKeyhole,
+  },
+  {
+    title: "Visitor-submitted information",
+    text: "A public website widget or form can accept visitor input. Its saved answers and resulting call records are organization data in the workspace, not entries in the public plan catalog.",
+    icon: Database,
+  },
 ];
 
 export default function DeploymentPage() {
@@ -140,12 +134,14 @@ export default function DeploymentPage() {
             <div className={styles.sectionHead}>
               <div>
                 <p className={styles.eyebrow}>Data visibility</p>
-                <h2>Know what is public, private and operational.</h2>
+                <h2>Public pages are not public workspaces.</h2>
               </div>
-              <p>Visibility depends on where Kodewaves runs and which providers your workspace connects.</p>
+              <p>
+                “Public” describes what a visitor can see without signing in. Workspace and conversation data is handled by the selected deployment and the providers connected to it.
+              </p>
             </div>
             <div className={styles.capabilityGrid}>
-              {dataVisibility.map(({ title, text, icon: Icon }) => (
+              {dataScopes.map(({ title, text, icon: Icon }) => (
                 <article key={title} className={styles.capability}>
                   <span className={styles.capabilityIcon}><Icon aria-hidden className="size-5" /></span>
                   <h3>{title}</h3>
@@ -154,7 +150,7 @@ export default function DeploymentPage() {
               ))}
             </div>
             <p className="mt-5 max-w-4xl text-xs leading-6 text-muted-foreground">
-              Connected speech, LLM, telephony and storage providers receive the audio, transcript or record fields needed for the enabled service. Check each provider’s retention and privacy terms when configuring it.
+              For a customer-managed installation, the owner control plane stores license and installation status metadata; it is separate from the installation’s workspace database and recording storage. Connected cloud services can still process the data sent to them.
             </p>
           </div>
         </section>
