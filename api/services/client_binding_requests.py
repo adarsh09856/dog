@@ -4,7 +4,7 @@ import hashlib
 import os
 import secrets
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -23,7 +23,11 @@ from api.services.installation_identity import (
     InstallationIdentityError, sign_binding_request, verify_binding_request,
 )
 from api.services.installation_license import (
-    InstallationLicenseError, issue_license_token, load_license,
+    InstallationLicenseError, load_license,
+)
+from api.services.owner_license_signer_client import (
+    OwnerLicenseSignerError,
+    OwnerLicenseSignerPolicyError,
 )
 from api.services.owner_trust import OwnerTrustError, trusted_owner_status_url
 
@@ -93,10 +97,10 @@ async def send_binding_request(request: dict) -> dict:
 
 
 async def accept_binding_request(
-    request: dict, token: str, signers: list[tuple[bytes, str]],
+    request: dict, token: str, verification_keys: Sequence[str],
 ) -> dict:
     license_data = None
-    for _private_key, owner_public_key in signers:
+    for owner_public_key in verification_keys:
         try:
             license_data = load_license(token, owner_public_key)
             break
@@ -139,7 +143,9 @@ async def accept_binding_request(
 
 
 async def approve_binding_request(
-    request_id: int, user_id: int, signing_key: Callable[[], tuple[bytes, str]],
+    request_id: int,
+    user_id: int,
+    sign_license: Callable[[dict], Awaitable[tuple[str, str]]],
 ) -> dict:
     request = await get_client_binding_request(request_id)
     if request is None or request["status"] != "pending":
@@ -161,7 +167,6 @@ async def approve_binding_request(
     timestamp = int(time.time())
     if existing["expires_at"] <= timestamp:
         raise HTTPException(status_code=409, detail="Expired installations must be renewed before changing bindings")
-    private_key, public_key = signing_key()
     claims = {
         "iat": timestamp,
         "exp": existing["expires_at"],
@@ -174,8 +179,12 @@ async def approve_binding_request(
         "limits": existing["limits"],
     }
     try:
-        token = issue_license_token(claims, private_key)
+        token, public_key = await sign_license(claims)
         load_license(token, public_key, now=timestamp)
+    except OwnerLicenseSignerPolicyError as exc:
+        raise HTTPException(status_code=422, detail="License claims violate owner issuance policy") from exc
+    except OwnerLicenseSignerError as exc:
+        raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
     except (InstallationLicenseError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     accepted = await resolve_client_binding_request(
@@ -201,7 +210,8 @@ async def approve_binding_request(
 
 
 async def recover_approved_binding_token(
-    request_id: int, signing_key: Callable[[], tuple[bytes, str]],
+    request_id: int,
+    sign_license: Callable[[dict], Awaitable[tuple[str, str]]],
 ) -> dict:
     """Recreate the exact deterministic license token issued by an approved request."""
     request = await get_client_binding_request(request_id)
@@ -220,10 +230,6 @@ async def recover_approved_binding_token(
     ):
         raise HTTPException(status_code=409, detail="Installation bindings changed after approval; use the current renewal flow")
 
-    try:
-        private_key, public_key = signing_key()
-    except (OSError, ValueError, InstallationLicenseError) as exc:
-        raise HTTPException(status_code=503, detail="Owner license signing is unavailable") from exc
     claims = {
         "iat": request["license_issued_at"],
         "exp": installation["expires_at"],
@@ -235,9 +241,13 @@ async def recover_approved_binding_token(
         "features": installation["features"],
         "limits": installation["limits"],
     }
-    token = issue_license_token(claims, private_key)
     try:
+        token, public_key = await sign_license(claims)
         load_license(token, public_key)
+    except OwnerLicenseSignerPolicyError as exc:
+        raise HTTPException(status_code=409, detail="The approved license cannot be recreated by the current signer policy") from exc
+    except OwnerLicenseSignerError as exc:
+        raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
     except InstallationLicenseError as exc:
         raise HTTPException(status_code=409, detail="The current owner signing key cannot validate this recovered license") from exc
     fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()

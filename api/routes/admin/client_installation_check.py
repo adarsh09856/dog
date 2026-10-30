@@ -17,13 +17,16 @@ from api.db.client_installations import (
     get_client_installation_record,
     record_client_installation_check,
 )
-from api.routes.admin.client_installations import _owner_verification_signers
 from api.services.installation_license import (
     InstallationLicenseError,
-    issue_license_token,
     load_license,
 )
 from api.services.client_binding_requests import accept_binding_request
+from api.services.owner_license_signer_client import (
+    OwnerLicenseSignerError,
+    owner_license_public_keys,
+    sign_installation_status,
+)
 from api.services.installation_identity import (
     InstallationIdentityError,
     verify_enrollment,
@@ -147,8 +150,12 @@ async def enroll_client_installation(
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Installation bearer token required")
     token = authorization.removeprefix("Bearer ").strip()
+    try:
+        verification_keys = await owner_license_public_keys()
+    except OwnerLicenseSignerError as exc:
+        raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
     license_data = None
-    for _private_key, owner_public_key in _owner_verification_signers():
+    for owner_public_key in verification_keys:
         try:
             license_data = load_license(token, owner_public_key)
             break
@@ -185,17 +192,19 @@ async def check_client_installation(
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Installation bearer token required")
     token = authorization.removeprefix("Bearer ").strip()
-    verified = None
-    for private_key, public_key in _owner_verification_signers():
+    try:
+        verification_keys = await owner_license_public_keys()
+    except OwnerLicenseSignerError as exc:
+        raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
+    license_data = None
+    for public_key in verification_keys:
         try:
             license_data = load_license(token, public_key)
-            verified = (license_data, private_key)
             break
         except InstallationLicenseError:
             continue
-    if verified is None:
+    if license_data is None:
         raise HTTPException(status_code=401, detail="Invalid installation token")
-    license_data, private_key = verified
 
     if request.proof_signature is None:
         raise HTTPException(
@@ -246,7 +255,11 @@ async def check_client_installation(
         "issued_at": now,
         "expires_at": min(now + 300, record["expires_at"]),
     }
-    return {"signed_status": issue_license_token(status, private_key)}
+    try:
+        signed_status = await sign_installation_status(status, token)
+    except OwnerLicenseSignerError as exc:
+        raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
+    return {"signed_status": signed_status}
 
 
 @router.post("/binding-requests", status_code=201)
@@ -258,4 +271,8 @@ async def submit_client_binding_request(
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Installation bearer token required")
     token = authorization.removeprefix("Bearer ").strip()
-    return await accept_binding_request(request.model_dump(), token, _owner_verification_signers())
+    try:
+        verification_keys = await owner_license_public_keys()
+    except OwnerLicenseSignerError as exc:
+        raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
+    return await accept_binding_request(request.model_dump(), token, verification_keys)

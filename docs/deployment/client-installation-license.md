@@ -40,32 +40,41 @@ verify it against the deployed owner and client versions before production use.
 
 The normal SaaS Compose stacks do not mount signing keys. On the **owner** host,
 store the license private key as `current.key` in a dedicated absolute directory
-outside the checkout and build context. The API image runs as UID/GID 10001;
-grant that identity read access to this directory and its key files while keeping
-them inaccessible to other users. For example, on a standard Linux Docker host,
-use a root-owned directory with group 10001 and mode `0750`, and key files with
-group 10001 and mode `0640`. Adapt this for rootless Docker or user namespaces.
-Keep release-signing keys and all client installations out of this directory.
+outside the checkout and build context. The isolated signer container runs as
+UID/GID 10001; grant that identity read access to this directory and its key
+files while keeping them inaccessible to other users. For example, on a
+standard Linux Docker host, use a root-owned directory with group 10001 and mode
+`0750`, and key files with group 10001 and mode `0640`. Adapt this for rootless
+Docker or user namespaces. Keep release-signing keys and all client installations
+out of this directory.
 
 Set `KODEWAVES_OWNER_KEYS_DIR` to that host directory in the owner stack's
-environment, then add `deploy/owner/docker-compose.owner.yaml` as a second
-Compose file. For the repository's default SaaS stack, for example:
+environment. Also set `KODEWAVES_OWNER_LICENSE_SIGNER_TOKEN` to a cryptographically
+random secret of at least 32 characters and `KODEWAVES_OWNER_TRUSTED_PROXY_CIDRS`
+to the actual CIDR of the reverse proxy peer seen by the API. Do not trust a
+client-provided forwarded-IP header or copy a sample CIDR without checking the
+live Compose network. Then add `deploy/owner/docker-compose.owner.yaml` as a
+second Compose file. For the repository's default SaaS stack, for example:
 
 ```bash
 docker compose -f docker-compose.yaml -f deploy/owner/docker-compose.owner.yaml config
 docker compose -f docker-compose.yaml -f deploy/owner/docker-compose.owner.yaml up -d api
 ```
 
-The overlay binds the directory read-only into the owner API, sets the current
-signer path, and passes the optional legacy signer paths and trusted proxy
-CIDRs. Paths in `KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES` are
+The overlay mounts the directory read-only **only in the internal
+`owner-license-signer` service**. The API joins the internal signer network and
+authenticates to it with the shared bearer token; the signer has no published
+port and its network is internal. The API container does not receive or mount
+private license keys. The overlay also passes the optional legacy signer paths
+to the signer and the trusted proxy CIDRs to the API. Paths in
+`KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES` are
 colon-separated container paths under `/run/kodewaves-owner-keys`; for example,
 `/run/kodewaves-owner-keys/old.key`. Use the same overlay with the chosen owner
 SaaS Compose stack when upgrading, so recreation does not remove the mount.
 The repository's `deploy.sh` adds it automatically when
 `KODEWAVES_OWNER_KEYS_DIR` is set in the environment or root `.env`.
-The customer installer does not include this overlay. Check that the API can
-read the key and that issuance and a client check succeed before using it.
+The customer installer does not include this overlay. Check that the signer is
+healthy, then verify owner issuance and a client status check before using it.
 
 Before API issuance, the owner creates a challenge using
 `POST /admin/client-installations/domain-challenges` with `customer_id` and
@@ -81,10 +90,11 @@ control at issuance; it does not prevent a host administrator from copying
 software and changing local environment settings later.
 
 The hosted owner API can issue and inventory installation records through
-`/admin/client-installations`. It requires a Kodewaves superuser and an owner
-signing key file configured with `KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE`.
-The API returns the token once; the database stores only its fingerprint and
-entitlement metadata. A superuser can mark an installation revoked through
+`/admin/client-installations`. It requires a Kodewaves superuser and a healthy
+internal owner-license-signer service. The signer is the only runtime container
+with access to the private license key. The API returns the token once; the
+database stores only its fingerprint and entitlement metadata. A superuser can
+mark an installation revoked through
 `POST /admin/client-installations/{installation_id}/revoke`, and the owner UI
 shows that state. Online clients receive revocation through the periodic owner
 check. A client that was previously verified can use the 24-hour outage grace

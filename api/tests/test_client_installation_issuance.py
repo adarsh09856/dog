@@ -16,6 +16,11 @@ from api.routes.admin import client_installation_check, client_installations
 from api.services import client_binding_requests as binding_service
 from api.services.installation_identity import sign_binding_request
 from api.services.installation_license import issue_license_token, load_license
+from api.services.owner_license_signer_client import (
+    OwnerLicenseSignerError,
+    OwnerLicenseSignerPolicyError,
+)
+from api.tests.owner_signer_test_utils import mock_owner_signer
 
 
 @pytest.mark.parametrize(
@@ -67,30 +72,64 @@ def test_owner_issuance_accepts_enforced_creation_caps():
     assert request.limits["max_campaigns"] == 20
 
 
-def test_owner_signer_preserves_raw_key_bytes_that_look_like_whitespace(monkeypatch, tmp_path):
-    raw = b" " + bytes(range(1, 31)) + b"\n"
-    key_path = tmp_path / "raw-private-key"
-    key_path.write_bytes(raw)
-    monkeypatch.setenv("KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE", str(key_path))
-    loaded, _public = client_installations._owner_signing_key()
-    assert loaded == raw
+def test_owner_issuance_canonicalizes_optional_ip_bindings():
+    request = client_installations.IssueClientInstallation.model_validate({
+        "installation_id": "install-test",
+        "customer_id": "customer-test",
+        "domains": ["example.com"],
+        "ip_ranges": ["203.0.113.7/24", "2001:db8::4/64", "203.0.113.0/24"],
+        "expires_at": int(time.time()) + 3600,
+    })
+    assert request.ip_ranges == ["2001:db8::/64", "203.0.113.0/24"]
+
+    with pytest.raises(ValidationError):
+        client_installations.IssueClientInstallation.model_validate({
+            "installation_id": "install-test",
+            "customer_id": "customer-test",
+            "domains": ["example.com"],
+            "ip_ranges": ["not-an-ip"],
+            "expires_at": int(time.time()) + 3600,
+        })
 
 
-def test_owner_signer_rejects_overpadded_base64_private_key(monkeypatch, tmp_path):
-    private = Ed25519PrivateKey.generate()
-    raw = private.private_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PrivateFormat.Raw,
-        encryption_algorithm=serialization.NoEncryption(),
+def test_owner_api_does_not_load_private_license_signing_keys():
+    from inspect import getsource
+
+    assert "KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE" not in getsource(client_installations)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("signer_error", "http_status"),
+    [
+        (OwnerLicenseSignerPolicyError("invalid claims"), 422),
+        (OwnerLicenseSignerError("unavailable"), 503),
+    ],
+)
+async def test_owner_issuance_distinguishes_policy_rejection_from_signer_outage(
+    monkeypatch, signer_error, http_status,
+):
+    monkeypatch.setattr(
+        client_installations,
+        "unverified_license_domains",
+        AsyncMock(return_value=[]),
     )
-    key_path = tmp_path / "owner-private-key"
-    key_path.write_bytes(base64.urlsafe_b64encode(raw) + b"=")
-    monkeypatch.setenv("KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE", str(key_path))
-
+    monkeypatch.setattr(
+        client_installations,
+        "sign_client_license",
+        AsyncMock(side_effect=signer_error),
+    )
     with pytest.raises(HTTPException) as error:
-        client_installations._owner_signing_key()
-    assert error.value.status_code == 503
-    assert error.value.detail == "Owner license signer is unavailable"
+        await client_installations.issue_client_installation(
+            client_installations.IssueClientInstallation(
+                installation_id="install-test",
+                customer_id="customer-test",
+                domains=["example.com"],
+                expires_at=int(time.time()) + 3600,
+            ),
+            SimpleNamespace(id=5),
+        )
+    assert error.value.status_code == http_status
 
 
 @pytest.mark.asyncio
@@ -135,7 +174,7 @@ async def test_owner_binding_request_requires_enrolled_installation_proof(monkey
         "reason": "Move to a new host",
     }
     signature = sign_binding_request(installation_private, **fields)
-    monkeypatch.setattr(client_installation_check, "_owner_verification_signers", lambda: [(owner_private, owner_public)])
+    mock_owner_signer(monkeypatch, client_installation_check, (owner_private, owner_public))
     monkeypatch.setattr(
         binding_service, "get_client_installation_record",
         AsyncMock(return_value={"installation_public_key": installation_public}),
@@ -182,9 +221,10 @@ async def test_binding_request_approval_requires_dns_proof_and_rotates_signed_cl
         format=serialization.PrivateFormat.Raw,
         encryption_algorithm=serialization.NoEncryption(),
     )
-    key_path = tmp_path / "owner-private-key"
-    key_path.write_bytes(raw)
-    monkeypatch.setenv("KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE", str(key_path))
+    public = base64.urlsafe_b64encode(private.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode("ascii")
+    mock_owner_signer(monkeypatch, client_installations, (raw, public))
     request = {
         "id": 31,
         "installation_id": "install-test",
@@ -279,7 +319,10 @@ async def test_approved_binding_token_recovery_recreates_exact_token_without_rot
     monkeypatch.setattr(binding_service, "get_client_binding_request", AsyncMock(return_value=request))
     monkeypatch.setattr(binding_service, "get_client_installation_record", AsyncMock(return_value=installation))
 
-    recovered = await binding_service.recover_approved_binding_token(31, lambda: (raw, public))
+    async def sign_license(claims):
+        return issue_license_token(claims, raw), public
+
+    recovered = await binding_service.recover_approved_binding_token(31, sign_license)
 
     assert recovered["token"] == token
     assert recovered["public_key"] == public
@@ -287,7 +330,7 @@ async def test_approved_binding_token_recovery_recreates_exact_token_without_rot
 
     installation["token_fingerprint"] = "c" * 64
     with pytest.raises(HTTPException) as error:
-        await binding_service.recover_approved_binding_token(31, lambda: (raw, public))
+        await binding_service.recover_approved_binding_token(31, sign_license)
     assert error.value.status_code == 409
 
 
@@ -301,9 +344,10 @@ async def test_owner_issues_signed_installation_without_storing_bearer_token(
         format=serialization.PrivateFormat.Raw,
         encryption_algorithm=serialization.NoEncryption(),
     )
-    key_path = tmp_path / "owner-private-key"
-    key_path.write_bytes(base64.urlsafe_b64encode(raw).rstrip(b"="))
-    monkeypatch.setenv("KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE", str(key_path))
+    public = base64.urlsafe_b64encode(private.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode("ascii")
+    mock_owner_signer(monkeypatch, client_installations, (raw, public))
 
     session = SimpleNamespace(add=lambda item: captured.append(item), commit=AsyncMock())
     captured = []
@@ -368,7 +412,7 @@ async def test_owner_renews_existing_license_without_storing_replacement_token(m
     public = base64.urlsafe_b64encode(private.public_key().public_bytes(
         serialization.Encoding.Raw, serialization.PublicFormat.Raw
     )).rstrip(b"=").decode("ascii")
-    monkeypatch.setattr(client_installations, "_owner_signing_key", lambda: (raw, public))
+    mock_owner_signer(monkeypatch, client_installations, (raw, public))
     current_expiry = int(time.time()) + 3600
     monkeypatch.setattr(client_installations, "get_client_installation_record", AsyncMock(return_value={
         "installation_id": "install-test", "customer_id": "customer-test",

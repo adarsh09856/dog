@@ -22,6 +22,7 @@ from api.db.kodewaves_models import (
 from api.routes.admin import client_installation_check, client_installations as owner_routes
 from api.services.installation_identity import sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status
+from api.tests.owner_signer_test_utils import mock_owner_signer
 
 @pytest_asyncio.fixture
 async def owner_database(monkeypatch):
@@ -231,7 +232,7 @@ async def test_signed_owner_check_and_revocation_use_committed_database_state(ow
         record.token_fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
         record.installation_public_key = installation_public
         await session.commit()
-    monkeypatch.setattr(client_installation_check, "_owner_verification_signers", lambda: [(private, public)])
+    mock_owner_signer(monkeypatch, client_installation_check, (private, public))
     http_request = SimpleNamespace(client=SimpleNamespace(host="203.0.113.7"), headers={})
 
     async def check():
@@ -356,7 +357,7 @@ async def test_enrollment_and_signed_checks_reject_replays_and_bearer_only(owner
         record = await session.get(ClientInstallationModel, "client-test")
         record.token_fingerprint = hashlib.sha256(token.encode("ascii")).hexdigest()
         await session.commit()
-    monkeypatch.setattr(client_installation_check, "_owner_verification_signers", lambda: [(owner_private, owner_public)])
+    mock_owner_signer(monkeypatch, client_installation_check, (owner_private, owner_public))
     issued = await owner_routes.create_installation_enrollment_token("client-test", _user=SimpleNamespace(id=1))
     secret = issued["enrollment_token"]
     fields = {
