@@ -131,6 +131,10 @@ def test_owner_only_database_modules_are_removed_and_checked_at_release():
         path = f"api/db/{module}.py"
         assert f"./{path}" in dockerfile
         assert repr(path) in verifier
+    for module in ("owner_license_signer", "owner_license_signer_client"):
+        path = f"api/services/{module}.py"
+        assert f"./{path}" in dockerfile
+        assert repr(path) in verifier
     assert "./scripts/create_superuser.py" in dockerfile
     assert "'scripts/create_superuser.py'" in verifier
     assert "COPY --from=api-source --chown=kodewaves:kodewaves /app/scripts ./scripts" in dockerfile
