@@ -5,6 +5,7 @@ on:
     branches:
       - codex/client-bundle-verification-*
       - codex/client-bundle-theme
+      - codex/kodewaves-shared-work
   pull_request:
     branches:
       - main
@@ -171,7 +172,7 @@ jobs:
           src/lib/brandingTheme.test.ts
 
   verify:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.ref == 'refs/heads/codex/client-bundle-theme'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.ref == 'refs/heads/codex/client-bundle-theme' || github.ref == 'refs/heads/codex/kodewaves-shared-work'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
