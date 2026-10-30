@@ -804,6 +804,30 @@ class KodewavesDBClient(BaseDBClient):
         except Exception:
             return None
 
+    async def get_active_saas_plan(self, code: str) -> Optional[SaaSPlanModel]:
+        """Fetch one active plan by its stable catalog code."""
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(SaaSPlanModel).where(
+                    SaaSPlanModel.code == code,
+                    SaaSPlanModel.is_active.is_(True),
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def get_default_saas_plan(self) -> Optional[SaaSPlanModel]:
+        """Fetch the configured active default plan, if one exists."""
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(SaaSPlanModel)
+                .where(
+                    SaaSPlanModel.is_active.is_(True),
+                    SaaSPlanModel.is_default.is_(True),
+                )
+                .order_by(SaaSPlanModel.created_at.asc())
+            )
+            return result.scalars().first()
+
     async def set_setting(self, key: str, value: Dict[str, Any], category: str = "general") -> GlobalPlatformSettingModel:
         async with self.get_session() as session:
             stmt = select(GlobalPlatformSettingModel).where(GlobalPlatformSettingModel.key == key)
