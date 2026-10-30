@@ -520,7 +520,7 @@ export default function MasterKeysAndModelsPage() {
                               variant="outline"
                               className={`uppercase text-[9px] font-bold px-1.5 py-0 ${
                                 cat === "stt"
-                                  ? "border-sky-500/40 text-sky-600 dark:text-sky-400 bg-sky-500/5"
+                                  ? "border-primary/40 text-primary bg-primary/5"
                                   : cat === "tts"
                                   ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5"
                                   : cat === "realtime"

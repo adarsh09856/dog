@@ -115,7 +115,7 @@ export default function AppointmentsPage() {
     : status === "pending"
       ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
       : status === "completed"
-        ? "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
         : "border-border bg-muted text-muted-foreground";
 
   const handleSaveAppointment = async () => {
@@ -155,10 +155,10 @@ export default function AppointmentsPage() {
     <main className="mx-auto w-full max-w-screen-2xl space-y-7 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       {loadError && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"><div className="flex flex-wrap items-center justify-between gap-3"><span>{loadError}</span><Button variant="outline" size="sm" onClick={fetchAppointments}>Try again</Button></div></div>}
       {/* Header */}
-      <header className="relative isolate overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-card via-card to-sky-500/10 px-5 py-6 sm:px-8 sm:py-8">
-        <div aria-hidden="true" className="absolute -right-12 -top-20 -z-10 h-64 w-64 rounded-full bg-sky-500/10 blur-3xl" />
+      <header className="relative isolate overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-card via-card to-primary/10 px-5 py-6 sm:px-8 sm:py-8">
+        <div aria-hidden="true" className="absolute -right-12 -top-20 -z-10 h-64 w-64 rounded-full bg-primary/10 blur-3xl" />
         <div>
-          <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/5 px-3 py-1 text-xs font-semibold uppercase tracking-[.16em] text-sky-700 dark:text-sky-300"><CalendarIcon className="h-3.5 w-3.5" /> Scheduling</span>
+          <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-semibold uppercase tracking-[.16em] text-primary"><CalendarIcon className="h-3.5 w-3.5" /> Scheduling</span>
           <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">Appointments</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
             Keep callbacks, demos, and site visits organized across your team.
@@ -183,7 +183,7 @@ export default function AppointmentsPage() {
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Appointment overview">
         {[
           { label: "All bookings", value: appointments.length, note: "Appointments in workspace", icon: CalendarIcon, tone: "text-primary bg-primary/10" },
-          { label: "Upcoming", value: appointments.filter((appointment) => new Date(appointment.start_time).getTime() >= Date.now() && appointment.status !== "cancelled").length, note: "Scheduled from now", icon: Clock, tone: "text-sky-600 bg-sky-500/10" },
+          { label: "Upcoming", value: appointments.filter((appointment) => new Date(appointment.start_time).getTime() >= Date.now() && appointment.status !== "cancelled").length, note: "Scheduled from now", icon: Clock, tone: "text-primary bg-primary/10" },
           { label: "Confirmed", value: appointments.filter((appointment) => appointment.status === "confirmed").length, note: "Ready for the next step", icon: CheckCircle2, tone: "text-emerald-600 bg-emerald-500/10" },
           { label: "Needs follow-up", value: appointments.filter((appointment) => appointment.status === "pending").length, note: "Awaiting confirmation", icon: Phone, tone: "text-amber-600 bg-amber-500/10" },
         ].map((metric) => <Card key={metric.label} className="rounded-2xl border-border/70 shadow-sm"><CardContent className="p-4 sm:p-5"><div className="flex items-start justify-between gap-2"><span className="text-xs font-medium text-muted-foreground sm:text-sm">{metric.label}</span><span className={`rounded-xl p-2 ${metric.tone}`}><metric.icon className="h-4 w-4" /></span></div><p className="mt-3 text-2xl font-semibold tabular-nums tracking-tight sm:text-3xl">{metric.value.toLocaleString()}</p><p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">{metric.note}</p></CardContent></Card>)}

@@ -180,6 +180,7 @@ export default function OverviewPage() {
       ],
     },
   ];
+  const toolDirectoryItemRows = Math.max(...sections.map((section) => section.items.length));
 
   return (
     <div className={dashboard.dashboard}>
@@ -398,12 +399,20 @@ export default function OverviewPage() {
           </section>
         )}
 
-        <section aria-label="Workspace tools" className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}>
+        <section
+          aria-label="Workspace tools"
+          className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}
+          style={{
+            "--tool-directory-accent": "var(--brand-primary-color, var(--primary))",
+            "--tool-directory-item-rows": toolDirectoryItemRows,
+            "--tool-directory-row-count": toolDirectoryItemRows + 2,
+          } as React.CSSProperties}
+        >
           {sections.map((section, index) => (
             <section key={section.category} className={panel.toolGroup} aria-label={section.category}>
               <div className={panel.groupHeading}><span>0{index + 1}</span><h2>{section.category}</h2></div>
               <p className={panel.groupDescription}>{section.description}</p>
-              <div>
+              <div className={panel.toolItemList}>
                 {section.items.map((item) => {
                   const Icon = item.icon;
                   return <Link key={item.href} href={item.href} className={panel.toolLink}><Icon size={17} /><div><h3>{item.title}</h3><p>{item.desc}</p></div><ArrowRight size={15} /></Link>;

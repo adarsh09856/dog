@@ -21,7 +21,6 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import WorkflowLayout from '@/app/workflow/WorkflowLayout';
-import styles from './RunWorkspace.module.css';
 import {
     getWorkflowApiV1WorkflowFetchWorkflowIdGet,
     getWorkflowRunApiV1WorkflowWorkflowIdRunsRunIdGet,
@@ -40,6 +39,8 @@ import { copyTextToClipboard } from '@/lib/clipboard';
 import { formatDateTime } from '@/lib/dateTime';
 import { downloadFile, getSignedUrl } from '@/lib/files';
 import { cn } from '@/lib/utils';
+
+import styles from './RunWorkspace.module.css';
 
 interface WorkflowRunResponse {
     mode: string;
@@ -209,7 +210,7 @@ function WaveformLane({
                         key={`${track}-${index}`}
                         className={cn(
                             'min-h-1 flex-1 rounded-full',
-                            track === 'user' ? 'bg-sky-500' : 'bg-emerald-500'
+                            track === 'user' ? 'bg-amber-500' : 'bg-emerald-500'
                         )}
                         style={{ height: `${Math.round(peak * 100)}%` }}
                     />
@@ -452,7 +453,7 @@ function SplitTracksSection({
                             className={cn(
                                 'gap-1.5',
                                 userTrackActive
-                                    ? 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300'
+                                    ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300'
                                     : 'text-muted-foreground opacity-60'
                             )}
                         >
@@ -747,9 +748,9 @@ export default function WorkflowRunPage() {
                                     <CardTitle className="min-w-0 text-2xl">
                                         {isTextChatRun ? 'Text Chat Session' : 'Agent Run Completed'}
                                     </CardTitle>
-                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isTextChatRun ? 'bg-sky-500/15' : 'bg-emerald-500/20'}`}>
+                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center ${isTextChatRun ? 'bg-primary/15' : 'bg-emerald-500/20'}`}>
                                         {isTextChatRun ? (
-                                            <FileText className="h-5 w-5 text-sky-500" />
+                                            <FileText className="h-5 w-5 text-primary" />
                                         ) : (
                                             <svg className="h-5 w-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />

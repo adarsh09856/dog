@@ -161,13 +161,13 @@ function getBadgeForSpec(
         case "global":
             return { label: "Global Node", className: "bg-amber-500 text-white" };
         case "trigger":
-            return { label: "API Trigger", className: "bg-purple-500 text-white" };
+            return { label: "API Trigger", className: "bg-primary text-primary-foreground" };
         case "webhook":
-            return { label: "Webhook", className: "bg-indigo-500 text-white" };
+            return { label: "Webhook", className: "bg-primary text-primary-foreground" };
         case "qa":
             return { label: "QA Analysis", className: "bg-teal-500 text-white" };
         case "integration":
-            return { label: spec.display_name, className: "bg-cyan-600 text-white" };
+            return { label: spec.display_name, className: "bg-primary/80 text-primary-foreground" };
     }
 }
 
