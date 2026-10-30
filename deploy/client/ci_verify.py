@@ -437,11 +437,11 @@ def _container_http_response(
     target: str = "api",
     env: dict[str, str],
 ) -> tuple[int, str]:
-    """Probe the isolated Compose network from the API container itself.
+    """Probe the Compose network from the API container itself.
 
-    The smoke marks the network internal, so Docker intentionally does not
-    publish its ports to the host. Running the HTTP client with ``compose exec``
-    keeps the smoke isolated while still testing the actual API and UI servers.
+    Container-local probes avoid relying on host-published ports and test the
+    actual API/UI servers on their service network. The disposable API also
+    needs host-gateway access to reach the temporary HTTPS owner used by CI.
     """
     if target not in {"api", "ui"}:
         raise ValueError(f"Unsupported runtime smoke target: {target}")
@@ -621,10 +621,7 @@ def _verify_compose_runtime(
         "      ARQ_WORKERS: \"0\"\n"
         "      ENABLE_ARI_MANAGER: \"false\"\n"
         "      ENABLE_CAMPAIGN_ORCHESTRATOR: \"false\"\n"
-        "      KODEWAVES_OWNER_STATUS_POLL_SECONDS: \"1\"\n"
-        "networks:\n"
-        "  internal:\n"
-        "    internal: true\n",
+        "      KODEWAVES_OWNER_STATUS_POLL_SECONDS: \"1\"\n",
         encoding="utf-8",
     )
     if owner is not None:

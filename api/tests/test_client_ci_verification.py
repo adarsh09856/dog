@@ -110,7 +110,9 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
             if "up" in command:
                 assert "--wait" in command
                 override = Path(command[command.index("-f", command.index("-f") + 1) + 1])
-                assert "internal: true" in override.read_text()
+                override_text = override.read_text()
+                assert "ARQ_WORKERS: \"0\"" in override_text
+                assert "internal: true" not in override_text
                 env_file = Path(command[command.index("--env-file") + 1])
                 env_values = dict(
                     line.split("=", 1)
