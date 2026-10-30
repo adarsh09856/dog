@@ -174,7 +174,7 @@ export default function SovereignBillingPage() {
     // A return URL is not payment proof: verify the provider receipt before
     // showing success or refreshing the wallet. Keep the URL on failure so it
     // can be retried after a temporary verification outage.
-    void paymentsApi.verifyPayment({ gateway: "stripe", order_id: sessionId, payment_id: sessionId })
+    void paymentsApi.verifyPayment({ gateway: "stripe", order_id: sessionId })
       .then(async (receipt) => {
         if (cancelled) return;
         if (!receipt.success) throw new Error("Payment has not been verified. Refresh before retrying payment.");
