@@ -400,7 +400,7 @@ export default function OverviewPage() {
 
         <section aria-label="Workspace tools" className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}>
           {sections.map((section, index) => (
-            <div key={section.category} className={panel.toolGroup}>
+            <section key={section.category} className={panel.toolGroup} aria-label={section.category}>
               <div className={panel.groupHeading}><span>0{index + 1}</span><h2>{section.category}</h2></div>
               <p className={panel.groupDescription}>{section.description}</p>
               <div>
@@ -409,7 +409,7 @@ export default function OverviewPage() {
                   return <Link key={item.href} href={item.href} className={panel.toolLink}><Icon size={17} /><div><h3>{item.title}</h3><p>{item.desc}</p></div><ArrowRight size={15} /></Link>;
                 })}
               </div>
-            </div>
+            </section>
           ))}
         </section>
         {/* Platform administration is available only to backend superusers. */}

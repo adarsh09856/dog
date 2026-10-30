@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 
+import CallRecordingsList from "./CallRecordingsList";
 import RecordingsList from "./RecordingsList";
 import { RecordingsUploadDialog } from "./RecordingsUploadDialog";
 import TtsCacheList from "./TtsCacheList";
@@ -50,11 +51,25 @@ export default function RecordingsPage() {
                 <div><p className="text-sm font-semibold">Choose a library</p><p className="mt-1 text-xs leading-5 text-muted-foreground">Manage source recordings or review cached speech reused by workflows. Playback controls stay available on each item.</p></div>
             </div>
 
-            <Tabs defaultValue="recordings" key={`${user.id}:${"selectedTeam" in user ? user.selectedTeam?.id : user.organizationId}`}>
+            <Tabs defaultValue="calls" key={`${user.id}:${"selectedTeam" in user ? user.selectedTeam?.id : user.organizationId}`}>
                 <TabsList className="mb-4">
+                    <TabsTrigger value="calls">Call recordings</TabsTrigger>
                     <TabsTrigger value="recordings">Uploaded recordings</TabsTrigger>
                     <TabsTrigger value="tts-cache">TTS cache</TabsTrigger>
                 </TabsList>
+                <TabsContent value="calls">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Call recordings</CardTitle>
+                            <CardDescription>
+                                Recordings from completed phone and browser calls. Calls without saved audio are not listed here.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <CallRecordingsList />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
                 <TabsContent value="recordings">
                     <Card>
                         <CardHeader>
