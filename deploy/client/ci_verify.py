@@ -429,43 +429,48 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> N
             raise ValueError(f"Rendered {service_name.upper()} identity key path does not match its mount")
 
 
-def _loopback_port(compose_command: list[str], service: str, container_port: int, *, env: dict[str, str]) -> int:
-    result = subprocess.run(
-        [*compose_command, "port", service, str(container_port)],
-        check=True, capture_output=True, text=True, env=env,
+def _container_http_response(
+    compose_command: list[str],
+    path: str,
+    *,
+    host: str | None = None,
+    target: str = "api",
+    env: dict[str, str],
+) -> tuple[int, str]:
+    """Probe the isolated Compose network from the API container itself.
+
+    The smoke marks the network internal, so Docker intentionally does not
+    publish its ports to the host. Running the HTTP client with ``compose exec``
+    keeps the smoke isolated while still testing the actual API and UI servers.
+    """
+    if target not in {"api", "ui"}:
+        raise ValueError(f"Unsupported runtime smoke target: {target}")
+    container_host = "127.0.0.1" if target == "api" else "ui"
+    container_port = 8000 if target == "api" else 3010
+    url = f"http://{container_host}:{container_port}{path}"
+    script = textwrap.dedent("""
+        import json, sys, urllib.error, urllib.request
+        request = urllib.request.Request(sys.argv[1], headers={"Host": sys.argv[2]} if sys.argv[2] else {})
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                result = {"status": response.status, "body": response.read(4096).decode("utf-8", "replace")}
+        except urllib.error.HTTPError as error:
+            result = {"status": error.code, "body": error.read(4096).decode("utf-8", "replace") if error.fp else ""}
+        print(json.dumps(result, separators=(",", ":")))
+    """)
+    response = subprocess.run(
+        [*compose_command, "exec", "-T", "api", "python", "-c", script, url, host or ""],
+        check=True, capture_output=True, text=True, timeout=20, env=env,
     )
-    value = result.stdout.strip().splitlines()[-1]
-    parsed = urllib.parse.urlsplit(f"//{value}")
     try:
-        address = parsed.hostname or ""
-        port = parsed.port
-    except ValueError as exc:
-        raise ValueError(f"Compose returned an invalid {service} port binding: {value!r}") from exc
-    if port is None or not ipaddress.ip_address(address).is_loopback:
-        raise ValueError(f"Compose {service} port must be bound to loopback, got {value!r}")
-    return port
-
-
-def _http_status(url: str, *, host: str | None = None) -> int:
-    headers = {"Host": host} if host else {}
-    request = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            return response.status
-    except urllib.error.HTTPError as exc:
-        return exc.code
-
-
-def _http_response(url: str, *, host: str | None = None) -> tuple[int, str]:
-    """Return bounded response evidence for the runtime smoke assertions."""
-    headers = {"Host": host} if host else {}
-    request = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            return response.status, response.read(4096).decode("utf-8", "replace")
-    except urllib.error.HTTPError as exc:
-        body = exc.read(4096) if exc.fp is not None else b""
-        return exc.code, body.decode("utf-8", "replace")
+        payload = json.loads(response.stdout.strip().splitlines()[-1])
+        status = payload["status"]
+        body = payload["body"]
+    except (IndexError, KeyError, json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("Container HTTP probe returned invalid response evidence") from exc
+    if type(status) is not int or not isinstance(body, str):
+        raise ValueError("Container HTTP probe returned invalid response evidence")
+    return status, body
 
 
 def _runtime_smoke_license(private_key: bytes, public_key: str) -> str:
@@ -659,26 +664,30 @@ def _verify_compose_runtime(
             cwd=root, check=True, env=command_env, timeout=360,
             capture_output=True, text=True,
         )
-        api_port = _loopback_port(compose_command, "api", 8000, env=command_env)
-        ui_port = _loopback_port(compose_command, "ui", 3010, env=command_env)
-        health_status = _http_status(f"http://127.0.0.1:{api_port}/api/v1/health")
+        health_status, _ = _container_http_response(
+            compose_command, "/api/v1/health", env=command_env,
+        )
         if health_status != 200:
             raise ValueError(f"Packaged API health endpoint returned HTTP {health_status}")
-        ui_status = _http_status(f"http://127.0.0.1:{ui_port}/")
+        ui_status, _ = _container_http_response(
+            compose_command, "/", target="ui", env=command_env,
+        )
         if ui_status != 200:
             raise ValueError(f"Packaged UI root returned HTTP {ui_status}")
-        wrong_host_status, wrong_host_body = _http_response(
-            f"http://127.0.0.1:{api_port}/api/v1/workflow",
+        wrong_host_status, wrong_host_body = _container_http_response(
+            compose_command, "/api/v1/workflow",
             host="wrong.customer.example.invalid",
+            env=command_env,
         )
         if wrong_host_status != 402 or "This domain is not licensed" not in wrong_host_body:
             raise ValueError(
                 "A protected request with a mismatched Host must fail the signed domain binding; "
                 f"received HTTP {wrong_host_status}: {wrong_host_body[:240]}"
             )
-        valid_host_status, valid_host_body = _http_response(
-            f"http://127.0.0.1:{api_port}/api/v1/workflow",
+        valid_host_status, valid_host_body = _container_http_response(
+            compose_command, "/api/v1/workflow",
             host="smoke.customer.example.invalid",
+            env=command_env,
         )
         if owner is None and (
             valid_host_status != 402 or "Owner installation check has not succeeded" not in valid_host_body
@@ -692,9 +701,10 @@ def _verify_compose_runtime(
             owner_gate_status, owner_gate_body = valid_host_status, valid_host_body
             deadline = time.monotonic() + 45
             while time.monotonic() < deadline:
-                owner_gate_status, owner_gate_body = _http_response(
-                    f"http://127.0.0.1:{api_port}/api/v1/workflow",
+                owner_gate_status, owner_gate_body = _container_http_response(
+                    compose_command, "/api/v1/workflow",
                     host="smoke.customer.example.invalid",
+                    env=command_env,
                 )
                 if owner_gate_status != 402:
                     break
@@ -710,9 +720,10 @@ def _verify_compose_runtime(
             denied_status, denied_body = owner_gate_status, owner_gate_body
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
-                denied_status, denied_body = _http_response(
-                    f"http://127.0.0.1:{api_port}/api/v1/workflow",
+                denied_status, denied_body = _container_http_response(
+                    compose_command, "/api/v1/workflow",
                     host="smoke.customer.example.invalid",
+                    env=command_env,
                 )
                 if denied_status == 402 and "outside the licensed ranges" in denied_body:
                     break
@@ -726,9 +737,10 @@ def _verify_compose_runtime(
             recovered_status, recovered_body = denied_status, denied_body
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
-                recovered_status, recovered_body = _http_response(
-                    f"http://127.0.0.1:{api_port}/api/v1/workflow",
+                recovered_status, recovered_body = _container_http_response(
+                    compose_command, "/api/v1/workflow",
                     host="smoke.customer.example.invalid",
+                    env=command_env,
                 )
                 if recovered_status == 404 and "Not Found" in recovered_body:
                     break

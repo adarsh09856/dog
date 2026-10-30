@@ -453,8 +453,10 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
         if command[:2] == ["docker", "build"]:
             return SimpleNamespace(returncode=0)
         if command[:2] == ["docker", "compose"]:
-            if "port" in command:
-                return SimpleNamespace(stdout="127.0.0.1:23456\n")
+            if "exec" in command:
+                url = command[-2]
+                status = 500 if url.endswith("/api/v1/workflow") else 200
+                return SimpleNamespace(stdout=json.dumps({"status": status, "body": "synthetic response"}))
             return SimpleNamespace(returncode=0)
         if command[:3] == ["docker", "image", "inspect"]:
             return SimpleNamespace(stdout="sha256:" + "f" * 64)
@@ -462,22 +464,7 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
             return SimpleNamespace(returncode=0)
         pytest.fail(f"Unexpected command: {command}")
 
-    class Response:
-        status = 200
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-    def open_url(request, timeout):
-        if request.full_url.endswith("/api/v1/workflow"):
-            raise urllib.error.HTTPError(request.full_url, 500, "unexpected response", {}, None)
-        return Response()
-
     monkeypatch.setattr(verifier.subprocess, "run", run)
-    monkeypatch.setattr(verifier.urllib.request, "urlopen", open_url)
     with pytest.raises(ValueError, match="received HTTP 500"):
         verifier._verify_compose_runtime(
             Path(__file__).resolve().parents[2], tmp_path, api_image="kodewaves-api:ci-check",
@@ -487,6 +474,10 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
 
     down = next(command for command in commands if command[:2] == ["docker", "compose"] and "down" in command)
     image_rm = next(command for command in commands if command[:3] == ["docker", "image", "rm"])
+    http_probes = [
+        command for command in commands
+        if command[:2] == ["docker", "compose"] and "exec" in command
+    ]
     compose_up_options = next(
         options for command, options in command_options
         if command[:2] == ["docker", "compose"] and "up" in command
@@ -495,6 +486,12 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
     assert compose_up_options["text"] is True
     assert "--volumes" in down and "--remove-orphans" in down
     assert image_rm[-1].startswith("kodewaves-ci-minio:kw-ci-")
+    assert http_probes
+    assert all(command[command.index("exec") + 1:command.index("exec") + 4] == ["-T", "api", "python"]
+               for command in http_probes)
+    assert not any(command[:2] == ["docker", "compose"] and "port" in command for command in commands)
+    assert "http://127.0.0.1:8000/api/v1/health" in [command[-2] for command in http_probes]
+    assert "http://ui:3010/" in [command[-2] for command in http_probes]
 
 
 def test_runtime_smoke_preserves_compose_startup_diagnostics(verifier, monkeypatch, tmp_path):
