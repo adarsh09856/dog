@@ -1,0 +1,53 @@
+.page { max-width:1480px;display:grid;gap:24px;margin:0 auto;padding:clamp(18px,3vw,38px) clamp(16px,3vw,42px) 64px; }
+.hero { position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:24px;min-height:190px;overflow:hidden;padding:clamp(25px,3.5vw,40px);border:1px solid #29433a;border-radius:19px;color:#f1f4eb;background:radial-gradient(ellipse at 78% 14%,rgba(183,211,179,.16),transparent 30%),linear-gradient(120deg,#10231f,#1b3a30 68%,#284b3b);box-shadow:0 22px 48px -40px rgba(14,35,29,.8); }
+.hero::after { position:absolute;z-index:-1;width:280px;height:280px;right:14%;top:-230px;border:1px solid rgba(209,179,103,.28);border-radius:50%;box-shadow:0 0 0 34px rgba(209,179,103,.04),0 0 0 72px rgba(209,179,103,.024);content:""; }
+.heroCopy { max-width:700px; }
+.eyebrow { display:flex;align-items:center;gap:9px;color:#c4d3c8;font:600 10px/1.4 var(--font-geist-mono),monospace;letter-spacing:.15em;text-transform:uppercase; }
+.eyebrow::before { width:7px;height:7px;border-radius:50%;background:#d1b367;box-shadow:0 0 0 4px rgba(209,179,103,.12);content:""; }
+.hero h1 { margin:16px 0 9px;color:#f4f5ec;font-size:clamp(2rem,3.7vw,3.2rem);font-weight:520;letter-spacing:-.06em;line-height:1.04; }
+.hero p { max-width:620px;color:#c2d0c7;font-size:13px;line-height:1.8; }
+.heroActions { display:flex;align-items:center;flex-wrap:wrap;gap:10px; }
+.heroActions > :global([data-slot="badge"]) { border-color:rgba(198,224,198,.27);color:#dbe9dd;background:rgba(198,224,198,.09); }
+.heroActions > button { color:#f1f4eb!important;border-color:rgba(223,233,223,.3)!important;background:rgba(255,255,255,.05)!important; }
+.metrics { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:hidden;border:1px solid var(--border);border-radius:15px;background:var(--card);box-shadow:0 14px 34px -32px var(--foreground); }
+.metrics > div { min-width:0;border-right:1px solid var(--border);background:linear-gradient(145deg,color-mix(in srgb,var(--primary) 5%,var(--card)),var(--card) 70%); }
+.metrics > div:last-child { border:0; }
+.metrics :global([data-slot="card-header"]) { padding:20px 22px 8px; }
+.metrics :global([data-slot="card-content"]) { padding:5px 22px 21px; }
+.metrics :global([data-slot="card-title"]) { color:var(--muted-foreground);font:600 9px/1.5 var(--font-geist-mono),monospace;letter-spacing:.08em; }
+.metrics :global(.text-3xl) { font-size:clamp(1.7rem,2.8vw,2.35rem);font-weight:610;letter-spacing:-.05em; }
+.metrics :global(p) { max-width:43ch;font-size:10px;line-height:1.65; }
+.planArea,.ledgerArea { display:grid;gap:17px; }
+.tabList { width:max-content;max-width:100%;padding:5px;border:1px solid var(--border);border-radius:12px;background:var(--card); }
+.tabList button { min-height:37px;border-radius:8px;font-size:11px; }
+.sectionIntro { display:flex;align-items:flex-end;justify-content:space-between;gap:18px; }
+.sectionIntro h2 { font-size:22px;font-weight:610;letter-spacing:-.04em; }
+.sectionIntro p { max-width:58ch;margin-top:5px;color:var(--muted-foreground);font-size:11px;line-height:1.7; }
+.planGrid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px; }
+.planCard { position:relative;min-width:0;overflow:hidden;border:1px solid var(--border);border-radius:15px;background:var(--card);box-shadow:0 13px 32px -32px var(--foreground); }
+.planCard::before { position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--primary),color-mix(in srgb,var(--cta) 76%,var(--primary)));content:""; }
+.planCardCurrent { border-color:color-mix(in srgb,var(--cta) 58%,var(--border));box-shadow:0 0 0 1px color-mix(in srgb,var(--cta) 32%,transparent),0 15px 34px -29px var(--foreground); }
+.planCard :global([data-slot="card-header"]) { padding:21px 20px 13px; }
+.planCard :global([data-slot="card-content"]) { padding:0 20px 20px; }
+.planCard :global([data-slot="card-title"]) { font-size:16px;font-weight:650;letter-spacing:-.025em; }
+.planCard :global([data-slot="card-description"]) { margin-top:5px;font-size:10px;line-height:1.6; }
+.planPrice { padding-top:17px; }
+.planPrice :global(.text-3xl) { font-size:clamp(1.75rem,2.4vw,2.3rem);font-weight:640;letter-spacing:-.05em; }
+.creditSection { display:grid;gap:15px;padding-top:10px; }
+.creditGrid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px; }
+.creditCard { min-width:0;overflow:hidden;border:1px solid var(--border);border-radius:14px;background:var(--card);box-shadow:0 12px 30px -32px var(--foreground); }
+.creditCardSelected { border-color:var(--primary);box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 26%,transparent); }
+.creditCard :global([data-slot="card-header"]) { padding:19px 19px 13px; }
+.creditCard :global([data-slot="card-content"]) { padding:0 19px 18px; }
+.creditCard :global([data-slot="card-title"]) { font-size:14px; }
+.ledgerCard { overflow:hidden;border:1px solid var(--border);border-radius:15px;background:var(--card); }
+.ledgerCard :global([data-slot="card-header"]) { padding:21px 22px; }
+.ledgerCard :global([data-slot="card-title"]) { font-size:16px; }
+.ledgerCard :global([data-slot="card-description"]) { margin-top:5px;font-size:11px;line-height:1.7; }
+.ledgerCard :global([data-slot="table-container"]) { max-width:100%;overflow-x:auto; }
+.ledgerCard table { min-width:690px; }
+.ledgerCard thead { background:color-mix(in srgb,var(--secondary) 50%,var(--card)); }
+.ledgerCard tbody tr { min-height:52px; }
+@media(max-width:1000px) { .planGrid,.creditGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:700px) { .hero { grid-template-columns:1fr;align-items:start;padding:23px 20px; } .heroActions { justify-content:flex-start; } .metrics { grid-template-columns:1fr; } .metrics > div { border-right:0;border-bottom:1px solid var(--border); } .metrics > div:last-child { border-bottom:0; } .planGrid,.creditGrid { grid-template-columns:1fr; } .sectionIntro { align-items:flex-start;flex-direction:column; } .tabList { width:100%;grid-template-columns:1fr 1fr; } .tabList button { white-space:normal; } }
+@media(prefers-reduced-motion:reduce) { .planCard,.creditCard { transition:none!important; } }
