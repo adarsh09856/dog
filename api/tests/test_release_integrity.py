@@ -307,7 +307,7 @@ async def test_startup_integrity_alert_reaches_owner_check_endpoint(monkeypatch,
     from fastapi import FastAPI
 
     from api.routes.admin import client_installation_check
-from api.tests.owner_signer_test_utils import mock_owner_signer
+    from api.tests.owner_signer_test_utils import mock_owner_signer
     from api.services import release_integrity
     from api.services.installation_license import issue_license_token, verify_installation_status_claims
 
