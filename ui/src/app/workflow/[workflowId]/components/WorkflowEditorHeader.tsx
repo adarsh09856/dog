@@ -12,6 +12,7 @@ import {
 } from "@/client/sdk.gen";
 import { WorkflowError } from "@/client/types.gen";
 import { FlowEdge, FlowNode } from "@/components/flow/types";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 import { Button } from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -27,7 +28,8 @@ import {
 } from "@/components/ui/popover";
 import { useSidebar } from "@/components/ui/sidebar";
 import { copyTextToClipboard } from "@/lib/clipboard";
-import chrome from "@/components/layout/WorkspaceChrome.module.css";
+
+import editor from "../WorkflowEditorWorkspace.module.css";
 
 interface WorkflowEditorHeaderProps {
     workflowName: string;
@@ -232,9 +234,9 @@ export const WorkflowEditorHeader = ({
     };
 
     return (
-        <div className={`${chrome.editorHeader} relative z-20 flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/80 bg-card/95 text-foreground shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85`}>
+        <header className={`${chrome.editorHeader} ${editor.header} relative z-20 flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/80 bg-card/95 text-foreground shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/85`}>
             {/* Left section: Mobile menu + Back button + Workflow name */}
-            <div className="flex items-center gap-3 mr-4">
+            <div className={`${editor.identity} flex items-center gap-3 mr-4`}>
                 <button
                     onClick={toggleSidebar}
                     className="flex items-center justify-center w-8 h-8 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors md:hidden"
@@ -250,7 +252,9 @@ export const WorkflowEditorHeader = ({
                     <ArrowLeft className="w-5 h-5" />
                 </button>
 
-                <div className="flex items-center gap-2">
+                <div className={editor.identityCopy}>
+                    <span className={editor.eyebrow}>Voice agent builder</span>
+                    <div className="flex min-w-0 items-center gap-2">
                     {rename.kind !== "display" ? (
                         <div className="flex flex-col gap-1">
                             <Input
@@ -297,11 +301,12 @@ export const WorkflowEditorHeader = ({
                             )}
                         </>
                     )}
+                    </div>
                 </div>
             </div>
 
             {/* Right section: Version + status + tester/call actions + save */}
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-2.5">
+            <div className={`${editor.actions} flex min-w-0 flex-wrap items-center justify-end gap-2 sm:gap-2.5`}>
                 {/* Read-only banner when viewing a historical version */}
                 {isViewingHistoricalVersion && (
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-primary/30 bg-primary/10">
@@ -499,6 +504,6 @@ export const WorkflowEditorHeader = ({
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
-        </div>
+        </header>
     );
 };
