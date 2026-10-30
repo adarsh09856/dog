@@ -26,6 +26,12 @@ LOCAL_REPLY_TTS_LANGUAGES = frozenset({
     "ne", "pa", "sa", "ta", "te",
 })
 _DEVANAGARI_LANGUAGES = frozenset({"hi", "mr", "ne", "sa", "mai", "brx", "doi"})
+_CONFIRMED_LANGUAGE_ROUTES = frozenset({
+    "urdu_routed_to_hindi",
+    "competitive_indian_english",
+    "whisper_english_rescue",
+})
+_AUTO_LANGUAGE_SWITCH_CONFIRMATIONS = 2
 
 
 def _resolve_script_language_conflict(
@@ -81,10 +87,56 @@ def _resolve_auto_language(
         return "hi", "urdu_routed_to_hindi"
     if not code:
         return previous or None, "missing_detector_language"
+    if code not in LOCAL_REPLY_TTS_LANGUAGES:
+        return (
+            previous if previous in LOCAL_REPLY_TTS_LANGUAGES else "hi",
+            "excluded_language_to_previous_supported" if previous in LOCAL_REPLY_TTS_LANGUAGES
+            else "excluded_language_to_hindi",
+        )
+    if confidence is None:
+        return previous or None, "missing_detector_confidence"
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
-    if confidence is not None and confidence < threshold and previous:
+    if confidence < threshold and previous:
         return previous, "held_previous_low_confidence"
     return code, "detector"
+
+
+def _advance_stable_language(
+    current: str | None,
+    candidate: str | None,
+    confidence: float | None,
+    route: str,
+    pending: str | None,
+    pending_count: int,
+) -> tuple[str | None, str | None, int]:
+    """Require repeat evidence before a new detector guess becomes fallback state.
+
+    A high-confidence one-off still routes the current transcript, but cannot
+    become the language used to override later low-confidence turns. Two
+    consecutive confident turns confirm an ordinary language change. Explicit
+    rescue routes remain immediate because they use independent evidence.
+    """
+    stable = str(current or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    detected = str(candidate or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    if detected not in LOCAL_REPLY_TTS_LANGUAGES:
+        return stable or None, None, 0
+    threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
+    confirmed_route = route in _CONFIRMED_LANGUAGE_ROUTES
+    if confidence is None and not confirmed_route:
+        return stable or None, None, 0
+    if confidence is not None and confidence < threshold and not confirmed_route:
+        return stable or None, None, 0
+    if not stable:
+        return detected, None, 0
+    if detected == stable:
+        return stable, None, 0
+    if confirmed_route:
+        return detected, None, 0
+
+    next_count = pending_count + 1 if pending == detected else 1
+    if next_count >= _AUTO_LANGUAGE_SWITCH_CONFIRMATIONS:
+        return detected, None, 0
+    return stable, detected, next_count
 
 
 def _trusted_tts_language(
@@ -107,7 +159,7 @@ def _trusted_tts_language(
         # response to a voice that is absent from the configured TTS inventory.
         return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else "hi"
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
-    if confidence is None or confidence >= threshold:
+    if confidence is not None and confidence >= threshold:
         return code
     return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
 
@@ -133,6 +185,8 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         self.latest_tts_language: str | None = None
         self.latest_detected_text: str | None = None
         self._stable_detected_language: str | None = None
+        self._pending_detected_language: str | None = None
+        self._pending_detected_language_count = 0
         self._latest_language_confidence: float | None = None
         self._recognizing_segment = False
         self.phone_capture_pending = None
@@ -377,20 +431,21 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         elif (
             self.latest_detected_language
             and settings is not None
+            and local_indic
             and _is_auto_language(settings.language)
-            and (
-                language_confidence is None
-                or language_confidence >= (
-                    AUTO_ENGLISH_MIN_CONFIDENCE
-                    if str(detected_language or "").strip().lower().replace("_", "-").split("-", 1)[0] == "en"
-                    else AUTO_LANGUAGE_MIN_CONFIDENCE
-                )
-                or language_route in {"urdu_routed_to_hindi", "competitive_indian_english", "whisper_english_rescue"}
-            )
         ):
-            # Do not let empty or punctuation-only recognition overwrite the
-            # prior language used as fallback for the next uncertain segment.
-            self._stable_detected_language = self.latest_detected_language
+            (
+                self._stable_detected_language,
+                self._pending_detected_language,
+                self._pending_detected_language_count,
+            ) = _advance_stable_language(
+                self._stable_detected_language,
+                self.latest_detected_language,
+                language_confidence,
+                language_route,
+                getattr(self, "_pending_detected_language", None),
+                getattr(self, "_pending_detected_language_count", 0),
+            )
         if text and (
             settings is not None
             and settings.model == "indicconformer-ctc-int8"
