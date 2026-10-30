@@ -828,6 +828,22 @@ def _verify_compose_runtime(
         if primary_output:
             diagnostics.append("Failing Compose output: " + primary_output[-420:])
         try:
+            rendered = subprocess.run(
+                [*compose_command, "config", "--format", "json"],
+                cwd=root, check=False, env=command_env, timeout=30,
+                capture_output=True, text=True,
+            )
+            if rendered.returncode == 0:
+                config = json.loads(rendered.stdout)
+                rendered_ports = {
+                    name: service.get("ports", [])
+                    for name, service in config.get("services", {}).items()
+                    if name in {"api", "ui"}
+                }
+                diagnostics.append("Rendered Compose service ports: " + json.dumps(rendered_ports))
+        except Exception as diagnostic_error:  # noqa: BLE001 - retain the original smoke failure
+            diagnostics.append(f"Rendered Compose config diagnostic failed: {type(diagnostic_error).__name__}")
+        try:
             status = subprocess.run(
                 [*compose_command, "ps", "--all", "--format", "json", "api", "ui"],
                 cwd=root, check=False, env=command_env, timeout=30,

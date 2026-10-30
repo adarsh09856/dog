@@ -616,6 +616,14 @@ def test_runtime_smoke_keeps_compose_failure_with_bounded_service_diagnostics(ve
         if command[:2] == ["docker", "build"]:
             return SimpleNamespace(returncode=0)
         if command[:2] == ["docker", "compose"]:
+            if command[-3:] == ["config", "--format", "json"]:
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout=json.dumps({"services": {
+                        "api": {"ports": [{"target": 8000, "published": "23000"}]},
+                        "ui": {"ports": [{"target": 3010, "published": "23001"}]},
+                    }}),
+                )
             if "up" in command:
                 raise subprocess.CalledProcessError(
                     1, command, stderr="dependency failed: container ui is unhealthy"
@@ -653,6 +661,7 @@ def test_runtime_smoke_keeps_compose_failure_with_bounded_service_diagnostics(ve
     assert "dependency failed: container ui is unhealthy" in diagnostic
     assert '"Service":"api","Status":"healthy"' in diagnostic
     assert '"Service":"ui","Status":"unhealthy"' in diagnostic
+    assert '"api": [{"target": 8000, "published": "23000"}]' in diagnostic
     assert "API startup log: api startup diagnostic marker" in diagnostic
     assert "UI startup log: ui startup diagnostic marker" in diagnostic
 
