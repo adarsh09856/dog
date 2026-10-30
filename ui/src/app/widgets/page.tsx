@@ -104,7 +104,7 @@ export default function WidgetsPage() {
       listRequest.current += 1;
       embedRequest.current += 1;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user, fetchWidgets]);
 
   const handleSaveWidget = async () => {
     if (!editingWidget || !editingWidget.name) {

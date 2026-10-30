@@ -455,6 +455,7 @@ services:
     image: "${KODEWAVES_INDIC_STT_IMAGE:-kodewaves-indic-stt:v1.0.0}"
     container_name: kodewaves_indic_stt
     restart: unless-stopped
+    profiles: ["local"]
     environment:
       INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-all}"
       INDIC_STT_PREWARM_LANGUAGES: "${INDIC_STT_PREWARM_LANGUAGES:-}"
