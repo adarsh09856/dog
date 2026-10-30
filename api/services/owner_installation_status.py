@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import secrets
@@ -48,6 +49,12 @@ def _status_key(installation_id: str) -> str:
     return f"kodewaves:owner-installation-status:v1:{installation_id}"
 
 
+def _finding_field(finding: dict) -> tuple[str, str]:
+    serialized = json.dumps(finding, sort_keys=True)
+    fingerprint = hashlib.sha256(serialized.encode()).hexdigest()
+    return f"pending_integrity_finding:{fingerprint}", serialized
+
+
 def _status_url() -> str:
     try:
         return trusted_owner_status_url()
@@ -78,17 +85,24 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
     except ReleaseIntegrityError as exc:
         integrity_ok = False
         integrity_finding = exc.finding()
+        field, serialized = _finding_field(integrity_finding)
         await redis_client.hset(
             _status_key(license_data.installation_id),
-            mapping={
-                "integrity_failed_latched": "1",
-                "pending_integrity_finding": json.dumps(integrity_finding, sort_keys=True),
-            },
+            mapping={"integrity_failed_latched": "1"},
         )
-    pending = await redis_client.hget(
-        _status_key(license_data.installation_id), "pending_integrity_finding"
+        await redis_client.eval(
+            "if redis.call('HEXISTS', KEYS[1], ARGV[3]) == 0 then "
+            "return redis.call('HSET', KEYS[1], ARGV[1], ARGV[2]) end return 0",
+            1, _status_key(license_data.installation_id), field, serialized,
+            field.replace("pending_integrity_finding:", "acknowledged_integrity_finding:"),
+        )
+    fields = await redis_client.hgetall(_status_key(license_data.installation_id))
+    pending_findings = sorted(
+        (field, value) for field, value in fields.items()
+        if field == b"pending_integrity_finding" or field.startswith(b"pending_integrity_finding:")
     )
-    if pending:
+    pending_field, pending = pending_findings[0] if pending_findings else (None, None)
+    if pending is not None:
         integrity_ok = False
         integrity_finding = json.loads(pending)
     nonce = secrets.token_urlsafe(32)
@@ -112,14 +126,20 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
         nonce=nonce,
     )
     if pending:
+        acknowledged_field, _ = _finding_field(json.loads(pending))
+        acknowledged_field = acknowledged_field.replace(
+            "pending_integrity_finding:", "acknowledged_integrity_finding:"
+        )
         # Do not erase a newer finding written by another polling process.
         await redis_client.eval(
             "if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then "
+            "redis.call('HSET', KEYS[1], ARGV[3], '1'); "
             "return redis.call('HDEL', KEYS[1], ARGV[1]) end return 0",
             1,
             _status_key(license_data.installation_id),
-            "pending_integrity_finding",
+            pending_field,
             pending,
+            acknowledged_field,
         )
     if status["revoked"]:
         # A slower active response from another worker must not undo a
