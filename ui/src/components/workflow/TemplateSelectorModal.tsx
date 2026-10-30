@@ -90,10 +90,10 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
         iconBg: 'bg-emerald-500 text-white',
     },
     blue: {
-        bg: 'bg-blue-50 dark:bg-blue-950/30',
-        text: 'text-blue-700 dark:text-blue-300',
-        border: 'border-blue-200 dark:border-blue-800',
-        iconBg: 'bg-blue-500 text-white',
+        bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+        text: 'text-emerald-700 dark:text-emerald-300',
+        border: 'border-emerald-200 dark:border-emerald-800',
+        iconBg: 'bg-emerald-500 text-white',
     },
     violet: {
         bg: 'bg-amber-50 dark:bg-amber-950/30',
