@@ -1,5 +1,5 @@
 "use client";
-import { AudioLines, Mic2, Upload, Volume2 } from "lucide-react";
+import { AudioLines, Mic2, PhoneCall, Upload, Volume2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 
+import CallRecordingsList from "./CallRecordingsList";
 import RecordingsList from "./RecordingsList";
 import { RecordingsUploadDialog } from "./RecordingsUploadDialog";
 import styles from "./RecordingsWorkspace.module.css";
@@ -48,28 +49,37 @@ export default function RecordingsPage() {
             </header>
 
             <section className={styles.libraryRail} aria-label="Audio library guide">
-                <div className={styles.libraryNote}><span className={styles.noteIcon}><Mic2 className="h-4 w-4" /></span><div><strong>Original recordings</strong><p>Browse, play, rename, and remove source audio.</p></div></div>
-                <div className={styles.libraryNote}><span className={styles.noteIcon}><Volume2 className="h-4 w-4" /></span><div><strong>Generated speech</strong><p>Review cached phrases and invalidate them when needed.</p></div></div>
-                <div className={styles.libraryNote}><span className={styles.noteIcon}><AudioLines className="h-4 w-4" /></span><div><strong>Organization library</strong><p>Audio assets and cache are scoped to your organization.</p></div></div>
+                <div className={styles.libraryNote}><span className={styles.noteIcon}><PhoneCall className="h-4 w-4" /></span><div><strong>Call recordings</strong><p>Listen to and download audio captured from completed calls.</p></div></div>
+                <div className={styles.libraryNote}><span className={styles.noteIcon}><Mic2 className="h-4 w-4" /></span><div><strong>Uploaded audio</strong><p>Manage short audio clips that agents can play in workflows.</p></div></div>
+                <div className={styles.libraryNote}><span className={styles.noteIcon}><Volume2 className="h-4 w-4" /></span><div><strong>TTS cache</strong><p>Reuse generated speech to avoid synthesizing the same phrase again.</p></div></div>
             </section>
 
-            <Tabs defaultValue="recordings" className={styles.tabs} key={`${user.id}:${"selectedTeam" in user ? user.selectedTeam?.id : user.organizationId}`}>
+            <Tabs defaultValue="calls" className={styles.tabs} key={`${user.id}:${"selectedTeam" in user ? user.selectedTeam?.id : user.organizationId}`}>
                 <TabsList className={styles.tabList}>
-                    <TabsTrigger value="recordings">Uploaded recordings</TabsTrigger>
+                    <TabsTrigger value="calls">Call recordings</TabsTrigger>
+                    <TabsTrigger value="recordings">Uploaded audio</TabsTrigger>
                     <TabsTrigger value="tts-cache">TTS cache</TabsTrigger>
                 </TabsList>
+                <TabsContent value="calls">
+                    <Card className={styles.panel}>
+                        <CardHeader className={styles.panelHeader}>
+                            <CardTitle>Call recordings</CardTitle>
+                            <CardDescription>
+                                Recordings from completed phone and browser calls. Calls without saved audio are not listed here.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <CallRecordingsList />
+                        </CardContent>
+                    </Card>
+                </TabsContent>
                 <TabsContent value="recordings">
                     <Card className={styles.panel}>
                         <CardHeader className={styles.panelHeader}>
-                            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                                <div>
-                                    <CardTitle>All Recordings</CardTitle>
-                                    <CardDescription>
-                                        Audio recordings shared across all agents in your organization
-                                    </CardDescription>
-                                </div>
-                                <span className="text-xs text-muted-foreground">Organization library</span>
-                            </div>
+                            <CardTitle>Uploaded workflow audio</CardTitle>
+                            <CardDescription>
+                                Reusable audio clips uploaded for agent workflows. These are separate from completed call recordings.
+                            </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <RecordingsList refreshKey={refreshKey} />
@@ -81,7 +91,7 @@ export default function RecordingsPage() {
                         <CardHeader className={styles.panelHeader}>
                             <CardTitle>Cached speech</CardTitle>
                             <CardDescription>
-                                Speech reused across your organization’s workflows. Listen to a phrase and invalidate it to generate fresh audio on its next request.
+                                Generated speech is cached so repeated phrases can play without a new TTS request. Listen to a phrase or invalidate it to regenerate on its next request.
                             </CardDescription>
                         </CardHeader>
                         <CardContent>

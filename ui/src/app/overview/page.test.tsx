@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ getStats: vi.fn() }));
@@ -59,6 +59,20 @@ describe("workspace overview", () => {
 
     const configureLink = await screen.findByRole("link", { name: "Configure models" });
     expect(configureLink.getAttribute("href")).toBe("/model-configurations");
+  });
+
+  it("renders workspace links inside the three semantic tool groups", async () => {
+    mocks.getStats.mockResolvedValue(emptyStats);
+    render(<OverviewPage />);
+
+    const directory = await screen.findByRole("region", { name: "Workspace tools" });
+    const build = within(directory).getByRole("region", { name: "BUILD" });
+    const growth = within(directory).getByRole("region", { name: "GROWTH AND LEADS" });
+    const observability = within(directory).getByRole("region", { name: "MANAGE AND OBSERVABILITY" });
+
+    expect(within(build).getByRole("link", { name: /Voice Agents/ }).getAttribute("href")).toBe("/workflow");
+    expect(within(growth).getByRole("link", { name: /CRM Leads/ }).getAttribute("href")).toBe("/crm");
+    expect(within(observability).getByRole("link", { name: /Agent Runs/ }).getAttribute("href")).toBe("/usage");
   });
 
   it("uses the configured brand theme for overview capability and wallet accents", async () => {
