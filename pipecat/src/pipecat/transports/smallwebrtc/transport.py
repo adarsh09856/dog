@@ -288,6 +288,8 @@ class SmallWebRTCClient:
         """
         self._webrtc_connection = webrtc_connection
         self._closing = False
+        self._client_connected_once = False
+        self._client_closed_before_connect = False
         self._callbacks = callbacks
 
         self._audio_output_track = None
@@ -533,6 +535,18 @@ class SmallWebRTCClient:
                 self._last_audio_write_failure_log_at = 0.0
             return True
 
+        # The output pipeline may start before ICE finishes, and its mixer can
+        # emit silence frames. Drop only frames before the initial connection;
+        # initial speech waits for on_client_connected. Once connected or closed,
+        # preserve normal write-failure handling so real output errors still surface.
+        if (
+            not connected
+            and not self.is_closing
+            and not self._client_connected_once
+            and not self._client_closed_before_connect
+        ):
+            return True
+
         reason = (
             "closing" if self.is_closing
             else "not_connected" if not connected
@@ -630,6 +644,8 @@ class SmallWebRTCClient:
         if not self._params:
             return
 
+        self._client_connected_once = True
+        self._client_closed_before_connect = False
         self._audio_input_track = self._webrtc_connection.audio_input_track()
         self._video_input_track = self._webrtc_connection.video_input_track()
         self._screen_video_track = self._webrtc_connection.screen_video_input_track()
@@ -658,6 +674,8 @@ class SmallWebRTCClient:
 
     async def _handle_client_closed(self):
         """Handle client connection closure."""
+        if not self._client_connected_once:
+            self._client_closed_before_connect = True
         # Set pending futures before clearing the track to unblock write_audio_frame
         if self._audio_output_track:
             self._audio_output_track.mark_pending_futures_done()
