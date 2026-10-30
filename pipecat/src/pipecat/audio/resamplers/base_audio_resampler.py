@@ -25,6 +25,18 @@ class BaseAudioResampler(ABC):
     different sample rates.
     """
 
+    def reset(self) -> None:
+        """Discard buffered samples when an audio stream is interrupted."""
+        pass
+
+    async def flush(self) -> bytes:
+        """Return buffered output at a completed audio boundary.
+
+        Stateless implementations have no pending samples. Streaming
+        implementations should also prepare for the next independent stream.
+        """
+        return b""
+
     @abstractmethod
     async def resample(self, audio: bytes, in_rate: int, out_rate: int) -> bytes:
         """Resamples the given audio data to a different sample rate.
