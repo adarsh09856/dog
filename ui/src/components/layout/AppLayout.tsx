@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import React, { ReactNode } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
-import { BrandTagline } from "@/components/BrandTagline";
 import { Button } from "@/components/ui/button";
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { useAppConfig } from "@/context/AppConfigContext";
@@ -16,15 +15,6 @@ import { useAuth } from "@/lib/auth";
 import { requiredFeatureForUiPath } from "@/lib/clientEntitlements";
 
 import { AppSidebar } from "./AppSidebar";
-import chrome from "./WorkspaceChrome.module.css";
-
-const PUBLIC_MARKETING_PATHS = ["/", "/pricing", "/platform", "/deployment", "/auth", "/handler", "/embed"];
-
-function isPublicMarketingPath(pathname: string | null): boolean {
-  return PUBLIC_MARKETING_PATHS.some((path) =>
-    path === "/" ? pathname === path : pathname === path || pathname?.startsWith(`${path}/`),
-  );
-}
 
 function AppHeader() {
   const { toggleSidebar } = useSidebar();
@@ -33,15 +23,15 @@ function AppHeader() {
   const sectionLabel = section === "workflow" ? "Voice agents" : section.replaceAll("-", " ");
 
   return (
-    <header className={`workspace-topbar ${chrome.appHeader} sticky top-[var(--event-banner-h,0px)] z-50 flex items-center justify-between border-b border-border/60 bg-background/70 px-4 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/55`}>
+    <header className="workspace-topbar sticky top-[var(--event-banner-h,0px)] z-50 flex items-center justify-between border-b border-border/60 bg-background/70 px-4 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-background/55">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Open menu" className="md:hidden">
           <Menu className="h-5 w-5" />
         </Button>
         <Link href="/" className="md:hidden" aria-label="Home"><BrandLogo className="h-6" /></Link>
-        <nav aria-label="Workspace location" className={`${chrome.breadcrumb} hidden items-center gap-3 text-xs md:flex`}><span>Workspace</span><span aria-hidden="true" className={chrome.breadcrumbDivider}>/</span><span aria-current="page">{sectionLabel}</span></nav>
+        <div className="hidden items-center gap-3 text-xs md:flex"><span className="text-muted-foreground">Workspace</span><span aria-hidden="true" className="text-muted-foreground/50">/</span><span className="font-semibold capitalize text-foreground">{sectionLabel}</span></div>
       </div>
-      <BrandTagline className="hidden font-mono text-[9px] tracking-[.12em] text-muted-foreground sm:inline" />
+      <span className="hidden font-mono text-[9px] tracking-[.12em] text-muted-foreground sm:inline">VOICE OPERATIONS</span>
     </header>
   );
 }
@@ -53,7 +43,10 @@ function BackendStatusBanner() {
   if (
     !config ||
     config.backendStatus === "reachable" ||
-    isPublicMarketingPath(pathname) ||
+    pathname === "/" ||
+    pathname?.startsWith("/auth") ||
+    pathname?.startsWith("/pricing") ||
+    pathname?.startsWith("/embed") ||
     pathname?.startsWith("/admin") ||
     pathname?.startsWith("/superadmin")
   ) {
@@ -110,7 +103,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({
   const requiredFeature = requiredFeatureForUiPath(pathname);
 
   // Public marketing & embedding routes: Never render sidebar or internal app chrome
-  const isPublicOrMarketing = isPublicMarketingPath(pathname);
+  const isPublicOrMarketing =
+    pathname === "/" ||
+    pathname.startsWith("/pricing") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/handler") ||
+    pathname.startsWith("/embed");
 
   // Admin and superadmin control plane routes have their own layout and sidebar
   const isAdminRoute =
@@ -130,9 +128,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({
     <SidebarProvider defaultOpen>
       {shouldShowSidebar ? (
         <LeadFormsProvider>
-          <div className="flex min-h-screen w-full min-w-0">
+          <div className="flex min-h-screen w-full">
             <AppSidebar />
-            <SidebarInset className="min-w-0 flex-1 overflow-x-clip">
+            <SidebarInset className="flex-1">
               <BackendStatusBanner />
               {!isWorkflowEditor && <AppHeader />}
               {/* Optional header area for specific pages */}
@@ -158,7 +156,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({
               )}
 
               {/* Main content area */}
-              <main className={`app-surface ${chrome.mainSurface} flex-1`}>
+              <main className="app-surface flex-1">
                 {entitlements.isClientEdition && requiredFeature && entitlements.loading ? (
                   <div className="container mx-auto px-4 py-12" role="status" aria-live="polite">
                     Checking installation access…

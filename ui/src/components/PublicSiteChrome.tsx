@@ -9,11 +9,9 @@ import { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useClientBranding } from "@/context/ClientBrandingContext";
 
-import styles from "./PublicSiteChrome.module.css";
-
 const links = [
-  { href: "/platform", label: "Platform" },
-  { href: "/deployment", label: "Deployment" },
+  { href: "/#platform", label: "Platform" },
+  { href: "/#deployment", label: "Deployment" },
   { href: "/pricing", label: "Pricing" },
 ];
 
@@ -26,27 +24,27 @@ export function PublicHeader() {
   useEffect(() => setOpen(false), [pathname]);
 
   return (
-    <header className={`${styles.header} public-header sticky top-0 z-50`}>
+    <header className="public-header sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl">
       <a
         href="#main-content"
         className="sr-only rounded-lg bg-background px-4 py-3 focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50"
       >
         Skip to content
       </a>
-      <div className={`${styles.headerInner} mx-auto flex h-[76px] max-w-[1480px] items-center justify-between gap-4 px-5 sm:px-8 lg:px-10`}>
-        <Link href="/" aria-label="Home" className={`${styles.brand} min-w-0 max-w-[55%] sm:max-w-none`}>
+      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
+        <Link href="/" aria-label="Home" className="min-w-0 max-w-[55%] sm:max-w-none">
           <BrandLogo className="h-8" />
         </Link>
         <nav
           aria-label="Main navigation"
-          className={`${styles.nav} hidden items-center gap-8 text-sm md:flex`}
+          className="hidden items-center gap-8 text-sm md:flex"
         >
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               aria-current={pathname === link.href ? "page" : undefined}
-              className={`${styles.navLink} text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:text-foreground`}
+              className="text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:text-foreground"
             >
               {link.label}
             </Link>
@@ -59,7 +57,7 @@ export function PublicHeader() {
             onClick={() =>
               setTheme(resolvedTheme === "dark" ? "light" : "dark")
             }
-            className={`${styles.themeButton} rounded-lg p-2.5 text-muted-foreground hover:bg-muted hover:text-foreground`}
+            className="rounded-lg p-2.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             {mounted && resolvedTheme === "dark" ? (
               <Sun className="size-4" />
@@ -75,7 +73,7 @@ export function PublicHeader() {
           </Link>
           <Link
             href="/auth/login"
-            className={`${styles.consoleLink} hidden items-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90 sm:inline-flex`}
+            className="hidden items-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90 sm:inline-flex"
           >
             Open console <ArrowRight className="size-4" />
           </Link>
@@ -85,7 +83,7 @@ export function PublicHeader() {
             aria-expanded={open}
             aria-controls="public-mobile-navigation"
             onClick={() => setOpen(!open)}
-            className={`${styles.menuButton} rounded-lg p-2 md:hidden`}
+            className="rounded-lg p-2 md:hidden"
           >
             {open ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
@@ -95,15 +93,14 @@ export function PublicHeader() {
         <nav
           id="public-mobile-navigation"
           aria-label="Mobile navigation"
-          className={`${styles.mobileMenu} space-y-1 border-t border-border px-5 py-4 md:hidden`}
+          className="space-y-1 border-t border-border px-5 py-4 md:hidden"
         >
           {[...links, { href: "/auth/login", label: "Sign in" }].map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              aria-current={pathname === link.href ? "page" : undefined}
               onClick={() => setOpen(false)}
-              className={`${styles.mobileLink} block rounded-lg px-3 py-3 text-sm hover:bg-muted`}
+              className="block rounded-lg px-3 py-3 text-sm hover:bg-muted"
             >
               {link.label}
             </Link>
@@ -117,11 +114,11 @@ export function PublicHeader() {
 export function PublicFooter() {
   const branding = useClientBranding();
   return (
-    <footer className={`${styles.footer} border-t border-border`}>
+    <footer className="border-t border-border bg-background">
       <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] gap-8 px-5 py-12 sm:px-8 md:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0 space-y-4">
           <Link href="/" aria-label="Home">
-            <BrandLogo inverse className="h-7" />
+            <BrandLogo className="h-7" />
           </Link>
           <p className="max-w-sm text-sm leading-6 text-muted-foreground">
             {branding.tagline}
@@ -131,10 +128,10 @@ export function PublicFooter() {
           aria-label="Footer navigation"
           className="flex flex-wrap content-start gap-x-7 gap-y-4 text-sm text-muted-foreground"
         >
-          <Link href="/platform" className="hover:text-foreground">
+          <Link href="/#platform" className="hover:text-foreground">
             Platform
           </Link>
-          <Link href="/deployment" className="hover:text-foreground">
+          <Link href="/#deployment" className="hover:text-foreground">
             Deployment
           </Link>
           <Link href="/pricing" className="hover:text-foreground">
