@@ -667,35 +667,40 @@ def test_release_verifier_checks_caddyfile_with_the_approved_digest(tmp_path, mo
         verify_images.verify_caddyfile("caddy:latest", str(root / "deploy/client/Caddyfile"))
 
 
-def test_release_publisher_writes_only_verified_image_digests(tmp_path, monkeypatch):
+@pytest.mark.parametrize("shared_repository", [False, True])
+def test_release_publisher_stages_unique_refs_without_touching_release_tags(monkeypatch, shared_repository):
     root = Path(__file__).resolve().parents[2]
     monkeypatch.syspath_prepend(str(root / "deploy/client"))
     import build_and_verify
 
-    api_digest = "registry.example.com/kodewaves/api@sha256:" + "a" * 64
-    ui_digest = "registry.example.com/kodewaves/ui@sha256:" + "b" * 64
+    api_repository = "registry.example.com/kodewaves/api"
+    ui_repository = api_repository if shared_repository else "registry.example.com/kodewaves/ui"
+    api_digest = api_repository + "@sha256:" + "a" * 64
+    ui_digest = ui_repository + "@sha256:" + "b" * 64
     calls = []
 
     def run(command, **kwargs):
         calls.append(command)
-        if command[1] == "push":
-            return None
-        digest = api_digest if command[-1].endswith("api:release") else ui_digest
+        if command[1] in {"tag", "push"}:
+            return SimpleNamespace(stdout="", stderr="", returncode=0)
+        digest = api_digest if command[-1].endswith("-api") else ui_digest
         return SimpleNamespace(stdout=json.dumps([digest]))
 
     monkeypatch.setattr(build_and_verify.subprocess, "run", run)
-    output = tmp_path / "release-images.env"
-    pinned = build_and_verify.push_and_write_digest_env(
-        "registry.example.com/kodewaves/api:release",
-        "registry.example.com/kodewaves/ui:release",
-        output,
+    staging, pinned = build_and_verify.push_staging_images(
+        "local-api:built", "local-ui:built",
+        api_repository + ":api-release",
+        ui_repository + ":ui-release",
+        release_id="abc123",
     )
 
-    assert pinned == (api_digest, ui_digest)
-    assert output.read_text(encoding="utf-8") == (
-        f"CLIENT_API_IMAGE={api_digest}\nCLIENT_UI_IMAGE={ui_digest}\n"
+    assert staging == (
+        api_repository + ":kodewaves-verify-abc123-api",
+        ui_repository + ":kodewaves-verify-abc123-ui",
     )
-    assert [command[1] for command in calls] == ["push", "image", "push", "image"]
+    assert pinned == (api_digest, ui_digest)
+    assert [command[1] for command in calls] == ["tag", "push", "image", "tag", "push", "image"]
+    assert all("release" not in command[-1] for command in calls if command[1] in {"tag", "push"})
     docker_hub_digest = "docker.io/kodewaves/api@sha256:" + "c" * 64
     assert build_and_verify._pushed_digest(
         "kodewaves/api:release", json.dumps([docker_hub_digest])
@@ -708,10 +713,86 @@ def test_release_publisher_rejects_tags_without_registry_or_namespace(tmp_path, 
     import build_and_verify
 
     with pytest.raises(ValueError, match="registry or namespace"):
-        build_and_verify.push_and_write_digest_env(
+        build_and_verify.push_staging_images(
+            "local-api:built", "local-ui:built",
             "local-api:release", "registry.example.com/kodewaves/ui:release",
-            tmp_path / "release-images.env",
+            release_id="abc123",
         )
+
+
+def test_release_promotion_preserves_verified_digests(monkeypatch):
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(root / "deploy/client"))
+    import build_and_verify
+
+    api_digest = "registry.example.com/kodewaves/api@sha256:" + "a" * 64
+    ui_digest = "registry.example.com/kodewaves/ui@sha256:" + "b" * 64
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if command[1:4] == ["buildx", "imagetools", "inspect"] and len(command) == 5:
+            return SimpleNamespace(returncode=1, stdout="", stderr="manifest unknown")
+        if command[1:4] == ["buildx", "imagetools", "inspect"]:
+            value = "a" * 64 if "/api:" in command[-1] else "b" * 64
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"digest": "sha256:" + value}),
+                stderr="",
+            )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(build_and_verify.subprocess, "run", run)
+    build_and_verify.promote_verified_images(
+        ("registry.example.com/kodewaves/api:staging", "registry.example.com/kodewaves/ui:staging"),
+        ("registry.example.com/kodewaves/api:release", "registry.example.com/kodewaves/ui:release"),
+        (api_digest, ui_digest),
+    )
+
+    promotions = [command for command in calls if command[1:4] == ["buildx", "imagetools", "create"]]
+    assert len(promotions) == 2
+    assert all("--prefer-index=false" in command for command in promotions)
+    assert promotions[0][-1] == api_digest
+    assert promotions[1][-1] == ui_digest
+
+
+def test_release_promotion_refuses_to_overwrite_existing_tag(monkeypatch):
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(root / "deploy/client"))
+    import build_and_verify
+
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return SimpleNamespace(returncode=0, stdout="existing", stderr="")
+
+    monkeypatch.setattr(build_and_verify.subprocess, "run", run)
+    with pytest.raises(ValueError, match="Refusing to overwrite existing"):
+        build_and_verify.promote_verified_images(
+            ("registry.example.com/kodewaves/api:staging", "registry.example.com/kodewaves/ui:staging"),
+            ("registry.example.com/kodewaves/api:release", "registry.example.com/kodewaves/ui:release"),
+            ("registry.example.com/kodewaves/api@sha256:" + "a" * 64,
+             "registry.example.com/kodewaves/ui@sha256:" + "b" * 64),
+        )
+    assert not any(command[1:4] == ["buildx", "imagetools", "create"] for command in calls)
+
+
+def test_release_digest_env_is_written_atomically(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(root / "deploy/client"))
+    import build_and_verify
+
+    output = tmp_path / "release.env"
+    output.write_text("old release", encoding="utf-8")
+    api_digest = "registry.example.com/kodewaves/api@sha256:" + "a" * 64
+    ui_digest = "registry.example.com/kodewaves/ui@sha256:" + "b" * 64
+    build_and_verify.write_digest_env(output, api_digest, ui_digest)
+
+    assert output.read_text(encoding="utf-8") == (
+        f"CLIENT_API_IMAGE={api_digest}\nCLIENT_UI_IMAGE={ui_digest}\n"
+    )
+    assert not list(tmp_path.glob("*.tmp"))
 
 
 def test_release_cli_refuses_to_push_unsigned_images(tmp_path, monkeypatch):
