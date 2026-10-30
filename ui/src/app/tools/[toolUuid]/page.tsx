@@ -1,6 +1,4 @@
 "use client";
-import chrome from "@/components/layout/WorkspaceChrome.module.css";
-
 import { ArrowLeft, Code, ExternalLink, FlaskConical, Loader2, Save } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -29,6 +27,7 @@ import {
     type ToolParameter,
     validateUrl,
 } from "@/components/http";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -949,7 +948,7 @@ const data = await response.json();`;
                                 <div
                                     className="w-10 h-10 rounded-lg flex items-center justify-center"
                                     style={{
-                                        backgroundColor: tool.icon_color || categoryConfig?.iconColor || "#3B82F6",
+                                        backgroundColor: tool.icon_color || categoryConfig?.iconColor || "#426B57",
                                     }}
                                 >
                                     {renderToolIcon(tool.category)}

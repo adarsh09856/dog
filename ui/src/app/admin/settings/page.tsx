@@ -713,7 +713,7 @@ export default function AdminSettingsPage() {
         <Card id="settings-stt" className="border-border/60 md:col-span-2">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
-              <Mic className="h-5 w-5 text-sky-500" />
+              <Mic className="h-5 w-5 text-primary" />
               Self-hosted Indian speech recognition
             </CardTitle>
             <CardDescription>

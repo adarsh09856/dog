@@ -113,7 +113,7 @@ export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
         description: "Make HTTP requests to external APIs",
         icon: Globe,
         iconName: "globe",
-        iconColor: "#3B82F6",
+        iconColor: "#426B57",
     },
     {
         value: "end_call",
@@ -145,7 +145,7 @@ export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
         description: "Hand the live call to another platform agent, without dropping the caller",
         icon: ArrowLeftRight,
         iconName: "arrow-left-right",
-        iconColor: "#0EA5E9",
+        iconColor: "#D1B367",
         autoFill: {
             name: "Transfer To Agent",
             description: "Transfer the caller to a specialist agent when their question is outside what you handle",
@@ -169,7 +169,7 @@ export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
         description: "Connect a customer MCP server; its tools become available to the agent",
         icon: Puzzle,
         iconName: "puzzle",
-        iconColor: "#8B5CF6",
+        iconColor: "#6EAAA0",
     },
     {
         value: "native",
@@ -188,7 +188,7 @@ export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
             "Built-in third-party integrations such as Google Calendar are not available in this release. Connect a service with External HTTP API or MCP Server instead.",
         icon: Puzzle,
         iconName: "puzzle",
-        iconColor: "#8B5CF6",
+        iconColor: "#A5A875",
         disabled: true,
     },
 ];
@@ -204,7 +204,7 @@ export function getToolIcon(category: string): LucideIcon {
 
 export function getToolIconColor(category: string, fallbackColor?: string): string {
     const config = TOOL_CATEGORIES.find(c => c.value === category);
-    return config?.iconColor ?? fallbackColor ?? "#3B82F6";
+    return config?.iconColor ?? fallbackColor ?? "#426B57";
 }
 
 export function renderToolIcon(category: string, className: string = "w-5 h-5 text-white"): ReactNode {

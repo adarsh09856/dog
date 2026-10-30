@@ -94,16 +94,16 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
         iconBg: 'bg-emerald-500 text-white',
     },
     blue: {
-        bg: 'bg-blue-50 dark:bg-blue-950/30',
-        text: 'text-blue-700 dark:text-blue-300',
-        border: 'border-blue-200 dark:border-blue-800',
-        iconBg: 'bg-blue-500 text-white',
+        bg: 'bg-primary/10 dark:bg-primary/20',
+        text: 'text-primary',
+        border: 'border-primary/20 dark:border-primary/30',
+        iconBg: 'bg-primary text-primary-foreground',
     },
     violet: {
-        bg: 'bg-violet-50 dark:bg-violet-950/30',
-        text: 'text-violet-700 dark:text-violet-300',
-        border: 'border-violet-200 dark:border-violet-800',
-        iconBg: 'bg-violet-500 text-white',
+        bg: 'bg-amber-50 dark:bg-amber-950/30',
+        text: 'text-amber-800 dark:text-amber-300',
+        border: 'border-amber-200 dark:border-amber-800',
+        iconBg: 'bg-amber-500 text-white',
     },
     rose: {
         bg: 'bg-rose-50 dark:bg-rose-950/30',
@@ -118,10 +118,10 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
         iconBg: 'bg-amber-500 text-white',
     },
     cyan: {
-        bg: 'bg-cyan-50 dark:bg-cyan-950/30',
-        text: 'text-cyan-700 dark:text-cyan-300',
-        border: 'border-cyan-200 dark:border-cyan-800',
-        iconBg: 'bg-cyan-500 text-white',
+        bg: 'bg-teal-50 dark:bg-teal-950/30',
+        text: 'text-teal-700 dark:text-teal-300',
+        border: 'border-teal-200 dark:border-teal-800',
+        iconBg: 'bg-teal-600 text-white',
     },
     slate: {
         bg: 'bg-slate-50 dark:bg-slate-900/30',
@@ -142,10 +142,10 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
         iconBg: 'bg-teal-500 text-white',
     },
     indigo: {
-        bg: 'bg-indigo-50 dark:bg-indigo-950/30',
-        text: 'text-indigo-700 dark:text-indigo-300',
-        border: 'border-indigo-200 dark:border-indigo-800',
-        iconBg: 'bg-indigo-500 text-white',
+        bg: 'bg-primary/10 dark:bg-primary/20',
+        text: 'text-primary',
+        border: 'border-primary/20 dark:border-primary/30',
+        iconBg: 'bg-primary text-primary-foreground',
     },
 };
 

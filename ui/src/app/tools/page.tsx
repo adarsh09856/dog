@@ -194,7 +194,7 @@ export default function ToolsPage() {
                 description: newToolDescription || undefined,
                 category: newToolCategory,
                 icon: categoryConfig?.iconName || "globe",
-                icon_color: categoryConfig?.iconColor || "#3B82F6",
+                icon_color: categoryConfig?.iconColor || "#426B57",
                 definition,
             };
 
@@ -449,7 +449,7 @@ export default function ToolsPage() {
                                                             className={styles.toolIcon}
                                                             style={{
                                                                 backgroundColor:
-                                                                    tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#3B82F6",
+                                                                    tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#426B57",
                                                             }}
                                                         >
                                                             {renderToolIcon(tool.category)}
@@ -514,7 +514,7 @@ export default function ToolsPage() {
                                                             className={styles.toolIcon}
                                                                 style={{
                                                                     backgroundColor:
-                                                                        tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#3B82F6",
+                                                                        tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#426B57",
                                                                 }}
                                                             >
                                                                 {renderToolIcon(tool.category)}

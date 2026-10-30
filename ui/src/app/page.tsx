@@ -26,25 +26,25 @@ const operatingStages = [
   {
     number: "01",
     label: "DESIGN",
-    title: "Shape the work before the call.",
-    summary: "Build the conversation path, define useful questions and connect the actions an agent can take.",
-    points: ["Visual workflow builder", "Prompts, branches and tools"],
+    title: "Build the voice agent workflow.",
+    summary: "Set the agent’s instructions, greeting, conversation branches and actions before connecting it to callers.",
+    points: ["Visual workflow builder", "Knowledge, tools and call actions"],
     icon: Workflow,
   },
   {
     number: "02",
     label: "CONNECT",
-    title: "Choose how people reach you.",
-    summary: "Configure the browser and telephone channels, plus the speech providers enabled for your deployment.",
-    points: ["Browser and telephone", "Provider and language settings"],
+    title: "Connect browser and phone calls.",
+    summary: "Run browser voice sessions, route inbound calls to an assigned workflow, or start outbound calls and campaigns through configured carriers.",
+    points: ["Web voice and inbound routing", "Outbound calls and campaigns"],
     icon: Phone,
   },
   {
     number: "03",
     label: "OPERATE",
-    title: "Review what happened.",
-    summary: "Follow completed runs, transcripts and recordings so your team can improve the workflow with evidence.",
-    points: ["Conversation history", "Usage and call review"],
+    title: "Review each call and run.",
+    summary: "Inspect run status, call details, transcripts and available recordings, then use that history to improve the workflow.",
+    points: ["Runs, transcripts and recordings", "Usage and campaign results"],
     icon: Headphones,
   },
 ];
@@ -53,30 +53,32 @@ const speechStages = [
   {
     number: "A",
     title: "Speech recognition",
-    text: "Select an enabled STT provider and the languages supported by the chosen model.",
+    text: "Choose an enabled speech-to-text provider and a model’s supported languages to turn caller audio into text.",
     icon: MessageSquareText,
   },
   {
     number: "B",
     title: "Reasoning and actions",
-    text: "Connect an LLM to your instructions, knowledge sources, workflow branches and tools.",
+    text: "Use a configured language model with the agent’s instructions, knowledge files, workflow branches and connected tools.",
     icon: Workflow,
   },
   {
     number: "C",
     title: "Voice synthesis",
-    text: "Choose an enabled TTS provider, voice and speaking settings for the agent.",
+    text: "Choose an enabled text-to-speech provider, voice and speaking settings for the agent’s replies.",
     icon: AudioLines,
   },
 ];
 
 const platformAreas = [
   { title: "Workflow builder", text: "Design questions, branches and actions that follow the caller’s request.", icon: Workflow },
-  { title: "Business tools", text: "Look up information, collect details and pass work into connected systems.", icon: Wrench },
-  { title: "Web and telephone", text: "Configure browser voice and the telephony providers enabled for the workspace.", icon: Globe2 },
-  { title: "Conversation review", text: "Inspect transcripts, recordings and workflow runs after each interaction.", icon: Headphones },
-  { title: "Models and languages", text: "Choose from the STT, LLM and TTS providers available in your deployment.", icon: AudioLines },
-  { title: "Workspace data", text: "Manage knowledge files and review usage with your team’s workspace controls.", icon: Database },
+  { title: "Inbound and outbound calls", text: "Route inbound calls to an assigned agent workflow and place outbound calls through a configured telephony provider.", icon: Phone },
+  { title: "Outbound campaigns", text: "Create, start and review campaigns that call contact lists using an agent workflow and configured carrier.", icon: AudioLines },
+  { title: "CRM and appointments", text: "Manage contact and lead records, appointment bookings and appointment settings in the workspace.", icon: Database },
+  { title: "Voice forms and web widgets", text: "Create structured forms and embed a configured browser voice agent on a website; available widget features depend on setup.", icon: Globe2 },
+  { title: "Tools and knowledge", text: "Connect configured tools and maintain knowledge documents that agents can use during conversations.", icon: Wrench },
+  { title: "Call and run review", text: "Review workflow runs, call outcomes, transcripts, available recordings and usage history.", icon: Headphones },
+  { title: "Configured speech models", text: "Select enabled speech-to-text, language-model and text-to-speech providers; available models and languages vary by deployment.", icon: AudioLines },
 ];
 
 export default function HomePage() {
@@ -91,12 +93,12 @@ export default function HomePage() {
             <div className={styles.heroCopy}>
               <p className={styles.eyebrow}>Voice operations / {branding.company_name}</p>
               <h1 className={styles.headline}>
-                Every conversation.<br />
-                <span className={styles.headlineAccent}>A clear next step.</span>
+                AI voice agents for calls.<br />
+                <span className={styles.headlineAccent}>Workflows that get things done.</span>
               </h1>
               <p className={styles.lede}>{branding.tagline}</p>
               <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">
-                Design how the agent responds, connect it to the systems your team uses, and review the work after each conversation.
+                Build voice-agent workflows for browser sessions and telephone calls. Configure speech recognition, a language model and a speaking voice, then connect campaigns, CRM, appointments, forms, tools and knowledge where enabled.
               </p>
               <div className={styles.actions}>
                 <Link href="/auth/login" className={styles.primaryAction}>
@@ -110,7 +112,7 @@ export default function HomePage() {
             <div className={styles.heroVisual}>
               <VoiceOperationsIllustration />
               <div className={styles.visualCaption}>
-                <span>Listen / Understand / Respond</span>
+                <span>Recognize speech / Respond / Take action</span>
                 <span>Workflow preview / not live data</span>
               </div>
             </div>
@@ -119,10 +121,10 @@ export default function HomePage() {
 
         <div className={`${styles.pageFrame} ${styles.signalStrip}`} aria-label="Voice operations lifecycle">
           {[
-            ["01", "Design the conversation"],
-            ["02", "Connect browser and phone"],
-            ["03", "Choose enabled speech models"],
-            ["04", "Review completed work"],
+            ["01", "Build an agent workflow"],
+            ["02", "Route browser and phone calls"],
+            ["03", "Configure STT, LLM and TTS"],
+            ["04", "Review calls, runs and results"],
           ].map(([number, label]) => (
             <div className={styles.signalItem} key={number}>
               <span className={styles.signalNumber}>{number}</span>
@@ -136,10 +138,10 @@ export default function HomePage() {
             <div className={styles.sectionHead}>
               <div>
                 <p className={styles.eyebrow}>Configure the full call lifecycle</p>
-                <h2>One workspace for agents, channels and call review.</h2>
+                <h2>Build an agent, connect a call, review the result.</h2>
               </div>
               <p>
-                Build the workflow once, connect the supported channels and providers, then keep the conversation history close to the tools that power the work.
+                Configure the conversation and speech providers, route browser or telephone calls, and use workspace features such as campaigns, CRM, appointments, forms, widgets, tools and knowledge when available to your account.
               </p>
             </div>
             <div className={styles.stageGrid}>
@@ -185,7 +187,7 @@ export default function HomePage() {
             <div className={styles.sectionHead}>
               <div>
                 <p className={styles.eyebrow}>Tools around each conversation</p>
-                <h2>Move from a caller’s words to useful work.</h2>
+                <h2>Use calls to support real business workflows.</h2>
               </div>
               <p>
                 Available tools depend on the workspace plan, enabled integrations and deployment configuration.

@@ -20,14 +20,16 @@
 .toolDirectory { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 2rem; padding-top: 1rem; }
 .toolGroup { min-width: 0; }
 .groupHeading { display: flex; align-items: center; gap: 10px; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
-.groupHeading > span { font-family: var(--font-geist-mono),monospace; font-size: 10px; color: var(--primary); }
+.groupHeading > span { font-family: var(--font-geist-mono),monospace; font-size: 10px; color: color-mix(in srgb,var(--tool-directory-accent,var(--sidebar-primary)) 55%,var(--foreground)); }
 .groupHeading h2 { font-size: 10px; letter-spacing: .09em; font-weight: 650; }
 .groupDescription { color: var(--muted-foreground); font-size: 11px; line-height: 1.7; min-height: 3.25rem; margin: .9rem 0; }
 .toolLink { display: flex; align-items: flex-start; gap: 12px; border-bottom: 1px solid var(--border); padding: 1.1rem 0; transition: color 150ms, padding 150ms; }
-.toolLink > svg:first-child { margin-top: 2px; color: var(--primary); flex-shrink: 0; }
+.toolItemList { display: contents; }
+.toolLink > svg:first-child { margin-top: 2px; color: color-mix(in srgb,var(--tool-directory-accent,var(--sidebar-primary)) 55%,var(--foreground)); flex-shrink: 0; }
 .toolLink > svg:last-child { margin-left: auto; color: var(--muted-foreground); flex-shrink: 0; margin-top: 3px; }
+.toolLink > div { min-width: 0; }
 .toolLink h3 { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
-.toolLink p { font-size: 10px; line-height: 1.7; color: var(--muted-foreground); }
+.toolLink p { font-size: 10px; line-height: 1.7; color: var(--muted-foreground); overflow-wrap: anywhere; }
 .toolLink:hover { color: var(--primary); padding-left: 6px; }
 .toolLink:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 3px; }
 .adminHero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: .5rem 0 2rem; border-bottom: 1px solid var(--border); }
