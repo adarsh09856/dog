@@ -25,7 +25,8 @@ from api.services.workflow.direct_caller_reply import END_CALL_TOOL_NAMES as _EN
 _LOCAL_CALLER_RESPONSE_GUARD = (
     "Answer in the caller's language. Use their known name and contact details; ask "
     "only for the next missing or corrected detail. Never repeat an earlier reply or "
-    "invent service names. For bookings, retain every caller-provided service, date, "
+    "invent service names. Never claim an action succeeded without tool success. "
+    "For bookings, retain every caller-provided service, date, "
     "and time. Ask one short clarification only when needed; never guess a date, year, "
     "or time. After the date is clear, ask only for the time."
 )
