@@ -358,6 +358,7 @@ export default function PricingPage() {
             ); })}
           </div>
           </div>
+          </div>
         </section>
 
         <section className={`${styles.installation} ${pageStyles.installPanel} grid gap-8 rounded-2xl border border-border bg-muted/40 p-7 sm:p-10 md:grid-cols-2`}>
