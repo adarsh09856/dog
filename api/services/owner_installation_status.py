@@ -90,8 +90,17 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
         integrity_finding = exc.finding()
         await redis_client.hset(
             _status_key(license_data.installation_id),
-            mapping={"integrity_failed_latched": "1"},
+            mapping={
+                "integrity_failed_latched": "1",
+                "pending_integrity_finding": json.dumps(integrity_finding, sort_keys=True),
+            },
         )
+    pending = await redis_client.hget(
+        _status_key(license_data.installation_id), "pending_integrity_finding"
+    )
+    if pending:
+        integrity_ok = False
+        integrity_finding = json.loads(pending)
     nonce = secrets.token_urlsafe(32)
     response = await client.post(
         _status_url(),
@@ -112,6 +121,16 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
         license_token=token,
         nonce=nonce,
     )
+    if pending:
+        # Do not erase a newer finding written by another polling process.
+        await redis_client.eval(
+            "if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then "
+            "return redis.call('HDEL', KEYS[1], ARGV[1]) end return 0",
+            1,
+            _status_key(license_data.installation_id),
+            "pending_integrity_finding",
+            pending,
+        )
     if status["revoked"]:
         # A slower active response from another worker must not undo a
         # revocation already observed by this installation.
