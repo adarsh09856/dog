@@ -2584,6 +2584,20 @@ The source ref match is verified; the runtime container/image ref and caller-hea
 - [x] Python syntax parsing succeeded for all 1,006 `api/**/*.py` files using `ast.parse`; no bytecode or test report was created. `git diff --check origin/main..HEAD` passed, and the candidate worktree is clean after removing the temporary dependency junction.
 - [ ] Backend unit/integration tests were not run: this worktree has neither `api/.env.test` nor a repo venv. Do not point tests at `api/.env` or any production database. API image build, migration execution, browser/phone runtime acceptance and model latency benchmarks remain pending.
 
+### 2026-10-30 local consolidation checkpoint — current source of truth
+
+- [x] Local integration checkout is clean on `main` at `143bb751d8f53080a84bdcbf1bad2843d9c578e2`. It is 443 commits ahead of fetched GitHub `origin/main` (`8a44d2b03f93eb72e99f922f7a363deb87730dfc`); nothing has been pushed or deployed in this checkpoint.
+- [x] The actual VPS source tip `codex/production-integration` (`35ae46d3`), the corresponding local production branch (`0bed9cc2`), `codex/client-bundle-theme` (`ea0a1b92`), and `codex/client-voice-integration` (`1ebe61d2`) are ancestors of local `main`. The platform-completion, speech-language-audit, and speech-routing branch tips are also recorded as merge parents. Branch history is reconciled locally; stale overlaps were resolved by retaining the newer local-main tree.
+- [x] Speech audit confirms local main retains confidence-aware STT routing, language-switch stability, Hindi/English phone-number rescue, safe number/date phrase boundaries, interruption/cancellation handling, and first-audible/PCM-gap tracing. Older branch implementations that remove these protections were not copied over them. The 48-character TTS phrase edit remains excluded; it can increase buffering delay and has no acceptance measurement.
+- [x] Applied the safe client-theme delta from the other chat: removed duplicate disabled-state CSS declarations. Its placeholder-email behavior is already present in local main.
+- [x] Preserved the original chat worktree and all four `.bundle` snapshots; none were copied into the consolidated source. The peer chat's workflow edit still references client test files, so it is not part of a release that excludes test files. Its separate plan edits were not copied; this file remains the primary ledger. The Kodewaves icon/logo asset review is still in the peer worktree.
+- [ ] Before publishing, produce a source-only snapshot from this local tree that excludes new test files, diagnostic scripts and reports while keeping the GitHub baseline's existing files intact. Review the exact snapshot diff and verify no customer/site data or server backups enter it.
+- [ ] Build immutable API/UI images for that exact snapshot in the configured build environment (not on the busy inference host), inspect image digests and migration compatibility, then update the production checkout only after rollback references are recorded.
+- [ ] After deployment, verify the active source SHA and image digests, then run correlated WebRTC and authorized telephone calls for Hindi, English and Hinglish. Record STT final, LLM first useful text, first non-silent TTS PCM and playback completion; also verify number/date capture, no repeated turns, no cutoff/overlap, and auto-detection only for installed supported languages.
+- [ ] Finish the remaining user/admin page, client package/install, billing, CRM, campaign, telephony, form, widget, tool, recording, appointment and report acceptance checks. Do not mark them complete from source inspection or a healthy container alone.
+
+**Current release state:** local branch reconciliation is complete at the ancestry/source-selection level; the source-only GitHub update, image build, production update, and full caller-heard acceptance have not happened yet.
+
 ### 2026-10-30 GitHub main fast-forward
 
 - [x] Fast-forwarded GitHub `main` from `a911125273b4882daf783c802c0821c3a2873c5a` to reviewed candidate `8a44d2b03f93eb72e99f922f7a363deb87730dfc`; verified with `git ls-remote`. No force push.
