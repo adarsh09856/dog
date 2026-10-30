@@ -1,6 +1,10 @@
+"use client";
+
 import Image from "next/image";
+
 import React from "react";
 
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { cn } from "@/lib/utils";
 
 // Shared Kodewaves brand lockup. The mark is also the App Router icon at
@@ -14,6 +18,7 @@ export function BrandLogo({
   inverse?: boolean;
   mark?: boolean;
 }) {
+  const branding = useClientBranding();
   const icon = (
     <Image
       src="/icon.svg"

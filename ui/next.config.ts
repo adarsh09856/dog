@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   experimental: {
+    cpus: 1,
     serverSourceMaps: true,
     webpackBuildWorker: true,
   },

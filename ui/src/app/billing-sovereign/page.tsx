@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { startConfiguredCheckout } from "@/lib/billing/checkout";
-import { paymentsApi } from "@/lib/kodewavesApi";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +32,6 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClientBranding } from "@/context/ClientBrandingContext";
-import { useAuth } from "@/lib/auth";
 import {
   paymentsApi,
   publicApi,

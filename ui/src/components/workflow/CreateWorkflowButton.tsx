@@ -21,9 +21,6 @@ import { useAuth } from '@/lib/auth';
 import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
 import logger from '@/lib/logger';
 import { getRandomId } from '@/lib/utils';
-import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
-import { detailFromError } from '@/lib/apiError';
-
 export function CreateWorkflowButton() {
     const router = useRouter();
     const { user, getAccessToken } = useAuth();
