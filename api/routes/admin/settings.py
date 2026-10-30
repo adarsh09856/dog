@@ -17,9 +17,12 @@ router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
 class PlatformSettingsResponse(BaseModel):
     company_name: str = "Kodewaves"
-    logo_url: Optional[str] = "/kodewaves-brand.svg"
-    support_email: Optional[str] = "support@kodewaves.in"
-    primary_color: Optional[str] = "#4f46e5"
+    tagline: str = "Voice agents for web and phone"
+    favicon_url: str = ""
+    font: str = "geist"
+    logo_url: Optional[str] = ""
+    support_email: Optional[str] = ""
+    primary_color: Optional[str] = "#426b57"
     allow_user_byok: bool = False
     enforce_wallet_balance: bool = True
     enable_local_ai_engine: bool = False
@@ -81,10 +84,13 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
         return "••••••••" + val[-4:]
 
     return PlatformSettingsResponse(
-        company_name=branding.get("company_name", "Kodewaves"),
-        logo_url=branding.get("logo_url", "/kodewaves-brand.svg"),
-        support_email=branding.get("support_email", "support@kodewaves.in"),
-        primary_color=branding.get("primary_color", "#4f46e5"),
+        company_name=normalized_branding.company_name,
+        tagline=normalized_branding.tagline,
+        favicon_url=normalized_branding.favicon_url,
+        font=normalized_branding.font,
+        logo_url=normalized_branding.logo_url,
+        support_email=normalized_branding.support_email,
+        primary_color=normalized_branding.primary_color,
         allow_user_byok=byok.get("allow_user_byok", False),
         enforce_wallet_balance=wallet.get("enforce_wallet_balance", True),
         enable_local_ai_engine=local_ai.get("enable_local_ai_engine", local_ai.get("enabled", False)),
@@ -131,13 +137,16 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
     )
     if structured_fields.intersection(payload):
         # 1. Branding
-        branding = {
-            "company_name": payload.get("company_name", "Kodewaves"),
-            "logo_url": payload.get("logo_url", "/kodewaves-brand.svg"),
-            "support_email": payload.get("support_email", "support@kodewaves.in"),
-            "primary_color": payload.get("primary_color", "#4f46e5"),
-        }
-        await kodewaves_db_client.set_setting(key="branding", value=branding, category="branding")
+        if any(key in payload for key in PlatformBranding.model_fields):
+            existing_branding = await kodewaves_db_client.get_setting("branding") or {}
+            try:
+                branding = PlatformBranding.model_validate({
+                    **existing_branding,
+                    **{key: value for key, value in payload.items() if key in PlatformBranding.model_fields},
+                }).model_dump()
+            except ValidationError as exc:
+                raise HTTPException(status_code=422, detail="Invalid branding settings: " + str(exc)) from exc
+            await kodewaves_db_client.set_setting(key="branding", value=branding, category="branding")
 
         # 2. BYOK Policy
         if "allow_user_byok" in payload:
@@ -160,18 +169,12 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
             await kodewaves_db_client.set_setting(key="smtp", value=smtp, category="smtp")
 
         # 5. Local AI Engine Settings
-        local_ai = {
-            "enable_local_ai_engine": bool(payload.get("enable_local_ai_engine", False)),
-            "local_ai_access_policy": payload.get("local_ai_access_policy", "public"),
-            "ollama_endpoint": payload.get("ollama_endpoint", "http://ollama:11434"),
-            "piper_endpoint": payload.get("piper_endpoint", "http://piper:5000"),
-            "whisper_endpoint": payload.get("whisper_endpoint", "http://whisper:8000/v1"),
-            "indic_vits_tts_endpoint": payload.get(
-                "indic_vits_tts_endpoint", "http://indic-vits-tts:8000/v1"
-            ),
-            "local_ai_max_concurrency": int(payload.get("local_ai_max_concurrency", 2)),
-        }
-        await kodewaves_db_client.set_setting(key="local_ai", value=local_ai, category="local_ai")
+        if local_ai_fields.intersection(payload):
+            local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+            local_ai.update({key: payload[key] for key in local_ai_fields.intersection(payload)})
+            if "local_ai_max_concurrency" in local_ai:
+                local_ai["local_ai_max_concurrency"] = int(local_ai["local_ai_max_concurrency"])
+            await kodewaves_db_client.set_setting(key="local_ai", value=local_ai, category="local_ai")
 
         # 6. Payment Gateways
         if payment_fields.intersection(payload):

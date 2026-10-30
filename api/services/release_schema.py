@@ -185,5 +185,14 @@ def migration_compatibility(
     }
 
 
+def verify_deployment_migration_history(migrations_dir: Path, current_revisions: tuple[str, ...]) -> None:
+    """Compatibility shim for callers of the previous deployment preflight API."""
+    if len(current_revisions) > 1:
+        raise SchemaCompatibilityError("Database has multiple Alembic revisions; refusing deployment")
+    try:
+        migration_compatibility(migrations_dir, current_revisions)
+    except ValueError as exc:
+        raise SchemaCompatibilityError(f"Candidate migration history is incompatible: {exc}") from exc
+
 if __name__ == "__main__":
     raise SystemExit(main())

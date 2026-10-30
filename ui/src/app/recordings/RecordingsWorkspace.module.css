@@ -12,7 +12,7 @@
 .libraryNote strong { display: block; color: var(--foreground); font-size: .82rem; font-weight: 650; }
 .libraryNote p { margin-top: .25rem; color: var(--muted-foreground); font-size: .72rem; line-height: 1.5; }
 .tabs { min-width: 0; }
-.tabList { display: grid; width: min(100%, 29rem); grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 1rem; border: 1px solid var(--border); border-radius: .9rem; background: color-mix(in srgb, var(--muted) 55%, transparent); padding: .25rem; }
+.tabList { display: grid; width: min(100%, 29rem); grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 1rem; border: 1px solid var(--border); border-radius: .9rem; background: color-mix(in srgb, var(--muted) 55%, transparent); padding: .25rem; }
 .tabList button { min-height: 2.6rem; border-radius: .65rem; font-size: .8rem; }
 .panel { overflow: hidden; border-color: color-mix(in srgb, var(--border) 82%, transparent); border-radius: 1.2rem; box-shadow: 0 2px 12px rgb(25 32 40 / 4%); }
 .panelHeader { gap: 1rem; border-bottom: 1px solid color-mix(in srgb, var(--border) 75%, transparent); background: color-mix(in srgb, var(--muted) 22%, transparent); padding: 1.25rem clamp(1rem, 2vw, 1.5rem); }

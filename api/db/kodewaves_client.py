@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
-from sqlalchemy import delete, desc, or_, select, update
+from sqlalchemy import delete, desc, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 
@@ -38,7 +38,7 @@ from api.db.kodewaves_models import (
 def _materialize_paid_plan_assignment(
     requested: Dict[str, Any], previous: Any
 ) -> Dict[str, Any]:
-    """Compute a purchased term while the organization's wallet lock is held."""
+    """Compute the purchased term while the organization's wallet lock is held."""
     assignment = dict(requested)
     term_days = int(assignment.pop("_term_days"))
     if term_days not in {30, 365}:
@@ -622,8 +622,15 @@ class KodewavesDBClient(BaseDBClient):
         if minutes < 0 or (minutes == 0 and plan_assignment is None):
             raise ValueError("Minute credits must be positive unless granting a paid plan")
         async with self.get_session() as session:
-            # An upsert also serializes first-time wallet creation: a SELECT
-            # FOR UPDATE alone cannot lock a row that does not exist yet.
+            if reference_id or plan_assignment is not None:
+                # Serialize first-time purchases and plan renewals by org; a
+                # row lock alone cannot protect a wallet that does not exist.
+                await session.execute(
+                    text("SELECT pg_advisory_xact_lock(492566, :org_id)"),
+                    {"org_id": organization_id},
+                )
+            # Create the wallet atomically before locking it. The advisory lock
+            # above also serializes payment replay checks and plan assignment.
             await session.execute(
                 insert(OrganizationWalletModel).values(
                     organization_id=organization_id,
@@ -663,6 +670,9 @@ class KodewavesDBClient(BaseDBClient):
             )
             session.add(ledger_entry)
 
+            # Paid plan assignment and its minutes share the same transaction.
+            # A duplicate payment reference returns above, so replayed webhooks
+            # cannot extend the plan term without a new captured payment.
             if plan_assignment is not None:
                 key = f"org_plan_{organization_id}"
                 setting_result = await session.execute(
@@ -676,11 +686,10 @@ class KodewavesDBClient(BaseDBClient):
                     plan_assignment, previous_value
                 )
                 if setting is None:
-                    session.add(
-                        GlobalPlatformSettingModel(
-                            key=key, value=assignment, category="plan"
-                        )
+                    setting = GlobalPlatformSettingModel(
+                        key=key, value=assignment, category="plan"
                     )
+                    session.add(setting)
                 else:
                     setting.value = assignment
                     setting.category = "plan"
@@ -794,15 +803,14 @@ class KodewavesDBClient(BaseDBClient):
     # ------------------------------------------------------------------------
     # Platform Settings
     # ------------------------------------------------------------------------
+    async def get_settings_map(self) -> Dict[str, Any]:
+        async with self.get_session() as session:
+            result = await session.execute(select(GlobalPlatformSettingModel))
+            return {record.key: record.value for record in result.scalars().all()}
+
     async def get_setting(
         self, key: str, *, raise_on_error: bool = False
     ) -> Optional[Dict[str, Any]]:
-        """Read a platform setting, optionally propagating database failures.
-
-        Callers enforcing entitlements or serving required configuration must be
-        able to fail closed when the settings store is unavailable. Legacy
-        callers keep the existing best-effort behavior by default.
-        """
         try:
             async with self.get_session() as session:
                 stmt = select(GlobalPlatformSettingModel).where(GlobalPlatformSettingModel.key == key)

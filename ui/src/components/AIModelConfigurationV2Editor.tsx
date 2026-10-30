@@ -24,8 +24,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VoiceSelectorModal } from "@/components/VoiceSelectorModal";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
 import { detailFromError } from "@/lib/apiError";
-import { catalogApi, type AvailableCatalogResponse } from "@/lib/kodewavesApi";
 import { useAuth } from "@/lib/auth";
+import { formatRoundingPolicy } from "@/lib/billingDisplay";
+import { type AvailableCatalogResponse, catalogApi } from "@/lib/kodewavesApi";
 import {
     inferSttEngineType,
     languageForLocalSttSelection,
@@ -1460,9 +1461,9 @@ export function AIModelConfigurationV2Editor({
                                     />}
                                     {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "indic-vits-rasa-13" && (
                                         <div className="space-y-1 rounded-md border p-3">
-                                            <p className="text-sm font-medium">TTS language: Automatic — enabled</p>
+                                            <p className="text-sm font-medium">TTS language: Automatic</p>
                                             <p className="text-xs text-muted-foreground">
-                                                Replies use matching installed voices automatically. The preferred voice sets the demo and preferred speaker gender; it does not lock the reply language. Shared scripts use the call language context. Unsupported languages and unavailable matching voices cannot be synthesized.
+                                                Replies use a matching installed voice when the reply script identifies it. The preferred voice sets the demo and speaker gender; it does not lock the reply language. Shared scripts use call language context. This model supports 13 language groups; unsupported languages and unavailable matching voices cannot be synthesized.
                                             </p>
                                         </div>
                                     )}
@@ -1497,7 +1498,7 @@ export function AIModelConfigurationV2Editor({
                                     )}
                                     {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
                                         <p className="text-xs text-muted-foreground">
-                                            Speech recognition auto-detects {selectedSttModel?.auto_detect_languages?.length || 0} installed STT languages. Assistant speech also requires a matching installed TTS voice. Very short or unclear speech may need repeating; switching languages within one utterance is not fully supported.
+                                            Speech recognition auto-detects {selectedSttModel?.auto_detect_languages?.length || 0} installed STT languages. Assistant speech also requires a matching installed TTS voice. Regional VITS can switch voices for unambiguous reply scripts. Very short or unclear speech may need repeating; switching languages within one utterance is not fully supported.
                                         </p>
                                     )}
                                     {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "piper" && /^([a-z]{2,3})[-_][A-Z]{2}[-_]/.test(kodewaves.voice) && (

@@ -6,8 +6,8 @@ import { TurnCredentialsResponse } from "@/client/types.gen";
 import { WorkflowValidationError } from "@/components/flow/types";
 import type { ConversationNodeTransitionItem, RealtimeFeedbackMessage as FeedbackMessage } from "@/components/workflow/conversation";
 import { activeBotMessageIndex, finalizeActiveBotMessage } from "@/components/workflow/conversation/activeBotMessage";
-import { replacePendingTranscription } from "@/components/workflow/conversation/pendingTranscription";
 import { isLlmTtfb } from "@/components/workflow/conversation/adapters/fromRealtimeFeedback";
+import { replacePendingTranscription } from "@/components/workflow/conversation/pendingTranscription";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { resolveBrowserBackendUrl } from '@/lib/apiClient';
 import { detailFromError } from '@/lib/apiError';
@@ -47,6 +47,7 @@ const HANDLED_SERVICE_ERROR_TYPES = new Set([
 // start a fresh run rather than being offered a retry that cannot succeed.
 const SPENT_RUN_ERROR_TYPES = new Set(['workflow_run_already_completed']);
 const DISCONNECTED_GRACE_MS = 5000;
+const WEBSOCKET_CONNECT_TIMEOUT_MS = 10000;
 let feedbackMessageSequence = 0;
 const nextFeedbackMessageId = (kind: string) => `${kind}-${Date.now()}-${++feedbackMessageSequence}`;
 
@@ -352,19 +353,44 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
             logger.info(`Connecting to WebSocket: ${wsUrl}`);
 
             const ws = new WebSocket(wsUrl);
+            // Keep the socket reachable by cleanup while the handshake is
+            // still in progress. Validation can fail before onopen, and the
+            // pending socket must not survive that failed call attempt.
+            wsRef.current = ws;
+            let settled = false;
+            const timeout = window.setTimeout(() => {
+                if (settled) return;
+                settled = true;
+                ws.close();
+                reject(new Error('WebSocket connection timed out after 10 seconds'));
+            }, WEBSOCKET_CONNECT_TIMEOUT_MS);
 
             ws.onopen = () => {
+                if (settled) {
+                    ws.close();
+                    return;
+                }
+                settled = true;
+                window.clearTimeout(timeout);
                 logger.info('WebSocket connected');
                 wsRef.current = ws;
                 resolve();
             };
 
             ws.onerror = (error) => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timeout);
                 logger.error('WebSocket error:', error);
                 reject(new Error(`WebSocket connection failed at ${wsUrl}`));
             };
 
             ws.onclose = (event) => {
+                if (!settled) {
+                    settled = true;
+                    window.clearTimeout(timeout);
+                    reject(new Error(`WebSocket closed before connecting (code ${event.code})`));
+                }
                 logger.info('WebSocket closed');
                 wsRef.current = null;
                 if (event.reason === 'call ended') {
@@ -527,6 +553,29 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             break;
                         }
 
+                        case 'rtf-bot-text-preview': {
+                            const token = message.payload.text;
+                            if (typeof token !== 'string' || !token) break;
+                            previewTextRef.current += token;
+                            const visibleText = previewTextRef.current;
+                            setFeedbackMessages(prev => {
+                                const index = activeBotMessageIndex(prev);
+                                if (index >= 0) {
+                                    const updated = [...prev];
+                                    updated[index] = { ...updated[index], text: visibleText };
+                                    return updated;
+                                }
+                                return [...prev, {
+                                    id: `bot-${Date.now()}`,
+                                    type: 'bot-text',
+                                    text: visibleText,
+                                    final: false,
+                                    timestamp: new Date().toISOString(),
+                                }];
+                            });
+                            break;
+                        }
+
                         case 'rtf-bot-text': {
                             // Confirm speech without duplicating its earlier preview.
                             spokenTextRef.current = [spokenTextRef.current, message.payload.text]
@@ -661,7 +710,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             previewTextRef.current = '';
                             spokenTextRef.current = '';
                             setFeedbackMessages(prev => [
-                                ...finalizeActiveBotMessage(prev, confirmedBeforeError),
+                                ...finalizeActiveBotMessage(prev, confirmedBeforeError).filter(msg => msg.type !== 'bot-text' || !!msg.text.trim()),
                                 {
                                     id: nextFeedbackMessageId('error'),
                                     type: 'pipeline-error',
@@ -684,7 +733,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             }
                             // Finalize the last bot message so "speaking..." indicator is removed
                             const completedSpokenText = spokenTextRef.current;
-                            setFeedbackMessages(prev => finalizeActiveBotMessage(prev, completedSpokenText));
+                            setFeedbackMessages(prev => finalizeActiveBotMessage(prev, completedSpokenText).filter(msg => msg.type !== 'bot-text' || !!msg.text.trim()));
                             previewTextRef.current = '';
                             spokenTextRef.current = '';
                             break;
@@ -790,6 +839,15 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                 path: { workflow_id: workflowId },
                 headers: { 'Authorization': `Bearer ${accessToken}` },
             });
+            // The signaling socket only accepts and waits for the SDP offer;
+            // it does not start a workflow until that offer arrives. Open it
+            // alongside the independent validation requests so a slow
+            // handshake doesn't add another network round trip to startup.
+            const websocketPromise = connectWebSocket();
+            // Attach a rejection handler immediately. A failed validation can
+            // close a still-pending socket before we await it, and that close
+            // must not become an unhandled rejection.
+            void websocketPromise.catch(() => undefined);
             const [turnResponse, response, workflowResponse] = await Promise.all([
                 turnPromise, configurationPromise, workflowPromise,
             ]);
@@ -820,14 +878,14 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                     setApiKeyError(null);
                     setApiKeyErrorCode(null);
                     setPermissionError(message);
-                    setConnectionStatus('failed');
+                    cleanupConnection({ graceful: false, status: 'failed' });
                     return;
                 }
 
                 setApiKeyModalOpen(true);
                 setApiKeyErrorCode('invalid_api_key');
                 setApiKeyError(message);
-                setConnectionStatus('failed');
+                cleanupConnection({ graceful: false, status: 'failed' });
                 return;
             }
 
@@ -842,12 +900,11 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                         .join('\n');
                 }
                 setWorkflowConfigError(msg);
-                setConnectionStatus('failed');
+                cleanupConnection({ graceful: false, status: 'failed' });
                 return;
             }
 
-            // Connect WebSocket first
-            await connectWebSocket();
+            await websocketPromise;
 
             // Create peer connection
             timeStartRef.current = null;

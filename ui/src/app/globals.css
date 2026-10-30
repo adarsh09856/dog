@@ -70,6 +70,8 @@
   --chart-3: #214743;
   --chart-4: #8aa875;
   --chart-5: #c07d55;
+  /* The workspace rail stays deep green in both content themes, so light mode
+     is not the same pale, detached sidebar treatment as the legacy console. */
   --sidebar: #10231f;
   --sidebar-foreground: #e5eee8;
   --sidebar-primary: #9bc9aa;
@@ -78,8 +80,8 @@
   --sidebar-accent-foreground: #f2f7f3;
   --sidebar-border: #29433a;
   --sidebar-ring: #9bc9aa;
-  --background: #f2f4ed;
   --foreground: #142b2c;
+  --background: #f2f4ed;
   /* Single restrained warm accent — used only on primary CTAs + focus rings. */
   --cta: #b99554;
   --cta-text: #263c32;
@@ -339,19 +341,19 @@
   background-color: oklch(0.215 0 0);
   border-color: rgb(255 255 255 / 0.1);
 }
-/* Muted, compact labels — the big white default labels read amateurish. */
+/* Compact labels remain readable against the form surface. */
 .lead-form-underline label {
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--muted-foreground);
+  color: var(--foreground);
 }
-/* Ghost placeholders: present on every field, but barely-there. */
+/* Placeholder copy is supporting text, but must still meet readable contrast. */
 .lead-form-underline :is(input, textarea)::placeholder {
   color: var(--muted-foreground);
-  opacity: 0.14;
+  opacity: 1;
 }
 .lead-form-underline [data-slot="select-trigger"][data-placeholder] {
-  color: color-mix(in oklab, var(--muted-foreground) 17%, transparent);
+  color: var(--muted-foreground);
 }
 /* Underline-only fields: transparent box, hairline bottom border, amber
    underline on the focused control. Compact heights keep rows tight. */
@@ -384,6 +386,13 @@
   outline: none;
   box-shadow: none;
   border-bottom-color: var(--cta);
+}
+.lead-form-underline :is(input, textarea, [data-slot="select-trigger"]):disabled,
+.lead-form-underline [data-slot="select-trigger"][data-disabled] {
+  opacity: 0.78;
+}
+.lead-form-slab [data-slot="button"]:disabled {
+  opacity: 0.78;
 }
 
 /* Event banner (Kodewaves Cloud only, NEXT_PUBLIC_EVENT_BANNER=1). The bar is

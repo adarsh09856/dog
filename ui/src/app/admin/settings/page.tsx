@@ -37,7 +37,8 @@ import IndicSttTest from "./IndicSttTest";
 import styles from "./SettingsWorkspace.module.css";
 
 const POPULAR_OLLAMA_MODELS = [
-  { value: "qwen3.5:2b-q4_K_M", label: "Qwen 3.5 2B Q4 (CPU)" },
+  { value: "qwen3.5:2b", label: "Qwen 3.5 2B (Ollama tag)" },
+  { value: "qwen3.5:2b-q4_K_M", label: "Qwen 3.5 2B Q4_K_M (Ollama tag)" },
 ];
 
 
@@ -254,7 +255,7 @@ export default function AdminSettingsPage() {
           <span className={admin.kicker}>PLATFORM / CONFIGURATION</span>
           <h1 className={admin.title}>Platform Settings & Sovereignty</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            White-label Kodewaves, configure sovereign SMTP credentials, manage self-hosted server Ollama models, and set payment gateways.
+            Configure the platform name and public theme, email delivery, self-hosted model services, and payment settings.
           </p>
         </div>
       <div className={`${styles.heroActions} flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end`}>
@@ -410,11 +411,11 @@ export default function AdminSettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Cpu className="h-5 w-5 text-indigo-500" />
+                  <Cpu className="h-5 w-5 text-primary" />
                   Self-Hosted AI Engine (CPU Stack)
                 </CardTitle>
                 <CardDescription>
-                  Runs speech recognition, response generation and speech synthesis on your Kodewaves server. Available models and voices are discovered from the configured services.
+                  Runs speech recognition, response generation, and speech synthesis on the {branding.company_name} server. Models and voices are discovered from configured services; actual inference hardware depends on the server runtime.
                 </CardDescription>
               </div>
               <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">
@@ -430,7 +431,7 @@ export default function AdminSettingsPage() {
                   Enable Sovereign Self-hosted AI Engine
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
-                  Allows opted-in tenants to use inference on the Kodewaves server. Access can be granted per user in User Management to control server load.
+                  Allows opted-in tenants to use inference on the {branding.company_name} server. Access can be granted per user in User Management to control server load.
                 </div>
               </div>
               <Switch
@@ -496,7 +497,7 @@ export default function AdminSettingsPage() {
                   placeholder="http://indic-vits-tts:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">Shared endpoint for installed local voices. Supported languages and speakers are discovered from the running service and shown in model configuration.</p>
+                <p className="text-[10px] text-muted-foreground">Shared endpoint for installed local voices. Supported languages and speakers are discovered from the running service and shown in Model Configuration.</p>
               </div>
 
               <div className="space-y-1">
@@ -521,7 +522,7 @@ export default function AdminSettingsPage() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Server className="h-5 w-5 text-indigo-500" />
+                  <Server className="h-5 w-5 text-primary" />
                   Server Ollama Model Manager (CPU LLM Suite)
                 </CardTitle>
                 <CardDescription>

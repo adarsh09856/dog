@@ -11,8 +11,10 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from fastapi import HTTPException
 
 from api.db import appointments
+from api.services.saas_entitlements import enforce_saas_feature
 
 
 def caller_phone_matches_booking(phone: str, messages: list) -> bool:
@@ -150,6 +152,7 @@ async def execute_booking(arguments, organization_id):
             "error": "Workspace unavailable; no booking was saved",
         }
     try:
+        await enforce_saas_feature(organization_id, "appointments")
         booking = BookingArguments.model_validate(arguments)
         if booking.start_time <= datetime.now(booking.start_time.tzinfo):
             return {
@@ -174,6 +177,8 @@ async def execute_booking(arguments, organization_id):
     except ValidationError as exc:
         errors = "; ".join(error["msg"] for error in exc.errors(include_input=False))
         return {"status": "error", "booked": False, "error": errors}
+    except HTTPException as exc:
+        return {"status": "error", "booked": False, "error": str(exc.detail)}
     except FileExistsError:
         return {
             "status": "conflict",

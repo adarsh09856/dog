@@ -56,7 +56,7 @@ import {
   ModelCatalogEntry,
 } from "@/lib/kodewavesApi";
 
-import styles from "./ModelsWorkspace.module.css";
+import admin from "../AdminWorkspace.module.css";
 
 export interface ProviderMeta {
   provider: string;

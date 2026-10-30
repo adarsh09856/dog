@@ -443,8 +443,10 @@ class BaseOutputTransport(FrameProcessor):
             self._audio_buffer = bytearray()
             self._audio_buffer_cls: type[OutputAudioRawFrame] = OutputAudioRawFrame
 
-            # Inactivity gaps between streamed TTS chunks are not audio stream
-            # boundaries. Drain at TTSStoppedFrame and reset on interruption.
+            # This will be used to resample incoming audio to the output sample rate.
+            # Synthesis/network pauses are not stream boundaries. Completion
+            # drains this filter and interruption resets it explicitly; an
+            # inactivity timeout would silently discard still-unplayed speech.
             self._resampler = create_stream_resampler(clear_after_secs=None)
 
             # The user can provide a single mixer, to be used by the default
@@ -677,8 +679,9 @@ class BaseOutputTransport(FrameProcessor):
             Args:
                 frame: The TTS stopped frame to queue.
             """
-            # Resampling filters can retain trailing speech samples even when
-            # the transport byte buffer is empty. Drain those before the marker.
+            # Resampling filters can retain an entire short phrase even when
+            # the transport byte buffer is empty. Drain them before the stop
+            # marker so those samples cannot be lost or enter a later phrase.
             self._audio_buffer.extend(await self._resampler.flush())
             await self._enqueue_flushed_audio_buffer()
             await self._audio_queue.put(frame)
@@ -775,9 +778,12 @@ class BaseOutputTransport(FrameProcessor):
             self._bot_speaking = False
             self._tts_audio_received = False
 
-            # Any remaining leftover here (e.g. from an interruption) is
-            # discarded rather than flushed, since it's no longer wanted.
-            self._audio_buffer = bytearray()
+            # Do not clear `_audio_buffer` here. This notification can follow a
+            # natural output-queue timeout while TTS is still synthesizing the
+            # next phrase; dropping the partial tail makes speech lose its last
+            # samples before the next phrase arrives. Explicit interruptions
+            # clear stale audio in `handle_interruptions`, while TTS completion
+            # flushes the remaining bytes before queuing TTSStoppedFrame.
 
             logger.debug(
                 f"Bot{f' [{self._destination}]' if self._destination else ''} stopped speaking"

@@ -14,9 +14,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth";
 import React, { useCallback, useEffect, useState } from "react";
 
-import { createWorkflowApiV1WorkflowCreateDefinitionPost } from "@/client/sdk.gen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,10 +30,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { detailFromError } from "@/lib/apiError";
-import { useAuth } from "@/lib/auth";
 import { PromptTemplate, promptTemplatesApi } from "@/lib/kodewavesApi";
+import { createWorkflowApiV1WorkflowCreateDefinitionPost } from "@/client/sdk.gen";
+import { detailFromError } from "@/lib/apiError";
 import { promptTemplateWorkflow } from "@/lib/promptTemplateWorkflow";
 
 export default function PromptTemplatesPage() {
@@ -153,12 +160,7 @@ export default function PromptTemplatesPage() {
       await promptTemplatesApi.deleteTemplate(template.id);
       const remainingTemplates = templates.filter((item) => item.id !== template.id);
       setTemplates(remainingTemplates);
-      if (
-        category !== "all" &&
-        !remainingTemplates.some(
-          (item) => item.category.toLowerCase() === category.toLowerCase()
-        )
-      ) {
+      if (category !== "all" && !remainingTemplates.some((item) => item.category.toLowerCase() === category.toLowerCase())) {
         setCategory("all");
       }
     } catch (err) {
@@ -314,22 +316,10 @@ export default function PromptTemplatesPage() {
                 </Button>
                 {!t.is_featured && (
                   <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs gap-1.5"
-                      aria-label={`Edit ${t.title}`}
-                      onClick={() => handleEditTemplate(t)}
-                    >
+                    <Button variant="outline" size="sm" className="text-xs gap-1.5" aria-label={`Edit ${t.title}`} onClick={() => handleEditTemplate(t)}>
                       <Pencil className="h-3.5 w-3.5" /> Edit
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs gap-1.5 text-destructive hover:text-destructive"
-                      aria-label={`Delete ${t.title}`}
-                      onClick={() => handleDeleteTemplate(t)}
-                    >
+                    <Button variant="outline" size="sm" className="text-xs gap-1.5 text-destructive hover:text-destructive" aria-label={`Delete ${t.title}`} onClick={() => void handleDeleteTemplate(t)}>
                       <Trash2 className="h-3.5 w-3.5" /> Delete
                     </Button>
                   </div>
@@ -350,7 +340,10 @@ export default function PromptTemplatesPage() {
       )}
 
       {/* CREATE TEMPLATE MODAL */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+      <Dialog open={modalOpen} onOpenChange={(open) => {
+        setModalOpen(open);
+        if (!open) setEditingTemplateId(null);
+      }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingTemplateId !== null ? "Edit Custom Voice Template" : "Add Custom Voice Template"}</DialogTitle>
