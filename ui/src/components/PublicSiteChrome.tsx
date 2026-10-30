@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
 import { useClientBranding } from "@/context/ClientBrandingContext";
+import styles from "./PublicSiteChrome.module.css";
 
 const links = [
   { href: "/#platform", label: "Platform" },
@@ -24,27 +25,27 @@ export function PublicHeader() {
   useEffect(() => setOpen(false), [pathname]);
 
   return (
-    <header className="public-header sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl">
+    <header className={`${styles.header} public-header sticky top-0 z-50`}>
       <a
         href="#main-content"
         className="sr-only rounded-lg bg-background px-4 py-3 focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50"
       >
         Skip to content
       </a>
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
-        <Link href="/" aria-label="Home" className="min-w-0 max-w-[55%] sm:max-w-none">
+      <div className={`${styles.headerInner} mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8`}>
+        <Link href="/" aria-label="Home" className={`${styles.brand} min-w-0 max-w-[55%] sm:max-w-none`}>
           <BrandLogo className="h-8" />
         </Link>
         <nav
           aria-label="Main navigation"
-          className="hidden items-center gap-8 text-sm md:flex"
+          className={`${styles.nav} hidden items-center gap-8 text-sm md:flex`}
         >
           {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
               aria-current={pathname === link.href ? "page" : undefined}
-              className="text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:text-foreground"
+              className={`${styles.navLink} text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:text-foreground`}
             >
               {link.label}
             </Link>
@@ -73,7 +74,7 @@ export function PublicHeader() {
           </Link>
           <Link
             href="/auth/login"
-            className="hidden items-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90 sm:inline-flex"
+            className={`${styles.consoleLink} hidden items-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90 sm:inline-flex`}
           >
             Open console <ArrowRight className="size-4" />
           </Link>
@@ -114,11 +115,11 @@ export function PublicHeader() {
 export function PublicFooter() {
   const branding = useClientBranding();
   return (
-    <footer className="border-t border-border bg-background">
+    <footer className={`${styles.footer} border-t border-border`}>
       <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] gap-8 px-5 py-12 sm:px-8 md:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0 space-y-4">
           <Link href="/" aria-label="Home">
-            <BrandLogo className="h-7" />
+            <BrandLogo inverse className="h-7" />
           </Link>
           <p className="max-w-sm text-sm leading-6 text-muted-foreground">
             {branding.tagline}
