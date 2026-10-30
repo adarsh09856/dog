@@ -123,3 +123,20 @@ def test_binding_request_rejects_invalid_input(changes):
     fields.update(changes)
     with pytest.raises(ValidationError):
         installation.ClientBindingChangeRequest(**fields)
+
+
+def test_client_binding_import_does_not_require_owner_modules(monkeypatch):
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    from api.services import deployment_edition
+
+    monkeypatch.setattr(deployment_edition, "IMAGE_EDITION", "client")
+    monkeypatch.setitem(sys.modules, "api.db.client_installations", None)
+    monkeypatch.setitem(sys.modules, "api.services.owner_license_signer_client", None)
+    path = Path(__file__).resolve().parents[1] / "services" / "client_binding_requests.py"
+    spec = importlib.util.spec_from_file_location("client_binding_boundary_check", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert callable(module.send_binding_request)

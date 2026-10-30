@@ -206,6 +206,18 @@ describe("public pricing", () => {
     expect(screen.getByText(/— included minutes/)).toBeTruthy();
   });
 
+  it("does not offer an invalid credit bundle for purchase", async () => {
+    mocks.getPublicPlans.mockResolvedValue([]);
+    mocks.getPublicCreditOffers.mockResolvedValue([{
+      id: "broken", name: "Broken bundle", minutes: null,
+      bonus_minutes: 0, price_cents: -1, currency: "INR",
+    }]);
+    render(<PricingPage />);
+    expect(await screen.findByText("Bundle details unavailable")).toBeTruthy();
+    expect(screen.getByText("Price unavailable")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Continue to wallet/ })).toBeNull();
+  });
+
   it("keeps the selected credit bundle through the sign-in link", async () => {
     mocks.getPublicPlans.mockResolvedValue([]);
     mocks.getPublicCreditOffers.mockResolvedValue([{

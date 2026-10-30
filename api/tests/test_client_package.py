@@ -127,7 +127,7 @@ def test_owner_only_database_modules_are_removed_and_checked_at_release():
     root = Path(__file__).resolve().parents[2]
     dockerfile = (root / "api/Dockerfile").read_text()
     verifier = (root / "deploy/client/verify_images.py").read_text()
-    for module in ("owner_user_management", "saas_plan_catalog"):
+    for module in ("owner_user_management", "saas_plan_catalog", "client_installations"):
         path = f"api/db/{module}.py"
         assert f"./{path}" in dockerfile
         assert repr(path) in verifier
