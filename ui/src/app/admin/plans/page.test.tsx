@@ -45,4 +45,28 @@ describe("owner plan configuration", () => {
       is_public: false,
     })));
   });
+
+  it("shows plan enforcement, capacity and owner actions together", async () => {
+    mocks.getPlans.mockResolvedValue([{
+      id: "pro-id", name: "Growth Pro", code: "growth-pro", currency: "INR",
+      monthly_price_cents: 499900, annual_price_cents: 4990000, included_minutes: 2500,
+      max_concurrent_calls: 8, max_agents: 12, overage_rate_per_minute: 1.5,
+      has_crm_access: true, has_appointments_access: false, has_forms_access: true,
+      has_widget_access: true, has_campaigns_access: false, allow_user_byok: false,
+      is_active: true, is_public: false, is_default: true,
+    }]);
+
+    render(<AdminPlansPage />);
+
+    expect(await screen.findByRole("heading", { name: "Plan governance" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Growth Pro" })).toBeTruthy();
+    expect(screen.getByText("2,500")).toBeTruthy();
+    expect(screen.getByText("Platform-managed keys required")).toBeTruthy();
+    expect(screen.getByText("Enforced feature access").parentElement?.textContent).toContain("3/5");
+    expect(screen.getByText("Default fallback")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Growth Pro" }));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.getByDisplayValue("Growth Pro")).toBeTruthy();
+  });
 });

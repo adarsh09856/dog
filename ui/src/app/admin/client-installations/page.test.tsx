@@ -128,6 +128,7 @@ describe("owner integrity alert refresh", () => {
     render(<ClientInstallationsPage />);
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByText(/approved ·/)).toBeTruthy();
+    expect(screen.queryByDisplayValue("recovered-license-token")).toBeNull();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Recover approved license" }));
     });
@@ -136,6 +137,32 @@ describe("owner integrity alert refresh", () => {
       "/admin/client-installations/binding-requests/24/recover-token",
       { method: "POST" },
     );
+  });
+
+  it("surfaces the installation trust boundary and all owner actions in the registry card", async () => {
+    mocks.apiFetch.mockImplementation((endpoint: string) => Promise.resolve(
+      endpoint.endsWith("/alerts") || endpoint.includes("/binding-requests") ? [] : [{
+        installation_id: "customer-prod-eu", customer_id: "customer-42",
+        domains: ["voice.customer.example"], ip_ranges: ["198.51.100.10/32"],
+        features: ["voice", "crm"], limits: { max_concurrent_calls: 6, max_agents: 20 },
+        expires_at: 1_900_000_000, token_fingerprint: "metadata-fingerprint",
+        revoked_at: null, last_seen_at: null, observed_ip: "198.51.100.10",
+        integrity_failed_at: null, identity_enrolled: false,
+      }],
+    ));
+
+    render(<ClientInstallationsPage />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText("License active")).toBeTruthy();
+    expect(screen.getByText("Identity not enrolled")).toBeTruthy();
+    expect(screen.getByText("voice.customer.example")).toBeTruthy();
+    expect(screen.getByText("198.51.100.10/32")).toBeTruthy();
+    expect(screen.getByText("No client check received")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create enrollment token" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Renew for 30 days" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Mark revoked" })).toBeTruthy();
+    expect(screen.queryByDisplayValue("metadata-fingerprint")).toBeNull();
   });
 
   it("explains safe recovery and disables renewal after an integrity failure", async () => {
