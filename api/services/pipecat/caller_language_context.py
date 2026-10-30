@@ -146,11 +146,6 @@ class CallerLanguageContext:
                     self._hints.setdefault((ordinal, text), (
                         "Reply in English; do not repeat answered questions."
                     ))
-                elif _clearly_english_caller_text(text):
-                    self._hints.setdefault((ordinal, text), (
-                        "The caller wrote in English. Answer in English; "
-                        "do not repeat questions already answered."
-                    ))
 
         # STT can identify languages beyond the installed TTS inventory. Keep
         # the raw detector metadata, but reply in a voice we can actually emit.

@@ -55,7 +55,7 @@ def test_real_llm_request_builder_includes_clock_for_generic_workflow():
     original = deepcopy(request)
     result = service.build_chat_completion_params(request)["messages"]
     assert any("Current India local time:" in m.get("content", "") for m in result)
-    assert "The caller wrote in English" in result[-1]["content"]
+    assert "Reply in English" in result[-1]["content"]
     assert result[-1]["content"].endswith(request["messages"][-1]["content"])
     assert request == original
     assert len(request["messages"]) == 2

@@ -140,6 +140,7 @@ def test_local_qwen_keeps_response_guard_in_reusable_prefix_without_mutating_his
     assert "ask only for the next missing or corrected detail" in guard
     assert "Never repeat an earlier reply" in guard
     assert "invent service names" in guard
+    assert "Never claim an action succeeded without tool success" in guard
     assert "retain every caller-provided service, date, and time" in guard
     assert "never guess a date, year, or time" in guard
 
