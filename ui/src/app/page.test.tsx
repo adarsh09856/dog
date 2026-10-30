@@ -36,15 +36,21 @@ describe("public home branding", () => {
     render(<HomePage />);
 
     const heroHeading = screen.getByRole("heading", { level: 1 });
-    expect(heroHeading.textContent).toContain("Every conversation.");
-    expect(heroHeading.textContent).toContain("A clear next step.");
+    expect(heroHeading.textContent).toContain("AI voice agents for calls.");
+    expect(heroHeading.textContent).toContain("Workflows that get things done.");
     expect(screen.getByText("Configure the full call lifecycle")).toBeTruthy();
     expect(screen.getByText("Workflow builder")).toBeTruthy();
-    expect(screen.getByText("Web and telephone")).toBeTruthy();
-    expect(screen.getByText("Conversation review")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Shape the work before the call." })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Choose how people reach you." })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Review what happened." })).toBeTruthy();
+    expect(screen.getByText("Inbound and outbound calls")).toBeTruthy();
+    expect(screen.getByText("Outbound campaigns")).toBeTruthy();
+    expect(screen.getByText("CRM and appointments")).toBeTruthy();
+    expect(screen.getByText("Voice forms and web widgets")).toBeTruthy();
+    expect(screen.getByText("Tools and knowledge")).toBeTruthy();
+    expect(screen.getByText("Call and run review")).toBeTruthy();
+    expect(screen.getByText("Configured speech models")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Build the voice agent workflow." })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Connect browser and phone calls." })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Review each call and run." })).toBeTruthy();
+    expect(screen.getByText(/speech-to-text, language-model and text-to-speech providers/)).toBeTruthy();
     expect(screen.getByLabelText("Illustration of a voice workflow from caller to action")).toBeTruthy();
     expect(screen.getByText("Illustrative workflow")).toBeTruthy();
     expect(screen.queryByRole("group", { name: "Conversation examples" })).toBeNull();

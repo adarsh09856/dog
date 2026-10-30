@@ -6,8 +6,9 @@ vi.mock('@/lib/auth', () => ({ useAuth: () => ({ user: { id: 'user-1' }, loading
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/kodewavesApi', () => ({ promptTemplatesApi: { getTemplates: mocks.templates, createTemplate: mocks.createTemplate } }));
 vi.mock('@/client/sdk.gen', () => ({ createWorkflowApiV1WorkflowCreateDefinitionPost: mocks.createAgent }));
-import PromptTemplatesPage from './page';
 import { promptTemplateWorkflow } from '@/lib/promptTemplateWorkflow';
+
+import PromptTemplatesPage from './page';
 
 const template = { id: 'saved-template', title: 'Customer help', category: 'Support', description: 'Help customers', system_prompt: 'Answer questions about our configured services.', first_message: 'नमस्ते, कैसे मदद करूँ?', tags: [], is_featured: false };
 
@@ -22,9 +23,15 @@ describe('saved prompt template agent creation', () => {
     render(<PromptTemplatesPage />);
     fireEvent.click(await screen.findByRole('button', { name: 'Use in Voice Studio' }));
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
-    const body = mocks.createAgent.mock.calls[0][0].body;
+    const body = mocks.createAgent.mock.calls[0][0].body as {
+      name: string;
+      workflow_definition: {
+        nodes: { type: string; data: Record<string, unknown> }[];
+        edges: { data: { label: string } }[];
+      };
+    };
     expect(body.name).toBe('Customer help');
-    expect(body.workflow_definition.nodes.map((node: any) => node.type)).toEqual(['startCall', 'endCall']);
+    expect(body.workflow_definition.nodes.map((node) => node.type)).toEqual(['startCall', 'endCall']);
     expect(body.workflow_definition.nodes[0].data.greeting).toBe(template.first_message);
     expect(body.workflow_definition.nodes[0].data.prompt).toBe(template.system_prompt);
     expect(body.workflow_definition.edges).toHaveLength(1);
@@ -39,6 +46,12 @@ describe('saved prompt template agent creation', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Use in Voice Studio' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Agent creation unavailable');
     expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it('renders the category summary icon and count without a missing component', async () => {
+    render(<PromptTemplatesPage />);
+    expect(await screen.findByText('Categories')).toBeTruthy();
+    expect(screen.getByText('Browse by business use case')).toBeTruthy();
   });
 });
 

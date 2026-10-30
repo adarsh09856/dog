@@ -35,6 +35,12 @@ describe('website widget flows', () => {
     mocks.updateWidget.mockResolvedValue({ id: 'existing-widget' });
   });
 
+  it('mounts the widget library and loads its data', async () => {
+    render(<WidgetsPage />);
+    expect(await screen.findByRole('heading', { name: 'Website Voice Calling Widgets' })).toBeTruthy();
+    await waitFor(() => expect(mocks.getWidgets).toHaveBeenCalledOnce());
+  });
+
   it('creates a widget with the selected agent and domain restrictions', async () => {
     render(<WidgetsPage />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Create Widget' }).hasAttribute('disabled')).toBe(false));

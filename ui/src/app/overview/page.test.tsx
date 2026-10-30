@@ -70,6 +70,12 @@ describe("workspace overview", () => {
     const growth = within(directory).getByRole("region", { name: "GROWTH AND LEADS" });
     const observability = within(directory).getByRole("region", { name: "MANAGE AND OBSERVABILITY" });
 
+    expect(directory.style.getPropertyValue("--tool-directory-item-rows")).toBe("7");
+    expect(directory.style.getPropertyValue("--tool-directory-row-count")).toBe("9");
+    expect(directory.style.getPropertyValue("--tool-directory-accent")).toBe("var(--brand-primary-color, var(--primary))");
+    expect(within(build).getAllByRole("link")).toHaveLength(7);
+    expect(within(growth).getAllByRole("link")).toHaveLength(5);
+    expect(within(observability).getAllByRole("link")).toHaveLength(3);
     expect(within(build).getByRole("link", { name: /Voice Agents/ }).getAttribute("href")).toBe("/workflow");
     expect(within(growth).getByRole("link", { name: /CRM Leads/ }).getAttribute("href")).toBe("/crm");
     expect(within(observability).getByRole("link", { name: /Agent Runs/ }).getAttribute("href")).toBe("/usage");

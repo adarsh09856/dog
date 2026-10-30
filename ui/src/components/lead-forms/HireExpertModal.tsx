@@ -20,6 +20,7 @@ import { useAuth } from "@/lib/auth";
 
 import { CaptchaChallenge } from "./CaptchaChallenge";
 import { FormTrustLine } from "./FormTrustLine";
+import { getHireExpertEmailPrefill } from "./hireExpertEmail";
 import { isValidEmail } from "./isPersonalEmail";
 import { HIRE_VOLUME_OPTIONS, type LeadSource } from "./leadFieldOptions";
 import { LeadModalShell } from "./LeadModalShell";
@@ -39,8 +40,11 @@ export function HireExpertModal({ open, onOpenChange, source, onOpenEnterprise }
   // Deployment provenance (analytics only): cloud → cloud_app, else oss_app. OSS submits the
   // lead anonymously (cloud can't verify its token), so the email field below is the identity.
   const origin = config?.deploymentMode === "cloud" ? "cloud_app" : "oss_app";
-  // Logged-in user's email (Stack uses primaryEmail; local uses email) — prefilled, editable.
-  const userEmail = user ? ("primaryEmail" in user ? user.primaryEmail ?? "" : user.email ?? "") : "";
+  // Prefill only with a real authenticated address. The OSS installer's
+  // admin@admin.com placeholder is intentionally left blank for user entry.
+  const userEmail = getHireExpertEmailPrefill(
+    user ? ("primaryEmail" in user ? user.primaryEmail : user.email) : "",
+  );
 
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");

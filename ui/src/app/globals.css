@@ -341,19 +341,19 @@
   background-color: oklch(0.215 0 0);
   border-color: rgb(255 255 255 / 0.1);
 }
-/* Muted, compact labels — the big white default labels read amateurish. */
+/* Compact labels remain readable against the form surface. */
 .lead-form-underline label {
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--muted-foreground);
+  color: var(--foreground);
 }
-/* Ghost placeholders: present on every field, but barely-there. */
+/* Placeholder copy is supporting text, but must still meet readable contrast. */
 .lead-form-underline :is(input, textarea)::placeholder {
   color: var(--muted-foreground);
-  opacity: 0.14;
+  opacity: 1;
 }
 .lead-form-underline [data-slot="select-trigger"][data-placeholder] {
-  color: color-mix(in oklab, var(--muted-foreground) 17%, transparent);
+  color: var(--muted-foreground);
 }
 /* Underline-only fields: transparent box, hairline bottom border, amber
    underline on the focused control. Compact heights keep rows tight. */
@@ -386,6 +386,14 @@
   outline: none;
   box-shadow: none;
   border-bottom-color: var(--cta);
+  border-bottom-width: 2px;
+}
+.lead-form-underline :is(input, textarea, [data-slot="select-trigger"]):disabled,
+.lead-form-underline [data-slot="select-trigger"][data-disabled] {
+  opacity: 0.78;
+}
+.lead-form-slab [data-slot="button"]:disabled {
+  opacity: 0.78;
 }
 
 /* Event banner (Kodewaves Cloud only, NEXT_PUBLIC_EVENT_BANNER=1). The bar is

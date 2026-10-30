@@ -16,6 +16,7 @@ import Page from "./page";
 const appointments = [
   { id: 1, title: "Product demo", customer_name: "Asha Rao", customer_phone: "+919876543210", customer_email: "asha@example.com", start_time: "2027-01-10T10:00:00+05:30", end_time: "2027-01-10T10:30:00+05:30", status: "confirmed", notes: "Interested in onboarding" },
   { id: 2, title: "Callback", customer_name: "Kabir Shah", customer_phone: "+919876543211", customer_email: "", start_time: "2027-01-11T11:00:00+05:30", end_time: "2027-01-11T11:30:00+05:30", status: "pending", notes: "" },
+  { id: 3, title: "Completed demo", customer_name: "Mira Sen", customer_phone: "+919876543212", customer_email: "", start_time: "2026-06-10T10:00:00+05:30", end_time: "2026-06-10T10:30:00+05:30", status: "completed", notes: "" },
 ];
 
 beforeEach(() => {
@@ -51,6 +52,14 @@ describe("Appointments workspace", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     expect(await screen.findByText("Edit Appointment")).toBeTruthy();
     expect(screen.getByDisplayValue("Asha Rao")).toBeTruthy();
+  });
+
+  it("uses blue only for informational upcoming and completed appointment states", async () => {
+    render(<Page />);
+    await screen.findAllByText("Completed demo");
+    expect(screen.getAllByText("completed")[0].className).toContain("sky-500");
+    const upcomingLabel = screen.getByText("Upcoming");
+    expect(upcomingLabel.parentElement?.querySelector("svg")?.parentElement?.className).toContain("sky-500");
   });
 
   it("surfaces load failures with a retry action", async () => {
