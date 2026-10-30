@@ -386,6 +386,7 @@
   outline: none;
   box-shadow: none;
   border-bottom-color: var(--cta);
+  border-bottom-width: 2px;
 }
 .lead-form-underline :is(input, textarea, [data-slot="select-trigger"]):disabled,
 .lead-form-underline [data-slot="select-trigger"][data-disabled] {
