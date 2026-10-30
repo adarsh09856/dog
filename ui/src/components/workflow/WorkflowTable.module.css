@@ -1,0 +1,12 @@
+.tableCard { border:1px solid var(--border);border-radius:13px;overflow:hidden;background:var(--card);box-shadow:0 14px 32px -34px var(--foreground); }
+.tableCard [data-slot="table-container"] { overflow-x:auto; }
+.tableCard table { min-width:840px; }
+.tableCard thead { background:color-mix(in srgb,var(--secondary) 55%,var(--card)); }
+.tableCard thead tr,.tableCard tbody tr { display:grid;grid-template-columns:58px minmax(220px,1.4fr) minmax(125px,.85fr) 95px minmax(280px,1.5fr);align-items:center; }
+.tableCard thead tr { min-height:47px; }
+.tableCard tbody tr { min-height:77px;border-top:1px solid var(--border); }
+.tableCard th,.tableCard td { min-width:0;padding:12px 14px!important;border:0!important; }
+.tableCard tbody tr:hover { background:color-mix(in srgb,var(--primary) 4%,var(--card)); }
+.tableCard tbody tr > td:last-child > div { gap:6px; }
+.tableCard tbody tr > td:last-child button { min-height:33px;border-radius:8px;font-size:10px; }
+@media(max-width:900px) { .tableCard table { min-width:760px; } .tableCard thead tr,.tableCard tbody tr { grid-template-columns:48px minmax(210px,1.3fr) minmax(110px,.8fr) 72px minmax(245px,1.4fr); } .tableCard th,.tableCard td { padding-inline:10px!important; } }

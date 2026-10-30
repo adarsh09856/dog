@@ -5,6 +5,12 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [react()],
+  // Component tests need CSS Modules to resolve, but do not compile Tailwind.
+  // Avoid loading the app's PostCSS plugin from Vite's test CSS pipeline; this
+  // keeps tests deterministic across the installed Tailwind/Vite versions.
+  css: {
+    postcss: { plugins: [] },
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -1,7 +1,5 @@
 "use client";
 
-import admin from "../AdminWorkspace.module.css";
-
 import {
   AlertCircle,
   CheckCircle2,
@@ -57,6 +55,8 @@ import {
   MasterCredential,
   ModelCatalogEntry,
 } from "@/lib/kodewavesApi";
+
+import admin from "../AdminWorkspace.module.css";
 
 export interface ProviderMeta {
   provider: string;
@@ -508,7 +508,7 @@ export default function MasterKeysAndModelsPage() {
                                   : cat === "tts"
                                   ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5"
                                   : cat === "realtime"
-                                  ? "border-purple-500/40 text-purple-600 dark:text-purple-400 bg-purple-500/5"
+                                  ? "border-primary/40 text-primary bg-primary/5"
                                   : cat === "telecom"
                                   ? "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/5"
                                   : "border-primary/40 text-primary bg-primary/5"

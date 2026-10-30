@@ -12,6 +12,7 @@ import {
   type PublicSaaSPlan,
 } from "@/lib/kodewavesApi";
 
+import pageStyles from "../PublicPages.module.css";
 import styles from "./PricingSurface.module.css";
 
 function money(cents: number, currency: string) {
@@ -109,65 +110,47 @@ export default function PricingPage() {
   return (
     <div className="public-site public-pricing min-h-screen bg-background text-foreground">
       <PublicHeader />
-      <main id="main-content" className="mx-auto max-w-7xl px-5 pb-24 sm:px-8">
-        <section className={`${styles.intro} relative isolate mb-12 grid gap-8 overflow-hidden rounded-[2rem] border-b-0 bg-sidebar px-6 py-10 text-sidebar-foreground shadow-[0_28px_80px_-48px_rgba(16,35,31,.85)] sm:px-10 sm:py-14 md:grid-cols-[minmax(0,1fr)_minmax(240px,0.55fr)] md:items-end lg:px-14`}>
-          <div className="pointer-events-none absolute -right-24 -top-36 -z-10 size-[26rem] rounded-full border border-sidebar-foreground/10" aria-hidden="true" />
-          <div className="pointer-events-none absolute -right-6 -top-20 -z-10 size-[18rem] rounded-full border border-sidebar-foreground/10" aria-hidden="true" />
-          <div className="max-w-2xl">
-            <p className="mb-5 inline-flex items-center gap-3 rounded-full border border-sidebar-foreground/20 bg-sidebar-foreground/[0.06] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/75">
-              <span className="size-1.5 rounded-full bg-cta" aria-hidden="true" />
-              Plans and deployment
-            </p>
-            <h1 className="max-w-3xl text-4xl font-semibold leading-[1.04] tracking-[-0.045em] sm:text-5xl lg:text-[4.25rem]">
-              Choose a plan.<br /><span className="text-cta">Know what it covers.</span>
-            </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-sidebar-foreground/75 sm:text-lg sm:leading-8">
-              See the configured price, included usage and enabled features for each workspace plan. Provider and deployment costs are shown separately.
-            </p>
-          </div>
-          <aside className="grid gap-5 rounded-2xl border border-sidebar-foreground/15 bg-sidebar-foreground/[0.05] p-5 sm:p-6 md:mb-1" aria-label="Plan payment terms">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sidebar-foreground/60">Clear plan terms</p>
-              <ul className="mt-3 space-y-2 text-sm text-sidebar-foreground/85">
-                <li className="flex items-center gap-2"><Check className="size-4 shrink-0 text-cta" />Configured prices and limits</li>
-                <li className="flex items-center gap-2"><Check className="size-4 shrink-0 text-cta" />No automatic renewal</li>
-                <li className="flex items-center gap-2"><Check className="size-4 shrink-0 text-cta" />Provider costs shown separately</li>
-              </ul>
+      <main id="main-content" className={pageStyles.pageFrame}>
+        <section className={pageStyles.priceHero}>
+          <div className={pageStyles.priceHeroGrid}>
+            <div className={pageStyles.heroCopy}>
+              <p className={pageStyles.eyebrow}>Plans / Configured terms</p>
+              <h1 className={pageStyles.headline}>Choose a plan.<br /><span className={pageStyles.headlineAccent}>Know what it covers.</span></h1>
+              <p className={pageStyles.lede}>
+                See the configured price, included usage and enabled features for each workspace plan. Provider and deployment costs are listed separately.
+              </p>
             </div>
-            {hasCycleChoice && (
-              <div className="border-t border-sidebar-foreground/15 pt-4">
-                <p className="mb-2 text-xs text-sidebar-foreground/65">Compare the configured payment term</p>
-                <div className="inline-flex rounded-lg border border-sidebar-foreground/15 bg-sidebar p-1" role="group" aria-label="Billing period">
-                  <button
-                    type="button"
-                    aria-pressed={!annual}
-                    onClick={() => setAnnual(false)}
-                    className={`rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta ${!annual ? "bg-cta text-cta-foreground shadow-sm" : "text-sidebar-foreground/70 hover:text-sidebar-foreground"}`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={annual}
-                    onClick={() => setAnnual(true)}
-                    className={`rounded-md px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cta ${annual ? "bg-cta text-cta-foreground shadow-sm" : "text-sidebar-foreground/70 hover:text-sidebar-foreground"}`}
-                  >
-                    Annual
-                  </button>
-                </div>
-              </div>
-            )}
-          </aside>
+            <aside className={pageStyles.priceTerms} aria-label="Plan payment terms">
+              <strong>Clear plan terms</strong>
+              <ul>
+                <li><Check aria-hidden />Configured prices and limits</li>
+                <li><Check aria-hidden />No automatic renewal</li>
+                <li><Check aria-hidden />Provider costs shown separately</li>
+              </ul>
+            </aside>
+          </div>
         </section>
 
-        <section
-          aria-label="Subscription plans"
-          className={`grid gap-4 ${planState === "ready" && plans.length === 1
+        <section className={pageStyles.planSection} aria-labelledby="subscription-plans-heading">
+          <div className={pageStyles.pricingSectionHead}>
+            <div>
+              <h2 id="subscription-plans-heading">Workspace plans</h2>
+              <p>Choose a configured plan and review its exact term and enabled features.</p>
+            </div>
+            {hasCycleChoice && (
+              <div className={pageStyles.billingControl} role="group" aria-label="Billing period">
+                <button type="button" aria-pressed={!annual} onClick={() => setAnnual(false)}>Monthly</button>
+                <button type="button" aria-pressed={annual} onClick={() => setAnnual(true)}>Annual</button>
+              </div>
+            )}
+          </div>
+          <div
+          className={`${pageStyles.planGrid} grid ${planState === "ready" && plans.length === 1
             ? "mx-auto max-w-xl"
             : planState === "ready" && plans.length === 2
               ? "mx-auto max-w-5xl md:grid-cols-2"
               : "md:grid-cols-2 xl:grid-cols-3"}`}
-        >
+          >
           {planState === "loading" && (
             <p
               role="status"
@@ -295,27 +278,22 @@ export default function PricingPage() {
               </article>
             );
           })}
+          </div>
         </section>
-        <p className="mx-auto mt-7 max-w-3xl text-center text-xs leading-6 text-muted-foreground">
+        <p className={pageStyles.priceFootnote}>
           Prices are shown in each offer’s configured currency. No currency
           conversion or annual discount is estimated here. Taxes and final
           payment terms are confirmed during purchase.
         </p>
 
-        <section className="mt-24">
-          <div className="mb-8">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
-              Additional usage
-            </p>
-            <h2 className="text-3xl font-medium tracking-tight">
-              Credit bundles
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-muted-foreground">
-              Review the available top-ups for your account. Provider and
-              carrier charges may apply separately.
-            </p>
-          </div>
-          <div className="grid gap-5 md:grid-cols-3">
+        <section className={pageStyles.usageSection} aria-labelledby="credit-bundles-heading">
+          <div className={pageStyles.usageGrid}>
+            <div className={pageStyles.usageIntro}>
+              <p className={pageStyles.eyebrow}>Additional usage</p>
+              <h2 id="credit-bundles-heading">Credit bundles</h2>
+              <p>Review the available top-ups for your account. Provider and carrier charges may apply separately.</p>
+            </div>
+          <div className={pageStyles.bundleGrid}>
             {packageState === "loading" && (
               <p role="status" className="text-sm text-muted-foreground">
                 Loading credit bundles…
@@ -345,7 +323,7 @@ export default function PricingPage() {
             {packages.map((pkg) => (
               <article
                 key={pkg.id}
-                className={`${styles.creditCard} rounded-2xl border border-border bg-card p-7`}
+                className={`${styles.creditCard} ${pageStyles.bundleCard} rounded-2xl border border-border bg-card p-7`}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-semibold">{pkg.name}</h3>
@@ -373,9 +351,10 @@ export default function PricingPage() {
               </article>
             ))}
           </div>
+          </div>
         </section>
 
-        <section className={`${styles.installation} my-24 grid gap-8 rounded-2xl border border-border bg-muted/40 p-7 sm:p-10 md:grid-cols-2`}>
+        <section className={`${styles.installation} ${pageStyles.installPanel} grid gap-8 rounded-2xl border border-border bg-muted/40 p-7 sm:p-10 md:grid-cols-2`}>
           <div>
             <Server className="mb-5 size-6 text-cta-text" />
             <h2 className="text-3xl font-medium tracking-tight">
@@ -408,7 +387,7 @@ export default function PricingPage() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-3xl">
+        <section className={`${pageStyles.faqSection} mx-auto max-w-3xl`}>
           <h2 className="mb-8 text-3xl font-medium tracking-tight">
             Questions before you start.
           </h2>

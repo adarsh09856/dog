@@ -1,6 +1,7 @@
 'use client';
 
 import {
+    AlertTriangle,
     Archive,
     AudioLines,
     Check,
@@ -9,7 +10,6 @@ import {
     Inbox,
     Pencil,
     RotateCcw,
-    AlertTriangle,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
@@ -20,10 +20,10 @@ import {
     updateWorkflowStatusApiV1WorkflowWorkflowIdStatusPut,
 } from '@/client/sdk.gen';
 import type { FolderResponse } from '@/client/types.gen';
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { catalogApi, type AvailableCatalogResponse } from '@/lib/kodewavesApi';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -42,7 +42,9 @@ import {
 } from "@/components/ui/table";
 import { useOrganizationTimezone } from '@/hooks/useOrganizationTimezone';
 import { formatDate } from '@/lib/dateTime';
-import chrome from "@/components/layout/WorkspaceChrome.module.css";
+import { type AvailableCatalogResponse,catalogApi } from '@/lib/kodewavesApi';
+
+import tableStyle from "./WorkflowTable.module.css";
 
 interface Workflow {
     id: number;
@@ -157,7 +159,7 @@ export function WorkflowTable({
                     <span>No active models found in catalog. Agents will fail until a provider key is configured in Admin or Model Settings.</span>
                 </div>
             )}
-            <Card className={chrome.agentTable}>
+            <Card className={`${chrome.agentTable} ${tableStyle.tableCard}`}>
                 <CardContent className="p-0">
                     <Table>
                         <TableHeader>

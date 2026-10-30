@@ -1,7 +1,5 @@
 "use client";
 
-import admin from "../AdminWorkspace.module.css";
-
 import {
   AlertTriangle,
   Coins,
@@ -63,6 +61,8 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
 import { adminApi, AdminUserItem, SaaSPlan } from "@/lib/kodewavesApi";
+
+import admin from "../AdminWorkspace.module.css";
 
 function userEditValues(user?: AdminUserItem) {
   return {
@@ -475,7 +475,7 @@ export default function AdminUsersPage() {
                         </TableCell>
                         <TableCell>
                           {u.is_superuser ? (
-                            <Badge className="bg-purple-500/10 text-purple-600 border-purple-500/20 text-[10px] gap-1">
+                            <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] gap-1">
                               <Shield className="h-3 w-3" /> Superadmin
                             </Badge>
                           ) : (

@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { detailFromError } from "@/lib/apiError";
 import { getPostAuthDestination } from "@/lib/pricingSelection";
 
+import pageStyles from "../../PublicPages.module.css";
+
 export function SignupForm() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -76,12 +78,13 @@ export function SignupForm() {
 
   return (
     <AuthShell enterpriseSlot={<AuthEnterpriseCTA />}>
-      <div className="space-y-1.5 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Create an account</h1>
-        <p className="text-sm text-muted-foreground">Enter your details to get started</p>
+      <div className={pageStyles.authFormIntro}>
+        <p className={pageStyles.eyebrow}>Workspace access</p>
+        <h1 className={pageStyles.authHeading}>Create an account</h1>
+        <p>Set up your workspace profile to start configuring voice agents.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className={pageStyles.authFields}>
         <div className="space-y-2">
           <Label htmlFor="name">Full Name</Label>
           <Input
@@ -142,12 +145,12 @@ export function SignupForm() {
             minLength={8}
           />
         </div>
-        <Button type="submit" className="w-full" disabled={loading}>
+        <Button type="submit" className={`${pageStyles.authSubmit} w-full`} disabled={loading}>
           {loading ? "Creating account..." : "Create account"}
         </Button>
       </form>
 
-      <p className="text-center text-sm text-muted-foreground">
+      <p className={pageStyles.authFoot}>
         Already have an account?{" "}
         <Link href={`/auth/login${authSearch}`} className="text-primary underline-offset-4 hover:underline">
           Sign in
