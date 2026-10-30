@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from api.enums import Environment
 
@@ -38,6 +39,24 @@ if all([LANGFUSE_HOST, LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY]) and not (
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or None
 PUBLIC_HOST = os.getenv("PUBLIC_HOST") or None
 
+
+def _is_loopback_origin(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        return urlsplit(value).hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+    except ValueError:
+        return False
+
+
+if (
+    ENVIRONMENT == Environment.PRODUCTION.value
+    and _is_loopback_origin(PUBLIC_BASE_URL)
+    and PUBLIC_HOST
+    and PUBLIC_HOST.lower() not in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+):
+    PUBLIC_BASE_URL = f"https://{PUBLIC_HOST}"
+
 # The server's own IPv4 address, as the operator supplied it to the setup
 # script. Usually identical to PUBLIC_HOST, but kept distinct because it must
 # stay a raw IP (coturn's external-ip needs one) while PUBLIC_HOST may be a
@@ -53,14 +72,34 @@ SERVER_IP = os.getenv("SERVER_IP", "")
 # When this is a non-public address (localhost or a private/reserved IP) the host
 # isn't reachable from the internet, so get_backend_endpoints() resolves a running
 # Cloudflare tunnel's URL at runtime instead (see api/utils/common.py).
-BACKEND_API_ENDPOINT = (
-    os.getenv("BACKEND_API_ENDPOINT") or PUBLIC_BASE_URL or "http://localhost:8000"
+_configured_backend_api_endpoint = os.getenv("BACKEND_API_ENDPOINT")
+if (
+    ENVIRONMENT == Environment.PRODUCTION.value
+    and _is_loopback_origin(_configured_backend_api_endpoint)
+    and not _is_loopback_origin(PUBLIC_BASE_URL)
+):
+    _configured_backend_api_endpoint = None
+BACKEND_API_ENDPOINT = _configured_backend_api_endpoint or PUBLIC_BASE_URL or "http://localhost:8000"
+# The embed script is served from the public UI origin. A stale sample
+# `UI_APP_URL=http://localhost:3010` must not override the configured public
+# origin in production; keep the explicit value for local development and
+# split-origin deployments.
+_configured_ui_app_url = os.getenv("UI_APP_URL")
+if (
+    ENVIRONMENT == Environment.PRODUCTION.value
+    and _is_loopback_origin(_configured_ui_app_url)
+    and not _is_loopback_origin(PUBLIC_BASE_URL)
+):
+    _configured_ui_app_url = None
+UI_APP_URL = (
+    _configured_ui_app_url
+    or PUBLIC_BASE_URL
+    or (
+        f"https://{PUBLIC_HOST}"
+        if PUBLIC_HOST and PUBLIC_HOST != "localhost"
+        else "http://localhost:3010"
+    )
 )
-# The embed script is served from the public UI origin.  `PUBLIC_BASE_URL` is
-# already passed to the API in production Compose deployments; use it when the
-# optional, UI-specific override is not set so copied client snippets never
-# silently point at the API container's localhost default.
-UI_APP_URL = os.getenv("UI_APP_URL") or PUBLIC_BASE_URL or "http://localhost:3010"
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
