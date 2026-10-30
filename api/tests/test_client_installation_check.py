@@ -21,6 +21,7 @@ from api.services.installation_license import (
     verify_installation_status,
     verify_installation_status_claims,
 )
+from api.tests.owner_signer_test_utils import mock_owner_signer
 
 
 def _http_request(peer="203.0.113.7", forwarded=""):
@@ -113,11 +114,7 @@ async def test_owner_applies_optional_ip_policy_before_consuming_enrollment_toke
         ),
     )
     consume = AsyncMock(return_value=True)
-    monkeypatch.setattr(
-        client_installation_check,
-        "_owner_verification_signers",
-        lambda: [(owner_private, owner_public)],
-    )
+    mock_owner_signer(monkeypatch, client_installation_check, (owner_private, owner_public))
     monkeypatch.setattr(client_installation_check, "consume_installation_enrollment", consume)
 
     call = client_installation_check.enroll_client_installation(
@@ -147,7 +144,7 @@ async def test_owner_status_is_signed_and_bound_to_token_and_nonce(monkeypatch):
         encoding=serialization.Encoding.Raw,
         format=serialization.PublicFormat.Raw,
     )).rstrip(b"=").decode("ascii")
-    monkeypatch.setattr(client_installation_check, "_owner_verification_signers", lambda: [(raw, public_key)])
+    mock_owner_signer(monkeypatch, client_installation_check, (raw, public_key))
     now = int(time.time())
     token = issue_license_token({
         "iat": now - 2, "exp": now + 3600, "edition": "client",
@@ -223,9 +220,9 @@ async def test_owner_status_is_signed_and_bound_to_token_and_nonce(monkeypatch):
     new_public = base64.urlsafe_b64encode(new_key.public_key().public_bytes(
         serialization.Encoding.Raw, serialization.PublicFormat.Raw,
     )).rstrip(b"=").decode("ascii")
-    monkeypatch.setattr(
-        client_installation_check, "_owner_verification_signers",
-        lambda: [(new_raw, new_public), (raw, public_key)],
+    mock_owner_signer(
+        monkeypatch, client_installation_check,
+        (new_raw, new_public), (raw, public_key),
     )
     proof_issued_at, proof_signature = _owner_check_proof(
         installation_private, installation_id="client-1", token=token, nonce=nonce,
@@ -256,7 +253,7 @@ async def test_owner_status_rejects_unsigned_unenrolled_check(monkeypatch):
         encoding=serialization.Encoding.Raw,
         format=serialization.PublicFormat.Raw,
     )).rstrip(b"=").decode("ascii")
-    monkeypatch.setattr(client_installation_check, "_owner_verification_signers", lambda: [(raw, public)])
+    mock_owner_signer(monkeypatch, client_installation_check, (raw, public))
     now = int(time.time())
     token = issue_license_token({
         "iat": now - 1, "exp": now + 3600, "edition": "client",
@@ -402,7 +399,7 @@ async def test_owner_records_bounded_component_finding(monkeypatch):
     public = base64.urlsafe_b64encode(key.public_key().public_bytes(
         serialization.Encoding.Raw, serialization.PublicFormat.Raw,
     )).rstrip(b"=").decode()
-    monkeypatch.setattr(client_installation_check, "_owner_verification_signers", lambda: [(raw, public)])
+    mock_owner_signer(monkeypatch, client_installation_check, (raw, public))
     now = int(time.time())
     token = issue_license_token({
         "iat": now - 1, "exp": now + 3600, "edition": "client",
@@ -462,7 +459,7 @@ async def test_owner_signs_ip_binding_failure_without_revoking_license(monkeypat
     public = base64.urlsafe_b64encode(key.public_key().public_bytes(
         serialization.Encoding.Raw, serialization.PublicFormat.Raw,
     )).rstrip(b"=").decode()
-    monkeypatch.setattr(client_installation_check, "_owner_verification_signers", lambda: [(raw, public)])
+    mock_owner_signer(monkeypatch, client_installation_check, (raw, public))
     now = int(time.time())
     token = issue_license_token({
         "iat": now - 1, "exp": now + 3600, "edition": "client",

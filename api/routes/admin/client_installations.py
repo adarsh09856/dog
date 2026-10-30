@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
-import os
+import ipaddress
 import re
 import secrets
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Annotated
 
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.exc import IntegrityError
@@ -43,10 +39,13 @@ from api.services.client_binding_requests import (
 from api.services.domain_challenge import challenge_record_name, dns_proves_domain
 from api.services.installation_license import (
     InstallationLicenseError,
-    _b64url_decode,
     _canonical_domain,
-    issue_license_token,
     load_license,
+)
+from api.services.owner_license_signer_client import (
+    OwnerLicenseSignerError,
+    OwnerLicenseSignerPolicyError,
+    sign_client_license,
 )
 
 router = APIRouter(prefix="/client-installations", tags=["admin-client-installations"])
@@ -96,6 +95,14 @@ class IssueClientInstallation(BaseModel):
     @classmethod
     def canonical_domains(cls, values: list[str]) -> list[str]:
         return sorted({_canonical_domain(value) for value in values})
+
+    @field_validator("ip_ranges")
+    @classmethod
+    def canonical_ip_ranges(cls, values: list[str]) -> list[str]:
+        try:
+            return sorted({str(ipaddress.ip_network(value.strip(), strict=False)) for value in values})
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise ValueError("Allowed IPs must be valid IP addresses or CIDR ranges") from exc
 
     @field_validator("limits", mode="before")
     @classmethod
@@ -157,39 +164,6 @@ class RejectBindingRequest(BaseModel):
     note: str = Field(default="", max_length=1000)
 
 
-def _read_owner_signing_key(key_path: str) -> tuple[bytes, str]:
-    if not key_path:
-        raise HTTPException(status_code=503, detail="Owner license signer is not configured")
-    try:
-        key_data = Path(key_path).read_bytes()
-        if len(key_data) != 32:
-            key_data = _b64url_decode(key_data.strip().decode("ascii"))
-        key = Ed25519PrivateKey.from_private_bytes(key_data)
-    except (OSError, ValueError, TypeError, UnicodeError) as exc:
-        raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
-    public_key = key.public_key().public_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PublicFormat.Raw,
-    )
-    return key_data, base64.urlsafe_b64encode(public_key).rstrip(b"=").decode("ascii")
-
-
-def _owner_signing_key() -> tuple[bytes, str]:
-    return _read_owner_signing_key(os.getenv("KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE", ""))
-
-
-def _owner_verification_signers() -> list[tuple[bytes, str]]:
-    """Keep old client check responses verifiable while rotating the owner key."""
-    signers = [_owner_signing_key()]
-    legacy_paths = os.getenv("KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES", "")
-    for path in legacy_paths.split(os.pathsep):
-        if path.strip():
-            signer = _read_owner_signing_key(path.strip())
-            if signer[1] not in {existing[1] for existing in signers}:
-                signers.append(signer)
-    return signers
-
-
 @router.get("")
 async def list_client_installations(
     _user: Annotated[UserModel, Depends(get_superuser)],
@@ -229,7 +203,7 @@ async def approve_binding_request(
     user: Annotated[UserModel, Depends(get_superuser)],
 ) -> dict:
     """Approve only DNS-verified domains and issue the replacement token once."""
-    return await approve_binding_change(request_id, user.id, _owner_signing_key)
+    return await approve_binding_change(request_id, user.id, sign_client_license)
 
 
 @router.post("/binding-requests/{request_id}/recover-token")
@@ -238,7 +212,7 @@ async def recover_binding_request_token(
     _user: Annotated[UserModel, Depends(get_superuser)],
 ) -> dict:
     """Recover the exact token from an approved request without rotating it."""
-    return await recover_approved_binding_token(request_id, _owner_signing_key)
+    return await recover_approved_binding_token(request_id, sign_client_license)
 
 
 @router.post("/alerts/{alert_id}/acknowledge")
@@ -300,7 +274,6 @@ async def issue_client_installation(
     unverified = await unverified_license_domains(request.customer_id, request.domains)
     if unverified:
         raise HTTPException(status_code=409, detail=f"Verify domain control before issuance: {', '.join(unverified)}")
-    private_key, public_key = _owner_signing_key()
     claims = {
         "iat": timestamp,
         "exp": request.expires_at,
@@ -312,9 +285,13 @@ async def issue_client_installation(
         "features": request.features,
         "limits": request.limits,
     }
-    token = issue_license_token(claims, private_key)
     try:
+        token, public_key = await sign_client_license(claims)
         license_data = load_license(token, public_key, now=timestamp)
+    except OwnerLicenseSignerPolicyError as exc:
+        raise HTTPException(status_code=422, detail="License claims violate owner issuance policy") from exc
+    except OwnerLicenseSignerError as exc:
+        raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
     except InstallationLicenseError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -364,7 +341,6 @@ async def renew_client_installation(
     unverified = await unverified_license_domains(existing["customer_id"], existing["domains"])
     if unverified:
         raise HTTPException(status_code=409, detail=f"Verify domain control before renewal: {', '.join(unverified)}")
-    private_key, public_key = _owner_signing_key()
     claims = {
         "iat": timestamp,
         "exp": request.expires_at,
@@ -378,8 +354,12 @@ async def renew_client_installation(
     }
     try:
         IssueClientInstallation.model_validate({**claims, "expires_at": request.expires_at})
-        token = issue_license_token(claims, private_key)
+        token, public_key = await sign_client_license(claims)
         load_license(token, public_key, now=timestamp)
+    except OwnerLicenseSignerPolicyError as exc:
+        raise HTTPException(status_code=422, detail="License claims violate owner issuance policy") from exc
+    except OwnerLicenseSignerError as exc:
+        raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
     except (InstallationLicenseError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     updated = await renew_client_installation_record(

@@ -12,20 +12,32 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_owner_signer_mount_is_read_only_and_absent_from_client_stack():
+def test_owner_signer_is_isolated_from_api_and_client_stack():
     owner = yaml.safe_load((ROOT / "deploy/owner/docker-compose.owner.yaml").read_text())
-    assert set(owner["services"]) == {"api"}
+    assert set(owner["services"]) == {"api", "owner-license-signer"}
     api = owner["services"]["api"]
     assert api["environment"]["KODEWAVES_EDITION"] == "saas"
-    assert api["environment"]["KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE"] == (
-        "/run/kodewaves-owner-keys/current.key"
+    assert "KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE" not in api["environment"]
+    assert api["environment"]["KODEWAVES_OWNER_LICENSE_SIGNER_URL"] == (
+        "http://owner-license-signer:8765"
     )
-    mount = api["volumes"][0]
+    assert "KODEWAVES_OWNER_LICENSE_SIGNER_TOKEN" in api["environment"]
+    assert "KODEWAVES_OWNER_TRUSTED_PROXY_CIDRS" in api["environment"]
+    assert "app-network" in api["networks"]
+    assert "owner-signer-network" in api["networks"]
+
+    signer = owner["services"]["owner-license-signer"]
+    assert signer["command"] == ["python", "-m", "api.services.owner_license_signer"]
+    assert signer["expose"] == ["8765"]
+    assert "ports" not in signer
+    assert signer["networks"] == ["owner-signer-network"]
+    mount = signer["volumes"][0]
     assert mount["type"] == "bind"
     assert mount["source"].startswith("${KODEWAVES_OWNER_KEYS_DIR:?")
     assert mount["target"] == "/run/kodewaves-owner-keys"
     assert mount["read_only"] is True
     assert mount["bind"]["create_host_path"] is False
+    assert owner["networks"]["owner-signer-network"]["internal"] is True
 
     client = (ROOT / "deploy/client/docker-compose.client.yaml").read_text()
     assert "KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE" not in client
@@ -37,6 +49,11 @@ def test_deploy_reuses_owner_overlay_when_configured(tmp_path, owner_enabled):
     bash = shutil.which("bash")
     if bash is None:
         pytest.skip("bash is required to exercise deploy.sh")
+    probe = subprocess.run(
+        [bash, "--version"], capture_output=True, text=True, timeout=5, check=False,
+    )
+    if probe.returncode != 0:
+        pytest.skip("A bash executable was found, but its runtime is unavailable")
     shutil.copy2(ROOT / "deploy.sh", tmp_path / "deploy.sh")
     bindir = tmp_path / "bin"
     bindir.mkdir()

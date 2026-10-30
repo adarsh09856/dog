@@ -57,6 +57,7 @@ from api.services.client_binding_requests import accept_binding_request, approve
 from api.routes.admin import client_installation_check
 from api.services.installation_identity import sign_binding_request, sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status_claims
+from api.tests.owner_signer_test_utils import mock_owner_signer
 
 
 def _disposable_database_url() -> str:
@@ -181,10 +182,7 @@ async def test_enrolled_identity_replay_and_integrity_alert_persist(monkeypatch)
 
         owner_private, owner_public = private_bytes(owner), public_string(owner)
         client_private, client_public = private_bytes(client), public_string(client)
-        monkeypatch.setattr(
-            client_installation_check, "_owner_verification_signers",
-            lambda: [(owner_private, owner_public)],
-        )
+        mock_owner_signer(monkeypatch, client_installation_check, (owner_private, owner_public))
         now = int(time.time())
         installation_id = "client-integration-1"
         token = issue_license_token({
@@ -470,7 +468,7 @@ async def test_binding_request_nonce_conflict_and_atomic_approval_persist(monkey
                 "reason": proof_fields["reason"],
                 "signature": sign_binding_request(client_private, **proof_fields),
             }
-            return await accept_binding_request(request, token, [(owner_private, owner_public)])
+            return await accept_binding_request(request, token, [owner_public])
 
         accepted = await submit(fields)
         assert accepted["status"] == "pending"
@@ -506,9 +504,10 @@ async def test_binding_request_nonce_conflict_and_atomic_approval_persist(monkey
                     "created_at": verified_at,
                 })
 
-        approved = await approve_binding_request(
-            request_id, 1, lambda: (owner_private, owner_public),
-        )
+        async def sign_license(claims):
+            return issue_license_token(claims, owner_private), owner_public
+
+        approved = await approve_binding_request(request_id, 1, sign_license)
         assert approved["status"] == "approved"
         replacement = installation_license.load_license(
             approved["token"], owner_public, now=int(time.time()),
@@ -539,7 +538,7 @@ async def test_binding_request_nonce_conflict_and_atomic_approval_persist(monkey
         # the binding after the first transaction has committed.
         with pytest.raises(HTTPException) as second_resolution:
             await approve_binding_request(
-                request_id, 1, lambda: (owner_private, owner_public),
+                request_id, 1, sign_license,
             )
         assert second_resolution.value.status_code == 404
         assert not await resolve_client_binding_request(
