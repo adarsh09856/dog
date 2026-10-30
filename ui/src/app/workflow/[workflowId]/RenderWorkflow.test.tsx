@@ -46,7 +46,7 @@ vi.mock('@xyflow/react', () => ({
     Background: () => null,
     BackgroundVariant: { Dots: 'dots' },
     Panel: ({ children }: { children: ReactNode }) => children,
-    ReactFlow: ({ nodesDraggable, children }: { nodesDraggable: boolean; children: ReactNode }) => <div data-testid="canvas" data-editable={nodesDraggable}>{children}</div>,
+    ReactFlow: ({ nodesDraggable, children, proOptions }: { nodesDraggable: boolean; children: ReactNode; proOptions?: { hideAttribution?: boolean } }) => <div data-testid="canvas" data-editable={nodesDraggable} data-hide-attribution={proOptions?.hideAttribution}>{children}</div>,
 }));
 vi.mock('./components/WorkflowEditorHeader', () => ({
     WorkflowEditorHeader: ({ activeVersionLabel, onHistoryClick, onBackToDraft, saveWorkflow }: {
@@ -75,6 +75,10 @@ beforeEach(() => {
 
 it.each(['archived', 'published'])('opens a linked %s version read-only before history loads', async status => {
     render(<RenderWorkflow workflowId={12} initialWorkflowName="Agent" user={{ id: '1' }} initialSelectedVersion={version(3, status)} />);
+    expect(screen.getByRole('main', { name: 'Workflow editor' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Workflow canvas' })).toBeTruthy();
+    expect(screen.getByTestId('canvas').getAttribute('data-hide-attribution')).toBe('true');
+    expect(screen.getByRole('complementary', { name: 'Agent test panel' })).toBeTruthy();
     expect(screen.getByTestId('canvas').getAttribute('data-editable')).toBe('false');
     expect(screen.getByTestId('tester').getAttribute('data-disabled')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));

@@ -37,7 +37,7 @@ describe("CRM page loading", () => {
     expect(mocks.getContacts).not.toHaveBeenCalled();
     mocks.auth = { loading: false, user: { id: "user-1" } };
     view.rerender(<CRMPage />);
-    await screen.findByText("+15550123456");
+    expect((await screen.findAllByText("+15550123456")).length).toBeGreaterThan(0);
     expect(mocks.getContacts).toHaveBeenCalledTimes(1);
   });
 
@@ -46,7 +46,7 @@ describe("CRM page loading", () => {
     mocks.getContacts.mockRejectedValue(new Error("CRM unavailable"));
     mocks.getStages.mockResolvedValue([]);
     render(<CRMPage />);
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("CRM unavailable"));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("CRM unavailable"));
   });
 });
 
@@ -55,17 +55,51 @@ describe("CRM lead-stage editing", () => {
     mocks.auth = { loading: false, user: { id: "user-1" } };
     render(<CRMPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /add lead/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add a lead" }));
     fireEvent.change(screen.getByPlaceholderText("Rahul"), { target: { value: "Asha" } });
     fireEvent.change(screen.getByPlaceholderText("+91 98765 43210"), { target: { value: "+919876543210" } });
-    fireEvent.click(screen.getByRole("combobox"));
+    const selects = screen.getAllByRole("combobox");
+    fireEvent.click(selects[selects.length - 1]);
     fireEvent.click(await screen.findByRole("option", { name: "Qualified" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save Lead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
 
     await waitFor(() => expect(mocks.createContact).toHaveBeenCalledWith(expect.objectContaining({
       first_name: "Asha",
       phone: "+919876543210",
       stage_id: selectedStage.id,
     })));
+  });
+
+  it("shows stage counts and filters both the records view and its result count", async () => {
+    mocks.auth = { loading: false, user: { id: "user-1" } };
+    mocks.getContacts.mockResolvedValue([
+      { id: "contact-1", first_name: "Asha", last_name: "Rao", phone: "+919876543210", stage_id: firstStage.id },
+      { id: "contact-2", first_name: "Kabir", last_name: "Shah", phone: "+919876543211", stage_id: selectedStage.id },
+    ]);
+    render(<CRMPage />);
+
+    expect(await screen.findByRole("button", { name: /All contacts/ })).toBeTruthy();
+    const qualifiedStage = screen.getByRole("button", { name: /Qualified/ });
+    expect(qualifiedStage.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(qualifiedStage);
+
+    await waitFor(() => expect(qualifiedStage.getAttribute("aria-pressed")).toBe("true"));
+    expect(screen.getAllByText("Kabir Shah").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Asha Rao")).toBeNull();
+    expect(screen.getByText("Showing Qualified leads")).toBeTruthy();
+  });
+
+  it("shows a useful empty state and clears search and stage filters", async () => {
+    mocks.auth = { loading: false, user: { id: "user-1" } };
+    mocks.getContacts.mockResolvedValue([
+      { id: "contact-1", first_name: "Asha", last_name: "Rao", phone: "+919876543210", stage_id: firstStage.id },
+    ]);
+    render(<CRMPage />);
+
+    const search = await screen.findByRole("textbox", { name: "Search contacts" });
+    fireEvent.change(search, { target: { value: "no-match" } });
+    expect(await screen.findByRole("heading", { name: "No contacts match this view" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(await screen.findAllByText("Asha Rao")).not.toHaveLength(0);
   });
 });

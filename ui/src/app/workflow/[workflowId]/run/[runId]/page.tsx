@@ -21,7 +21,6 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import WorkflowLayout from '@/app/workflow/WorkflowLayout';
-import styles from './RunWorkspace.module.css';
 import {
     getWorkflowApiV1WorkflowFetchWorkflowIdGet,
     getWorkflowRunApiV1WorkflowWorkflowIdRunsRunIdGet,

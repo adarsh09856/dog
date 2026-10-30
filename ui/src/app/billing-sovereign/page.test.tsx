@@ -108,6 +108,7 @@ describe("manual plan renewal", () => {
     render(<SovereignBillingPage />);
 
     expect(await screen.findByText("$299.00")).toBeTruthy();
+    expect(screen.queryByText("Overage Rate:")).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Choose Plan" }));
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("365 days"));
   });

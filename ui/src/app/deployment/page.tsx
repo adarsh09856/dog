@@ -17,8 +17,8 @@ import styles from "../PublicPages.module.css";
 const deploymentOptions = [
   {
     label: "01 / HOSTED",
-    title: "Managed workspace",
-    description: "Use the hosted Kodewaves workspace to build and operate agents without maintaining the application servers yourself.",
+    title: "Managed Kodewaves workspace",
+    description: "Kodewaves operates the hosted application and its data services. Your signed-in workspace holds organization-scoped agent and business records; external providers receive the call data needed for the services you connect.",
     icon: Cloud,
     details: [
       "Workspace access and enabled plan features",

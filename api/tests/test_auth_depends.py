@@ -248,6 +248,31 @@ def _patch_oss_auth_dependencies(monkeypatch, *, user, bootstrap):
 
 
 @pytest.mark.asyncio
+async def test_superuser_dependency_rejects_api_keys_even_for_superuser_creator(monkeypatch):
+    """Organization API keys must never inherit global owner privileges."""
+    user = SimpleNamespace(is_active=True, is_superuser=True)
+    get_user = AsyncMock(return_value=user)
+    monkeypatch.setattr(auth_depends, "get_user", get_user)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await auth_depends.get_superuser(x_api_key="organization-api-key")
+
+    assert exc_info.value.status_code == 403
+    assert "API keys cannot access owner controls" in exc_info.value.detail
+    get_user.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_superuser_dependency_accepts_superadmin_session(monkeypatch):
+    user = SimpleNamespace(is_active=True, is_superuser=True)
+    get_user = AsyncMock(return_value=user)
+    monkeypatch.setattr(auth_depends, "get_user", get_user)
+
+    assert await auth_depends.get_superuser(authorization="Bearer user-session") is user
+    get_user.assert_awaited_once_with("Bearer user-session", None, None, None, None)
+
+
+@pytest.mark.asyncio
 async def test_oss_auth_bootstraps_existing_organization(monkeypatch):
     """An OSS org that predates a bootstrap step must still be provisioned.
 

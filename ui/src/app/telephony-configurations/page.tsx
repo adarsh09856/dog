@@ -1,6 +1,4 @@
 "use client";
-import panel from "@/components/layout/PanelWorkspace.module.css";
-
 import {
   AlertTriangle,
   ChevronRight,
@@ -45,15 +43,14 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTelephonyConfigWarnings } from "@/context/TelephonyConfigWarningsContext";
 import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 import { copyTextToClipboard } from "@/lib/clipboard";
+
+import styles from "./TelephonyWorkspace.module.css";
 
 export default function TelephonyConfigurationsPage() {
   const { user, getAccessToken, loading: authLoading } = useAuth();
@@ -185,23 +182,23 @@ export default function TelephonyConfigurationsPage() {
   const attentionCount = items.filter((item) => item.inactive || item.is_ready_for_outbound === false).length;
 
   return (
-    <div className="min-h-screen">
-      <div className="container mx-auto max-w-screen-2xl px-4 py-7 sm:px-6 lg:px-8">
-        <div className={panel.collectionHeader}>
-          <div>
-            <span className={panel.eyebrow}>CHANNELS / TELEPHONY</span>
+    <div className={styles.page}>
+      <div className={styles.inner}>
+        <header className={styles.hero}>
+          <div className={styles.heroCopy}>
+            <span className={styles.eyebrow}>CHANNELS / TELEPHONY</span>
             <h1>Telephony</h1>
             <p>
               Connect carriers, manage phone numbers, and choose the outbound account for your workflows.
             </p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button className={styles.heroAction} onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4 mr-2" /> Add configuration
           </Button>
-        </div>
+        </header>
 
         {telnyxMissingWebhookPublicKeyCount > 0 && (
-          <div className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <div className={styles.warning}>
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
               <div className="space-y-1 text-sm">
@@ -224,7 +221,7 @@ export default function TelephonyConfigurationsPage() {
         )}
 
         {vonageMissingSignatureSecretCount > 0 && (
-          <div className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <div className={styles.warning}>
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
               <div className="space-y-1 text-sm">
@@ -243,57 +240,58 @@ export default function TelephonyConfigurationsPage() {
           </div>
         )}
 
-        <section aria-label="Telephony overview" className="mb-6 grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-card sm:grid-cols-4">
+        <section aria-label="Telephony overview" className={styles.stats}>
           {[
             { label: "Provider accounts", value: loading ? "—" : items.length, icon: PhoneCall },
             { label: "Phone numbers", value: loading ? "—" : phoneNumberCount, icon: PhoneCall },
             { label: "Ready for outbound", value: loading ? "—" : readyCount, icon: ShieldCheck },
             { label: "Needs attention", value: loading ? "—" : attentionCount, icon: AlertTriangle },
-          ].map(({ label, value, icon: Icon }, index) => (
-            <div key={label} className={`flex items-start gap-3 border-border p-4 sm:p-5 ${index % 2 === 0 ? "border-r" : ""} ${index < 3 ? "sm:border-r" : ""} ${index < 2 ? "border-b sm:border-b-0" : ""}`}>
-              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icon className="size-4" aria-hidden="true" /></span>
-              <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-muted-foreground">{label}</p><p className="mt-1 text-xl font-semibold tabular-nums tracking-tight">{value}</p></div>
+          ].map(({ label, value, icon: Icon }) => (
+            <div key={label} className={styles.stat}>
+              <span className={styles.statIcon}><Icon className="size-4" aria-hidden="true" /></span>
+              <div className="min-w-0"><p className={styles.statLabel}>{label}</p><p className={styles.statValue}>{value}</p></div>
             </div>
           ))}
         </section>
 
         {loading ? (
-          <div className="grid gap-3">
+          <div className="grid gap-3" role="status" aria-label="Loading telephony configurations">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-24 w-full" />
           </div>
         ) : items.length === 0 ? (
-          <Card className="overflow-hidden rounded-xl border-border shadow-sm">
-            <CardHeader>
-              <CardTitle>No telephony configurations yet</CardTitle>
-              <CardDescription>
-                Add one to enable outbound calls and receive inbound calls.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" /> Add configuration
-              </Button>
-            </CardContent>
-          </Card>
+          <div className={styles.empty}>
+            <span className={styles.emptyIcon}><PhoneCall className="size-5" aria-hidden="true" /></span>
+            <h2>No telephony configurations yet</h2>
+            <p>Add a carrier account to connect phone numbers, place outbound calls, and receive inbound calls.</p>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Add configuration
+            </Button>
+          </div>
         ) : (
-          <div className="grid gap-3">
+          <section aria-labelledby="provider-configurations-heading">
+            <div className={styles.sectionHead}>
+              <div><h2 id="provider-configurations-heading">Provider accounts</h2><p>Set the default outbound route and maintain inbound numbers for each carrier.</p></div>
+              <Badge variant="outline">{items.length} {items.length === 1 ? "account" : "accounts"}</Badge>
+            </div>
+            <div className={styles.providerList}>
             {items.map((item) => (
-              <Card key={item.id} className="overflow-hidden rounded-xl border-border shadow-sm transition-colors hover:border-primary/35 hover:bg-muted/10">
-                <CardContent className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center">
+              <Card key={item.id} className={styles.provider}>
+                <CardContent className={styles.providerContent}>
                   <Link
                     href={`/telephony-configurations/${item.id}`}
-                    className="flex flex-1 items-center gap-4 min-w-0"
+                    className={styles.providerIdentity}
                   >
-                    <div className="flex flex-col gap-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium truncate">{item.name}</span>
+                    <span className={styles.providerMark}><PhoneCall className="size-5" aria-hidden="true" /></span>
+                    <div className={styles.providerDetails}>
+                      <div className={styles.providerTitle}>
+                        <strong>{item.name}</strong>
                         <Badge variant="secondary">{item.provider}</Badge>
                         {item.is_default_outbound && (
-                          <Badge className="gap-1">
+                          <span className={styles.defaultMark}>
                             <Star className="h-3 w-3 fill-current" />
                             Default
-                          </Badge>
+                          </span>
                         )}
                         {item.inactive && (
                           <Badge variant="destructive">Inactive</Badge>
@@ -308,18 +306,18 @@ export default function TelephonyConfigurationsPage() {
                           </Badge>
                         )}
                       </div>
-                      <span className="text-sm text-muted-foreground">
+                      <span className={styles.providerMeta}>
                         {item.phone_number_count} phone{" "}
                         {item.phone_number_count === 1 ? "number" : "numbers"}
                       </span>
                       {item.inactive && (
-                        <span className="text-sm text-destructive">
+                        <span className={styles.providerMessage}>
                           Disabled after repeated connection failures
                           {item.inactive_reason ? `: ${item.inactive_reason}` : ""}
                         </span>
                       )}
                       {!item.inactive && item.outbound_blocked_reason && (
-                        <span className="text-sm text-amber-700 dark:text-amber-500">
+                        <span className={styles.providerMessage}>
                           {item.outbound_blocked_reason}
                         </span>
                       )}
@@ -333,14 +331,14 @@ export default function TelephonyConfigurationsPage() {
                             .catch(() => toast.error("Failed to copy ID"));
                         }}
                         title="Click to copy"
-                        className="inline-flex items-center gap-1 self-start rounded font-mono text-xs text-muted-foreground hover:text-foreground"
+                        className={styles.providerId}
                       >
                         <span className="truncate">Configuration ID: {item.id}</span>
                         <Copy className="h-3 w-3 shrink-0" />
                       </button>
                     </div>
                   </Link>
-                  <div className="flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto sm:flex-nowrap">
+                  <div className={styles.providerActions}>
                     {item.inactive && (
                       <Button
                         variant="outline"
@@ -391,7 +389,8 @@ export default function TelephonyConfigurationsPage() {
                 </CardContent>
               </Card>
             ))}
-          </div>
+            </div>
+          </section>
         )}
       </div>
 

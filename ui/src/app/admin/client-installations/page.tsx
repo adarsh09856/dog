@@ -1,8 +1,6 @@
 "use client";
 
-import admin from "../AdminWorkspace.module.css";
-
-import { Ban, KeyRound, Plus, RefreshCw } from "lucide-react";
+import { Activity, AlertTriangle, Ban, Clock3, KeyRound, Plus, RefreshCw, ShieldCheck } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/kodewavesApi";
+
+import admin from "../AdminWorkspace.module.css";
+import styles from "./InstallationsWorkspace.module.css";
 
 interface InstallationRecord {
   installation_id: string;
@@ -108,6 +109,10 @@ export default function ClientInstallationsPage() {
   const [maxAgents, setMaxAgents] = useState("");
   const [maxCampaigns, setMaxCampaigns] = useState("");
   const [days, setDays] = useState(30);
+  const now = Date.now();
+  const protectedCount = records.filter((record) => !record.revoked_at && !record.integrity_failed_at && record.expires_at * 1000 > now).length;
+  const riskCount = records.filter((record) => Boolean(record.revoked_at || record.integrity_failed_at || record.expires_at * 1000 <= now)).length;
+  const pendingBindingCount = bindingRequests.filter((request) => request.status === "pending").length;
 
   const refresh = useCallback(async () => {
     try {
@@ -334,40 +339,59 @@ export default function ClientInstallationsPage() {
   };
 
   return (
-    <div className={admin.surface} data-area="DISTRIBUTION / INSTALLATIONS">
+    <div className={`${admin.surface} ${styles.surface}`} data-area="DISTRIBUTION / INSTALLATIONS">
       <div className={admin.hero}>
-        <span className={admin.kicker}>Owner control / distribution</span>
-        <h1 className={admin.title}>Client Installations</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Issue signed installation licenses and review owner records. SaaS plans are managed separately.</p>
+        <div>
+          <span className={admin.kicker}>OWNER CONTROL / SIGNED DISTRIBUTION</span>
+          <h1 className={admin.title}>Client Installations</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Govern each signed customer deployment: prove its domain, bind its network, review integrity signals, and control renewal or revocation.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh owner state
+        </Button>
       </div>
 
-      <div className={admin.prerequisite} role="note">
+      <section className={styles.portfolio} aria-label="Installation control summary">
+        {[
+          { label: "Protected installations", value: loading ? "—" : protectedCount, icon: ShieldCheck, risk: false },
+          { label: "Binding approvals pending", value: loading ? "—" : pendingBindingCount, icon: Activity, risk: pendingBindingCount > 0 },
+          { label: "Integrity incidents", value: loading ? "—" : alerts.length, icon: AlertTriangle, risk: alerts.length > 0 },
+          { label: "Expired / revoked / blocked", value: loading ? "—" : riskCount, icon: Clock3, risk: riskCount > 0 },
+        ].map(({ label, value, icon: Icon, risk }) => (
+          <div key={label} className={styles.portfolioItem}>
+            <span className={`${styles.portfolioIcon} ${risk ? styles.portfolioIconRisk : ""}`}><Icon size={17} aria-hidden="true" /></span>
+            <div><p className={styles.portfolioLabel}>{label}</p><p className={styles.portfolioValue}>{value}</p></div>
+          </div>
+        ))}
+      </section>
+
+      <div className={`${admin.prerequisite} ${styles.signingNote}`} role="note">
         <KeyRound className="h-5 w-5 shrink-0" aria-hidden="true" />
         <div><strong>Owner signing prerequisite</strong><p>License issuance requires the owner server to have a private signing key configured. This page cannot verify that server setting in advance; issuance reports an error if it is missing.</p></div>
       </div>
       {signerUnavailable && <div className={admin.setupError} role="alert">Owner signing is unavailable. Configure <code>KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE</code> on the owner API server, mount the private key readable by that service, then retry issuance. Keep the private key out of client bundles.</div>}
 
-      <Card>
+      <Card className={styles.issueCard}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base"><Plus className="h-4 w-4" />Issue installation license</CardTitle>
           <CardDescription>Verify DNS control for the licensed domain before issuance. The signing key stays on the owner server; the license token is shown only once.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={issue} className="grid gap-4 sm:grid-cols-2">
-            <div className={admin.formSection}><span>01 / Identity</span><p>Name the installation and customer before verifying the destination domain.</p></div>
-            <div className="space-y-2"><Label htmlFor="installation-id">Installation ID</Label><Input id="installation-id" required minLength={3} maxLength={100} pattern="[A-Za-z0-9][A-Za-z0-9._:-]{2,99}" title="Use 3–100 letters, digits, dots, underscores, colons or hyphens, starting with a letter or digit." value={installationId} onChange={(event) => setInstallationId(event.target.value)} /></div>
-            <div className="space-y-2"><Label htmlFor="customer-id">Customer ID</Label><Input id="customer-id" required value={customerId} onChange={(event) => { setCustomerId(event.target.value); setChallenge(null); setDomainVerified(false); }} /></div>
-            <div className={admin.formSection}><span>02 / Domain proof</span><p>Verify control of the licensed host. Restrict server addresses only when the deployment has stable egress IPs.</p></div>
-            <div className="space-y-2"><Label htmlFor="domain">Licensed domain</Label><Input id="domain" required placeholder="client.example.com" value={domain} onChange={(event) => { setDomain(event.target.value); setChallenge(null); setDomainVerified(false); }} /></div>
+          <form onSubmit={issue} className={`${styles.issueForm} grid gap-4 sm:grid-cols-2`}>
+            <div className={`${admin.formSection} ${styles.step}`}><span>01 / Installation identity</span><p>Assign a stable ID and customer record before binding the license to a destination.</p></div>
+            <div className={`${styles.field} space-y-2`}><Label htmlFor="installation-id">Installation ID</Label><Input id="installation-id" required minLength={3} maxLength={100} pattern="[A-Za-z0-9][A-Za-z0-9._:-]{2,99}" title="Use 3–100 letters, digits, dots, underscores, colons or hyphens, starting with a letter or digit." value={installationId} onChange={(event) => setInstallationId(event.target.value)} /></div>
+            <div className={`${styles.field} space-y-2`}><Label htmlFor="customer-id">Customer ID</Label><Input id="customer-id" required value={customerId} onChange={(event) => { setCustomerId(event.target.value); setChallenge(null); setDomainVerified(false); }} /></div>
+            <div className={`${admin.formSection} ${styles.step}`}><span>02 / Domain and network binding</span><p>Prove control of the hostname with DNS. Add an IP/CIDR restriction only for deployments with a stable egress address.</p></div>
+            <div className={`${styles.field} space-y-2`}><Label htmlFor="domain">Licensed domain</Label><Input id="domain" required placeholder="client.example.com" value={domain} onChange={(event) => { setDomain(event.target.value); setChallenge(null); setDomainVerified(false); }} /></div>
             <div className="space-y-2 sm:col-span-2"><Button type="button" variant="outline" disabled={challengeBusy || !customerId.trim() || !domain.trim()} onClick={() => void createChallenge()}>{challengeBusy ? "Checking DNS…" : "Create DNS challenge"}</Button></div>
-            {challenge && <div className="space-y-2 rounded-lg border p-3 text-sm sm:col-span-2">
+            {challenge && <div className={`${styles.challenge} space-y-2 rounded-lg border p-3 text-sm sm:col-span-2`}>
               <p>Add this TXT record to the domain. The challenge expires {new Date(challenge.expires_at * 1000).toLocaleString()}.</p>
-              <p className="break-all"><strong>Name:</strong> {challenge.record_name}</p>
-              <p className="break-all"><strong>Value:</strong> {challenge.record_value}</p>
+              <p className="break-all"><strong>Name:</strong></p><p className={styles.challengeValue}>{challenge.record_name}</p>
+              <p className="break-all"><strong>Value:</strong></p><p className={styles.challengeValue}>{challenge.record_value}</p>
               <Button type="button" variant="outline" disabled={challengeBusy || domainVerified} onClick={() => void verifyChallenge()}>{domainVerified ? "Domain verified" : challengeBusy ? "Checking DNS…" : "Verify DNS record"}</Button>
             </div>}
-            <div className="space-y-2"><Label htmlFor="ip-ranges">Allowed server IP/CIDR, optional</Label><Input id="ip-ranges" placeholder="203.0.113.10" value={ipRanges} onChange={(event) => setIpRanges(event.target.value)} /></div>
-            <div className={admin.formSection}><span>03 / Entitlements</span><p>Set the features, capacity and validity that this signed release may use.</p></div>
+            <div className={`${styles.field} space-y-2`}><Label htmlFor="ip-ranges">Allowed server IP/CIDR, optional</Label><Input id="ip-ranges" placeholder="203.0.113.10" value={ipRanges} onChange={(event) => setIpRanges(event.target.value)} /></div>
+            <div className={`${admin.formSection} ${styles.step}`}><span>03 / Entitlements and validity</span><p>Define the features and capacity enforced by this signed license.</p></div>
             <div className="space-y-2 sm:col-span-2"><Label htmlFor="features">Enabled features, comma separated</Label><Input id="features" value={features} onChange={(event) => setFeatures(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="max-calls">Maximum concurrent calls</Label><Input id="max-calls" type="number" min={1} required value={maxCalls} onChange={(event) => setMaxCalls(Number(event.target.value))} /></div>
             <div className="space-y-2"><Label htmlFor="max-seats">Maximum provisioned users, optional</Label><Input id="max-seats" type="number" min={1} value={maxSeats} onChange={(event) => setMaxSeats(event.target.value)} /></div>
@@ -375,44 +399,48 @@ export default function ClientInstallationsPage() {
             <div className="space-y-2"><Label htmlFor="max-agents">Maximum provisioned agents, optional</Label><Input id="max-agents" type="number" min={0} value={maxAgents} onChange={(event) => setMaxAgents(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="max-campaigns">Maximum campaigns, optional</Label><Input id="max-campaigns" type="number" min={0} value={maxCampaigns} onChange={(event) => setMaxCampaigns(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="valid-days">Valid for days</Label><Input id="valid-days" type="number" min={1} required value={days} onChange={(event) => setDays(Number(event.target.value))} /></div>
-            <div className={admin.formFooter}><span>The signed token is displayed once after issuance.</span><Button type="submit" disabled={submitting}>{submitting ? "Issuing…" : "Issue signed license"}</Button></div>
+            <div className={`${admin.formFooter} ${styles.formFooter}`}><span>The signed token is displayed once after issuance.</span><Button type="submit" disabled={submitting}>{submitting ? "Issuing…" : "Issue signed license"}</Button></div>
           </form>
         </CardContent>
       </Card>
 
       {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
-      {enrollment && <Card>
+      {enrollment && <Card className={styles.sectionCard}>
         <CardHeader><CardTitle className="text-base">Enrollment token for {enrollment.installation_id}</CardTitle><CardDescription>Shown once; expires {new Date(enrollment.expires_at * 1000).toLocaleString()}. Share it privately with the installation operator. Creating another token invalidates this one.</CardDescription></CardHeader>
         <CardContent className="space-y-3"><div><Label htmlFor="enrollment-token">One-time enrollment token</Label><Input id="enrollment-token" readOnly value={enrollment.enrollment_token} className="font-mono text-xs" /></div><Button variant="outline" onClick={() => setEnrollment(null)}>I have saved the token</Button></CardContent>
       </Card>}
-      {alerts.length > 0 && <Card className="border-destructive/50">
+      {alerts.length > 0 && <Card className={styles.sectionCard}>
         <CardHeader><CardTitle className="flex items-center gap-2 text-base text-destructive"><Ban className="h-4 w-4" />Installation integrity alerts ({alerts.length})</CardTitle><CardDescription>These reports contain protected-file paths and hashes only. Acknowledging an alert does not re-enable the client installation.</CardDescription></CardHeader>
         <CardContent className="space-y-3">
-          {alerts.map((alert) => <div key={alert.id} className="rounded-lg border border-destructive/30 p-3 text-sm">
-            <p className="font-semibold">{alert.installation_id} · {alert.reason.replaceAll("_", " ")}</p>
-            <p className="mt-1 break-all">Component: {alert.component}</p>
-            <p className="mt-1 break-all text-xs text-muted-foreground">Expected: {alert.expected_sha256 || (alert.reason === "added_file" ? "Not in signed manifest" : "Unavailable")}</p>
-            <p className="break-all text-xs text-muted-foreground">Observed: {alert.observed_sha256 || (alert.reason === "missing_file" ? "Missing" : "Unavailable")}</p>
-            <p className="mt-1 text-xs text-muted-foreground">First seen {new Date(alert.first_seen_at).toLocaleString()} · Last seen {new Date(alert.last_seen_at).toLocaleString()} · {alert.occurrence_count} check{alert.occurrence_count === 1 ? "" : "s"}</p>
+          {alerts.map((alert) => <div key={alert.id} className={styles.alertCard}>
+            <div className={styles.alertHeading}><strong>{alert.installation_id} · {alert.reason.replaceAll("_", " ")}</strong><span className="text-xs text-destructive">Blocked · review required</span></div>
+            <div className={styles.alertMeta}>
+              <div className={styles.metaCell}><span className={styles.metaLabel}>Changed component</span><span className={styles.metaValue}>{alert.component}</span></div>
+              <div className={styles.metaCell}><span className={styles.metaLabel}>Expected SHA-256</span><span className={styles.metaValue}>{alert.expected_sha256 || (alert.reason === "added_file" ? "Not in signed manifest" : "Unavailable")}</span></div>
+              <div className={styles.metaCell}><span className={styles.metaLabel}>Observed SHA-256</span><span className={styles.metaValue}>{alert.observed_sha256 || (alert.reason === "missing_file" ? "Missing" : "Unavailable")}</span></div>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">First seen {new Date(alert.first_seen_at).toLocaleString()} · Last seen {new Date(alert.last_seen_at).toLocaleString()} · {alert.occurrence_count} check{alert.occurrence_count === 1 ? "" : "s"}</p>
             <Button className="mt-2" type="button" variant="outline" size="sm" onClick={() => void acknowledgeAlert(alert.id)}>Acknowledge</Button>
           </div>)}
         </CardContent>
       </Card>}
-      {bindingRequests.length > 0 && <Card>
+      {bindingRequests.length > 0 && <Card className={styles.sectionCard}>
         <CardHeader>
           <CardTitle className="text-base">Domain and IP change requests ({bindingRequests.length})</CardTitle>
           <CardDescription>Verify control of every requested domain before approving. Approved binding licenses can be recovered by an owner without rotating them.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {bindingRequests.map((request) => <div key={request.id} className="rounded-lg border border-border/70 p-4 text-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+          {bindingRequests.map((request) => <div key={request.id} className={styles.requestCard}>
+            <div className={styles.requestHeading}>
               <strong>Request #{request.id} · {request.installation_id}</strong>
               <span className="text-xs text-muted-foreground">{request.status} · {new Date(request.created_at).toLocaleString()}</span>
             </div>
-            <p className="mt-2"><strong>Domains:</strong> {request.requested_domains.join(", ")}</p>
-            <p className="mt-1"><strong>Source IP/CIDR:</strong> {request.requested_ip_ranges.join(", ") || "No IP restriction"}</p>
-            <p className="mt-1 text-muted-foreground"><strong>Reason:</strong> {request.reason}</p>
-            {request.status === "pending" && <div className="mt-3 flex flex-wrap gap-2">
+            <div className={styles.requestMeta}>
+              <p><strong>Requested domains:</strong> {request.requested_domains.join(", ")}</p>
+              <p><strong>Requested source IP/CIDR:</strong> {request.requested_ip_ranges.join(", ") || "No IP restriction"}</p>
+              <p className={styles.requestReason}><strong>Customer reason:</strong> {request.reason}</p>
+            </div>
+            {request.status === "pending" && <div className={styles.requestActions}>
               {request.requested_domains.map((requestedDomain) => <Button
                 key={requestedDomain}
                 type="button"
@@ -447,37 +475,75 @@ export default function ClientInstallationsPage() {
         </CardContent>
       </Card>}
       {issued && (
-        <Card className="border-amber-500/50">
+        <Card className={styles.secretCard}>
           <CardHeader><CardTitle className="flex items-center gap-2 text-base"><KeyRound className="h-4 w-4" />Issued: {issued.installation_id}</CardTitle><CardDescription>Copy these values into the client installation configuration. Binding-approval tokens can be recovered from their approved request without changing the license.</CardDescription></CardHeader>
           <CardContent className="space-y-3">
-            <div><Label htmlFor="issued-token">Signed license token</Label><textarea id="issued-token" readOnly value={issued.token} className="mt-1 h-24 w-full rounded-md border bg-background p-2 font-mono text-xs" /></div>
+            <div className={styles.secretWarning}><KeyRound size={15} aria-hidden="true" /><p>This signed credential is displayed only after the owner action that issued or recovered it. Save it securely now; it will not be listed in installation metadata.</p></div>
+            <div><Label htmlFor="issued-token">Signed license token</Label><textarea id="issued-token" readOnly value={issued.token} className={styles.secretField} /></div>
             <div><Label htmlFor="issued-public-key">Public verification key</Label><Input id="issued-public-key" readOnly value={issued.public_key} className="font-mono text-xs" /></div>
             <Button variant="outline" onClick={() => setIssued(null)}>I have saved the token</Button>
           </CardContent>
         </Card>
       )}
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-base">Issued installations</CardTitle><CardDescription>Metadata only; signed tokens are not stored here. Enroll an identity only with an approved release configured to use that key: owner checks require its proof after enrollment.</CardDescription></div><Button variant="outline" size="sm" onClick={() => void refresh()}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button></CardHeader>
-        <CardContent className="space-y-3">
-          {loading && <p className="text-sm text-muted-foreground">Loading installations…</p>}
-          {!loading && records.length === 0 && <p className="text-sm text-muted-foreground">No installations issued yet.</p>}
-          {records.map((item) => (
-            <div key={item.installation_id} className={admin.installationRow}>
-              <div className="flex flex-wrap justify-between gap-2"><strong>{item.installation_id}</strong><span>{item.customer_id}</span></div>
-              <p className="mt-1 text-muted-foreground">{item.domains.join(", ")} · Expires {new Date(item.expires_at * 1000).toLocaleDateString()}</p>
-              {item.ip_ranges.length > 0 && <p className="mt-1 text-muted-foreground">Allowed source IPs: {item.ip_ranges.join(", ")}</p>}
-              <p className="mt-1 text-muted-foreground">{item.features.join(", ") || "No features"} · {item.limits.max_concurrent_calls ?? 0} concurrent calls</p>
-              <p className="mt-1 text-muted-foreground">Provisioned caps: {item.limits.max_seats ?? "unlimited"} users · {item.limits.max_workspaces ?? "unlimited"} workspaces · {item.limits.max_agents ?? "unlimited"} agents · {item.limits.max_campaigns ?? "unlimited"} campaigns</p>
-              <p className="mt-1 text-muted-foreground">{item.last_seen_at ? `Last owner check ${new Date(item.last_seen_at).toLocaleString()}` : "No client check received"}</p>
-              <p className="mt-1 text-muted-foreground">{item.identity_enrolled ? "Installation identity enrolled" : "Installation identity not enrolled"}{!item.identity_enrolled && item.enrollment_expires_at ? ` · Token expires ${new Date(item.enrollment_expires_at).toLocaleString()}` : ""}</p>
-              {item.observed_ip && <p className="mt-1 text-muted-foreground">Last observed source IP {item.observed_ip}</p>}
-              {item.renewed_at && <p className="mt-1 text-muted-foreground">Renewed {new Date(item.renewed_at).toLocaleString()}</p>}
-              {item.previous_token_valid_until && new Date(item.previous_token_valid_until).getTime() > Date.now() && <p className="mt-1 text-muted-foreground">Previous token handover ends {new Date(item.previous_token_valid_until).toLocaleString()}</p>}
-              {item.integrity_failed_at && <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-destructive"><p className="font-semibold">Integrity alert received {new Date(item.integrity_failed_at).toLocaleString()}.</p><p className="mt-1">This installation is blocked and cannot be renewed. Preserve the incident, restore a clean approved release, and issue a replacement with a new installation ID. Acknowledgment records review only.</p></div>}
-              {item.revoked_at ? <p className="mt-2 text-destructive">Marked revoked {new Date(item.revoked_at).toLocaleString()}. The client applies this after its next successful owner check.</p> : <div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={enrollingId === item.installation_id || Boolean(item.identity_enrolled) || Boolean(item.integrity_failed_at) || item.expires_at * 1000 <= Date.now()} onClick={() => void createEnrollment(item.installation_id)}>{enrollingId === item.installation_id ? "Creating…" : "Create enrollment token"}</Button><Button variant="outline" size="sm" disabled={renewingId === item.installation_id || Boolean(item.integrity_failed_at) || Boolean(item.previous_token_valid_until && new Date(item.previous_token_valid_until).getTime() > Date.now())} onClick={() => void renew(item)}>{renewingId === item.installation_id ? "Renewing…" : "Renew for 30 days"}</Button><Button variant="destructive" size="sm" disabled={revokingId === item.installation_id} onClick={() => void revoke(item.installation_id)}><Ban className="mr-2 h-4 w-4" />{revokingId === item.installation_id ? "Recording…" : "Mark revoked"}</Button></div>}
-            </div>
-          ))}
+      <Card className={styles.sectionCard}>
+        <CardHeader>
+          <div className={styles.installationsHeading}>
+            <div><CardTitle className="text-base">Issued installations</CardTitle><CardDescription>Owner metadata only; signed license tokens are not stored in this registry. Identity enrollment requires the approved client release to prove its bound key on owner checks.</CardDescription></div>
+            <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}><RefreshCw className={loading ? "mr-2 h-4 w-4 animate-spin" : "mr-2 h-4 w-4"} />Refresh</Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loading && <p className={styles.empty} role="status">Loading installations…</p>}
+          {!loading && records.length === 0 && <p className={styles.empty}>No installations issued yet.</p>}
+          <div className={styles.installList}>
+            {records.map((item) => {
+              const expired = item.expires_at * 1000 <= now;
+              const handoverActive = Boolean(item.previous_token_valid_until && new Date(item.previous_token_valid_until).getTime() > now);
+              const statusClass = item.revoked_at || item.integrity_failed_at
+                ? styles.stateBad
+                : expired ? styles.stateWarn : styles.stateGood;
+              const installClass = item.revoked_at
+                ? styles.installationRevoked
+                : item.integrity_failed_at
+                  ? styles.installationUnsafe
+                  : expired ? styles.installationExpired : "";
+              return (
+                <article key={item.installation_id} className={[styles.installation, installClass].filter(Boolean).join(" ")}>
+                  <header className={styles.installationHead}>
+                    <div className={styles.installationIdentity}><strong>{item.installation_id}</strong><span>Customer · {item.customer_id}</span></div>
+                    <div className={styles.stateGroup}>
+                      <span className={[styles.stateBadge, statusClass].join(" ")}>{item.revoked_at ? "Revoked" : item.integrity_failed_at ? "Integrity blocked" : expired ? "Expired" : "License active"}</span>
+                      <span className={[styles.stateBadge, item.identity_enrolled ? styles.stateGood : styles.stateWarn].join(" ")}>{item.identity_enrolled ? "Identity enrolled" : "Identity not enrolled"}</span>
+                    </div>
+                  </header>
+                  <div className={styles.dataGrid}>
+                    <div className={styles.dataCell}><span className={styles.dataLabel}>Licensed domain</span><span className={styles.dataValue}>{item.domains.join(", ")}</span></div>
+                    <div className={styles.dataCell}><span className={styles.dataLabel}>Allowed source IP/CIDR</span><span className={styles.dataValue}>{item.ip_ranges.join(", ") || "No IP restriction"}</span></div>
+                    <div className={styles.dataCell}><span className={styles.dataLabel}>License expires</span><span className={styles.dataValue}>{new Date(item.expires_at * 1000).toLocaleString()}</span></div>
+                    <div className={styles.dataCell}><span className={styles.dataLabel}>Enabled features</span><span className={styles.dataValue}>{item.features.join(", ") || "No features"}</span></div>
+                    <div className={styles.dataCell}><span className={styles.dataLabel}>Concurrent call cap</span><span className={styles.dataValue}>{item.limits.max_concurrent_calls ?? 0}</span></div>
+                    <div className={styles.dataCell}><span className={styles.dataLabel}>Provisioning caps</span><span className={styles.dataValue}>{item.limits.max_seats ?? "unlimited"} users · {item.limits.max_workspaces ?? "unlimited"} workspaces · {item.limits.max_agents ?? "unlimited"} agents · {item.limits.max_campaigns ?? "unlimited"} campaigns</span></div>
+                    <div className={styles.dataCell}><span className={styles.dataLabel}>Owner check</span><span className={styles.dataValue}>{item.last_seen_at ? "Last owner check " + new Date(item.last_seen_at).toLocaleString() : "No client check received"}</span></div>
+                    <div className={styles.dataCell}><span className={styles.dataLabel}>Installation identity</span><span className={styles.dataValue}>{item.identity_enrolled ? "Installation identity enrolled" : "Installation identity not enrolled"}{!item.identity_enrolled && item.enrollment_expires_at ? " · Token expires " + new Date(item.enrollment_expires_at).toLocaleString() : ""}</span></div>
+                    {item.observed_ip && <div className={styles.dataCell}><span className={styles.dataLabel}>Last observed source IP</span><span className={[styles.dataValue, styles.dataMono].join(" ")}>{item.observed_ip}</span></div>}
+                    {item.renewed_at && <div className={styles.dataCell}><span className={styles.dataLabel}>Last renewed</span><span className={styles.dataValue}>{new Date(item.renewed_at).toLocaleString()}</span></div>}
+                    {handoverActive && <div className={styles.dataCell}><span className={styles.dataLabel}>Previous token handover</span><span className={[styles.dataValue, styles.handover].join(" ")}>Ends {new Date(item.previous_token_valid_until!).toLocaleString()}</span></div>}
+                  </div>
+                  {item.integrity_failed_at && <div className={[admin.setupError, styles.integrityBlock].join(" ")}><p className="font-semibold">Integrity alert received {new Date(item.integrity_failed_at).toLocaleString()}.</p><p className="mt-1">This installation is blocked and cannot be renewed. Preserve the incident, restore a clean approved release, and issue a replacement with a new installation ID. Acknowledgment records review only.</p></div>}
+                  {item.revoked_at ? (
+                    <p className={styles.revokedNotice}>Marked revoked {new Date(item.revoked_at).toLocaleString()}. The client applies this after its next successful owner check.</p>
+                  ) : (
+                    <div className={styles.installationActions}>
+                      <Button variant="outline" size="sm" disabled={enrollingId === item.installation_id || Boolean(item.identity_enrolled) || Boolean(item.integrity_failed_at) || expired} onClick={() => void createEnrollment(item.installation_id)}>{enrollingId === item.installation_id ? "Creating…" : "Create enrollment token"}</Button>
+                      <Button variant="outline" size="sm" disabled={renewingId === item.installation_id || Boolean(item.integrity_failed_at) || handoverActive} onClick={() => void renew(item)}>{renewingId === item.installation_id ? "Renewing…" : "Renew for 30 days"}</Button>
+                      <Button variant="destructive" size="sm" disabled={revokingId === item.installation_id} onClick={() => void revoke(item.installation_id)}><Ban className="mr-2 h-4 w-4" />{revokingId === item.installation_id ? "Recording…" : "Mark revoked"}</Button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
     </div>

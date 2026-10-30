@@ -343,26 +343,41 @@ export default function MasterKeysAndModelsPage() {
     }
   };
 
-  return (
-    <div className={admin.surface} data-area="INTELLIGENCE / MODELS">
-      {/* Header */}
-      <div className={admin.hero}>
-        <div>
-          <span className={admin.kicker}>INTELLIGENCE / MODELS</span>
-          <h1 className={admin.title}>Master Credentials & AI Models</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Centrally manage sovereign API keys (Sarvam, OpenAI, ElevenLabs, Exotel) and configure markup margins.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="gap-2">
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          Reload
-        </Button>
-      </div>
+  const configuredProviderCount = DEFAULT_PROVIDERS.filter((provider) =>
+    keys.some((key) => key.provider.toLowerCase() === provider.provider.toLowerCase() && Boolean(key.api_key_masked || key.has_credentials)),
+  ).length;
+  const filteredModels = models.filter((model) => {
+    if (catalogCategoryFilter !== "all") {
+      if ((catalogCategoryFilter === "sts" || catalogCategoryFilter === "realtime") && model.category !== "sts" && model.category !== "realtime") return false;
+      if (catalogCategoryFilter !== "sts" && catalogCategoryFilter !== "realtime" && model.category !== catalogCategoryFilter) return false;
+    }
+    const query = catalogSearch.toLowerCase();
+    return !catalogSearch.trim() || model.display_name.toLowerCase().includes(query) || model.model_id.toLowerCase().includes(query) || model.provider.toLowerCase().includes(query);
+  });
 
-      {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
-      <Tabs defaultValue="credentials" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+  return (
+    <main className={styles.page} data-area="INTELLIGENCE / MODELS">
+      {/* Header */}
+      <section className={styles.hero}>
+        <div className={styles.heroGlow} aria-hidden="true" />
+        <div className={styles.heroCopy}>
+          <span className={styles.eyebrow}><Sparkles className="h-3.5 w-3.5" /> Intelligence / Models</span>
+          <h1>Models & provider access</h1>
+          <p>Connect model providers, check access, and curate the catalog your workspace uses.</p>
+        </div>
+        <div className={styles.heroActions}>
+          <div className={styles.heroStat}><span>{configuredProviderCount}</span><small>providers connected</small></div>
+          <div className={styles.heroStat}><span>{models.filter((model) => model.is_active).length}</span><small>active catalog models</small></div>
+          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="gap-2">
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Reload
+          </Button>
+        </div>
+      </section>
+
+      {loadError && <p role="alert" className={styles.error}>{loadError}<Button variant="outline" size="sm" onClick={fetchData}>Retry</Button></p>}
+      <Tabs defaultValue="credentials" className={styles.tabs}>
+        <TabsList className={styles.tabList}>
           <TabsTrigger value="credentials" className="gap-2">
             <Key className="h-4 w-4" />
             Master Provider Keys
@@ -376,7 +391,7 @@ export default function MasterKeysAndModelsPage() {
         {/* TAB 1: MASTER CREDENTIALS */}
         <TabsContent value="credentials" className="space-y-6">
           {/* Sovereign Local AI Engines (Local CPU) */}
-          <Card className="border-primary/30 bg-primary/5">
+          <Card className={styles.localEngines}>
             <CardHeader className="pb-3">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
@@ -394,9 +409,9 @@ export default function MasterKeysAndModelsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 lg:grid-cols-2">
                 {/* Self-hosted Indian CPU TTS */}
-                <div className="p-4 rounded-lg border border-border/70 bg-card space-y-3">
+                <div className={styles.localEngineCard}>
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm flex items-center gap-1.5">
                       <Sparkles className="h-4 w-4 text-emerald-500" />
@@ -419,7 +434,7 @@ export default function MasterKeysAndModelsPage() {
                 </div>
 
                 {/* Ollama LLM */}
-                <div className="p-4 rounded-lg border border-border/70 bg-card space-y-3">
+                <div className={styles.localEngineCard}>
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-sm flex items-center gap-1.5">
                       <Cpu className="h-4 w-4 text-primary" />
@@ -444,12 +459,12 @@ export default function MasterKeysAndModelsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-border/60">
+          <Card className={styles.panel}>
             <CardHeader className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <span>Platform Sovereign Master Credentials</span>
+                    <span>Provider credentials</span>
                     <Badge variant="secondary" className="font-normal text-xs">
                       Encrypted AES-256 (Fernet)
                     </Badge>
@@ -461,14 +476,15 @@ export default function MasterKeysAndModelsPage() {
               </div>
 
               {/* Master Keys Category Filter Tabs */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <div className={styles.filterRail} aria-label="Filter providers by capability">
                 {PROVIDER_CATEGORY_FILTERS.map((f) => (
                   <Button
                     key={f.id}
                     type="button"
                     variant={providerCategoryFilter === f.id ? "default" : "outline"}
                     size="sm"
-                    className="h-7 text-xs px-3"
+                    aria-pressed={providerCategoryFilter === f.id}
+                    className="h-8 shrink-0 text-xs px-3"
                     onClick={() => setProviderCategoryFilter(f.id)}
                   >
                     {f.label}
@@ -477,7 +493,7 @@ export default function MasterKeysAndModelsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className={styles.providerGrid}>
                 {DEFAULT_PROVIDERS.filter((item) => {
                   if (providerCategoryFilter === "all") return true;
                   return item.categories.includes(providerCategoryFilter);
@@ -489,7 +505,7 @@ export default function MasterKeysAndModelsPage() {
                   return (
                     <div
                       key={item.provider}
-                      className="flex flex-col justify-between p-4 rounded-xl border border-border/60 bg-card hover:border-primary/40 transition-colors shadow-xs"
+                      className={styles.providerCard}
                     >
                       <div className="space-y-2.5">
                         <div className="flex items-start justify-between gap-2">
@@ -504,7 +520,7 @@ export default function MasterKeysAndModelsPage() {
                               variant="outline"
                               className={`uppercase text-[9px] font-bold px-1.5 py-0 ${
                                 cat === "stt"
-                                  ? "border-sky-500/40 text-sky-600 dark:text-sky-400 bg-sky-500/5"
+                                  ? "border-primary/40 text-primary bg-primary/5"
                                   : cat === "tts"
                                   ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/5"
                                   : cat === "realtime"
@@ -622,18 +638,18 @@ export default function MasterKeysAndModelsPage() {
 
         {/* TAB 2: MODEL CATALOG & MARGINS */}
         <TabsContent value="catalog" className="space-y-6">
-          <Card className="border-border/60">
+          <Card className={styles.panel}>
             <CardHeader className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <CardTitle className="text-base">AI Model Catalog & Retail Pricing</CardTitle>
+              <CardTitle className="text-base">Model catalog & pricing</CardTitle>
                   <CardDescription>
                     Define which models are presented in the Studio and configure platform gross markup margins.
                   </CardDescription>
                 </div>
                 <Button
                   size="sm"
-                  className="gap-2 shrink-0"
+                  className="h-10 gap-2 shrink-0"
                   onClick={() => {
                     setEditingModel({
                       category: "llm",
@@ -651,8 +667,8 @@ export default function MasterKeysAndModelsPage() {
               </div>
 
               {/* Catalog Category Filters and Search */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
-                <div className="flex flex-wrap items-center gap-1.5">
+              <div className={styles.catalogToolbar}>
+                <div className={styles.filterRail} aria-label="Filter catalog by model type">
                   {[
                     { id: "all", label: "All Models" },
                     { id: "llm", label: "LLM (Reasoning)" },
@@ -665,26 +681,37 @@ export default function MasterKeysAndModelsPage() {
                       type="button"
                       variant={catalogCategoryFilter === f.id ? "default" : "outline"}
                       size="sm"
-                      className="h-7 text-xs px-2.5"
+                      aria-pressed={catalogCategoryFilter === f.id}
+                      className="h-8 shrink-0 text-xs px-2.5"
                       onClick={() => setCatalogCategoryFilter(f.id)}
                     >
                       {f.label}
                     </Button>
                   ))}
                 </div>
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <label className="relative w-full sm:w-72">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    aria-label="Search model catalog"
                     placeholder="Search catalog models..."
                     value={catalogSearch}
                     onChange={(e) => setCatalogSearch(e.target.value)}
-                    className="h-8 pl-8 text-xs"
+                    className="h-10 pl-9 text-sm"
                   />
-                </div>
+                </label>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto rounded-xl border border-border/60">
+              <div className={styles.catalogSummary} aria-live="polite">Showing {filteredModels.length} of {models.length} catalog models</div>
+              {filteredModels.length > 0 ? <div className={styles.mobileCatalog}>
+                {filteredModels.map((model) => <article key={model.id} className={styles.modelCard}>
+                  <div className="flex items-start justify-between gap-3"><div className="min-w-0"><Badge variant="outline" className="mb-2 uppercase text-[10px]">{model.category}</Badge><h3 className="truncate font-semibold">{model.display_name}</h3><p className="mt-1 text-xs capitalize text-muted-foreground">{model.provider}</p></div>{model.is_active ? <Badge className="shrink-0 bg-emerald-500/10 text-emerald-600">Active</Badge> : <Badge variant="secondary" className="shrink-0">Inactive</Badge>}</div>
+                  <p className="mt-3 break-all rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">{model.model_id}</p>
+                  <div className={styles.priceGrid}><div><span>Wholesale / min</span><strong>₹{model.cost_per_minute.toFixed(2)}</strong></div><div><span>Markup</span><strong>+{model.markup_margin_percent}%</strong></div><div><span>Retail / min</span><strong className={styles.retailRate}>₹{model.rate_per_minute.toFixed(2)}</strong></div></div>
+                  <div className="mt-3 flex gap-2 border-t border-border/70 pt-3"><Button variant="outline" size="sm" className="flex-1 gap-2" aria-label={`Edit ${model.display_name}`} onClick={() => { setEditingModel(model); setModelModalOpen(true); }}><Edit className="h-3.5 w-3.5" /> Edit</Button><Button variant="ghost" size="sm" className="gap-2 text-destructive hover:text-destructive" aria-label={`Delete ${model.display_name}`} onClick={() => handleDeleteModel(model.id)}><Trash2 className="h-3.5 w-3.5" /> Remove</Button></div>
+                </article>)}
+              </div> : <p className={styles.emptyState}>No models found matching current filter. Adjust the search or filters, or add a catalog entry.</p>}
+              <div className={styles.desktopCatalog}>
                 <Table>
                   <TableHeader className="bg-muted/40">
                     <TableRow>
@@ -700,37 +727,7 @@ export default function MasterKeysAndModelsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(() => {
-                      const filtered = models.filter((m) => {
-                        if (catalogCategoryFilter !== "all") {
-                          if (catalogCategoryFilter === "sts" || catalogCategoryFilter === "realtime") {
-                            if (m.category !== "sts" && m.category !== "realtime") return false;
-                          } else if (m.category !== catalogCategoryFilter) {
-                            return false;
-                          }
-                        }
-                        if (catalogSearch.trim()) {
-                          const q = catalogSearch.toLowerCase();
-                          return (
-                            m.display_name.toLowerCase().includes(q) ||
-                            m.model_id.toLowerCase().includes(q) ||
-                            m.provider.toLowerCase().includes(q)
-                          );
-                        }
-                        return true;
-                      });
-
-                      if (filtered.length === 0) {
-                        return (
-                          <TableRow>
-                            <TableCell colSpan={9} className="text-center py-8 text-sm text-muted-foreground">
-                              No models found matching current filter. Click &quot;Add Catalog Entry&quot; to register new models.
-                            </TableCell>
-                          </TableRow>
-                        );
-                      }
-
-                      return filtered.map((m) => (
+                    {filteredModels.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-sm text-muted-foreground">No models found matching current filter.</TableCell></TableRow> : filteredModels.map((m) => (
                         <TableRow key={m.id} className="hover:bg-muted/20">
                           <TableCell>
                             <Badge variant="outline" className="uppercase text-[10px]">
@@ -764,6 +761,7 @@ export default function MasterKeysAndModelsPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7"
+                                aria-label={`Edit ${m.display_name}`}
                                 onClick={() => {
                                   setEditingModel(m);
                                   setModelModalOpen(true);
@@ -775,6 +773,7 @@ export default function MasterKeysAndModelsPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7 text-destructive hover:text-destructive"
+                                aria-label={`Delete ${m.display_name}`}
                                 onClick={() => handleDeleteModel(m.id)}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -782,8 +781,7 @@ export default function MasterKeysAndModelsPage() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ));
-                    })()}
+                      ))}
                   </TableBody>
                 </Table>
               </div>
@@ -982,6 +980,6 @@ export default function MasterKeysAndModelsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
   );
 }

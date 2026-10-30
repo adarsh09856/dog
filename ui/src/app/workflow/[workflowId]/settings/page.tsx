@@ -1,6 +1,4 @@
 "use client";
-import chrome from "@/components/layout/WorkspaceChrome.module.css";
-
 import { format } from "date-fns";
 import { ArrowLeft, BookA, Brain, CalendarIcon, Clipboard, Download, ExternalLink, FileDown, Fingerprint, Loader2, Mic, Pause, PhoneOff, Play, Plus, Rocket, Settings, Trash2Icon, Upload, Variable, X } from "lucide-react";
 import Link from "next/link";
@@ -26,6 +24,7 @@ import {
     type ModelConfigurationDefaultsV2,
 } from "@/components/AIModelConfigurationV2Editor";
 import { FlowEdge, FlowNode } from "@/components/flow/types";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 import { LLMConfigSelector } from "@/components/LLMConfigSelector";
 import SpinLoader from "@/components/SpinLoader";
 import { Button } from "@/components/ui/button";
@@ -71,6 +70,7 @@ import {
     normalizeCallDispositions,
     validateCallDispositionRows,
 } from "./components/CallDispositionEditor";
+import settingsStyle from "./WorkflowSettingsWorkspace.module.css";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1766,9 +1766,9 @@ function WorkflowSettingsInner({
     }, []);
 
     return (
-        <div className="min-h-screen">
+        <div className={settingsStyle.page}>
             {/* Sticky header */}
-            <header className="sticky top-0 z-10 flex min-h-14 items-center gap-3 border-b bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6">
+            <header className={`${settingsStyle.header} sticky top-0 z-10 flex min-h-14 items-center gap-3 border-b bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6`}>
                 <Button
                     variant="ghost"
                     size="icon"
@@ -1778,14 +1778,14 @@ function WorkflowSettingsInner({
                 >
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
-                <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground">Workflow Settings</p>
-                    <h1 className={`${chrome.editorTitle} truncate`}>{workflowName || workflow.name}</h1>
+                <div className={settingsStyle.headerCopy}>
+                    <span className={settingsStyle.eyebrow}>Voice agent / configuration</span>
+                    <h1 className={`${chrome.editorTitle} ${settingsStyle.title} truncate`}>{workflowName || workflow.name}</h1>
                 </div>
             </header>
 
-            <nav className="border-b bg-muted/20 px-3 py-2 lg:hidden" aria-label="Workflow settings sections">
-                <div className="flex gap-2 overflow-x-auto pb-1">
+            <nav className={`${settingsStyle.sectionNav} border-b px-3 py-2 lg:hidden`} aria-label="Workflow settings sections">
+                <div className={`${settingsStyle.mobileNav} flex gap-2 overflow-x-auto pb-1`}>
                     {NAV_ITEMS.map((item) => (
                         <a
                             key={item.id}
@@ -1808,9 +1808,15 @@ function WorkflowSettingsInner({
             </nav>
 
             {/* Main + right nav */}
-            <div className="mx-auto flex max-w-5xl flex-col gap-5 px-3 py-5 sm:gap-8 sm:px-6 sm:py-8 lg:flex-row">
+            <div className={`${settingsStyle.content} mx-auto flex max-w-5xl flex-col gap-5 px-3 py-5 sm:gap-8 sm:px-6 sm:py-8 lg:flex-row`}>
                 {/* Sections */}
-                <div className="min-w-0 flex-1 space-y-8">
+                <main className={`${settingsStyle.sections} min-w-0 flex-1 space-y-8`} aria-label="Agent settings">
+                    <div className={settingsStyle.lead}>
+                        <div>
+                            <h2>Configure this agent</h2>
+                            <p>Shape its conversation, models, deployment, and call handling.</p>
+                        </div>
+                    </div>
                     {resolvedWorkflowConfigurationsForRender && (
                         <>
                             {/* General */}
@@ -1901,10 +1907,10 @@ function WorkflowSettingsInner({
                             )}
                         </>
                     )}
-                </div>
+                </main>
 
                 {/* ---- Right-side sticky nav ---- */}
-                <nav className="hidden w-44 shrink-0 lg:block" aria-label="Workflow settings sections">
+                <nav className={`${settingsStyle.desktopNav} hidden shrink-0 lg:block`} aria-label="Workflow settings sections">
                     <div className="sticky top-20 space-y-1">
                         <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                             On this page
@@ -1922,7 +1928,7 @@ function WorkflowSettingsInner({
                             >
                                 {item.label}
                                 {dirtySections.has(item.id) && (
-                                    <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                                    <span className={`${settingsStyle.dirtyMark} h-1.5 w-1.5 rounded-full bg-orange-500`} aria-label="Unsaved changes" />
                                 )}
                             </a>
                         ))}

@@ -80,6 +80,19 @@ describe("WorkflowTesterPanel voice run lifecycle", () => {
         expect(await startVoiceRun()).toBe("run:630140");
     });
 
+    it("explains the audio and text test modes without starting a session", async () => {
+        renderPanel();
+
+        expect(screen.getByRole("heading", { name: "Test your agent" })).toBeTruthy();
+        expect(await screen.findByText("Browser voice preview")).toBeTruthy();
+        expect(createRunMock).not.toHaveBeenCalled();
+
+        switchTo(/test chat/i);
+        expect(await screen.findByText("Manual chat")).toBeTruthy();
+        expect(screen.getByText("Send messages to check the agent’s text responses.")).toBeTruthy();
+        expect(createRunMock).not.toHaveBeenCalled();
+    });
+
     it("releases the run id when the audio tab is left", async () => {
         // Leaving the tab unmounts the tester, which ends the call and completes
         // the run server-side. Re-offering a completed run is refused, so the

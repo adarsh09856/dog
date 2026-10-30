@@ -35,6 +35,7 @@ import { WorkflowVersionDiffDialog } from './components/WorkflowVersionDiffDialo
 import { WorkflowProvider } from "./contexts/WorkflowContext";
 import { useWorkflowState } from "./hooks/useWorkflowState";
 import { layoutNodes } from './utils/layoutNodes';
+import workspace from "./WorkflowEditorWorkspace.module.css";
 
 const edgeTypes = {
     custom: CustomEdge,
@@ -577,7 +578,7 @@ function RenderWorkflow({
 
     return (
         <WorkflowProvider value={workflowContextValue}>
-            <div className="flex h-dvh min-h-[520px] min-w-0 flex-col overflow-hidden bg-background">
+            <div className={`${workspace.shell} flex h-dvh min-h-[520px] min-w-0 flex-col overflow-hidden bg-background`}>
                 <HireExpertNudge workflowId={workflowId} />
                 {/* New Workflow Editor Header */}
                 <WorkflowEditorHeader
@@ -601,10 +602,11 @@ function RenderWorkflow({
                 />
 
                 {/* Workflow Canvas */}
-                <div className="min-h-0 flex-1">
+                <main className={`${workspace.editorBody} min-h-0 flex-1`} aria-label="Workflow editor">
                     <div className="flex h-full min-w-0">
-                        <div className="relative min-w-0 flex-1 bg-background">
+                        <section className={`${workspace.canvas} relative min-w-0 flex-1 bg-background`} aria-label="Workflow canvas">
                             <ReactFlow
+                                proOptions={{ hideAttribution: true }}
                                 key={activeVersionId ?? 'current'}
                                 nodes={displayNodes}
                                 edges={edges}
@@ -641,7 +643,7 @@ function RenderWorkflow({
                                 {!isViewingHistoricalVersion && (
                                     <Panel position="top-right">
                                         <TooltipProvider>
-                                            <div className="flex flex-col gap-2 rounded-xl border border-border/80 bg-card/90 p-1.5 shadow-lg shadow-foreground/5 backdrop-blur-sm">
+                                            <div className={`${workspace.canvasQuickTools} flex flex-col gap-2 rounded-xl border border-border/80 bg-card/90 p-1.5 shadow-lg shadow-foreground/5 backdrop-blur-sm`} aria-label="Canvas actions">
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Button
@@ -682,7 +684,7 @@ function RenderWorkflow({
                             </ReactFlow>
 
                             {/* Bottom-left controls - horizontal layout with custom buttons */}
-                            <div className="absolute bottom-5 left-5 z-10 flex items-center gap-1 rounded-xl border border-border/80 bg-card/90 p-1.5 shadow-lg shadow-foreground/5 backdrop-blur-sm sm:bottom-6 sm:left-6">
+                            <div className={`${workspace.canvasControls} absolute bottom-5 left-5 z-10 flex items-center gap-1 rounded-xl border border-border/80 bg-card/90 p-1.5 shadow-lg shadow-foreground/5 backdrop-blur-sm sm:bottom-6 sm:left-6`} aria-label="Canvas navigation controls">
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -758,10 +760,10 @@ function RenderWorkflow({
                                     )}
                                 </TooltipProvider>
                             </div>
-                        </div>
+                        </section>
 
                         {isTesterRailOpen && (
-                            <aside className="hidden h-full w-[400px] shrink-0 border-l border-border/80 bg-card shadow-[-12px_0_30px_-28px_rgba(15,32,29,0.35)] xl:block">
+                            <aside className={`${workspace.testerRail} hidden h-full shrink-0 border-l border-border/80 bg-card shadow-[-12px_0_30px_-28px_rgba(15,32,29,0.35)] xl:block`} aria-label="Agent test panel">
                                 <WorkflowTesterPanel
                                     workflowId={workflowId}
                                     initialContextVariables={templateContextVariables}
@@ -789,7 +791,7 @@ function RenderWorkflow({
                             />
                         </SheetContent>
                     </Sheet>
-                </div>
+                </main>
 
                 <AddNodePanel
                     isOpen={isAddNodePanelOpen}

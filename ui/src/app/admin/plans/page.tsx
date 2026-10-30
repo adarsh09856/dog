@@ -1,22 +1,25 @@
 "use client";
 
-import admin from "../AdminWorkspace.module.css";
-
 import {
+  Check,
+  CircleX,
   Edit,
+  Globe,
   KeyRound,
+  Layers,
   Loader2,
   Lock,
   Plus,
   RefreshCw,
   Trash2,
   Unlock,
+  Users,
 } from "lucide-react";
 import React, { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -28,15 +31,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { adminApi, SaaSPlan } from "@/lib/kodewavesApi";
+
+import admin from "../AdminWorkspace.module.css";
+import styles from "./PlansWorkspace.module.css";
 
 function formatMoney(amount: number, currency: string) {
   try {
@@ -78,6 +76,10 @@ export default function AdminPlansPage() {
     fetchPlans();
   }, [fetchPlans]);
 
+  const activeCount = plans.filter((plan) => plan.is_active).length;
+  const publicCount = plans.filter((plan) => plan.is_active && plan.is_public).length;
+  const managedKeyCount = plans.filter((plan) => !plan.allow_user_byok).length;
+
   const handleSave = async () => {
     if (!editingPlan || !editingPlan.name || !editingPlan.code) return;
     setSaving(true);
@@ -108,17 +110,17 @@ export default function AdminPlansPage() {
   };
 
   return (
-    <div className={admin.surface} data-area="COMMERCE / PLANS">
+    <div className={`${admin.surface} ${styles.surface}`} data-area="COMMERCE / PLANS">
       {/* Header */}
       <div className={admin.hero}>
         <div>
           <span className={admin.kicker}>COMMERCE / PLANS</span>
-          <h1 className={admin.title}>SaaS Plans</h1>
+          <h1 className={admin.title}>Plan governance</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure 30-day and 365-day access with manual renewal. Included minutes are credited once per purchase.
+            Set the entitlements, capacity, pricing, and publication rules that every organization receives. Plans use manual renewal; minutes are granted once per purchase.
           </p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+        <div className={`${styles.heroActions} flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end`}>
           <Button
             size="sm"
             className="gap-2"
@@ -153,117 +155,115 @@ export default function AdminPlansPage() {
         </div>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error} Use Refresh to retry.</p>}
+      {error && <p role="alert" className={styles.error}>{error} Use Refresh to retry.</p>}
 
-      <Card className="border-border/60">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center justify-between">
-            <span>Available Tiers ({plans.length})</span>
-            <Badge variant="outline" className="text-xs">
-              Wallet access
-            </Badge>
-          </CardTitle>
-          <CardDescription>
-            When &quot;Allow BYOK&quot; is disabled on a plan, subscribers cannot use their own API keys and must consume platform-managed credits.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto rounded-xl border border-border/60">
-            <Table>
-              <TableHeader className="bg-muted/40">
-                <TableRow>
-                  <TableHead className="text-xs">Plan Name</TableHead>
-                  <TableHead className="text-xs">Code</TableHead>
-                  <TableHead className="text-xs text-right">Configured monthly price</TableHead>
-                  <TableHead className="text-xs text-right">Included Mins</TableHead>
-                  <TableHead className="text-xs text-center">Concurrency</TableHead>
-                  <TableHead className="text-xs text-center">BYOK Policy</TableHead>
-                  <TableHead className="text-xs text-center">Status</TableHead>
-                  <TableHead className="text-xs text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading || error ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-sm text-muted-foreground">
-                      {loading ? "Loading plans…" : "Plans could not be loaded. Refresh to retry."}
-                    </TableCell>
-                  </TableRow>
-                ) : plans.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-sm text-muted-foreground">
-                      No plans created yet. Click &quot;Create Plan&quot; to build your first tier.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  plans.map((p) => (
-                    <TableRow key={p.id} className="hover:bg-muted/20">
-                      <TableCell className="font-semibold text-xs">{p.name}</TableCell>
-                      <TableCell className="text-xs font-mono text-muted-foreground">{p.code}</TableCell>
-                      <TableCell className="text-xs text-right font-mono font-medium">
-                        {formatMoney(p.monthly_price_cents / 100, p.currency)} / month
-                        {p.annual_price_cents > 0 ? (
-                          <span className="block text-muted-foreground">
-                            {formatMoney(p.annual_price_cents / 100, p.currency)} / year
-                          </span>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="text-xs text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        {p.included_minutes.toLocaleString()} mins
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-xs">{p.max_concurrent_calls} calls</TableCell>
-                      <TableCell className="text-center">
-                        {p.allow_user_byok ? (
-                          <Badge variant="outline" className="text-[10px] text-primary border-primary/30 gap-1">
-                            <Unlock className="h-3 w-3" /> BYOK Allowed
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px] gap-1 hover:bg-amber-500/20">
-                            <Lock className="h-3 w-3" /> Platform Managed Only
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex flex-wrap items-center justify-center gap-1">
-                          <Badge className={p.is_active ? "bg-emerald-500/10 text-emerald-600 text-[10px]" : "text-[10px]"} variant={p.is_active ? "default" : "secondary"}>
-                            {p.is_active ? "Active" : "Archived"}
-                          </Badge>
-                          <Badge variant={p.is_public ? "outline" : "secondary"} className="text-[10px]">
-                            {p.is_public ? "Public" : "Private"}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => {
-                              setEditingPlan(p);
-                              setModalOpen(true);
-                            }}
-                          >
-                            <Edit className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive hover:text-destructive"
-                            onClick={() => handleDelete(p.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+      <section className={styles.portfolio} aria-label="Plan portfolio summary">
+        {[
+          { label: "Defined tiers", value: loading ? "—" : plans.length, icon: Layers },
+          { label: "Active for assignment", value: loading ? "—" : activeCount, icon: Users },
+          { label: "Public catalog", value: loading ? "—" : publicCount, icon: Globe },
+          { label: "Platform-managed keys", value: loading ? "—" : managedKeyCount, icon: Lock },
+        ].map(({ label, value, icon: Icon }) => (
+          <div className={styles.portfolioItem} key={label}>
+            <span className={styles.portfolioIcon}><Icon size={17} aria-hidden="true" /></span>
+            <div><p className={styles.portfolioLabel}>{label}</p><p className={styles.portfolioValue}>{value}</p></div>
           </div>
-        </CardContent>
-      </Card>
+        ))}
+      </section>
+
+      <section className={styles.catalog} aria-labelledby="available-plans-heading">
+        <div className={styles.catalogHeader}>
+          <div>
+            <h2 id="available-plans-heading">Available tiers</h2>
+            <p>Owner-defined limits and feature grants are enforced for organizations assigned to each plan.</p>
+          </div>
+          <span className={styles.catalogCount}>{loading ? "Loading catalog" : `${plans.length} ${plans.length === 1 ? "tier" : "tiers"}`}</span>
+        </div>
+        {loading ? (
+          <div role="status" className={styles.empty}><Loader2 className="h-5 w-5 animate-spin text-primary" /><p>Loading plan catalog…</p></div>
+        ) : error ? (
+          <div className={styles.empty} role="status"><p>Plan data is unavailable. Refresh to retry.</p></div>
+        ) : plans.length === 0 ? (
+          <div className={styles.empty}>
+            <span className={styles.emptyIcon}><Layers size={20} /></span>
+            <h3>No plans created yet</h3>
+            <p>Build the first tier with a plan code, quotas, feature access, and billing terms.</p>
+            <Button onClick={() => {
+              setEditingPlan({
+                name: "New Tier", code: "new-tier", monthly_price_cents: 499900, annual_price_cents: 0,
+                currency: "INR", included_minutes: 1000, max_concurrent_calls: 5, max_agents: 3,
+                has_crm_access: true, has_appointments_access: true, has_forms_access: true,
+                has_widget_access: true, has_campaigns_access: true, allow_user_byok: false,
+                is_active: true, is_public: true,
+              });
+              setModalOpen(true);
+            }}>Create first plan</Button>
+          </div>
+        ) : (
+          <div className={styles.planGrid}>
+            {plans.map((p) => {
+              const features = [
+                ["CRM", p.has_crm_access],
+                ["Appointments", p.has_appointments_access],
+                ["Voice forms", p.has_forms_access],
+                ["Web widgets", p.has_widget_access],
+                ["Campaigns", p.has_campaigns_access],
+              ] as const;
+              return (
+                <Card key={p.id} className={`${styles.planCard} ${p.is_default ? styles.defaultPlan : ""}`}>
+                  <div className={styles.planHeader}>
+                    <div className={styles.planIdentity}>
+                      <span className={styles.planIcon}><Layers size={18} aria-hidden="true" /></span>
+                      <div className="min-w-0">
+                        <h3 className={styles.planName}>{p.name}</h3>
+                        <p className={styles.planCode}>{p.code}</p>
+                      </div>
+                    </div>
+                    <div className={styles.planBadges}>
+                      {p.is_default && <Badge variant="outline">Default fallback</Badge>}
+                      <Badge variant={p.is_active ? "default" : "secondary"}>{p.is_active ? "Active" : "Archived"}</Badge>
+                      <Badge variant={p.is_public ? "outline" : "secondary"}>{p.is_public ? "Public" : "Private"}</Badge>
+                    </div>
+                  </div>
+                  <CardContent className={styles.planBody}>
+                    <div className={styles.priceRail} aria-label={`${p.name} prices`}>
+                      <div className={styles.priceCell}><span className={styles.priceLabel}>Monthly · 30 days</span><p className={styles.priceValue}>{formatMoney(p.monthly_price_cents / 100, p.currency)}</p></div>
+                      <div className={styles.priceCell}><span className={styles.priceLabel}>Annual · 365 days</span><p className={styles.priceValue}>{p.annual_price_cents > 0 ? formatMoney(p.annual_price_cents / 100, p.currency) : "Not set"}</p></div>
+                    </div>
+                    <div className={styles.limitGrid} aria-label={`${p.name} plan limits`}>
+                      <div className={styles.limitCell}><strong className={styles.limitValue}>{p.included_minutes.toLocaleString()}</strong><span className={styles.limitLabel}>Minutes / purchase</span></div>
+                      <div className={styles.limitCell}><strong className={styles.limitValue}>{p.max_concurrent_calls}</strong><span className={styles.limitLabel}>Concurrent calls</span></div>
+                      <div className={styles.limitCell}><strong className={styles.limitValue}>{p.max_agents ?? 0}</strong><span className={styles.limitLabel}>Voice agents</span></div>
+                    </div>
+                    <div>
+                      <div className={styles.ruleHeading}><span>Enforced feature access</span><span>{features.filter(([, enabled]) => enabled).length}/{features.length}</span></div>
+                      <div className={styles.featureGrid}>
+                        {features.map(([label, enabled]) => (
+                          <span key={label} className={`${styles.feature} ${enabled ? styles.featureEnabled : styles.featureDisabled}`}>
+                            {enabled ? <Check size={13} aria-hidden="true" /> : <CircleX size={13} aria-hidden="true" />}{label}
+                          </span>
+                        ))}
+                      </div>
+                      <div className={styles.byokLine}>
+                        {p.allow_user_byok ? <Unlock size={13} className="text-primary" aria-hidden="true" /> : <Lock size={13} className="text-amber-600" aria-hidden="true" />}
+                        <span>{p.allow_user_byok ? "Customer API keys allowed" : "Platform-managed keys required"}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <div className={styles.cardActions}>
+                    <Button variant="outline" size="sm" aria-label={`Edit ${p.name}`} onClick={() => { setEditingPlan(p); setModalOpen(true); }}>
+                      <Edit className="mr-1.5 h-3.5 w-3.5" /> Edit plan
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" aria-label={`Delete ${p.name}`} onClick={() => handleDelete(p.id)}>
+                      <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete
+                    </Button>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {/* CREATE / EDIT PLAN DIALOG */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

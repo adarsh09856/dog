@@ -155,8 +155,8 @@
 }
 
 /* Attention pulse applied by OnboardingTooltip to the element its arrow points
-   at; removed automatically when the tooltip is dismissed. Blue matches the
-   tooltip body so the ring and the callout read as one unit. Two shadow layers:
+   at; removed automatically when the tooltip is dismissed. The ring follows
+   the configured brand color so it reads as part of the same callout. Two shadow layers:
    a constant outline so the target stays highlighted between pulses, plus an
    expanding wave, with a slight breathing scale on top. */
 .onboarding-pulse {
@@ -166,8 +166,8 @@
 @keyframes onboarding-pulse {
   0% {
     box-shadow:
-      0 0 0 3px rgba(59, 130, 246, 0.75),
-      0 0 0 3px rgba(59, 130, 246, 0.6);
+      0 0 0 3px color-mix(in srgb, var(--brand-primary-color, var(--primary)) 75%, transparent),
+      0 0 0 3px color-mix(in srgb, var(--brand-primary-color, var(--primary)) 60%, transparent);
     transform: scale(1);
   }
   40% {
@@ -175,21 +175,21 @@
   }
   70% {
     box-shadow:
-      0 0 0 3px rgba(59, 130, 246, 0.75),
-      0 0 0 18px rgba(59, 130, 246, 0);
+      0 0 0 3px color-mix(in srgb, var(--brand-primary-color, var(--primary)) 75%, transparent),
+      0 0 0 18px color-mix(in srgb, var(--brand-primary-color, var(--primary)) 0%, transparent);
     transform: scale(1);
   }
   100% {
     box-shadow:
-      0 0 0 3px rgba(59, 130, 246, 0.75),
-      0 0 0 18px rgba(59, 130, 246, 0);
+      0 0 0 3px color-mix(in srgb, var(--brand-primary-color, var(--primary)) 75%, transparent),
+      0 0 0 18px color-mix(in srgb, var(--brand-primary-color, var(--primary)) 0%, transparent);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .onboarding-pulse {
     animation: none;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary-color, var(--primary)) 60%, transparent);
   }
 }
 

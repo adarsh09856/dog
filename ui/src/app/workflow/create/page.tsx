@@ -1,6 +1,4 @@
 'use client';
-import chrome from "@/components/layout/WorkspaceChrome.module.css";
-
 import {
     AlertTriangle,
     ArrowRight,
@@ -27,6 +25,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { createWorkflowApiV1WorkflowCreateDefinitionPost } from '@/client/sdk.gen';
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';

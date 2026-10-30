@@ -1,7 +1,5 @@
 "use client";
-import panel from "@/components/layout/PanelWorkspace.module.css";
-
-import { ExternalLink, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+import { Archive, Plus, RotateCcw, Search, Trash2, Wrench } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -56,6 +54,7 @@ import {
     type ToolCategory,
     type ToolDefinition,
 } from "./config";
+import styles from "./ToolsWorkspace.module.css";
 
 export default function ToolsPage() {
     const { user, getAccessToken, redirectToLogin, loading } = useAuth();
@@ -195,7 +194,7 @@ export default function ToolsPage() {
                 description: newToolDescription || undefined,
                 category: newToolCategory,
                 icon: categoryConfig?.iconName || "globe",
-                icon_color: categoryConfig?.iconColor || "#3B82F6",
+                icon_color: categoryConfig?.iconColor || "#426B57",
                 definition,
             };
 
@@ -305,6 +304,8 @@ export default function ToolsPage() {
 
     const activeTools = filteredTools.filter((tool) => tool.status === "active");
     const archivedTools = filteredTools.filter((tool) => tool.status === "archived");
+    const activeCount = tools.filter((tool) => tool.status === "active").length;
+    const archivedCount = tools.filter((tool) => tool.status === "archived").length;
 
     const getCategoryBadge = (category: string) => {
         switch (category) {
@@ -342,66 +343,71 @@ export default function ToolsPage() {
 
     if (loading || !user) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="space-y-4">
-                    <Skeleton className="h-12 w-64" />
-                    <Skeleton className="h-64 w-96" />
-                </div>
-            </div>
+            <main className={styles.loading}>
+                <Skeleton className="h-12 w-64" />
+                <Skeleton className="h-64 w-full" />
+            </main>
         );
     }
 
     return (
-        <div className="min-h-screen">
-            <div className="container mx-auto px-4 py-8">
-                <div className="max-w-6xl mx-auto">
-                    <div className={panel.collectionHeader}>
-                        <h1>Tools</h1>
-                        <p className="text-muted-foreground">
-                            Manage reusable tools that can be used across your workflows.
-                        </p>
-                    </div>
+        <main className={styles.page}>
+            <div className={styles.content}>
+                <header className={styles.hero}>
+                        <div className={styles.glow} aria-hidden="true" />
+                        <div className={styles.heroCopy}>
+                            <span className={styles.eyebrow}><Wrench className="h-3.5 w-3.5" /> Build / Tool library</span>
+                            <h1>Tools</h1>
+                            <p>Create reusable capabilities for your workflows. Keep active integrations ready and restore archived tools when you need them again.</p>
+                        </div>
+                        <Button onClick={() => setIsCreateDialogOpen(true)} className={styles.heroAction}>
+                            <Plus className="h-4 w-4" /> Create tool
+                        </Button>
+                </header>
+
+                <section className={styles.stats} aria-label="Tool library overview">
+                        <div className={styles.stat}><div><span>Active tools</span><strong>{activeCount}</strong></div><span className={styles.statIcon}><Wrench className="h-4 w-4" /></span></div>
+                        <div className={styles.stat}><div><span>Archived</span><strong>{archivedCount}</strong></div><span className={styles.statIcon}><Archive className="h-4 w-4" /></span></div>
+                        <div className={styles.stat}><div><span>Available in this view</span><strong>{filteredTools.length}</strong></div><span className={styles.statIcon}><Search className="h-4 w-4" /></span></div>
+                </section>
 
                     {error && (
-                        <div role="alert" className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive">
+                        <div role="alert" className={styles.error}>
                             {error}
                             <Button variant="outline" size="sm" className="ml-3" onClick={fetchTools}>Retry</Button>
                         </div>
                     )}
 
-                    <Card className="mb-6">
-                        <CardHeader>
-                            <div className={panel.collectionHeader}>
+                    <Card className={styles.panel}>
+                        <CardHeader className={styles.panelHeader}>
+                            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                                 <div>
                                     <CardTitle>Your Tools</CardTitle>
                                     <CardDescription>
                                         Create and manage tools for your organization
                                     </CardDescription>
                                 </div>
-                                <Button onClick={() => setIsCreateDialogOpen(true)}>
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Create Tool
-                                </Button>
+                                <span className="text-xs text-muted-foreground">Tools are shared across your organization’s workflows</span>
                             </div>
                         </CardHeader>
                         <CardContent>
                             {/* Search */}
-                            <div className="relative mb-4">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <div className={styles.search}>
+                                <Search />
                                 <Input
+                                    aria-label="Search tools"
                                     placeholder="Search tools..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="pl-10"
                                 />
                             </div>
 
                             {isLoading ? (
-                                <div className="space-y-4">
+                        <div className={styles.list}>
                                     {[1, 2, 3].map((i) => (
                                         <div
                                             key={i}
-                                            className="flex items-center justify-between p-4 border rounded-lg"
+                                            className={styles.skeletonRow}
                                         >
                                             <div className="space-y-2">
                                                 <Skeleton className="h-4 w-32" />
@@ -412,9 +418,9 @@ export default function ToolsPage() {
                                     ))}
                                 </div>
                             ) : error && tools.length === 0 ? null : activeTools.length === 0 && archivedTools.length === 0 ? (
-                                <div className="text-center py-12">
-                                    {renderToolIcon("http_api", "w-12 h-12 text-muted-foreground mx-auto mb-4")}
-                                    <p className="text-muted-foreground mb-4">
+                                <div className={styles.empty}>
+                                    <span className={styles.emptyIcon}>{renderToolIcon("http_api", "h-6 w-6")}</span>
+                                    <p className="text-muted-foreground">
                                         {searchQuery
                                             ? "No tools match your search"
                                             : "No tools found"}
@@ -429,27 +435,27 @@ export default function ToolsPage() {
                                 <>
                                     {/* Active Tools */}
                                     {activeTools.length > 0 ? (
-                                        <div className="space-y-4">
+                                        <div className={styles.list}>
                                             {activeTools.map((tool) => (
                                                 <div
                                                     key={tool.tool_uuid}
-                                                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                                                    className={styles.toolCard}
                                                     onClick={() =>
                                                         router.push(`/tools/${tool.tool_uuid}`)
                                                     }
                                                 >
                                                     <div className="flex items-center gap-4">
                                                         <div
-                                                            className="w-10 h-10 shrink-0 rounded-lg flex items-center justify-center"
+                                                            className={styles.toolIcon}
                                                             style={{
                                                                 backgroundColor:
-                                                                    tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#3B82F6",
+                                                                    tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#426B57",
                                                             }}
                                                         >
                                                             {renderToolIcon(tool.category)}
                                                         </div>
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
+                                                        <div className={styles.toolText}>
+                                                            <div className={styles.toolHeading}>
                                                                 <span className="font-medium">
                                                                     {tool.name}
                                                                 </span>
@@ -462,22 +468,24 @@ export default function ToolsPage() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <Button
+                                                    <div className={styles.toolActions}><Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        aria-label={`Archive ${tool.name}`}
                                                         onClick={(e) =>
                                                             handleDeleteTool(tool.tool_uuid, e)
                                                         }
                                                         className="text-destructive hover:text-destructive/90"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
-                                                    </Button>
+                                                    </Button></div>
                                                 </div>
                                             ))}
                                         </div>
                                     ) : !searchQuery ? (
-                                        <div className="text-center py-8">
-                                            <p className="text-muted-foreground mb-4">
+                                        <div className={styles.empty}>
+                                            <span className={styles.emptyIcon}>{renderToolIcon("http_api", "h-6 w-6")}</span>
+                                            <p className="text-muted-foreground">
                                                 No active tools
                                             </p>
                                             <Button onClick={() => setIsCreateDialogOpen(true)}>
@@ -488,31 +496,31 @@ export default function ToolsPage() {
 
                                     {/* Archived Tools */}
                                     {archivedTools.length > 0 && (
-                                        <div className="mt-8">
-                                            <h3 className="text-lg font-semibold text-muted-foreground mb-4">
+                                            <div className="mt-8">
+                                                <h3 className={styles.sectionTitle}>
                                                 Archived Tools
                                             </h3>
-                                            <div className="space-y-4">
+                                            <div className={styles.list}>
                                                 {archivedTools.map((tool) => (
                                                     <div
                                                         key={tool.tool_uuid}
-                                                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors opacity-60"
+                                                    className={`${styles.toolCard} ${styles.archivedCard}`}
                                                         onClick={() =>
                                                             router.push(`/tools/${tool.tool_uuid}`)
                                                         }
                                                     >
                                                         <div className="flex items-center gap-4">
                                                             <div
-                                                                className="w-10 h-10 shrink-0 rounded-lg flex items-center justify-center"
+                                                            className={styles.toolIcon}
                                                                 style={{
                                                                     backgroundColor:
-                                                                        tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#3B82F6",
+                                                                        tool.icon_color || getCategoryConfig(tool.category as ToolCategory)?.iconColor || "#426B57",
                                                                 }}
                                                             >
                                                                 {renderToolIcon(tool.category)}
                                                             </div>
-                                                            <div>
-                                                                <div className="flex items-center gap-2">
+                                                        <div className={styles.toolText}>
+                                                            <div className={styles.toolHeading}>
                                                                     <span className="font-medium">
                                                                         {tool.name}
                                                                     </span>
@@ -526,9 +534,10 @@ export default function ToolsPage() {
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        <Button
+                                                    <div className={styles.toolActions}><Button
                                                             variant="ghost"
                                                             size="sm"
+                                                        aria-label={`Restore ${tool.name}`}
                                                             onClick={(e) =>
                                                                 handleUnarchiveTool(tool.tool_uuid, e)
                                                             }
@@ -536,7 +545,7 @@ export default function ToolsPage() {
                                                             title="Restore tool"
                                                         >
                                                             <RotateCcw className="w-4 h-4" />
-                                                        </Button>
+                                                    </Button></div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -546,7 +555,6 @@ export default function ToolsPage() {
                             )}
                         </CardContent>
                     </Card>
-                </div>
             </div>
 
             {/* Create Tool Dialog */}
@@ -716,6 +724,6 @@ export default function ToolsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </main>
     );
 }

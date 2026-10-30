@@ -88,7 +88,7 @@ jobs:
           python -m alembic -c api/alembic.ini upgrade head
           python -m alembic -c api/alembic.ini current
       - name: Verify installer and image-verification orchestration
-        run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py -q
+        run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_installer_archive.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py -q
       - name: Verify client backup and recovery failure handling
         run: |
           sudo setpriv --reuid 0 --regid 1234 --clear-groups "$(command -v python)" -m pytest --noconftest -p no:cacheprovider api/tests/test_client_recovery_archive.py api/tests/test_client_recovery_docker.py -q

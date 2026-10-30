@@ -1,6 +1,4 @@
 "use client";
-import panel from "@/components/layout/PanelWorkspace.module.css";
-
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -17,6 +15,7 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +39,8 @@ import {
   SovereignWallet,
   WalletLedgerItem,
 } from "@/lib/kodewavesApi";
+
+import styles from "./BillingWorkspace.module.css";
 
 function loadRazorpayCheckout() {
   if (window.Razorpay) return Promise.resolve(true);
@@ -313,17 +314,17 @@ export default function SovereignBillingPage() {
   };
 
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+    <div className={styles.page}>
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <header className={panel.collectionHeader}>
-        <div>
-          <span className={panel.eyebrow}>WORKSPACE / BILLING</span><h1>Billing & Minute Wallet</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+      <header className={styles.hero}>
+        <div className={styles.heroCopy}>
+          <span className={styles.eyebrow}>WORKSPACE / BILLING</span><h1>Billing &amp; Minute Wallet</h1>
+          <p>
             Monitor voice minutes, review transactions, and manage your organization’s plan access.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className={styles.heroActions}>
           <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5" /> Organization Wallet
           </Badge>
@@ -335,7 +336,7 @@ export default function SovereignBillingPage() {
       </header>
 
       {/* WALLET KPI CARDS */}
-      <div className={panel.billingMetrics}>
+      <div className={`${panel.billingMetrics} ${styles.metrics}`} aria-label="Wallet summary">
         <Card className="border-border/60 bg-gradient-to-br from-card to-muted/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Available Voice Balance</CardTitle>
@@ -382,8 +383,8 @@ export default function SovereignBillingPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="plans" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+      <Tabs defaultValue="plans" className={styles.planArea}>
+        <TabsList className={`${styles.tabList} grid grid-cols-2`}>
           <TabsTrigger value="plans" className="gap-2">
             <CreditCard className="h-4 w-4" />
             Plan Options
@@ -396,7 +397,8 @@ export default function SovereignBillingPage() {
 
         {/* PLANS TAB */}
         <TabsContent value="plans" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className={styles.sectionIntro}><div><h2>Choose a plan</h2><p>Compare included voice minutes, concurrency, and key policies. Plans are paid once for a fixed access term.</p></div></div>
+          <div className={styles.planGrid}>
             {plans.map((p) => {
               const isCurrent = wallet?.plan_code === p.code;
               const selectedCycle = billingCycles[String(p.id)] ?? (p.monthly_price_cents > 0 ? "monthly" : "annual");
@@ -408,9 +410,9 @@ export default function SovereignBillingPage() {
               return (
                 <Card
                   key={p.id}
-                  className={`border-border/60 flex flex-col justify-between transition-all ${
+                  className={`${styles.planCard} flex flex-col justify-between transition-all ${
                     isCurrent ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/40"
-                  }`}
+                  } ${isCurrent ? styles.planCardCurrent : ""}`}
                 >
                   <CardHeader>
                     <div className="flex items-center justify-between">
@@ -422,7 +424,7 @@ export default function SovereignBillingPage() {
                       )}
                     </div>
                     <CardDescription>{p.description || "Voice AI agent plan"}</CardDescription>
-                    <div className="pt-4">
+                    <div className={`${styles.planPrice} pt-4`}>
                       <div className="flex items-baseline gap-1">
                         <span className="text-3xl font-extrabold">{isPaidPlan ? formatMinorUnits(selectedPrice, p.currency) : "Free"}</span>
                         {isPaidPlan ? <span className="text-xs text-muted-foreground">· one-time payment for {selectedAccessDays} days</span> : null}
@@ -460,10 +462,6 @@ export default function SovereignBillingPage() {
                         <span className="text-muted-foreground">Concurrent Calls:</span>
                         <span className="font-bold text-foreground font-mono">{p.max_concurrent_calls} channels</span>
                       </div>
-                      <div className="flex items-center justify-between py-1 border-b border-border/40">
-                        <span className="text-muted-foreground">Overage Rate:</span>
-                        <span className="font-bold text-foreground font-mono">{p.overage_rate_per_minute == null ? "Not configured" : `${formatMoney(p.overage_rate_per_minute, p.currency)}/min`}</span>
-                      </div>
                       <div className="flex items-center justify-between py-1">
                         <span className="text-muted-foreground">BYOK Key Policy:</span>
                         {p.allow_user_byok ? (
@@ -493,10 +491,12 @@ export default function SovereignBillingPage() {
             })}
           </div>
 
-          <section aria-labelledby="credit-bundles-heading" className="space-y-4">
-            <div>
+          <section aria-labelledby="credit-bundles-heading" className={styles.creditSection}>
+            <div className={styles.sectionIntro}>
+              <div>
               <h2 id="credit-bundles-heading" className="text-xl font-semibold">Credit bundles</h2>
               <p className="mt-1 text-sm text-muted-foreground">One-time wallet top-ups. Provider and carrier costs may be billed separately.</p>
+              </div>
             </div>
             {selectedCreditPackage && (
               <p role="status" className="rounded-md border border-primary/40 bg-primary/5 p-3 text-sm">
@@ -509,13 +509,13 @@ export default function SovereignBillingPage() {
             ) : creditPackages.length === 0 ? (
               <p className="text-sm text-muted-foreground">No credit bundles are currently published.</p>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className={styles.creditGrid}>
                 {creditPackages.map((pkg) => {
                   const packageId = String(pkg.id);
                   const selected = selectedCreditPackage === packageId;
                   const totalMinutes = pkg.minutes + pkg.bonus_minutes;
                   return (
-                    <Card key={packageId} id={`credit-package-${packageId}`} className={`flex flex-col border-border/60 ${selected ? "border-primary ring-1 ring-primary" : ""}`}>
+                    <Card key={packageId} id={`credit-package-${packageId}`} className={`${styles.creditCard} flex flex-col ${selected ? styles.creditCardSelected : ""}`}>
                       <CardHeader>
                         <div className="flex flex-wrap items-center gap-2">
                           <CardTitle className="text-base">{pkg.name}</CardTitle>
@@ -540,8 +540,8 @@ export default function SovereignBillingPage() {
         </TabsContent>
 
         {/* LEDGER TAB */}
-        <TabsContent value="ledger" className="space-y-6">
-          <Card className="border-border/60">
+        <TabsContent value="ledger" className={styles.ledgerArea}>
+          <Card className={styles.ledgerCard}>
             <CardHeader>
               <CardTitle className="text-base">Wallet Minute Ledger</CardTitle>
               <CardDescription>

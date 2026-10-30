@@ -142,7 +142,6 @@ export interface SaaSPlan {
   has_widget_access?: boolean;
   has_campaigns_access?: boolean;
   is_default?: boolean;
-  overage_rate_per_minute: number | null;
   max_concurrent_calls: number;
   allow_user_byok: boolean;
   features?: string[];
@@ -174,12 +173,8 @@ export interface PublicCreditPackage {
   is_popular?: boolean;
 }
 
-export interface PublicSaaSPlan extends Omit<SaaSPlan, "overage_rate_per_minute"> {
-  monthly_price_cents: number;
-  annual_price_cents: number;
-  currency: string;
+export interface PublicSaaSPlan extends SaaSPlan {
   max_agents: number;
-  overage_rate_per_minute: number | null;
 }
 
 export function normalizePublicCreditPackage(pkg: PublicCreditPackage): CreditPackage {

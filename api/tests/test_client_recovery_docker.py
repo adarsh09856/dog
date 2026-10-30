@@ -6,13 +6,38 @@ import sys
 import tarfile
 import threading
 import time
+import base64
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "deploy/client"))
 import recovery  # noqa: E402
+
+_RELEASE_SIGNING_KEY = Ed25519PrivateKey.generate()
+
+
+def _signed_release_manifest() -> tuple[dict[str, object], str]:
+    public_key = base64.urlsafe_b64encode(_RELEASE_SIGNING_KEY.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode("ascii")
+    payload = {
+        "edition": "client",
+        "files": {"api/app.py": "c" * 64},
+        "ui_files": {"ui/index.html": "d" * 64},
+        "images": {
+            "api": {"kind": "registry_digest", "reference": "registry.example.com/kodewaves/api@sha256:" + "a" * 64},
+            "ui": {"kind": "registry_digest", "reference": "registry.example.com/kodewaves/ui@sha256:" + "b" * 64},
+        },
+        "schema_compatibility": {"head": "head1", "upgrade_from": ["head1"], "rollback_to": []},
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    signature = base64.urlsafe_b64encode(_RELEASE_SIGNING_KEY.sign(canonical)).rstrip(b"=").decode("ascii")
+    return {"payload": payload, "signature": signature}, public_key
 
 
 def test_recovery_compose_does_not_inherit_omitted_interpolation_values(tmp_path, monkeypatch):
@@ -63,17 +88,11 @@ def _installation(directory: Path) -> tuple[Path, Path, Path]:
     env = inputs_dir / ".env"
     identity_value = str(identity.resolve())
     manifest_ref = "./client-release-manifest.json"
-    manifest_payload = {
-        "edition": "client",
-        "images": {
-            "api": {"reference": "registry.example.com/kodewaves/api@sha256:" + "a" * 64},
-            "ui": {"reference": "registry.example.com/kodewaves/ui@sha256:" + "b" * 64},
-        },
-    }
+    signed_manifest, public_key = _signed_release_manifest()
     manifest = directory / "client-release-manifest.json"
-    manifest.write_text(json.dumps({"payload": manifest_payload}), encoding="utf-8")
+    manifest.write_text(json.dumps(signed_manifest), encoding="utf-8")
     release_key = directory / "release-public-key.txt"
-    release_key.write_text("release-key\n", encoding="ascii")
+    release_key.write_text(public_key + "\n", encoding="ascii")
     env.write_text(
         "\n".join([
             "KODEWAVES_INSTALLATION_ID=customer-123",
@@ -173,7 +192,7 @@ def test_docker_backup_stops_exports_and_restarts_only_previously_running_servic
     assert result["services_restarted"] == ["api", "ui", "postgres", "redis", "minio"]
     assert events[0][-1] == "stop"
     assert events[-1] == ["start", "api", "ui", "postgres", "redis", "minio"]
-    assert recovery.validate_archive(output)["installation_id"] == "customer-123"
+    assert recovery.validate_archive(output, release_public_key=release_key)["installation_id"] == "customer-123"
 
 
 def test_docker_backup_refuses_external_writers_and_restarts_project(monkeypatch, tmp_path):
@@ -231,6 +250,7 @@ def test_restore_to_new_volumes_and_rollback_keeps_both_volume_sets(monkeypatch,
     monkeypatch.setattr(recovery, "_switch_compose_up", switch)
     result = recovery.restore_to_docker_volumes(
         archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+        release_public_key=release_key,
         confirm_maintenance=True,
     )
 
@@ -328,6 +348,7 @@ def test_restore_failure_restores_old_selection_and_retains_original_volumes(mon
     with pytest.raises(RuntimeError, match=expected_error):
         recovery.restore_to_docker_volumes(
             archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+            release_public_key=release_key,
             confirm_maintenance=True,
         )
 
@@ -365,6 +386,7 @@ def test_rollback_failure_reinstates_restored_selection_and_restarts_partial_pro
     monkeypatch.setattr(recovery, "_switch_compose_up", lambda *_args, **_kwargs: None)
     restored = recovery.restore_to_docker_volumes(
         archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+        release_public_key=release_key,
         confirm_maintenance=True,
     )
     prior_override = (compose_dir / recovery.RECOVERY_OVERRIDE).read_bytes()
