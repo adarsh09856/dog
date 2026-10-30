@@ -149,6 +149,8 @@ services:
 
       # Public HTTPS origin (Traefik-terminated). Used for absolute URLs and
       # for verifying inbound telephony webhook signatures.
+      PUBLIC_BASE_URL: "https://${PUBLIC_HOST}"
+      UI_APP_URL: "https://${PUBLIC_HOST}"
       BACKEND_API_ENDPOINT: "https://${PUBLIC_HOST}"
 
       DATABASE_URL: "postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/postgres"
