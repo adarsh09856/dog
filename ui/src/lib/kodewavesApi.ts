@@ -112,10 +112,21 @@ export interface SaaSPlan {
   name: string;
   code: string;
   description?: string;
-  monthly_price_inr: number;
-  monthly_price_usd: number;
+  monthly_price_cents: number;
+  annual_price_cents: number;
+  currency: string;
+  /** Legacy same-currency display values may be null when the plan uses another currency. */
+  monthly_price_inr?: number | null;
+  monthly_price_usd?: number | null;
   included_minutes: number;
-  overage_rate_per_minute: number;
+  max_agents?: number;
+  has_crm_access?: boolean;
+  has_appointments_access?: boolean;
+  has_forms_access?: boolean;
+  has_widget_access?: boolean;
+  has_campaigns_access?: boolean;
+  is_default?: boolean;
+  overage_rate_per_minute: number | null;
   max_concurrent_calls: number;
   allow_user_byok: boolean;
   features?: string[];
