@@ -729,6 +729,13 @@ export const publicApi = {
     const packages = await apiFetch<PublicCreditPackage[]>('/billing-sovereign/public/packages');
     return packages.map(normalizePublicCreditPackage);
   },
+  getPublicCreditOffers: async () => {
+    const packages = await apiFetch<PublicCreditPackage[]>(
+      '/billing-sovereign/public/packages',
+      { signal: AbortSignal.timeout(5000) },
+    );
+    return packages.map(normalizePublicCreditPackage);
+  },
 };
 
 export interface PaymentConfig {
