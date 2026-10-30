@@ -732,6 +732,15 @@ class CampaignClient(BaseDBClient):
                     f"Campaign {parent_campaign.id} has already been redialed"
                 )
 
+            # Redials create a new CampaignModel just like normal campaign
+            # creation. Keep the signed installation cap and insert in this
+            # transaction so concurrent redials cannot exceed the allowance.
+            await enforce_client_creation_limit(
+                session,
+                limit_name="max_campaigns",
+                model=CampaignModel,
+            )
+
             child_meta = {
                 k: v
                 for k, v in parent_meta.items()
