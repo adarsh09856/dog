@@ -649,6 +649,20 @@ def test_owner_ci_installs_same_pipecat_extras_as_api_image():
     assert ci_extras.group(1) == image_extras.group(1)
 
 
+def test_shared_integration_branch_runs_full_client_release_verification():
+    import yaml
+
+    root = Path(__file__).resolve().parents[2]
+    workflow = yaml.safe_load(
+        (root / ".github" / "workflows" / "client-bundle-verification.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    events = workflow.get("on", workflow.get(True, {}))
+    assert "codex/kodewaves-shared-work" in events["push"]["branches"]
+    assert "refs/heads/codex/kodewaves-shared-work" in workflow["jobs"]["verify"]["if"]
+
+
 def test_client_production_cors_is_bound_to_public_origin():
     import yaml
 
