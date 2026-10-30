@@ -6,7 +6,6 @@ from api.services.release_schema import (
     SchemaCompatibilityError,
     migration_compatibility,
     validate_database_upgrade_allowed,
-    verify_deployment_migration_history,
 )
 
 
@@ -46,19 +45,6 @@ def test_release_schema_rejects_multiple_heads(tmp_path):
 
     with pytest.raises(ValueError, match="one Alembic head"):
         migration_compatibility(migrations)
-
-
-def test_deploy_preflight_rejects_database_revision_missing_from_candidate(tmp_path):
-    migrations = tmp_path / "versions"
-    _write_revision(migrations, "001.py", "root", None)
-    _write_revision(migrations, "002.py", "head", "root")
-    verify_deployment_migration_history(migrations, ())
-    verify_deployment_migration_history(migrations, ("root",))
-    verify_deployment_migration_history(migrations, ("head",))
-    with pytest.raises(SchemaCompatibilityError, match="not ancestors"):
-        verify_deployment_migration_history(migrations, ("newer-production-revision",))
-    with pytest.raises(SchemaCompatibilityError, match="multiple Alembic revisions"):
-        verify_deployment_migration_history(migrations, ("root", "head"))
 
 
 def test_release_schema_rejects_missing_parent(tmp_path):

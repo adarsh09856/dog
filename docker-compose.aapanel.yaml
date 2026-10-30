@@ -88,7 +88,7 @@ services:
     build:
       context: .
       dockerfile: api/Dockerfile
-    image: kodewaves-api:v2.0.0
+    image: "${KODEWAVES_API_IMAGE:-kodewaves-api:v2.0.0}"
     container_name: kodewaves_api
     restart: unless-stopped
     depends_on:
@@ -108,7 +108,6 @@ services:
       # Set this to the aaPanel/Nginx proxy peer as seen by the API container.
       # Wildcard trust allows spoofed X-Forwarded-For values to bypass IP policy.
       FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-127.0.0.1}"
-      
       # Database and Cache
       DATABASE_URL: "postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres_secure_pass}@postgres:5432/postgres"
       REDIS_URL: "redis://:${REDIS_PASSWORD:-redis_secure_pass}@redis:6379"
@@ -120,6 +119,9 @@ services:
       KODEWAVES_SECRET_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY}"
       ADMIN_EMAIL: "${ADMIN_EMAIL:-}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      # Carrier media sockets carry a per-run HMAC capability in their URL.
+      TELEPHONY_WS_TOKEN_SECRET: "${TELEPHONY_WS_TOKEN_SECRET:-}"
+      TELEPHONY_WS_TOKEN_ENFORCE: "${TELEPHONY_WS_TOKEN_ENFORCE:-false}"
 
       # Local Sovereign Storage
       ENABLE_AWS_S3: "false"
@@ -171,10 +173,8 @@ services:
       KODEWAVES_DEVOPS_SECRET: "${KODEWAVES_DEVOPS_SECRET:-}"
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
-    volumes:
-      - ./api:/app/api:ro
-      - ./scripts:/app/scripts:ro
-      - ./pipecat:/app/pipecat:ro
+    # Application source is baked into the image. Host source mounts would
+    # override a release image and silently keep the previous checkout live.
     healthcheck:
       test:
         [
@@ -197,7 +197,7 @@ services:
     build:
       context: .
       dockerfile: ui/Dockerfile
-    image: kodewaves-ui:v2.0.0
+    image: "${KODEWAVES_UI_IMAGE:-kodewaves-ui:v2.0.0}"
     container_name: kodewaves_ui
     restart: unless-stopped
     depends_on:
@@ -239,6 +239,10 @@ services:
       - --fingerprint
       - --lt-cred-mech
       - --realm=${PUBLIC_HOST:-localhost}
+      # SERVER_IP maps Docker's relay address to the public IPv4.
+      - --external-ip=${SERVER_IP:?SERVER_IP must be set to the server public IPv4}
+      - --min-port=49152
+      - --max-port=49350
       - --static-auth-secret=${TURN_SECRET:-coturn_shared_secret}
     environment:
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
@@ -318,11 +322,13 @@ services:
   indic-stt:
     build:
       context: ./api/local_models/indic_stt
-    image: kodewaves-indic-stt:v1.0.0
+    image: "${KODEWAVES_INDIC_STT_IMAGE:-kodewaves-indic-stt:v1.0.0}"
     container_name: kodewaves_indic_stt
     restart: unless-stopped
     environment:
       INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-all}"
+      # Optional comma-separated startup languages, bounded by resident slots.
+      INDIC_STT_PREWARM_LANGUAGES: "${INDIC_STT_PREWARM_LANGUAGES:-}"
       INDIC_STT_THREADS: "${INDIC_STT_THREADS:-2}"
       INDIC_STT_AUTO_DETECT: "${INDIC_STT_AUTO_DETECT:-1}"
       INDIC_STT_LID_THREADS: "${INDIC_STT_LID_THREADS:-2}"
@@ -343,6 +349,7 @@ services:
     networks:
       - kodewaves-network
 
+  # Optional bilingual Inaya backend behind the combined speech endpoint.
   indus-tts:
     build:
       context: ./api/local_models/indus_tts
@@ -374,8 +381,6 @@ services:
       - kodewaves-network
 
   # Small regional CPU voice model: 13 documented languages and 20 speakers.
-
-  # Small regional CPU voice model: 13 documented languages and 20 speakers.
   indic-vits-tts:
     build:
       context: ./api/local_models/indic_vits
@@ -383,6 +388,10 @@ services:
     container_name: kodewaves_indic_vits_tts
     restart: unless-stopped
     profiles: ["local"]
+    depends_on:
+      indus-tts:
+        condition: service_healthy
+        required: false
     environment:
       INDIC_VITS_THREADS: "${INDIC_VITS_THREADS:-2}"
       INDUS_TTS_ENDPOINT: "${INDUS_COMBINED_ENDPOINT:-}"
@@ -500,7 +509,9 @@ services:
     image: ghcr.io/speaches-ai/speaches:latest-cpu
     container_name: kodewaves_whisper
     restart: unless-stopped
-    profiles: ["local"]
+    # Legacy Whisper is opt-in separately; local Indic installs should not
+    # load a second STT stack on small CPU hosts.
+    profiles: ["whisper"]
     ports:
       - "127.0.0.1:${WHISPER_PORT:-8765}:8000"
     volumes:

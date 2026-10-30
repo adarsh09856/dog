@@ -1,5 +1,4 @@
 'use client';
-import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import {
     AlertTriangle,
@@ -48,14 +47,14 @@ import {
     generateTemplateWorkflowDefinition,
     TEMPLATE_CATEGORIES,
 } from '@/constants/agentTemplates';
-import { INDIAN_TEMPLATE_LANGUAGES, WORKFLOW_GENERATION_LANGUAGES } from '@/constants/languages';
-import { detailFromError } from '@/lib/apiError';
+import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
 import { useAuth } from '@/lib/auth';
+import { detailFromError } from '@/lib/apiError';
+import { configuredTemplateLanguage } from '@/lib/templateLanguage';
 import { BLANK_WORKFLOW_DEFINITION } from '@/lib/blank-workflow-definition';
 import { apiFetch } from '@/lib/kodewavesApi';
 import { type AvailableCatalogResponse,catalogApi } from '@/lib/kodewavesApi';
 import logger from '@/lib/logger';
-import { configuredTemplateLanguage } from '@/lib/templateLanguage';
 import { getRandomId } from '@/lib/utils';
 
 function getTemplateIcon(iconName: string) {
@@ -125,9 +124,9 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
         iconBg: 'bg-cyan-500 text-white',
     },
     slate: {
-        bg: 'bg-muted/50',
-        text: 'text-muted-foreground',
-        border: 'border-border',
+        bg: 'bg-slate-50 dark:bg-slate-900/30',
+        text: 'text-slate-700 dark:text-slate-300',
+        border: 'border-slate-200 dark:border-slate-800',
         iconBg: 'bg-slate-600 text-white',
     },
     orange: {
@@ -350,7 +349,7 @@ export default function CreateWorkflowPage() {
         <div className="min-h-screen bg-background">
             <div className="container mx-auto px-4 py-8 max-w-6xl">
                 {/* Hero Header */}
-                <div className={chrome.creationHeader}>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-50/50 via-purple-50/30 to-pink-50/50 dark:from-indigo-950/20 dark:via-purple-900/10 dark:to-pink-950/20 border p-6 md:p-8 mb-8">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
@@ -358,13 +357,13 @@ export default function CreateWorkflowPage() {
                                     <Sparkles className="w-3.5 h-3.5" />
                                     Agent Templates Gallery
                                 </Badge>
-                                <span className="text-xs text-muted-foreground">Platform</span>
+                                <span className="text-xs text-muted-foreground">Kodewaves Platform</span>
                             </div>
                             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
                                 Create Your Voice Agent
                             </h1>
                             <p className="text-muted-foreground max-w-2xl text-sm md:text-base">
-                                Choose a starting workflow, then make its instructions, voice and tools your own. Test the conversation before publishing.
+                                Choose from battle-tested, pre-built agent templates configured with natural conversational flow, or build your own custom voice agent from scratch.
                             </p>
                         </div>
                         <div className="flex flex-wrap gap-2 shrink-0">
@@ -576,7 +575,7 @@ export default function CreateWorkflowPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="custom-builder-language">Prompt language</Label>
+                                    <Label htmlFor="custom-builder-language">Agent Language</Label>
                                     <select
                                         id="custom-builder-language"
                                         value={customBuilderLanguage}
@@ -584,12 +583,12 @@ export default function CreateWorkflowPage() {
                                         className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"
                                     >
                                         <option value="model">Use the language configured in Models</option>
-                                        {WORKFLOW_GENERATION_LANGUAGES.map(({ code, name }) => (
+                                        {INDIAN_TEMPLATE_LANGUAGES.map(({ code, name }) => (
                                             <option key={code} value={code}>{name}</option>
                                         ))}
                                     </select>
                                     <p className="text-xs text-muted-foreground">
-                                        This sets the generated prompt language; it does not limit speech recognition or voice output. STT and TTS language coverage varies by selected provider, model, and voice. Check their supported-language lists in Models.
+                                        The agent prompt follows this language and supports natural English code-switching. Configure compatible STT and TTS models in Models.
                                     </p>
                                 </div>
 

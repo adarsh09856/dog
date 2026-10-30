@@ -984,31 +984,6 @@ class CatalogService:
             except (aiohttp.ClientError, TimeoutError):
                 pass
 
-            # Advertise DhVaani only when its local checkpoint and licensed
-            # reference voices are loaded and reported by the serving engine.
-            try:
-                dhvaani_url = local_tts_api_base(local_ai_setting, "dhvaani-0.5")
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.5)) as session:
-                    async with session.get(f"{dhvaani_url}/models") as resp:
-                        if resp.status == 200:
-                            for dhvaani_model in (await resp.json()).get("data", []):
-                                if (
-                                    isinstance(dhvaani_model, dict)
-                                    and dhvaani_model.get("id") == "dhvaani-0.5"
-                                    and dhvaani_model.get("task") == "text-to-speech"
-                                    and dhvaani_model.get("installed") is True
-                                ):
-                                    local_tts.append({
-                                        "value": dhvaani_model["id"],
-                                        "label": dhvaani_model.get("name") or "DhVaani 0.5 — Indian languages + English",
-                                        "provider": "speaches",
-                                        "languages": dhvaani_model.get("languages", []),
-                                        "voices": dhvaani_model.get("voices", []),
-                                        "streaming": dhvaani_model.get("streaming", False),
-                                    })
-            except (aiohttp.ClientError, TimeoutError):
-                pass
-
             # Show only TTS models actually installed on the local Speaches server.
             speaches_url = local_ai_setting.get("whisper_endpoint") or os.environ.get(
                 "WHISPER_ENDPOINT", "http://whisper:8000/v1"

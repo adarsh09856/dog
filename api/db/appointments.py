@@ -205,7 +205,9 @@ async def delete_appointment(organization_id, appointment_id):
         appointment = result.scalar_one_or_none()
         if appointment is None:
             raise LookupError("Appointment not found")
-        await session.delete(appointment)
+        # The calendar UI exposes this operation as cancellation. Keep the row
+        # for audit/history and so it no longer occupies an availability slot.
+        appointment.status = "cancelled"
         await session.commit()
 
 

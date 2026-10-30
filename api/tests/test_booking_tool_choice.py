@@ -11,6 +11,59 @@ from pipecat.adapters.schemas.function_schema import FunctionSchema
 TOOL = {"type": "function", "function": {"name": "book_appointment", "parameters": {"type": "object"}}}
 
 
+@pytest.mark.asyncio
+async def test_llm_stream_diagnostics_are_sent_as_text_free_numeric_metadata(monkeypatch):
+    from api.services.pipecat.booking_tool_choice import OpenAILLMService
+
+    async def chunks():
+        yield SimpleNamespace(
+            usage=None,
+            choices=[SimpleNamespace(
+                delta=SimpleNamespace(content="Hello caller", tool_calls=None),
+                finish_reason=None,
+            )],
+        )
+        yield SimpleNamespace(
+            usage=SimpleNamespace(
+                prompt_tokens=18,
+                prompt_tokens_details=SimpleNamespace(cached_tokens=7),
+                completion_tokens=2,
+            ),
+            choices=[SimpleNamespace(
+                delta=SimpleNamespace(content=None, tool_calls=None),
+                finish_reason="stop",
+            )],
+        )
+
+    async def original_get_chat_completions(self, _context):
+        return chunks()
+
+    monkeypatch.setattr(
+        OpenAILLMService, "get_chat_completions", original_get_chat_completions
+    )
+    sink = AsyncMock()
+    service = BookingOpenAILLMService(
+        api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b")
+    )
+    service._llm_trace_sink = sink
+    context = SimpleNamespace(
+        get_messages=lambda: [{"role": "user", "content": "private caller text"}],
+        tools=SimpleNamespace(standard_tools=[]),
+    )
+
+    stream = await service.get_chat_completions(context)
+    assert [chunk async for chunk in stream]
+
+    sink.assert_awaited_once()
+    event = sink.await_args.args[0]
+    assert event["type"] == "rtf-llm-stream-trace"
+    assert event["payload"]["prompt_tokens"] == 18
+    assert event["payload"]["cached_prompt_tokens"] == 7
+    assert event["payload"]["completion_tokens"] == 2
+    assert event["payload"]["complete"] is True
+    assert "private caller text" not in str(event)
+
+
 def _params(*messages, tools=None):
     return {"messages": list(messages), "tools": [TOOL] if tools is None else tools}
 

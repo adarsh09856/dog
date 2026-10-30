@@ -11,7 +11,6 @@ type CheckoutOptions = {
   amount: number;
   currency: string;
   name: string;
-  description?: string;
   handler: (response: RazorpayResponse) => void;
   modal: { ondismiss: () => void };
 };

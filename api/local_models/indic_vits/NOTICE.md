@@ -13,7 +13,6 @@ Kodewaves serves that export with the documented CONV style and trained speaker 
 Kodewaves does not claim authorship of the model or that it supports all Indian languages.
 
 The regional model supports the 13 languages and 20 speaker slots documented by AI4Bharat.
-This adapter supports those documented languages and speaker slots; installed Piper voices are separately licensed.
 The adapter also loads installed Piper Hindi and Urdu models, each subject to its
 distributed model card and licenses. They are not additional AI4Bharat speakers.
 

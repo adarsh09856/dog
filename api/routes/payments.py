@@ -20,6 +20,7 @@ from api.db.kodewaves_models import (
 from api.db.models import UserModel
 from api.constants import UI_APP_URL
 from api.services.auth.depends import get_user
+from api.services.payment_receipts import PaymentReceiptError, verify_payment_receipt
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -76,118 +77,19 @@ def verify_razorpay_webhook_signature(body: bytes, signature: str, secret: str) 
         return False
 
 
-def _minor_units_to_gateway_units(amount: int) -> int:
-    """Gateway APIs accept the exact paise/cents integer stored by the catalog."""
-    return max(0, int(amount or 0))
-
-
-def _plan_price_for_checkout(plan: SaaSPlanModel, billing_cycle: str) -> int:
-    if billing_cycle not in {"monthly", "annual"}:
-        raise HTTPException(status_code=422, detail="Billing cycle must be monthly or annual")
-    amount = plan.annual_price_cents if billing_cycle == "annual" else plan.monthly_price_cents
-    if amount <= 0:
-        if billing_cycle == "monthly" and plan.annual_price_cents > 0:
-            raise HTTPException(status_code=400, detail="This plan is available only with annual billing")
-        raise HTTPException(status_code=400, detail="This plan has no paid price to check out")
-    return int(amount)
-
-
-async def _fetch_paid_order(req: "VerifyPaymentRequest", creds: Dict[str, Any]) -> dict[str, Any]:
-    """Fetch and validate the authoritative gateway order and its purchased item."""
-    gateway = req.gateway.lower()
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        if gateway == "razorpay":
-            key_id, secret = creds.get("razorpay_key_id"), creds.get("razorpay_key_secret")
-            if not key_id or not secret:
-                raise HTTPException(status_code=400, detail="Razorpay gateway is not configured")
-            order_response = await client.get(
-                f"https://api.razorpay.com/v1/orders/{req.order_id}", auth=(key_id, secret)
-            )
-            if not req.payment_id:
-                raise HTTPException(status_code=400, detail="Razorpay payment ID is required")
-            payment_response = await client.get(
-                f"https://api.razorpay.com/v1/payments/{req.payment_id}", auth=(key_id, secret)
-            )
-            if order_response.status_code != 200 or payment_response.status_code != 200:
-                raise HTTPException(status_code=402, detail="Payment order could not be verified")
-            order = order_response.json()
-            payment = payment_response.json()
-            if (
-                order.get("id") != req.order_id
-                or order.get("status") != "paid"
-                or payment is None
-                or payment.get("order_id") != req.order_id
-                or payment.get("status") != "captured"
-                or payment.get("amount") != order.get("amount")
-                or payment.get("currency") != order.get("currency")
-            ):
-                raise HTTPException(status_code=402, detail="Payment is not captured for this order")
-            return {
-                "amount": order["amount"], "currency": order["currency"],
-                "metadata": order.get("notes", {}),
-                "payment_id": payment.get("id"),
-            }
-
-        if gateway == "stripe":
-            secret = creds.get("stripe_secret_key")
-            if not secret:
-                raise HTTPException(status_code=400, detail="Stripe gateway is not configured")
-            response = await client.get(
-                f"https://api.stripe.com/v1/checkout/sessions/{req.order_id}",
-                headers={"Authorization": f"Bearer {secret}"},
-            )
-            if response.status_code != 200:
-                raise HTTPException(status_code=402, detail="Payment session could not be verified")
-            session = response.json()
-            if (
-                session.get("id") != req.order_id
-                or session.get("payment_status") != "paid"
-                or not session.get("payment_intent")
-                or (req.payment_id and session.get("payment_intent") != req.payment_id)
-            ):
-                raise HTTPException(status_code=402, detail="Payment is not complete for this session")
-            return {
-                "amount": session.get("amount_total"),
-                "currency": str(session.get("currency", "")).upper(),
-                "metadata": session.get("metadata", {}),
-                "payment_id": session.get("payment_intent"),
-            }
-
-    raise HTTPException(status_code=400, detail=f"Unsupported gateway '{req.gateway}'")
-
-
-def _validate_order_metadata(metadata: dict[str, Any], organization_id: int) -> tuple[str, str, str]:
-    """Require the paid order to name exactly one item owned by this organization."""
-    if str(metadata.get("organization_id")) != str(organization_id):
-        raise HTTPException(status_code=403, detail="Payment order belongs to another organization")
-    package_id = str(metadata.get("package_id") or "")
-    plan_code = str(metadata.get("plan_code") or "")
-    if bool(package_id) == bool(plan_code):
-        raise HTTPException(status_code=400, detail="Payment order has an invalid item reference")
-    billing_cycle = str(metadata.get("billing_cycle") or "monthly")
-    if billing_cycle not in {"monthly", "annual"}:
-        raise HTTPException(status_code=400, detail="Payment order has an invalid billing cycle")
-    return package_id, plan_code, billing_cycle
-
-
-def _order_organization_id(metadata: dict[str, Any]) -> int:
+def verify_stripe_webhook_signature(body: bytes, signature: str, secret: str) -> bool:
+    """Verify a fresh Stripe v1 signature over the unmodified request body."""
+    if not secret or not signature:
+        return False
     try:
-        organization_id = int(metadata.get("organization_id"))
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400, detail="Payment order has an invalid organization reference") from None
-    if organization_id <= 0:
-        raise HTTPException(status_code=400, detail="Payment order has an invalid organization reference")
-    return organization_id
-
-
-def _paid_plan_assignment(plan: SaaSPlanModel, billing_cycle: str) -> dict[str, Any]:
-    """Describe a finite, manually renewable term for the atomic wallet grant."""
-    return {
-        "plan_code": plan.code,
-        "plan_name": plan.name,
-        "billing_cycle": billing_cycle,
-        "_term_days": 365 if billing_cycle == "annual" else 30,
-    }
+        fields = [part.split("=", 1) for part in signature.split(",") if "=" in part]
+        timestamps = [value for key, value in fields if key == "t"]
+        if len(timestamps) != 1 or abs(datetime.now(UTC).timestamp() - int(timestamps[0])) > 300:
+            return False
+        expected = hmac.new(secret.encode(), timestamps[0].encode() + b"." + body, hashlib.sha256).hexdigest()
+        return any(hmac.compare_digest(expected, value) for key, value in fields if key == "v1")
+    except (TypeError, ValueError, UnicodeError):
+        return False
 
 
 # -----------------------------------------------------------------------------
@@ -330,6 +232,11 @@ async def create_payment_order(req: CreateOrderRequest, user: UserModel = Depend
         raise HTTPException(status_code=400, detail="User has no selected organization")
 
     creds = await get_gateway_credentials()
+    gateway = req.gateway.lower()
+    if gateway not in {"razorpay", "stripe"}:
+        raise HTTPException(status_code=400, detail="Unsupported payment gateway")
+    if not creds.get(gateway + "_enabled"):
+        raise HTTPException(status_code=503, detail="Payment gateway is not configured")
     item_title = ""
     amount_units = 0 # in paise (INR) or cents (USD)
     currency = req.currency or "INR"
@@ -351,7 +258,8 @@ async def create_payment_order(req: CreateOrderRequest, user: UserModel = Depend
                 raise HTTPException(status_code=404, detail="Active credit package not found")
             item_title = package.name
             currency = package.currency or currency
-            amount_units = _minor_units_to_gateway_units(package.price_cents)
+            # Admin prices are already stored in minor units (paise/cents).
+            amount_units = package.price_cents
             minutes_to_credit = package.minutes + (package.bonus_minutes or 0)
             package_ref = str(package.id)
 
@@ -373,8 +281,8 @@ async def create_payment_order(req: CreateOrderRequest, user: UserModel = Depend
                 raise HTTPException(status_code=404, detail="Active SaaS plan not found")
             item_title = f"{plan.name} Plan ({req.billing_cycle})"
             currency = plan.currency or currency
-            base_cents = _plan_price_for_checkout(plan, req.billing_cycle or "monthly")
-            amount_units = _minor_units_to_gateway_units(base_cents)
+            base_cents = plan.annual_price_cents if req.billing_cycle == "annual" else plan.monthly_price_cents
+            amount_units = base_cents
             minutes_to_credit = plan.included_monthly_minutes
             plan_ref = plan.code
         else:
@@ -427,10 +335,7 @@ async def create_payment_order(req: CreateOrderRequest, user: UserModel = Depend
             except Exception as e:
                 logger.error(f"[Payments] Razorpay connection error: {e}")
 
-        raise HTTPException(
-            status_code=503,
-            detail="Razorpay checkout is unavailable; configure valid gateway credentials and retry",
-        )
+        raise HTTPException(status_code=502, detail="Payment provider could not create an order")
 
     elif req.gateway.lower() == "stripe":
         stripe_sec = creds["stripe_secret_key"]
@@ -454,7 +359,6 @@ async def create_payment_order(req: CreateOrderRequest, user: UserModel = Depend
                             "metadata[minutes]": str(minutes_to_credit),
                             "metadata[package_id]": package_ref or "",
                             "metadata[plan_code]": plan_ref or "",
-                            "metadata[billing_cycle]": req.billing_cycle or "monthly",
                         },
                     )
                     if stripe_res.status_code in (200, 201):
@@ -471,10 +375,7 @@ async def create_payment_order(req: CreateOrderRequest, user: UserModel = Depend
             except Exception as e:
                 logger.error(f"[Payments] Stripe session creation error: {e}")
 
-        raise HTTPException(
-            status_code=503,
-            detail="Stripe checkout is unavailable; configure valid gateway credentials and retry",
-        )
+        raise HTTPException(status_code=502, detail="Payment provider could not create a checkout")
 
     raise HTTPException(status_code=400, detail=f"Unsupported gateway '{req.gateway}'")
 
@@ -504,20 +405,43 @@ async def verify_payment(req: VerifyPaymentRequest, user: UserModel = Depends(ge
         if not verify_razorpay_signature(req.order_id, req.payment_id, req.signature, secret):
             raise HTTPException(status_code=400, detail="Invalid Razorpay payment signature")
 
-    paid_order = await _fetch_paid_order(req, creds)
-    package_ref, plan_ref, billing_cycle = _validate_order_metadata(
-        paid_order["metadata"], org_id
+    try:
+        receipt = await verify_payment_receipt(
+            gateway=req.gateway.lower(), order_id=req.order_id, payment_id=req.payment_id,
+            organization_id=org_id, credentials=creds,
+        )
+    except PaymentReceiptError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    minutes_to_add = receipt.minutes
+    assigned_plan_code = receipt.plan_code
+
+    # Credit minutes to organization wallet
+    wallet = await kodewaves_db_client.add_minutes(
+        organization_id=org_id,
+        minutes=minutes_to_add,
+        reason="plan_subscription" if assigned_plan_code else "credit_purchase",
+        reference_id=receipt.reference_id,
+        notes=f"Payment verified via {req.gateway.upper()} (Order: {req.order_id})",
     )
-    if req.package_id and req.package_id != package_ref:
-        raise HTTPException(status_code=400, detail="Package does not match the paid order")
-    if (req.plan_id or req.plan_code) and (req.plan_code or req.plan_id) != plan_ref:
-        raise HTTPException(status_code=400, detail="Plan does not match the paid order")
-    return await _grant_paid_order(
-        paid_order,
-        org_id,
-        req.gateway.lower(),
-        paid_order.get("payment_id") or req.payment_id or req.order_id,
-        req.order_id,
+
+    if assigned_plan_code:
+        await kodewaves_db_client.set_setting(
+            f"org_plan_{org_id}",
+            {"plan_code": assigned_plan_code, "updated_at": datetime.now(UTC).isoformat()},
+            category="plan",
+        )
+
+    logger.info(
+        f"[Payments] Credited {minutes_to_add} minutes to org {org_id}. "
+        f"New balance: {wallet.credit_balance_minutes}. Ref: {req.payment_id}"
+    )
+
+    return VerifyPaymentResponse(
+        success=True,
+        message=f"Payment of {minutes_to_add} voice minutes confirmed and added to your balance.",
+        minutes_added=minutes_to_add,
+        new_wallet_balance=wallet.credit_balance_minutes,
+        plan_code=assigned_plan_code,
     )
 
 
@@ -534,11 +458,10 @@ async def razorpay_webhook(
     creds = await get_gateway_credentials()
     secret = creds["razorpay_webhook_secret"]
 
-    if not secret or not x_razorpay_signature:
-        raise HTTPException(status_code=400, detail="Razorpay webhook signature is not configured or missing")
-    if not verify_razorpay_webhook_signature(body, x_razorpay_signature, secret):
-        logger.warning("[Payments] Invalid Razorpay webhook signature")
-        raise HTTPException(status_code=400, detail="Invalid signature")
+    if not secret:
+        raise HTTPException(status_code=503, detail="Razorpay webhook is not configured")
+    if not x_razorpay_signature or not verify_razorpay_webhook_signature(body, x_razorpay_signature, secret):
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
     try:
         event = json.loads(body.decode("utf-8"))
@@ -548,17 +471,35 @@ async def razorpay_webhook(
     event_type = event.get("event")
     logger.info(f"[Payments] Razorpay webhook received: {event_type}")
 
-    if event_type == "payment.captured":
-        payment = event.get("payload", {}).get("payment", {}).get("entity", {})
-        order_id, payment_id = payment.get("order_id"), payment.get("id")
-        if not order_id or not payment_id:
-            raise HTTPException(status_code=400, detail="Captured payment is missing its order reference")
-        paid = await _fetch_paid_order(
-            VerifyPaymentRequest(gateway="razorpay", order_id=order_id, payment_id=payment_id),
-            creds,
-        )
-        organization_id = _order_organization_id(paid["metadata"])
-        await _grant_paid_order(paid, organization_id, "razorpay", payment_id, order_id)
+    if event_type in ("payment.captured", "order.paid"):
+        payload = event.get("payload", {})
+        payment_entity = payload.get("payment", {}).get("entity", {})
+        notes = payment_entity.get("notes", {})
+
+        org_id_str = notes.get("organization_id")
+        minutes_str = notes.get("minutes")
+        payment_id = payment_entity.get("id")
+
+        if org_id_str and minutes_str:
+            try:
+                org_id = int(org_id_str)
+                minutes = int(minutes_str)
+                if org_id <= 0 or minutes <= 0 or not payment_id:
+                    raise ValueError("Invalid payment entitlement")
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Invalid payment entitlement") from None
+            try:
+                await kodewaves_db_client.add_minutes(
+                    organization_id=org_id,
+                    minutes=minutes,
+                    reason="credit_purchase",
+                    reference_id=payment_id,
+                    notes=f"Razorpay webhook: {event_type}",
+                )
+                logger.info(f"[Payments] Webhook credited {minutes} minutes to Org #{org_id}")
+            except Exception as e:
+                logger.error(f"[Payments] Webhook credit error: {e}")
+                raise HTTPException(status_code=503, detail="Payment credit could not be recorded") from e
 
     return {"status": "ok"}
 
@@ -576,23 +517,10 @@ async def stripe_webhook(
     creds = await get_gateway_credentials()
     webhook_secret = creds["stripe_webhook_secret"]
 
-    if not webhook_secret or not stripe_signature:
-        raise HTTPException(status_code=400, detail="Stripe webhook signature is not configured or missing")
-    try:
-        parts = [part.split("=", 1) for part in stripe_signature.split(",") if "=" in part]
-        timestamp = next((value for key, value in parts if key == "t"), "")
-        signatures = [value for key, value in parts if key == "v1"]
-        if not timestamp or abs(int(datetime.now(UTC).timestamp()) - int(timestamp)) > 300:
-            raise HTTPException(status_code=400, detail="Stripe webhook timestamp is invalid or expired")
-        signed_payload = f"{timestamp}.".encode("utf-8") + body
-        computed = hmac.new(webhook_secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
-        if not any(hmac.compare_digest(computed, candidate) for candidate in signatures):
-            raise HTTPException(status_code=400, detail="Invalid Stripe webhook signature")
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.warning(f"[Payments] Stripe signature check error: {e}")
-        raise HTTPException(status_code=400, detail="Error validating Stripe webhook signature")
+    if not webhook_secret:
+        raise HTTPException(status_code=503, detail="Stripe webhook is not configured")
+    if not stripe_signature or not verify_stripe_webhook_signature(body, stripe_signature, webhook_secret):
+        raise HTTPException(status_code=400, detail="Invalid Stripe webhook signature")
 
     try:
         event = json.loads(body.decode("utf-8"))
@@ -602,15 +530,44 @@ async def stripe_webhook(
     event_type = event.get("type")
     logger.info(f"[Payments] Stripe webhook received: {event_type}")
 
-    if event_type == "checkout.session.completed":
+    # These are one-time Checkout purchases. Recurring invoice entitlements
+    # need their own subscription reconciliation rather than another top-up.
+    if event_type in ("checkout.session.completed", "payment_intent.succeeded"):
         data_obj = event.get("data", {}).get("object", {})
-        order_id, payment_id = data_obj.get("id"), data_obj.get("payment_intent")
-        if not order_id or not payment_id:
-            raise HTTPException(status_code=400, detail="Completed Stripe session is missing its payment reference")
-        paid = await _fetch_paid_order(
-            VerifyPaymentRequest(gateway="stripe", order_id=order_id, payment_id=payment_id), creds
+        metadata = data_obj.get("metadata", {})
+        org_id_str = metadata.get("organization_id")
+        minutes_str = metadata.get("minutes")
+        # Checkout redirects identify a session, while verification and payment
+        # events identify its PaymentIntent. Use one credit reference for both.
+        payment_id = data_obj.get("id") if event_type == "payment_intent.succeeded" else data_obj.get("payment_intent")
+        if isinstance(payment_id, dict):
+            payment_id = payment_id.get("id")
+        paid = (
+            data_obj.get("status") == "succeeded" if event_type == "payment_intent.succeeded"
+            else data_obj.get("payment_status") == "paid"
         )
-        organization_id = _order_organization_id(paid["metadata"])
-        await _grant_paid_order(paid, organization_id, "stripe", payment_id, order_id)
+        if not paid:
+            return {"status": "ok"}
+
+        if org_id_str and minutes_str:
+            try:
+                org_id = int(org_id_str)
+                minutes = int(minutes_str)
+                if org_id <= 0 or minutes <= 0 or not isinstance(payment_id, str) or not payment_id:
+                    raise ValueError("Invalid payment entitlement")
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Invalid payment entitlement") from None
+            try:
+                await kodewaves_db_client.add_minutes(
+                    organization_id=org_id,
+                    minutes=minutes,
+                    reason="credit_purchase",
+                    reference_id=payment_id,
+                    notes=f"Stripe webhook: {event_type}",
+                )
+                logger.info(f"[Payments] Stripe webhook credited {minutes} minutes to Org #{org_id}")
+            except Exception as e:
+                logger.error(f"[Payments] Stripe credit error: {e}")
+                raise HTTPException(status_code=503, detail="Payment credit could not be recorded") from e
 
     return {"status": "ok"}

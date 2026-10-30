@@ -12774,7 +12774,7 @@
                 "type": "null"
               }
             ],
-            "default": "",
+            "default": "/kodewaves-brand.svg",
             "title": "Logo Url"
           },
           "max_concurrent_calls": {

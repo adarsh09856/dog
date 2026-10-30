@@ -261,9 +261,10 @@ services:
       JWT_SECRET: "${OSS_JWT_SECRET}"
       MASTER_CREDENTIAL_ENCRYPTION_KEY: "${MASTER_CREDENTIAL_ENCRYPTION_KEY:-}"
       OLLAMA_ENDPOINT: "${OLLAMA_ENDPOINT:-http://ollama:11434}"
-      # Set the local LLM inference thread budget independently of API workers.
+      # Set the local LLM's inference thread budget independently of API workers.
       OLLAMA_NUM_THREADS: "${OLLAMA_NUM_THREADS:-3}"
       WHISPER_ENDPOINT: "${WHISPER_ENDPOINT:-http://whisper:8000/v1}"
+      INDIC_STT_ENDPOINT: "${INDIC_STT_ENDPOINT:-http://indic-stt:8000/v1}"
       INDIC_MIO_TTS_ENDPOINT: "${INDIC_MIO_TTS_ENDPOINT:-http://indic-mio-tts:8000/v1}"
       INDIC_PARLER_TTS_ENDPOINT: "${INDIC_PARLER_TTS_ENDPOINT:-http://indic-parler-tts:8000/v1}"
       INDIC_VITS_TTS_ENDPOINT: "${INDIC_VITS_TTS_ENDPOINT:-http://indic-vits-tts:8000/v1}"
@@ -349,7 +350,8 @@ services:
       start_period: 20s
     networks:
       - app-network
-      # Shared with the aaPanel API project when split deployment is enabled.
+      # aaPanel runs the API in its own Compose project. Keep UI reachable by
+      # the API's fallback proxy, and allow UI to resolve that API service.
       - kodewaves-shared
 
   # Cloudflare tunnel for inbound webhook / WSS reachability when the host has no
@@ -445,6 +447,38 @@ services:
     networks:
       - app-network
 
+  # IndicConformer regional decoders and English Moonshine on CPU.
+  indic-stt:
+    build:
+      context: ./api/local_models/indic_stt
+    image: kodewaves-indic-stt:v1.0.0
+    container_name: kodewaves_indic_stt
+    restart: unless-stopped
+    profiles: ["indus"]
+    environment:
+      INDIC_STT_LANGUAGES: "${INDIC_STT_LANGUAGES:-all}"
+      INDIC_STT_PREWARM_LANGUAGES: "${INDIC_STT_PREWARM_LANGUAGES:-}"
+      INDIC_STT_THREADS: "${INDIC_STT_THREADS:-2}"
+      INDIC_STT_AUTO_DETECT: "${INDIC_STT_AUTO_DETECT:-1}"
+      INDIC_STT_LID_THREADS: "${INDIC_STT_LID_THREADS:-2}"
+      INDIC_STT_RESIDENT_MODELS: "${INDIC_STT_RESIDENT_MODELS:-4}"
+    volumes:
+      - indic_stt_models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+    networks:
+      - app-network
+
+  # Optional bilingual Inaya backend behind the combined speech endpoint.
   indus-tts:
     build:
       context: ./api/local_models/indus_tts
@@ -473,8 +507,6 @@ services:
           memory: 2048M
     networks:
       - app-network
-
-  # Small regional CPU voice model: 13 documented languages and 20 speakers.
 
   # Small regional CPU voice model: 13 documented languages and 20 speakers.
   indic-vits-tts:
@@ -605,6 +637,8 @@ volumes:
     driver: local
   ollama_data:
     driver: local
+  indic_stt_models:
+    driver: local
   indic_mio_tts_models:
     driver: local
   indic_vits_tts_models:
@@ -615,9 +649,6 @@ volumes:
 networks:
   app-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: "${KODEWAVES_NETWORK_SUBNET:-172.30.0.0/24}"
   kodewaves-shared:
     external: ${KODEWAVES_SHARED_NETWORK_EXTERNAL:-false}
     name: ${KODEWAVES_NETWORK_NAME:-kodewaves-network}

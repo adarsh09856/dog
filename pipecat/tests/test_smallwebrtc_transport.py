@@ -50,7 +50,10 @@ pytest.importorskip("av")
 from aiortc.mediastreams import MediaStreamError  # noqa: E402
 from av import AudioFrame, VideoFrame  # noqa: E402
 
-from pipecat.frames.frames import OutputTransportMessageUrgentFrame  # noqa: E402
+from pipecat.frames.frames import (  # noqa: E402
+    OutputAudioRawFrame,
+    OutputTransportMessageUrgentFrame,
+)
 from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection  # noqa: E402
 from pipecat.transports.smallwebrtc.transport import (  # noqa: E402
     CAM_VIDEO_SOURCE,
@@ -166,6 +169,35 @@ class TestRawAudioTrackUnderrunMetrics(unittest.IsolatedAsyncioTestCase):
         track._finish_speech_metrics()
         self.assertEqual(track._speech_summary[:2], (2, 2))
         self.assertFalse(track._bot_speaking)
+
+
+class TestPreconnectAudioOutput(unittest.IsolatedAsyncioTestCase):
+    async def test_drops_preconnect_mixer_audio_without_failing_output_worker(self):
+        client, connection = _make_client()
+        self.addAsyncCleanup(connection._pc.close)
+        frame = OutputAudioRawFrame(
+            audio=bytes(320), sample_rate=16_000, num_channels=1
+        )
+
+        self.assertTrue(await client.write_audio_frame(frame))
+        self.assertEqual(client._audio_write_failure_count, 0)
+
+        # After a real peer connection has existed, loss of output remains a
+        # failure and must still cancel/report through the normal path.
+        client._client_connected_once = True
+        self.assertFalse(await client.write_audio_frame(frame))
+        self.assertEqual(client._audio_write_failure_count, 1)
+
+    async def test_connection_closed_before_ice_establishes_still_fails_output(self):
+        client, connection = _make_client()
+        self.addAsyncCleanup(connection._pc.close)
+        client._client_closed_before_connect = True
+        frame = OutputAudioRawFrame(
+            audio=bytes(320), sample_rate=16_000, num_channels=1
+        )
+
+        self.assertFalse(await client.write_audio_frame(frame))
+        self.assertEqual(client._audio_write_failure_count, 1)
 
 
 class TestSendMessage(unittest.IsolatedAsyncioTestCase):

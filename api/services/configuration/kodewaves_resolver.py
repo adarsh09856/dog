@@ -49,7 +49,6 @@ from api.services.configuration.registry import (
 )
 from api.services.configuration.stt_capabilities import stt_model_supports_auto_detect
 from api.services.credentials.master_credential_service import master_credential_service
-from api.services.saas_entitlements import is_saas_feature_allowed
 
 CredentialSource = Literal["user_key", "master_key", "local"]
 
@@ -341,7 +340,6 @@ async def apply_kodewaves_sovereign_resolution(
     # 1. Global Policies and Wallet Check
     byok_policy = await kodewaves_db_client.get_setting("byok_policy")
     allow_byok = byok_policy.get("allow_user_byok", True) if byok_policy else True
-    allow_byok = allow_byok and await is_saas_feature_allowed(organization_id, "byok")
 
     if not allow_byok:
         for layer in (effective.llm, effective.stt, effective.tts, effective.realtime):
@@ -657,13 +655,11 @@ async def apply_kodewaves_sovereign_resolution(
                             detail="Select a local TTS voice or a spoken language before starting the call",
                         )
                     is_auto_lang = str(tts_lang).strip().casefold() in {"auto", "multi", "multilingual", "default"}
-                    if selected_model == "indic-vits-rasa-13" or is_auto_lang:
-                        # This multilingual model selects a matching installed voice
-                        # from the text at runtime; STT language does not restrict a
-                        # preferred/demo voice saved in the agent configuration.
+                    if is_auto_lang:
                         supported_voices = local_model_voice_ids(installed_model)
                     else:
                         supported_voices = local_model_voice_ids_for_language(installed_model, tts_lang)
+
                     if not supported_voices:
                         raise HTTPException(
                             status_code=400,

@@ -150,7 +150,7 @@ class RealtimeFeedbackObserver(BaseObserver):
             "gaps_over_750ms": 0,
         }
 
-    def _observe_voice_audio(self, data: FramePushed) -> None:
+    def _observe_voice_audio(self, data: FramePushed) -> dict | None:
         """Log numeric server-side audio timing when external event export is off."""
         frame = data.frame
         now = time.monotonic()
@@ -263,7 +263,21 @@ class RealtimeFeedbackObserver(BaseObserver):
                 stats["gaps_over_750ms"],
                 stats["frames"] == 0,
             )
-            return
+            return {
+                "type": "rtf-audio-health",
+                "turn": self._trace_turn,
+                "payload": {
+                    "stage": "tts_pcm",
+                    "first_audio_ms": round((float(first_audio_at) - started_at) * 1000.0, 1)
+                    if first_audio_at is not None else None,
+                    "synthesis_wall_ms": round((now - started_at) * 1000.0, 1),
+                    "audio_frames": int(stats["frames"]),
+                    "audio_duration_ms": round(float(stats["duration_ms"]), 1),
+                    "max_gap_ms": round(float(stats["max_gap_ms"]), 1),
+                    "gaps_over_750ms": int(stats["gaps_over_750ms"]),
+                    "no_audio": stats["frames"] == 0,
+                },
+            }
 
         if isinstance(frame, BotStoppedSpeakingFrame) and isinstance(
             data.source, BaseOutputTransport
@@ -289,6 +303,23 @@ class RealtimeFeedbackObserver(BaseObserver):
                 if first_speech_at is not None else None,
                 round(float(stats["max_internal_silence_ms"]), 1),
             )
+            return {
+                "type": "rtf-audio-health",
+                "turn": self._trace_turn,
+                "payload": {
+                    "stage": "transport_playback",
+                    "first_frame_ms": round((float(first_frame_at) - started_at) * 1000.0, 1)
+                    if first_frame_at is not None else None,
+                    "first_speech_frame_ms": round((float(first_speech_at) - started_at) * 1000.0, 1)
+                    if first_speech_at is not None else None,
+                    "output_wall_ms": round((now - started_at) * 1000.0, 1),
+                    "audio_frames": int(stats["frames"]),
+                    "audio_duration_ms": round(float(stats["duration_ms"]), 1),
+                    "max_gap_ms": round(float(stats["max_gap_ms"]), 1),
+                    "gaps_over_750ms": int(stats["gaps_over_750ms"]),
+                    "max_internal_silence_ms": round(float(stats["max_internal_silence_ms"]), 1),
+                },
+            }
 
     async def log_speech(self, text: str):
         """Persist speech that is intentionally excluded from assistant context."""
@@ -369,7 +400,9 @@ class RealtimeFeedbackObserver(BaseObserver):
         self._frames_seen.add(frame.id)
 
         if self._call_event_recorder is None:
-            self._observe_voice_audio(data)
+            audio_health_event = self._observe_voice_audio(data)
+            if audio_health_event is not None:
+                await self._append_to_buffer(audio_health_event)
 
         # Keep basic stage evidence in the normal run log even when the
         # organization has no optional external diagnostics destination.

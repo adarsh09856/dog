@@ -11,13 +11,8 @@ from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import ContactModel, LeadActivityModel, LeadStageModel
 from api.db.models import UserModel
 from api.services.auth.depends import get_user
-from api.services.saas_entitlements import require_saas_feature
 
-router = APIRouter(
-    prefix="/crm",
-    tags=["crm"],
-    dependencies=[Depends(require_saas_feature("crm"))],
-)
+router = APIRouter(prefix="/crm", tags=["crm"])
 
 
 class ContactCreateRequest(BaseModel):

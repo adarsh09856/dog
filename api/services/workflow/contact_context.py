@@ -27,17 +27,17 @@ _PHONE_REQUEST = re.compile(
     re.IGNORECASE,
 )
 _EXPLICIT_NAME_ANSWER = re.compile(
-    r"^(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is|mera\s+naam)\s+(.+?)"
+    r"^(?:(?:uh|um)[,]?\s+)?(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is|mera\s+naam)\s+(.+?)"
     r"(?:\s+(?:hai|है|हूँ))?[.!?।\s]*$",
     re.IGNORECASE,
 )
 _EXPLICIT_NAME_PREFIX = re.compile(
-    r"^(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is)\s+(.+?)"
+    r"^(?:(?:uh|um)[,]?\s+)?(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is)\s+(.+?)"
     r"(?=\s+(?:and\s+(?:i|we)\b|but\b|i\s+(?:need|want|would|am)\b|my\s+(?:phone|number)\b)|[,.!?]|$)",
     re.IGNORECASE,
 )
 _HINDI_NAME_ANSWER = re.compile(
-    r"^(?:मेरा\s+नाम|मैं)\s+(.+?)(?:\s+(?:है|हूँ))?[.!?।\s]*$"
+    r"^(?:(?:अः|अह|उम्)[,،]?\s+)?(?:मेरा\s+नाम|मैं)\s+(.+?)(?:\s+(?:है|हूँ))?[.!?।\s]*$"
 )
 _HINDI_NAME_PREFIX = re.compile(
     r"^(?:(?:अः|अह|अच्छा)\s*)?मेरा\s+नाम\s+(.+?)\s+है(?=$|[\s,।.!])"
@@ -138,8 +138,7 @@ def remember_explicit_caller_name(messages: list, state: dict) -> str | None:
             # unless the assistant explicitly asked for the caller's name.
             explicit = re.match(
                 r"(?:(?:uh|um)[,]?\s+)?(?:(?:actually|correction|sorry)\s*[, :]?\s*)?"
-                r"(?:my\s+name\s+is|this\s+is|mera\s+naam|मेरा\s+नाम)",
-                segment, re.IGNORECASE,
+                r"(?:my\s+name\s+is|this\s+is|mera\s+naam|मेरा\s+नाम)", segment, re.IGNORECASE
             )
             prompted_identity = _ASK_FOR_NAME.search(assistant_prompt) and re.match(
                 r"(?:(?:uh|um)[,]?\s+)?(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:i\s+am|i'm)",
@@ -285,60 +284,130 @@ def _spoken_date_number(tokens: list[str]) -> int | None:
     return None
 
 
+def _date_fragment_tokens(statement: str) -> list[str]:
+    normalized = statement.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
+    raw_tokens = re.findall(r"[^\s,।.!?;:]+", normalized.casefold())
+    tokens = []
+    for token in raw_tokens:
+        token = re.sub(r"(?<=\d)(?:st|nd|rd|th)$", "", token)
+        if token in _DATE_WORD_ALIASES:
+            tokens.append(_DATE_WORD_ALIASES[token])
+        else:
+            tokens.extend(_DATE_WORD_ALIASES.get(part, part) for part in token.split("-") if part)
+    return tokens
+
+
+def _parse_explicit_date_statement(
+    statement: str, *, reference_date: date | None = None
+) -> str | None:
+    """Parse a date in either day-first or month-first English order."""
+    tokens = [
+        token for token in _date_fragment_tokens(statement)
+        if token not in {"of", "the", "on", "में", "को"}
+    ]
+    def is_day_token(word: str) -> bool:
+        if word.isdecimal():
+            return len(word) != 4 and 1 <= int(word) <= 31
+        return word in _DATE_SMALL_NUMBERS or word in _DATE_COMPOSITE_NUMBERS
+
+    for month_index, token in enumerate(tokens):
+        month = _DATE_MONTHS.get(token)
+        if month is None:
+            continue
+        # In "October twenty-seventh 2026", take the day immediately after
+        # the month. Otherwise accept the existing day-first form before it.
+        after_tokens = tokens[month_index + 1:]
+        after_day_tokens = []
+        year_phrase_starts_here = after_tokens[:2] in (
+            ["twenty", "twenty"], ["20", "twenty"]
+        )
+        if not year_phrase_starts_here:
+            for word in after_tokens:
+                if word in {"at", "time", "am", "pm", "बजे", "सुबह", "दोपहर", "शाम", "रात"}:
+                    break
+                if word.isdecimal() and len(word) == 4:
+                    break
+                if is_day_token(word):
+                    after_day_tokens.append(word)
+                elif after_day_tokens:
+                    break
+        day = None
+        consumed_after = 0
+        counts = (2, 1) if after_day_tokens[:1] in (["twenty"], ["thirty"]) else (1, 2)
+        for count in counts:
+            candidate_day = _spoken_date_number(after_day_tokens[:count])
+            if candidate_day is not None and 1 <= candidate_day <= 31:
+                day = candidate_day
+                consumed_after = count
+                break
+        if day is None or not 1 <= day <= 31:
+            before = [word for word in tokens[:month_index] if is_day_token(word)]
+            day = _spoken_date_number(before[-2:])
+            consumed_after = 0
+        if day is None or not 1 <= day <= 31:
+            continue
+
+        year_tokens = tokens[month_index + 1 + consumed_after:]
+        year = None
+        for index, word in enumerate(year_tokens):
+            if word.isdecimal() and len(word) == 4:
+                year = int(word)
+                break
+            following = year_tokens[index:index + 3]
+            if len(following) >= 3 and following[:2] in (
+                ["twenty", "twenty"], ["20", "twenty"]
+            ):
+                suffix = _spoken_date_number(following[2:3])
+                if suffix is not None and 0 <= suffix <= 99:
+                    year = 2020 + suffix
+                    break
+            if len(following) >= 2 and following[:1] == ["twenty"]:
+                suffix = _spoken_date_number(following[1:2])
+                if suffix is not None and 0 <= suffix <= 99:
+                    year = 2000 + suffix
+                    break
+            if len(following) >= 2 and following[0] == "20" and following[1].isdecimal():
+                suffix = int(following[1])
+                if 0 <= suffix <= 99:
+                    year = 2000 + suffix
+                    break
+
+        inferred_year = year is None and reference_date is not None
+        if inferred_year:
+            year = reference_date.year
+        if year is None or not 1900 <= year <= 2200:
+            continue
+        try:
+            parsed = date(year, month, day)
+            if inferred_year and parsed < reference_date:
+                continue
+            return parsed.isoformat()
+        except ValueError:
+            continue
+    return None
+
+
 def _explicit_caller_booking_date(
     statements: list[str], *, reference_date: date | None = None
 ) -> str | None:
-    """Parse a stated date; only infer this year when a reference is supplied."""
-    for statement in reversed(statements):
-        normalized = statement.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
-        # Python's \w splits Devanagari letters from their combining vowel
-        # marks. Split on whitespace and punctuation so Hindi month names stay
-        # intact for the alias table.
-        tokens = re.findall(r"[^\s,।.!?;:]+", normalized.casefold())
-        tokens = [re.sub(r"(?<=\d)(?:st|nd|rd|th)$", "", token) for token in tokens]
-        tokens = [_DATE_WORD_ALIASES.get(token, token) for token in tokens]
-        for index, token in enumerate(tokens):
-            month = _DATE_MONTHS.get(token)
-            if month is None:
-                continue
-            day_words = [
-                word for word in tokens[:index]
-                if word.isdecimal()
-                or word in _DATE_SMALL_NUMBERS
-                or word in _DATE_COMPOSITE_NUMBERS
-            ][-2:]
-            day = _spoken_date_number(day_words)
-            year_tokens = tokens[index + 1:index + 4]
-            year = (
-                int(year_tokens[0])
-                if year_tokens and year_tokens[0].isdecimal() and len(year_tokens[0]) == 4
-                else None
+    """Parse a stated date; join at most three consecutive speech fragments."""
+    usable = [item.strip() for item in statements if isinstance(item, str) and item.strip()]
+    for end in range(len(usable) - 1, -1, -1):
+        latest_tokens = _date_fragment_tokens(usable[end])
+        date_like = any(
+            token in _DATE_MONTHS or token in _DATE_SMALL_NUMBERS
+            or token in _DATE_COMPOSITE_NUMBERS
+            or (token.isdecimal() and len(token) in (1, 2, 4))
+            for token in latest_tokens
+        )
+        if not date_like:
+            continue
+        for start in range(end, max(-1, end - 3), -1):
+            parsed = _parse_explicit_date_statement(
+                " ".join(usable[start:end + 1]), reference_date=reference_date
             )
-            if year is None and len(year_tokens) >= 3 and year_tokens[:2] == ["twenty", "twenty"]:
-                suffix = _spoken_date_number(year_tokens[2:3])
-                if suffix is not None and 0 <= suffix <= 99:
-                    year = 2020 + suffix
-            elif year is None and len(year_tokens) >= 3 and year_tokens[0] == "20" and year_tokens[1] == "twenty":
-                suffix = _spoken_date_number(year_tokens[2:3])
-                if suffix is not None and 0 <= suffix <= 99:
-                    year = 2020 + suffix
-            elif year is None and len(year_tokens) >= 2 and year_tokens[0] == "twenty":
-                suffix = _spoken_date_number(year_tokens[1:2])
-                if suffix is not None and 0 <= suffix <= 99:
-                    year = 2000 + suffix
-            inferred_year = year is None and reference_date is not None
-            if inferred_year:
-                year = reference_date.year
-            if day is None or year is None or not 1900 <= year <= 2200:
-                continue
-            try:
-                parsed = date(year, month, day)
-                # Do not silently guess that a date already past is next year.
-                if inferred_year and parsed < reference_date:
-                    continue
-                return parsed.isoformat()
-            except ValueError:
-                continue
+            if parsed:
+                return parsed
     return None
 
 
@@ -429,23 +498,35 @@ def booking_date_time_question(
         return None
     if not any(new_booking_requested(message["content"]) for message in users[:-1]):
         return None
-    if re.search(
+    relative_date = re.search(r"\b(?:tomorrow|today|kal|aaj)\b|कल|आज", latest, re.I)
+    if not relative_date and re.search(
         r"\b(?:at|time|am|pm)\b|\d{1,2}:\d{2}|समय|बजे|सुबह|दोपहर|शाम|रात",
         latest,
         re.IGNORECASE,
     ):
         return None
     today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
-    if re.fullmatch(r"\s*(?:अः\s*)?(?:कल(?:\s+का)?|tomorrow)(?:\s+(?:please|कृपया))?[.!?।\s]*", latest, re.I):
+    if relative_date and re.search(r"\b(?:tomorrow|kal)\b|कल", latest, re.I):
         stated_date = (today + timedelta(days=1)).isoformat()
-    elif re.fullmatch(r"\s*(?:अः\s*)?(?:आज(?:\s+का)?|today)(?:\s+(?:please|कृपया))?[.!?।\s]*", latest, re.I):
+    elif relative_date:
         stated_date = today.isoformat()
     else:
-        stated_date = _explicit_caller_booking_date([latest], reference_date=today)
+        recent_user_statements = [
+            message["content"] for message in users[-3:]
+        ]
+        stated_date = _explicit_caller_booking_date(
+            recent_user_statements, reference_date=today
+        )
     if not stated_date:
         return None
-    if state.get("booking_time_question_date") == stated_date:
-        return None
+    # A caller may repeat the same relative date after an unclear time (for
+    # example, ASR text such as "Tomorrow's telepm"). Returning None here lets
+    # the LLM fill the missing time with a plausible but invented default.
+    # Keep the date and ask only for the still-missing time again.
+    # A new date without a time supersedes any previously proposed slot. Keep
+    # the caller on the deterministic date/time path instead of allowing the
+    # LLM to reuse or invent a time from the stale confirmation.
+    state.pop("booking_confirmation_slot", None)
     state["booking_time_question_date"] = stated_date
     parsed = date.fromisoformat(stated_date)
     hindi = state.get("reply_language") == "Hindi" or bool(
@@ -587,12 +668,39 @@ _SPOKEN_DIGITS = {
     "ஜீரோ": "0", "ஜிரோ": "0", "ஃபோர்": "4",
 }
 _DOUBLE_DIGIT_WORDS = {"double", "डबल", "ડબલ", "டபுள்"}
+_PHONE_DIGIT_READBACKS = {
+    "English": ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"),
+    "Hindi": ("शून्य", "एक", "दो", "तीन", "चार", "पाँच", "छह", "सात", "आठ", "नौ"),
+}
+
+
+def _phone_confirmation_reply(digits: str, *, hindi: bool) -> str:
+    """Read every phone digit separately, including repeated zeroes."""
+    names = _PHONE_DIGIT_READBACKS["Hindi" if hindi else "English"]
+    spoken_digits = ", ".join(names[int(digit)] for digit in digits)
+    if hindi:
+        return f"मैंने नंबर एक-एक अंक करके सुना: {spoken_digits}। क्या यह सही है? हाँ कहें या नंबर दोहराएँ।"
+    return f"I heard: {spoken_digits}. Is that correct? Say yes, or repeat the number."
+
+
 _PHONE_INTRO = re.compile(
     r"(?:(?:अः|अह|uh|um)\s+)?(?:मेरा\s+(?:मोबाइल|फोन)?\s*(?:नंबर|नम्बर)\s*(?:है)?|"
     r"(?:फोन\s+)?(?:नंबर|नम्बर)\s+(?:है|हैं)|"
     r"my\s+(?:mobile|phone)?\s*number\s*(?:is)?|"
     r"(?:phone\s+)?number\s+is)[,:\s]*", re.IGNORECASE
 )
+
+
+def _booking_was_requested(messages: list) -> bool:
+    from api.services.workflow.confirmed_booking import new_booking_requested
+
+    return any(
+        isinstance(message, dict)
+        and message.get("role") == "user"
+        and isinstance(message.get("content"), str)
+        and new_booking_requested(message["content"])
+        for message in messages
+    )
 
 
 def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
@@ -868,9 +976,12 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
     else:
         accumulated = previous_digits + current_digits
     if 10 <= len(accumulated) <= 15 and not unknown and not trailing_double:
-        if state.pop("caller_phone_uncertain_one", False):
-            # A newly spoken, uncertain number supersedes any older value only
-            # after the caller confirms the readback.
+        uncertain_one = state.pop("caller_phone_uncertain_one", False)
+        booking_requested = _booking_was_requested(messages[:latest_index])
+        if uncertain_one or booking_requested:
+            # In booking flows, keep the candidate uncommitted until the caller
+            # confirms a digit-by-digit readback. Non-booking ambiguous captures
+            # retain their existing confirmation behavior.
             for key in (
                 "caller_phone", "phone_just_completed", "approved_phone",
                 "caller_phone_digits",
@@ -878,6 +989,11 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
                 state.pop(key, None)
             state["caller_phone_confirmation_pending"] = accumulated
             state["awaiting_phone"] = True
+            if booking_requested:
+                hindi = state.get("reply_language") != "English" and bool(
+                    re.search(r"[\u0900-\u097f]", text + str(assistant_text))
+                )
+                return _phone_confirmation_reply(accumulated, hindi=hindi)
             suffix = accumulated[-4:]
             hindi = state.get("reply_language") != "English" and bool(
                 re.search(r"[\u0900-\u097f]", text + str(assistant_text))
@@ -890,6 +1006,7 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
         state.pop("caller_phone_digits", None)
         state["awaiting_phone"] = False
         return None
+
     if len(accumulated) > 15:
         state.pop("caller_phone_digits", None)
         state["awaiting_phone"] = True
@@ -1140,16 +1257,20 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         return None
     today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
     stated_date = None
-    if re.search(r"\b(?:tomorrow|today)\b|कल|आज", latest, re.I):
-        if re.search(r"\b(?:tomorrow)\b|कल", latest, re.I):
+    if re.search(r"\b(?:tomorrow|today|kal|aaj)\b|कल|आज", latest, re.I):
+        if re.search(r"\b(?:tomorrow|kal)\b|कल", latest, re.I):
             stated_date = (today + timedelta(days=1)).isoformat()
-        elif re.search(r"\b(?:today)\b|आज", latest, re.I):
+        elif re.search(r"\b(?:today|aaj)\b|आज", latest, re.I):
             stated_date = today.isoformat()
     if stated_date is None:
         stated_date = _explicit_caller_booking_date([latest], reference_date=today)
     date_was_in_latest = stated_date is not None
     if stated_date is None:
         stated_date = state.get("booking_time_question_date")
+    if not isinstance(stated_date, str):
+        stated_date = _explicit_caller_booking_date(
+            [message["content"] for message in users[-3:]], reference_date=today
+        )
     if not isinstance(stated_date, str):
         return None
     try:

@@ -548,6 +548,9 @@ function RunMetricsSection({
     gatheredContext: Record<string, string | number | boolean | object> | null;
 }) {
     const metrics = getTranscriptMetrics(logs, gatheredContext);
+    const speechDiagnostics = logs?.speech_diagnostics ?? [];
+    const audioHealth = speechDiagnostics.filter((event) => event.type === 'rtf-audio-health');
+    const formatMs = (value?: number | null) => value == null ? 'N/A' : `${Math.round(value)} ms`;
 
     return (
         <Card className="border-border">
@@ -561,6 +564,31 @@ function RunMetricsSection({
                 <MetricCard label="Tool Calls" value={String(metrics.toolCalls)} />
                 <MetricCard label="Nodes Visited" value={String(metrics.visitedNodes)} />
             </CardContent>
+            {audioHealth.length > 0 && (
+                <CardContent className="border-t border-border pt-4">
+                    <h3 className="mb-3 text-sm font-semibold">Speech timing and audio continuity</h3>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {audioHealth.map((event, index) => {
+                            const payload = event.payload;
+                            const stage = payload.stage ?? 'audio';
+                            const isPlayback = stage === 'transport_playback';
+                            const label = `Turn ${event.turn ?? index + 1} ${isPlayback ? 'playback' : 'TTS'}`;
+                            const value = isPlayback
+                                ? `First frame ${formatMs(payload.first_frame_ms)} · first audible ${formatMs(payload.first_speech_frame_ms)} · max silence ${formatMs(payload.max_internal_silence_ms)} · ${payload.gaps_over_750ms ?? 0} frame gaps >750 ms`
+                                : payload.no_audio
+                                    ? 'No audio'
+                                    : `First PCM ${formatMs(payload.first_audio_ms)} · synthesis ${formatMs(payload.synthesis_wall_ms)} · max gap ${formatMs(payload.max_gap_ms)} · ${payload.gaps_over_750ms ?? 0} gaps >750 ms`;
+                            return (
+                                <MetricCard
+                                    key={`${event.turn ?? index}-${stage}-${index}`}
+                                    label={label}
+                                    value={value}
+                                />
+                            );
+                        })}
+                    </div>
+                </CardContent>
+            )}
         </Card>
     );
 }

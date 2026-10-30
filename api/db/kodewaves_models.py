@@ -417,10 +417,16 @@ class AppointmentModel(Base):
 class FormModel(Base):
     """Custom form definition populated by voice agents"""
     __tablename__ = "forms"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "slug", name="uq_forms_organization_slug"
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
+    slug = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     fields_schema = Column(JSON, default=list, nullable=False)                     # [{id: 'f1', label: 'Company Size', type: 'select'}]
     is_active = Column(Boolean, default=True, nullable=False)

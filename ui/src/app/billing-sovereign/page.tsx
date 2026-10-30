@@ -15,7 +15,10 @@ import {
   Unlock,
   Zap,
 } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useAuth } from "@/lib/auth";
+import { startConfiguredCheckout } from "@/lib/billing/checkout";
+import { paymentsApi } from "@/lib/kodewavesApi";
+import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -212,105 +215,41 @@ export default function SovereignBillingPage() {
     if (!confirm(`Pay ${formatMinorUnits(price, plan.currency)} once for ${accessDays} days of ${plan.name} access? ${termNotice} It will not renew automatically. Included minutes are credited once and do not replenish monthly.`)) return;
     setSubscribingId(plan.id);
     try {
-      const config = await paymentsApi.getConfig();
-      if (config.razorpay_enabled && config.razorpay_key_id) {
-        const checkoutReady = await loadRazorpayCheckout();
-        if (!checkoutReady || !window.Razorpay) throw new Error("Razorpay checkout could not be loaded. Please retry.");
-        const order = await paymentsApi.createOrder({ plan_code: plan.code, gateway: "razorpay", billing_cycle: billingCycle });
-        new window.Razorpay({
-          key: order.key_id || config.razorpay_key_id,
-          amount: order.amount,
-          currency: order.currency,
-          name: branding.company_name,
-          description: `${plan.name} ${billingCycle} plan`,
-          order_id: order.order_id,
-          handler: async (result) => {
-            try {
-              const verified = await paymentsApi.verifyPayment({
-                gateway: "razorpay",
-                order_id: result.razorpay_order_id,
-                payment_id: result.razorpay_payment_id,
-                signature: result.razorpay_signature,
-                plan_code: plan.code,
-              });
-              alert(verified.message);
-              await fetchData();
-            } catch (err: unknown) {
-              alert(err instanceof Error ? err.message : "Payment verification failed");
-            } finally {
-              setSubscribingId(null);
-            }
-          },
-          modal: { ondismiss: () => setSubscribingId(null) },
-        }).open();
-        return;
+      if (plan.monthly_price_inr > 0 || plan.monthly_price_usd > 0) {
+        const result = await startConfiguredCheckout({ plan_id: String(plan.id), billing_cycle: "monthly" });
+        if (result.redirected) return;
+        alert(result.receipt.message);
+      } else {
+        const result = await sovereignBillingApi.subscribe(plan.id);
+        alert(result.message);
       }
-      if (config.stripe_enabled) {
-        const order = await paymentsApi.createOrder({ plan_code: plan.code, gateway: "stripe", billing_cycle: billingCycle });
-        if (!order.checkout_url) throw new Error("Stripe did not return a checkout URL");
-        window.location.assign(order.checkout_url);
-        return;
-      }
-      throw new Error("Payments are not configured for this platform. Contact the administrator.");
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to update subscription");
+      await fetchData();
+    } catch (err: any) {
+      alert(err.message || "Failed to update subscription");
+    } finally {
       setSubscribingId(null);
     }
   };
 
-  const handleCreditPackagePurchase = async (pkg: PublicCreditPackage) => {
-    const packageId = String(pkg.id);
-    if (wallet?.is_frozen) return;
-    const totalMinutes = pkg.minutes + pkg.bonus_minutes;
-    if (!confirm(`Buy ${pkg.name} for ${formatMinorUnits(pkg.price_cents, pkg.currency)}? This is a one-time payment for ${totalMinutes.toLocaleString()} wallet minutes. Provider and carrier charges may apply separately.`)) return;
-    setPurchasingPackageId(packageId);
-    try {
-      const config = await paymentsApi.getConfig();
-      if (config.razorpay_enabled && config.razorpay_key_id) {
-        const checkoutReady = await loadRazorpayCheckout();
-        if (!checkoutReady || !window.Razorpay) throw new Error("Razorpay checkout could not be loaded. Please retry.");
-        const order = await paymentsApi.createOrder({ package_id: packageId, gateway: "razorpay" });
-        new window.Razorpay({
-          key: order.key_id || config.razorpay_key_id,
-          amount: order.amount,
-          currency: order.currency,
-          name: branding.company_name,
-          description: `${pkg.name} credit bundle`,
-          order_id: order.order_id,
-          handler: async (result) => {
-            try {
-              const verified = await paymentsApi.verifyPayment({
-                gateway: "razorpay",
-                order_id: result.razorpay_order_id,
-                payment_id: result.razorpay_payment_id,
-                signature: result.razorpay_signature,
-                package_id: packageId,
-              });
-              alert(verified.message);
-              setSelectedCreditPackage(null);
-              await fetchData();
-            } catch (err: unknown) {
-              alert(err instanceof Error ? err.message : "Payment verification failed");
-            } finally {
-              setPurchasingPackageId(null);
-            }
-          },
-          modal: { ondismiss: () => setPurchasingPackageId(null) },
-        }).open();
-        return;
-      }
-      if (config.stripe_enabled) {
-        const order = await paymentsApi.createOrder({ package_id: packageId, gateway: "stripe" });
-        if (!order.checkout_url) throw new Error("Stripe did not return a checkout URL");
-        window.location.assign(order.checkout_url);
-        return;
-      }
-      throw new Error("Payments are not configured for this platform. Contact the administrator.");
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Credit bundle checkout failed");
-      setPurchasingPackageId(null);
-    }
-  };
+  useEffect(() => {
+    if (authLoading || !user) return;
+    const params = new URLSearchParams(window.location.search);
+    const session = params.get("session_id");
+    if (params.get("payment") !== "success" || !session) return;
+    let cancelled = false;
+    // A return URL is not payment proof: fetch the provider receipt through
+    // the authenticated backend before showing success or updating the wallet.
+    paymentsApi.verifyPayment({ gateway: "stripe", order_id: session, payment_id: session })
+      .then(async (receipt) => {
+        if (cancelled) return;
+        if (!receipt.success) throw new Error("Payment has not been verified.");
+        window.history.replaceState(null, "", window.location.pathname);
+        await fetchData();
+      }).catch((error) => {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Payment verification failed. Refresh before retrying payment.");
+      });
+    return () => { cancelled = true; };
+  }, [authLoading, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">

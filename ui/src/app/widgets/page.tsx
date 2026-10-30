@@ -9,7 +9,8 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useAuth } from "@/lib/auth";
+import React, { useEffect, useRef, useState } from "react";
 
 import { getWorkflowsApiV1WorkflowFetchGet } from "@/client/sdk.gen";
 import type { WorkflowListResponse } from "@/client/types.gen";
@@ -104,7 +105,7 @@ export default function WidgetsPage() {
       listRequest.current += 1;
       embedRequest.current += 1;
     };
-  }, [authLoading, user, fetchWidgets]);
+  }, [authLoading, user]);
 
   const handleSaveWidget = async () => {
     if (!editingWidget || !editingWidget.name) {

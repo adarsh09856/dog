@@ -216,6 +216,27 @@ class _BookingToolChoiceMixin:
                     yield chunk
                 complete = True
             finally:
+                trace_payload = {
+                    "model": getattr(getattr(self, "_settings", None), "model", None),
+                    "usage_context": getattr(self, "_usage_context", None)
+                    or "conversation_or_shared_inference",
+                    "headers_ms": round(headers_ms, 1),
+                    "first_event_ms": round(first_event_ms, 1)
+                    if first_event_ms is not None else None,
+                    "first_output_ms": round(first_output_ms, 1)
+                    if first_output_ms is not None else None,
+                    "total_ms": round((time.perf_counter() - started) * 1000, 1),
+                    "chunks": chunks,
+                    "prompt_tokens": prompt_tokens,
+                    "cached_prompt_tokens": cached_prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "history_messages": len(messages),
+                    "history_chars": message_chars,
+                    "system_chars": system_chars,
+                    "tools": tool_count,
+                    "finish_reason": finish_reason,
+                    "complete": complete,
+                }
                 logger.info(
                     "llm_stream_trace run={} model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} total_ms={} chunks={} prompt_tokens={} cached_prompt_tokens={} completion_tokens={} history_messages={} history_chars={} system_chars={} tools={} finish_reason={} complete={}",
                     get_current_run_id(),
@@ -236,6 +257,18 @@ class _BookingToolChoiceMixin:
                     finish_reason,
                     complete,
                 )
+                trace_sink = getattr(self, "_llm_trace_sink", None)
+                if callable(trace_sink):
+                    try:
+                        await trace_sink({
+                            "type": "rtf-llm-stream-trace",
+                            "payload": trace_payload,
+                        })
+                    except Exception as exc:
+                        logger.debug(
+                            "Could not persist numeric LLM stream diagnostics ({})",
+                            type(exc).__name__,
+                        )
                 close = getattr(stream, "close", None)
                 if callable(close):
                     await close()
@@ -243,11 +276,9 @@ class _BookingToolChoiceMixin:
         return traced_stream()
 
     async def _emit_direct_reply(self, text: str):
-        # OpenAI's process_frame owns the response start/end pair. Nested
-        # boundaries here leave aggregators waiting for an extra completion
-        # and can close a TTS context before the parent response finishes.
-        await self.start_ttfb_metrics()
-        await self.stop_ttfb_metrics()
+        # Fast replies bypass the model, so do not emit an LLM TTFB sample of
+        # zero. That value is misleading in the live transcript; real model
+        # requests still report their own TTFB through the normal service.
         await self._push_llm_text(text)
 
     def can_speculate_caller_turn(self, text: str) -> bool:
@@ -509,11 +540,23 @@ class _BookingToolChoiceMixin:
             raise
 
     def _completion_recovery_text(self, messages):
+        from api.services.configuration.language_normalizer import normalize_language_code
+        from api.services.pipecat.caller_language_context import _trusted_detected_language
+
         source = getattr(self, "_caller_language_source", None)
         settings = getattr(source, "_settings", None)
-        language = getattr(source, "latest_detected_language", None) or getattr(settings, "language", None)
+        # A recovery is spoken through the same TTS route as a normal reply.
+        # Honor an explicit caller choice and the confidence-filtered route;
+        # a weak raw detector label must not choose a different apology voice.
+        preference = getattr(source, "reply_language_override", None)
+        if not preference:
+            preference = getattr(
+                getattr(self, "_caller_language_context", None),
+                "_explicit_preference", None,
+            )
+        language = preference or _trusted_detected_language(source) or getattr(settings, "language", None)
         language = getattr(language, "value", language)
-        language = str(language or "").lower().replace("_", "-").split("-", 1)[0]
+        language = normalize_language_code(language)
         recovery = {
             "hi": "माफ़ कीजिए, जवाब देने में समस्या हुई। कृपया फिर से कोशिश करें।",
             "kn": "ಕ್ಷಮಿಸಿ, ಉತ್ತರ ನೀಡಲು ಸಮಸ್ಯೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
@@ -573,19 +616,30 @@ class _BookingToolChoiceMixin:
                 messages = list(messages)
                 messages.insert(first_user, {"role": "system", "content": "/no_think"})
                 params["messages"] = messages
-        if model.startswith(("qwen3:", "qwen3.5:")) and isinstance(messages, list):
-            # Keep Qwen reasoning concise across providers; Ollama's OpenAI
-            # endpoint accepts reasoning_effort, max_tokens, keep_alive, and
-            # stream usage. Native /api/chat options (think/num_ctx/num_thread)
-            # are not valid on this endpoint.
+        if (
+            getattr(self, "_kodewaves_local_ollama", False)
+            and model.startswith(("qwen3:", "qwen3.5:"))
+            and isinstance(messages, list)
+        ):
+            # Ollama's OpenAI endpoint reads reasoning_effort and max_tokens.
+            # Native /api/chat fields (think, options.num_thread/num_ctx/
+            # num_predict) are silently ignored here. Thread/context tuning
+            # must be persisted in the selected Ollama model's parameters so
+            # native warm-up and OpenAI conversation requests use one runner.
             params["reasoning_effort"] = "none"
-            if getattr(self, "_kodewaves_local_ollama", False):
-                extra_body = params.get("extra_body")
-                params["extra_body"] = {
-                    **(extra_body if isinstance(extra_body, dict) else {}),
-                    "keep_alive": "8760h",
-                }
-                params["stream_options"] = {"include_usage": True}
+            extra_body = params.get("extra_body")
+            params["extra_body"] = {
+                **(extra_body if isinstance(extra_body, dict) else {}),
+                # Prevent multi-minute model reloads on the first caller turn.
+                # The OpenAI-compatible endpoint parses this as a Go duration;
+                # a bare "-1" is rejected there (native /api/chat accepts -1).
+                "keep_alive": "8760h",
+            }
+            # Ollama's OpenAI-compatible streaming API sends input/output usage
+            # in a final chunk when requested. The trace wrapper records these
+            # counts without logging caller text, letting production distinguish
+            # slow prompt prefill from slow token generation.
+            params["stream_options"] = {"include_usage": True}
 
         from api.services.workflow.tools.booking import caller_confirmed_booking
 

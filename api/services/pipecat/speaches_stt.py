@@ -92,6 +92,11 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         # The SDK otherwise retries timeouts, multiplying the per-request wait.
         self._client.max_retries = 0
         self.latest_detected_language: str | None = None
+        # The local Indic service may decode with a fallback language that
+        # differs from its LID result. Keep both values: transcript/frame
+        # routing follows the detected language, while this records the
+        # decoder actually used for diagnostics.
+        self.latest_decoder_language: str | None = None
         # LLM language choice can use the best transcript guess, but TTS voice
         # routing must not treat a weak first-turn language guess as verified.
         self.latest_tts_language: str | None = None
@@ -99,6 +104,41 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         self._stable_detected_language: str | None = None
         self._latest_language_confidence: float | None = None
         self._recognizing_segment = False
+        self.phone_capture_pending = None
+
+    async def select_caller_language(self, language: str) -> bool:
+        """Honor a caller language choice without disabling automatic STT.
+
+        In auto mode the detector must remain active for every utterance. In a
+        fixed-language configuration, switch to a requested decoder only when
+        that language is actually installed in the local recognizer.
+        """
+        if self._settings.model != "indicconformer-ctc-int8":
+            return False
+        requested = str(language or "").strip().lower().replace("_", "-")
+        if requested in {"", "auto", "multi", "multilingual", "default", "unknown", "none"}:
+            return False
+        current = str(getattr(self._settings, "language", None) or "").strip().lower().replace("_", "-")
+        if current in {"", "auto", "multi", "multilingual", "default", "unknown", "none"}:
+            # Recognition remains per-utterance auto-detected. The caller's
+            # response-language preference is handled independently by the LLM.
+            return True
+        from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
+
+        code = LANGUAGE_NAME_TO_ISO.get(requested, requested.split("-", 1)[0])
+        if code not in LANGUAGE_NAME_TO_ISO.values() and len(code) not in (2, 3):
+            return False
+        inventory = await asyncio.wait_for(self._client.models.list(), timeout=2.0)
+        installed = {
+            str(value).lower().replace("_", "-").split("-", 1)[0]
+            for model in inventory.data
+            if model.id == self._settings.model
+            for value in (getattr(model, "languages", None) or [])
+        }
+        if code not in installed:
+            return False
+        await self._update_settings(STTSettings(language=code))
+        return True
 
     async def select_caller_language(self, language: str) -> bool:
         """Honor a caller language choice without disabling automatic STT.
@@ -235,12 +275,16 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         language_confidence = None
         language_route = "configured"
         self.latest_tts_language = None
+        phone_capture = bool(
+            callable(self.phone_capture_pending) and self.phone_capture_pending()
+        )
+        local_indic = settings is not None and settings.model == "indicconformer-ctc-int8"
+        auto_language = settings is not None and _is_auto_language(settings.language)
         if (
             settings is not None
-            and _is_auto_language(settings.language)
             and (
-                str(settings.model).startswith("Systran/faster-whisper-")
-                or settings.model == "indicconformer-ctc-int8"
+                (auto_language and str(settings.model).startswith("Systran/faster-whisper-"))
+                or (local_indic and (auto_language or phone_capture))
             )
         ):
             kwargs = {
@@ -248,12 +292,19 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 "model": settings.model,
                 "response_format": "verbose_json",
             }
-            if settings.prompt is not None:
+            if local_indic and not auto_language:
+                kwargs["language"] = str(settings.language).split("-", 1)[0]
+            if settings.prompt is not None and not local_indic:
                 kwargs["prompt"] = settings.prompt
             if settings.temperature is not None:
                 kwargs["temperature"] = settings.temperature
-            if settings.model == "indicconformer-ctc-int8" and self._stable_detected_language:
-                kwargs["extra_body"] = {"fallback_language": self._stable_detected_language}
+            extra_body = {}
+            if local_indic and auto_language and self._stable_detected_language:
+                extra_body["fallback_language"] = self._stable_detected_language
+            if local_indic and phone_capture:
+                extra_body["phone_capture"] = True
+            if extra_body:
+                kwargs["extra_body"] = extra_body
             result = await self._client.audio.transcriptions.create(**kwargs)
             response_extra = getattr(result, "model_extra", None) or {}
             raw_confidence = response_extra.get("language_confidence")
@@ -265,12 +316,28 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             detected_language = response_extra.get("detected_language") or selected
             if isinstance(detected_language, str):
                 detected_language = detected_language.strip().lower()
-            if settings.model == "indicconformer-ctc-int8":
-                self.latest_detected_language = (
+            if local_indic:
+                language_route = response_extra.get("language_route", "detector")
+                self.latest_decoder_language = (
                     selected.strip().lower() if isinstance(selected, str) and selected.strip() else None
                 )
-                language_route = response_extra.get("language_route", "detector")
+                if language_route in {"phone_hi_rescue", "phone_en_rescue"}:
+                    self.latest_decoder_language = language_route.removeprefix("phone_").removesuffix("_rescue")
+                if auto_language:
+                    self.latest_detected_language, resolved_route = _resolve_auto_language(
+                        detected_language if isinstance(detected_language, str) else None,
+                        language_confidence,
+                        self._stable_detected_language,
+                    )
+                    # Preserve detector/decode rescue routes unless language
+                    # normalization or confidence hysteresis deliberately
+                    # changed the selected language.
+                    if resolved_route != "detector":
+                        language_route = resolved_route
+                else:
+                    self.latest_detected_language = self.latest_decoder_language
             else:
+                self.latest_decoder_language = None
                 self.latest_detected_language, language_route = _resolve_auto_language(
                     detected_language if isinstance(detected_language, str) else None,
                     language_confidence,
@@ -281,6 +348,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 result = result.model_copy(update={"language": self.latest_detected_language})
         else:
             self.latest_detected_language = None
+            self.latest_decoder_language = None
             self._latest_language_confidence = None
             result = await super()._transcribe(normalized)
         text = (getattr(result, "text", None) or "").strip()
@@ -301,7 +369,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 language_confidence is None
                 or language_confidence >= (
                     AUTO_ENGLISH_MIN_CONFIDENCE
-                    if detected_language == "en"
+                    if str(detected_language or "").strip().lower().replace("_", "-").split("-", 1)[0] == "en"
                     else AUTO_LANGUAGE_MIN_CONFIDENCE
                 )
                 or language_route in {"urdu_routed_to_hindi", "competitive_indian_english", "whisper_english_rescue"}

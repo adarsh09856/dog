@@ -47,14 +47,22 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._speech_turn_open = False
         self._turn_speech_language = None
         if self._text_aggregation_mode == TextAggregationMode.SENTENCE:
-            # Start the first natural phrase promptly and release later
-            # word-boundary phrases while current audio plays, avoiding both
-            # overly short synthesis chunks and long gaps between CPU requests.
+            # Start on a completed short sentence rather than waiting for the
+            # full model answer. Larger fixed thresholds delay first audio;
+            # downstream PCM/history ordering is handled by the base service.
             self._text_aggregator = LocalSpeechAggregator(
                 min_characters=24,
                 first_chunk_characters=12,
                 first_clause_characters=24,
+                # If the LLM has not completed a sentence yet, start speech
+                # after a coherent word-boundary phrase instead of waiting
+                # several more seconds for punctuation. The aggregator retains
+                # every character and keeps later phrases at the larger size.
+                # Lower the first-phrase threshold to reduce the gap to speech;
+                # word/date guards still prevent unsafe phrase boundaries.
                 first_phrase_characters=16,
+                # Release follow-up phrases sooner to reduce silence between
+                # local CPU synthesis requests while retaining grouping guards.
                 streaming_phrase_characters=24,
             )
         # Avoid multiplying a stalled speech request through SDK retries.

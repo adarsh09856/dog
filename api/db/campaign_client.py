@@ -891,18 +891,27 @@ class CampaignClient(BaseDBClient):
             await session.refresh(campaign)
         return campaign
 
-    async def fail_running_campaign(self, campaign_id: int) -> bool:
-        """Fail a batch only if the campaign has not been paused or stopped."""
+    async def update_campaign_if_state(
+        self, campaign_id: int, expected_state: str, **kwargs
+    ) -> bool:
+        """Atomically apply a campaign update only while it remains in a state.
+
+        Used at asynchronous boundaries such as source sync: an operator may
+        pause or cancel a campaign while a worker is importing its contacts.
+        """
+        values = dict(kwargs)
+        values["updated_at"] = datetime.now(UTC)
         async with self.async_session() as session:
             result = await session.execute(
                 update(CampaignModel)
-                .where(CampaignModel.id == campaign_id, CampaignModel.state == "running")
-                .values(state="failed", updated_at=datetime.now(UTC))
-                .returning(CampaignModel.id)
+                .where(
+                    CampaignModel.id == campaign_id,
+                    CampaignModel.state == expected_state,
+                )
+                .values(**values)
             )
-            changed = result.scalar_one_or_none() is not None
             await session.commit()
-            return changed
+            return bool(result.rowcount)
 
     async def delete_campaign(self, campaign_id: int, organization_id: int) -> bool:
         """Delete campaign by ID for organization"""

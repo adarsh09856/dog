@@ -1,5 +1,4 @@
 "use client";
-import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import {
   Calendar as CalendarIcon,
@@ -116,12 +115,12 @@ export default function AppointmentsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 md:p-8">
+    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <header className={panel.collectionHeader}>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <span className={panel.eyebrow}>GROWTH / SCHEDULING</span><h1>Calendar Bookings & Appointments</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Calendar Bookings & Appointments</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage customer callbacks, demos, and site visits in your workspace.
           </p>
@@ -154,29 +153,6 @@ export default function AppointmentsPage() {
             Refresh
           </Button>
         </div>
-      </header>
-
-      <div className={panel.metricRail} aria-label="Appointment overview">
-        <Card className="border-border/60 bg-card p-5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">All bookings</span>
-          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{appointments.length.toLocaleString()}</span><CalendarIcon className="h-4 w-4 text-primary" /></div>
-          <p className="mt-2 text-xs text-muted-foreground">Appointments in this workspace</p>
-        </Card>
-        <Card className="border-border/60 bg-card p-5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Upcoming</span>
-          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{appointments.filter((appointment) => new Date(appointment.start_time).getTime() >= Date.now() && appointment.status !== "cancelled").length}</span><Clock className="h-4 w-4 text-primary" /></div>
-          <p className="mt-2 text-xs text-muted-foreground">Not cancelled and scheduled from now</p>
-        </Card>
-        <Card className="border-border/60 bg-card p-5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Confirmed</span>
-          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{appointments.filter((appointment) => appointment.status === "confirmed").length}</span><CheckCircle2 className="h-4 w-4 text-primary" /></div>
-          <p className="mt-2 text-xs text-muted-foreground">Bookings ready for the next step</p>
-        </Card>
-        <Card className="border-border/60 bg-card p-5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending</span>
-          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{appointments.filter((appointment) => appointment.status === "pending").length}</span><Phone className="h-4 w-4 text-primary" /></div>
-          <p className="mt-2 text-xs text-muted-foreground">Awaiting confirmation or follow-up</p>
-        </Card>
       </div>
 
       <Card className="border-border/60">
@@ -195,8 +171,8 @@ export default function AppointmentsPage() {
           </Badge>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table className="min-w-[980px]">
+          <div className="rounded-lg overflow-hidden">
+            <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead className="text-xs">Meeting Title</TableHead>

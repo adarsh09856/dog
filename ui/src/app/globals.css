@@ -70,8 +70,6 @@
   --chart-3: #214743;
   --chart-4: #8aa875;
   --chart-5: #c07d55;
-  /* The workspace rail stays deep green in both content themes, so light mode
-     is not the same pale, detached sidebar treatment as the legacy console. */
   --sidebar: #10231f;
   --sidebar-foreground: #e5eee8;
   --sidebar-primary: #9bc9aa;
@@ -80,8 +78,8 @@
   --sidebar-accent-foreground: #f2f7f3;
   --sidebar-border: #29433a;
   --sidebar-ring: #9bc9aa;
-  --foreground: #142b2c;
   --background: #f2f4ed;
+  --foreground: #142b2c;
   /* Single restrained warm accent — used only on primary CTAs + focus rings. */
   --cta: #b99554;
   --cta-text: #263c32;
