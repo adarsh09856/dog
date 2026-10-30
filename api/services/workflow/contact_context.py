@@ -128,17 +128,34 @@ def remember_explicit_caller_name(messages: list, state: dict) -> str | None:
         # existing state and must never replace that state with "क्या".
         if _ASK_CALLER_NAME.search(text):
             continue
-        match = (
-            _HINDI_NAME_PREFIX.match(text.strip())
-            or _EXPLICIT_NAME_PREFIX.match(text.strip())
-            or _EXPLICIT_NAME_ANSWER.fullmatch(text.strip())
-            or _HINDI_NAME_ANSWER.fullmatch(text.strip())
-        )
-        if match:
-            candidate = match.group(1).strip(" .,!?:;।")
-            if _looks_like_name(candidate) and candidate.casefold() not in _NON_NAME_ANSWERS:
-                state["caller_name"] = candidate
-        elif (
+        # Callers often state their request before identifying themselves.
+        # Only explicit self-identification is accepted in later clauses;
+        # expanding generic "I am ..." would mistake "I am ready" for a name.
+        segments = [part.strip() for part in re.split(r"[.!?।;,\n]+", text) if part.strip()]
+        found_explicit = False
+        for segment in segments:
+            # Bare "I am ..." is too ambiguous to treat as caller identity
+            # unless the assistant explicitly asked for the caller's name.
+            explicit = re.match(
+                r"(?:(?:uh|um)[,]?\s+)?(?:(?:actually|correction|sorry)\s*[, :]?\s*)?"
+                r"(?:my\s+name\s+is|this\s+is|mera\s+naam|मेरा\s+नाम)",
+                segment, re.IGNORECASE,
+            )
+            prompted_identity = _ASK_FOR_NAME.search(assistant_prompt) and re.match(
+                r"(?:(?:uh|um)[,]?\s+)?(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:i\s+am|i'm)",
+                segment, re.IGNORECASE,
+            )
+            if not explicit and not prompted_identity:
+                continue
+            match = _HINDI_NAME_PREFIX.match(segment) or _EXPLICIT_NAME_PREFIX.match(segment)
+            if not match:
+                match = _EXPLICIT_NAME_ANSWER.fullmatch(segment) or _HINDI_NAME_ANSWER.fullmatch(segment)
+            if match:
+                found_explicit = True
+                candidate = match.group(1).strip(" .,!?:;।")
+                if _looks_like_name(candidate) and candidate.casefold() not in _NON_NAME_ANSWERS:
+                    state["caller_name"] = candidate
+        if not found_explicit and (
             _ASK_FOR_NAME.search(assistant_prompt)
             and not re.search(r"\d", text)
         ):

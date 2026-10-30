@@ -1117,6 +1117,11 @@ def create_tts_service(
             silence_time_s=1.0,
         )
     elif user_config.tts.provider == ServiceProviders.SARVAM.value:
+        from api.services.configuration.language_normalizer import normalize_language_code
+        from api.services.pipecat.caller_language_tts import (
+            caller_language_sarvam_service_class,
+        )
+
         # Map Sarvam language code to pipecat Language enum for TTS
         language_mapping = {
             "bn-IN": Language.BN,
@@ -1132,7 +1137,16 @@ def create_tts_service(
             "te-IN": Language.TE,
         }
         language = getattr(user_config.tts, "language", None)
-        pipecat_language = language_mapping.get(language, Language.HI)
+        model = getattr(user_config.tts, "model", None) or "bulbul:v3"
+        configured_language_code = normalize_language_code(
+            str(getattr(language, "value", language) or ""),
+            target_provider="sarvam",
+        )
+        pipecat_language = (
+            language_mapping.get(configured_language_code)
+            or language_mapping.get(language)
+            or Language.HI
+        )
 
         voice = (
             getattr(user_config.tts, "voice", None) or ""
@@ -1145,9 +1159,13 @@ def create_tts_service(
         }
         if speed and speed != 1.0:
             settings_kwargs["pace"] = speed
-        return SarvamTTSService(
+        language_routing_enabled = model.casefold() == "bulbul:v3"
+        service_type = caller_language_sarvam_service_class(SarvamTTSService)
+        return service_type(
             api_key=user_config.tts.api_key,
             settings=SarvamTTSSettings(**settings_kwargs),
+            caller_language_configured=pipecat_language,
+            caller_language_routing_enabled=language_routing_enabled,
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,

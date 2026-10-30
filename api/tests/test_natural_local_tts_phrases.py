@@ -26,8 +26,49 @@ async def test_long_followup_releases_a_coherent_phrase_before_sentence_end():
         if tail:
             parts.append(tail)
         assert len(parts) >= 2
-        assert all(len(part.text.strip()) >= 64 for part in parts[:-1])
+        assert all(len(part.text.strip()) >= 24 for part in parts[:-1])
         assert ''.join(part.text for part in parts).strip() == sentence.strip()
+    finally:
+        await service._client.close()
+
+
+@pytest.mark.asyncio
+async def test_first_phrase_releases_at_16_chars_on_a_safe_word_boundary():
+    aggregator = LocalSpeechAggregator(
+        min_characters=24,
+        first_chunk_characters=12,
+        first_phrase_characters=16,
+    )
+    emitted = []
+    for word in "I can help you today, please tell me your name.".split(" "):
+        emitted.extend([part.text async for part in aggregator.aggregate(word + " ")])
+        if emitted:
+            break
+
+    assert emitted == ["I can help you today, "]
+
+
+@pytest.mark.asyncio
+async def test_followup_phrase_releases_before_48_chars_to_reduce_audio_gaps():
+    service = SpeachesLiveTTSService(
+        api_key='test', base_url='http://localhost:8000/v1',
+        settings=SpeachesTTSSettings(model='indic-vits-rasa-13', voice='HIN_F'),
+    )
+    aggregator = service._text_aggregator
+    try:
+        assert aggregator._streaming_phrase_characters == 24
+        first = [part async for part in aggregator.aggregate("I can help you today, ")]
+        assert [part.text for part in first] == ["I can help you today, "]
+
+        followup = [
+            part async for part in aggregator.aggregate("please tell me your name and number ")
+        ]
+
+        assert len(followup) == 1
+        assert followup[0].text == "please tell me your name "
+        tail = await aggregator.flush()
+        assert tail is not None
+        assert tail.text == "and number"
     finally:
         await service._client.close()
 
@@ -53,8 +94,8 @@ async def test_streamed_numbers_and_dates_stay_in_one_synthesis_phrase():
     for text, sequence in examples:
         aggregator = LocalSpeechAggregator(
             min_characters=24, first_chunk_characters=12,
-            first_clause_characters=36, first_phrase_characters=36,
-            streaming_phrase_characters=64,
+            first_clause_characters=24, first_phrase_characters=16,
+            streaming_phrase_characters=48,
         )
         phrases = []
         for word in text.split(" "):
@@ -75,8 +116,8 @@ async def test_number_group_survives_character_stream_and_later_phrase():
     sequence = "nine and five three eight three double zero nine four one"
     aggregator = LocalSpeechAggregator(
         min_characters=24, first_chunk_characters=12,
-        first_clause_characters=36, first_phrase_characters=36,
-        streaming_phrase_characters=64,
+        first_clause_characters=24, first_phrase_characters=16,
+        streaming_phrase_characters=48,
     )
     phrases = []
     for character in text:
@@ -90,7 +131,7 @@ async def test_number_group_survives_character_stream_and_later_phrase():
 
 @pytest.mark.asyncio
 async def test_interruption_discards_a_pending_number():
-    aggregator = LocalSpeechAggregator(first_chunk_characters=12, first_phrase_characters=36)
+    aggregator = LocalSpeechAggregator(first_chunk_characters=12, first_phrase_characters=16)
     async for _ in aggregator.aggregate("Please confirm the number nine five three "):
         pass
     await aggregator.handle_interruption()
@@ -115,8 +156,8 @@ async def test_hindi_spoken_day_month_and_year_are_not_split_between_requests():
         for width in (1, 2, 3, 7, 13, 36, 64):
             aggregator = LocalSpeechAggregator(
                 min_characters=24, first_chunk_characters=12,
-                first_clause_characters=36, first_phrase_characters=36,
-                streaming_phrase_characters=64,
+                first_clause_characters=24, first_phrase_characters=16,
+                streaming_phrase_characters=48,
             )
             phrases = []
             for index in range(0, len(text), width):

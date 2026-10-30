@@ -51,11 +51,11 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             # word-boundary phrases while current audio plays, avoiding both
             # overly short synthesis chunks and long gaps between CPU requests.
             self._text_aggregator = LocalSpeechAggregator(
-                min_characters=48,
+                min_characters=24,
                 first_chunk_characters=12,
                 first_clause_characters=24,
-                first_phrase_characters=24,
-                streaming_phrase_characters=64,
+                first_phrase_characters=16,
+                streaming_phrase_characters=24,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
