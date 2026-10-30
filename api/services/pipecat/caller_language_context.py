@@ -2,7 +2,10 @@
 
 import re
 
-from api.services.configuration.language_normalizer import SPEECH_LANGUAGE_NAMES
+from api.services.configuration.language_normalizer import (
+    SPEECH_LANGUAGE_NAMES,
+    normalize_language_code,
+)
 
 
 _ENGLISH_SWITCH = re.compile(
@@ -57,6 +60,28 @@ def _trusted_detected_language(source) -> str | None:
     if hasattr(source, "latest_tts_language"):
         return getattr(source, "latest_tts_language", None)
     return getattr(source, "latest_detected_language", None)
+
+
+def sync_contact_reply_language(state: dict, source) -> None:
+    """Keep deterministic contact follow-ups aligned with the live voice route.
+
+    Explicit language choices take precedence while active. When auto routing
+    resumes, a confidence-filtered language may replace the stored
+    contact-flow language; weak/unknown labels clear a
+    stale choice rather than pinning later phone/date prompts to it.
+    """
+    if not isinstance(state, dict) or source is None:
+        return
+
+    language = getattr(source, "reply_language_override", None)
+    if language is None:
+        language = _trusted_detected_language(source)
+    raw_language = getattr(language, "value", language)
+    code = normalize_language_code(raw_language) if raw_language is not None else ""
+    if code in SPEECH_LANGUAGE_NAMES:
+        state["reply_language"] = SPEECH_LANGUAGE_NAMES[code]
+    else:
+        state.pop("reply_language", None)
 
 
 def standalone_language_request(text: str) -> str | None:
