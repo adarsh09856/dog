@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
 import { useClientBranding } from "@/context/ClientBrandingContext";
+
 import styles from "./PublicSiteChrome.module.css";
 
 const links = [
@@ -32,7 +33,7 @@ export function PublicHeader() {
       >
         Skip to content
       </a>
-      <div className={`${styles.headerInner} mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8`}>
+      <div className={`${styles.headerInner} mx-auto flex h-[76px] max-w-[1480px] items-center justify-between gap-4 px-5 sm:px-8 lg:px-10`}>
         <Link href="/" aria-label="Home" className={`${styles.brand} min-w-0 max-w-[55%] sm:max-w-none`}>
           <BrandLogo className="h-8" />
         </Link>
@@ -58,7 +59,7 @@ export function PublicHeader() {
             onClick={() =>
               setTheme(resolvedTheme === "dark" ? "light" : "dark")
             }
-            className="rounded-lg p-2.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className={`${styles.themeButton} rounded-lg p-2.5 text-muted-foreground hover:bg-muted hover:text-foreground`}
           >
             {mounted && resolvedTheme === "dark" ? (
               <Sun className="size-4" />
@@ -84,7 +85,7 @@ export function PublicHeader() {
             aria-expanded={open}
             aria-controls="public-mobile-navigation"
             onClick={() => setOpen(!open)}
-            className="rounded-lg p-2 md:hidden"
+            className={`${styles.menuButton} rounded-lg p-2 md:hidden`}
           >
             {open ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
@@ -94,14 +95,15 @@ export function PublicHeader() {
         <nav
           id="public-mobile-navigation"
           aria-label="Mobile navigation"
-          className="space-y-1 border-t border-border px-5 py-4 md:hidden"
+          className={`${styles.mobileMenu} space-y-1 border-t border-border px-5 py-4 md:hidden`}
         >
           {[...links, { href: "/auth/login", label: "Sign in" }].map((link) => (
             <Link
               key={link.href}
               href={link.href}
+              aria-current={pathname === link.href ? "page" : undefined}
               onClick={() => setOpen(false)}
-              className="block rounded-lg px-3 py-3 text-sm hover:bg-muted"
+              className={`${styles.mobileLink} block rounded-lg px-3 py-3 text-sm hover:bg-muted`}
             >
               {link.label}
             </Link>
