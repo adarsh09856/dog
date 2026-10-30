@@ -1,6 +1,4 @@
 "use client";
-import panel from "@/components/layout/PanelWorkspace.module.css";
-
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -15,10 +13,9 @@ import {
   Unlock,
   Zap,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
-import { startConfiguredCheckout } from "@/lib/billing/checkout";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClientBranding } from "@/context/ClientBrandingContext";
+import { useAuth } from "@/lib/auth";
 import {
   paymentsApi,
   publicApi,
@@ -41,6 +39,8 @@ import {
   SovereignWallet,
   WalletLedgerItem,
 } from "@/lib/kodewavesApi";
+
+import styles from "./BillingWorkspace.module.css";
 
 function loadRazorpayCheckout() {
   if (window.Razorpay) return Promise.resolve(true);
@@ -213,54 +213,118 @@ export default function SovereignBillingPage() {
     if (!confirm(`Pay ${formatMinorUnits(price, plan.currency)} once for ${accessDays} days of ${plan.name} access? ${termNotice} It will not renew automatically. Included minutes are credited once and do not replenish monthly.`)) return;
     setSubscribingId(plan.id);
     try {
-      if (plan.monthly_price_inr > 0 || plan.monthly_price_usd > 0) {
-        const result = await startConfiguredCheckout({ plan_id: String(plan.id), billing_cycle: "monthly" });
-        if (result.redirected) return;
-        alert(result.receipt.message);
-      } else {
-        const result = await sovereignBillingApi.subscribe(plan.id);
-        alert(result.message);
+      const config = await paymentsApi.getConfig();
+      if (config.razorpay_enabled && config.razorpay_key_id) {
+        const checkoutReady = await loadRazorpayCheckout();
+        if (!checkoutReady || !window.Razorpay) throw new Error("Razorpay checkout could not be loaded. Please retry.");
+        const order = await paymentsApi.createOrder({ plan_code: plan.code, gateway: "razorpay", billing_cycle: billingCycle });
+        new window.Razorpay({
+          key: order.key_id || config.razorpay_key_id,
+          amount: order.amount,
+          currency: order.currency,
+          name: branding.company_name,
+          description: `${plan.name} ${billingCycle} plan`,
+          order_id: order.order_id,
+          handler: async (result) => {
+            try {
+              const verified = await paymentsApi.verifyPayment({
+                gateway: "razorpay",
+                order_id: result.razorpay_order_id,
+                payment_id: result.razorpay_payment_id,
+                signature: result.razorpay_signature,
+                plan_code: plan.code,
+              });
+              alert(verified.message);
+              await fetchData();
+            } catch (err: unknown) {
+              alert(err instanceof Error ? err.message : "Payment verification failed");
+            } finally {
+              setSubscribingId(null);
+            }
+          },
+          modal: { ondismiss: () => setSubscribingId(null) },
+        }).open();
+        return;
       }
-      await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to update subscription");
-    } finally {
+      if (config.stripe_enabled) {
+        const order = await paymentsApi.createOrder({ plan_code: plan.code, gateway: "stripe", billing_cycle: billingCycle });
+        if (!order.checkout_url) throw new Error("Stripe did not return a checkout URL");
+        window.location.assign(order.checkout_url);
+        return;
+      }
+      throw new Error("Payments are not configured for this platform. Contact the administrator.");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to update subscription");
       setSubscribingId(null);
     }
   };
 
-  useEffect(() => {
-    if (authLoading || !user) return;
-    const params = new URLSearchParams(window.location.search);
-    const session = params.get("session_id");
-    if (params.get("payment") !== "success" || !session) return;
-    let cancelled = false;
-    // A return URL is not payment proof: fetch the provider receipt through
-    // the authenticated backend before showing success or updating the wallet.
-    paymentsApi.verifyPayment({ gateway: "stripe", order_id: session, payment_id: session })
-      .then(async (receipt) => {
-        if (cancelled) return;
-        if (!receipt.success) throw new Error("Payment has not been verified.");
-        window.history.replaceState(null, "", window.location.pathname);
-        await fetchData();
-      }).catch((error) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Payment verification failed. Refresh before retrying payment.");
-      });
-    return () => { cancelled = true; };
-  }, [authLoading, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  const handleCreditPackagePurchase = async (pkg: PublicCreditPackage) => {
+    const packageId = String(pkg.id);
+    if (wallet?.is_frozen) return;
+    const totalMinutes = pkg.minutes + pkg.bonus_minutes;
+    if (!confirm(`Buy ${pkg.name} for ${formatMinorUnits(pkg.price_cents, pkg.currency)}? This is a one-time payment for ${totalMinutes.toLocaleString()} wallet minutes. Provider and carrier charges may apply separately.`)) return;
+    setPurchasingPackageId(packageId);
+    try {
+      const config = await paymentsApi.getConfig();
+      if (config.razorpay_enabled && config.razorpay_key_id) {
+        const checkoutReady = await loadRazorpayCheckout();
+        if (!checkoutReady || !window.Razorpay) throw new Error("Razorpay checkout could not be loaded. Please retry.");
+        const order = await paymentsApi.createOrder({ package_id: packageId, gateway: "razorpay" });
+        new window.Razorpay({
+          key: order.key_id || config.razorpay_key_id,
+          amount: order.amount,
+          currency: order.currency,
+          name: branding.company_name,
+          description: `${pkg.name} credit bundle`,
+          order_id: order.order_id,
+          handler: async (result) => {
+            try {
+              const verified = await paymentsApi.verifyPayment({
+                gateway: "razorpay",
+                order_id: result.razorpay_order_id,
+                payment_id: result.razorpay_payment_id,
+                signature: result.razorpay_signature,
+                package_id: packageId,
+              });
+              alert(verified.message);
+              setSelectedCreditPackage(null);
+              await fetchData();
+            } catch (err: unknown) {
+              alert(err instanceof Error ? err.message : "Payment verification failed");
+            } finally {
+              setPurchasingPackageId(null);
+            }
+          },
+          modal: { ondismiss: () => setPurchasingPackageId(null) },
+        }).open();
+        return;
+      }
+      if (config.stripe_enabled) {
+        const order = await paymentsApi.createOrder({ package_id: packageId, gateway: "stripe" });
+        if (!order.checkout_url) throw new Error("Stripe did not return a checkout URL");
+        window.location.assign(order.checkout_url);
+        return;
+      }
+      throw new Error("Payments are not configured for this platform. Contact the administrator.");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Credit bundle checkout failed");
+      setPurchasingPackageId(null);
+    }
+  };
 
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+    <div className={styles.page}>
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <header className={panel.collectionHeader}>
-        <div>
-          <span className={panel.eyebrow}>WORKSPACE / BILLING</span><h1>Billing & Minute Wallet</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+      <header className={styles.hero}>
+        <div className={styles.heroCopy}>
+          <span className={styles.eyebrow}>WORKSPACE / BILLING</span><h1>Billing &amp; Minute Wallet</h1>
+          <p>
             Monitor voice minutes, review transactions, and manage your organization’s plan access.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className={styles.heroActions}>
           <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5" /> Organization Wallet
           </Badge>
@@ -272,7 +336,7 @@ export default function SovereignBillingPage() {
       </header>
 
       {/* WALLET KPI CARDS */}
-      <div className={panel.billingMetrics}>
+      <div className={`${panel.billingMetrics} ${styles.metrics}`} aria-label="Wallet summary">
         <Card className="border-border/60 bg-gradient-to-br from-card to-muted/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Available Voice Balance</CardTitle>
@@ -319,8 +383,8 @@ export default function SovereignBillingPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="plans" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+      <Tabs defaultValue="plans" className={styles.planArea}>
+        <TabsList className={`${styles.tabList} grid grid-cols-2`}>
           <TabsTrigger value="plans" className="gap-2">
             <CreditCard className="h-4 w-4" />
             Plan Options
@@ -333,7 +397,8 @@ export default function SovereignBillingPage() {
 
         {/* PLANS TAB */}
         <TabsContent value="plans" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className={styles.sectionIntro}><div><h2>Choose a plan</h2><p>Compare included voice minutes, concurrency, and key policies. Plans are paid once for a fixed access term.</p></div></div>
+          <div className={styles.planGrid}>
             {plans.map((p) => {
               const isCurrent = wallet?.plan_code === p.code;
               const selectedCycle = billingCycles[String(p.id)] ?? (p.monthly_price_cents > 0 ? "monthly" : "annual");
@@ -345,9 +410,9 @@ export default function SovereignBillingPage() {
               return (
                 <Card
                   key={p.id}
-                  className={`border-border/60 flex flex-col justify-between transition-all ${
+                  className={`${styles.planCard} flex flex-col justify-between transition-all ${
                     isCurrent ? "border-primary ring-1 ring-primary shadow-md" : "hover:border-primary/40"
-                  }`}
+                  } ${isCurrent ? styles.planCardCurrent : ""}`}
                 >
                   <CardHeader>
                     <div className="flex items-center justify-between">
@@ -359,7 +424,7 @@ export default function SovereignBillingPage() {
                       )}
                     </div>
                     <CardDescription>{p.description || "Voice AI agent plan"}</CardDescription>
-                    <div className="pt-4">
+                    <div className={`${styles.planPrice} pt-4`}>
                       <div className="flex items-baseline gap-1">
                         <span className="text-3xl font-extrabold">{isPaidPlan ? formatMinorUnits(selectedPrice, p.currency) : "Free"}</span>
                         {isPaidPlan ? <span className="text-xs text-muted-foreground">· one-time payment for {selectedAccessDays} days</span> : null}
@@ -430,10 +495,12 @@ export default function SovereignBillingPage() {
             })}
           </div>
 
-          <section aria-labelledby="credit-bundles-heading" className="space-y-4">
-            <div>
+          <section aria-labelledby="credit-bundles-heading" className={styles.creditSection}>
+            <div className={styles.sectionIntro}>
+              <div>
               <h2 id="credit-bundles-heading" className="text-xl font-semibold">Credit bundles</h2>
               <p className="mt-1 text-sm text-muted-foreground">One-time wallet top-ups. Provider and carrier costs may be billed separately.</p>
+              </div>
             </div>
             {selectedCreditPackage && (
               <p role="status" className="rounded-md border border-primary/40 bg-primary/5 p-3 text-sm">
@@ -446,13 +513,13 @@ export default function SovereignBillingPage() {
             ) : creditPackages.length === 0 ? (
               <p className="text-sm text-muted-foreground">No credit bundles are currently published.</p>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className={styles.creditGrid}>
                 {creditPackages.map((pkg) => {
                   const packageId = String(pkg.id);
                   const selected = selectedCreditPackage === packageId;
                   const totalMinutes = pkg.minutes + pkg.bonus_minutes;
                   return (
-                    <Card key={packageId} id={`credit-package-${packageId}`} className={`flex flex-col border-border/60 ${selected ? "border-primary ring-1 ring-primary" : ""}`}>
+                    <Card key={packageId} id={`credit-package-${packageId}`} className={`${styles.creditCard} flex flex-col ${selected ? styles.creditCardSelected : ""}`}>
                       <CardHeader>
                         <div className="flex flex-wrap items-center gap-2">
                           <CardTitle className="text-base">{pkg.name}</CardTitle>
@@ -477,8 +544,8 @@ export default function SovereignBillingPage() {
         </TabsContent>
 
         {/* LEDGER TAB */}
-        <TabsContent value="ledger" className="space-y-6">
-          <Card className="border-border/60">
+        <TabsContent value="ledger" className={styles.ledgerArea}>
+          <Card className={styles.ledgerCard}>
             <CardHeader>
               <CardTitle className="text-base">Wallet Minute Ledger</CardTitle>
               <CardDescription>

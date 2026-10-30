@@ -1,26 +1,23 @@
 "use client";
 
 import {
+  ArrowDownRight,
   Building,
   CheckCircle2,
   Edit,
   Mail,
-  MoreVertical,
   Phone,
   Plus,
   RefreshCw,
   Search,
   Trash2,
-  UserCheck,
   UserPlus,
   Users,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
-import React, { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -47,8 +44,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/lib/auth";
 import { Contact, crmApi, LeadStage } from "@/lib/kodewavesApi";
-import panel from "@/components/layout/PanelWorkspace.module.css";
+
+import styles from "./CRMWorkspace.module.css";
+
+const contactName = (contact: Contact) =>
+  [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim() || "Unnamed contact";
+
+const initials = (contact: Contact) => {
+  const name = contactName(contact);
+  return name === "Unnamed contact"
+    ? "?"
+    : name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+};
 
 export default function CRMPage() {
   const { user, loading: authLoading } = useAuth();
@@ -59,7 +68,6 @@ export default function CRMPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Contact Modal
   const [modalOpen, setModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Partial<Contact> | null>(null);
   const [saving, setSaving] = useState(false);
@@ -74,11 +82,9 @@ export default function CRMPage() {
         crmApi.getStages(),
       ]);
       setContacts(fetchedContacts);
-      if (fetchedStages && fetchedStages.length > 0) {
-        setStages(fetchedStages);
-      }
+      setStages(fetchedStages || []);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Unable to load this page. Please retry.");
+      setLoadError(err instanceof Error ? err.message : "Unable to load CRM records. Please retry.");
       console.error("Failed to load CRM data:", err);
     } finally {
       setLoading(false);
@@ -87,8 +93,23 @@ export default function CRMPage() {
 
   useEffect(() => {
     if (authLoading || !user) return;
-    fetchData();
+    void fetchData();
+    // CRM API is stable for the lifetime of the authenticated page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user]);
+
+  const openNewContact = () => {
+    setEditingContact({
+      first_name: "",
+      last_name: "",
+      phone: "",
+      email: "",
+      company: "",
+      stage_id: stages[0]?.id,
+      notes: "",
+    });
+    setModalOpen(true);
+  };
 
   const handleSaveContact = async () => {
     if (!editingContact || !editingContact.first_name || !editingContact.phone) {
@@ -105,8 +126,8 @@ export default function CRMPage() {
       setModalOpen(false);
       setEditingContact(null);
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to save contact");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save contact");
     } finally {
       setSaving(false);
     }
@@ -117,307 +138,211 @@ export default function CRMPage() {
     try {
       await crmApi.deleteContact(id);
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete contact");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete contact");
     }
   };
 
-  const filteredContacts = contacts.filter((c) => {
-    const matchesSearch =
-      (c.first_name || "").toLowerCase().includes(search.toLowerCase()) ||
-      (c.last_name && c.last_name.toLowerCase().includes(search.toLowerCase())) ||
-      (c.phone || "").includes(search) ||
-      (c.email && c.email.toLowerCase().includes(search.toLowerCase())) ||
-      (c.company && c.company.toLowerCase().includes(search.toLowerCase()));
+  const stageCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const contact of contacts) {
+      if (contact.stage_id) {
+        const id = String(contact.stage_id);
+        counts.set(id, (counts.get(id) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [contacts]);
 
-    const matchesStage = selectedStage === "all" || String(c.stage_id) === selectedStage;
-    return matchesSearch && matchesStage;
-  });
+  const filteredContacts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return contacts.filter((contact) => {
+      const matchesSearch = !query || [
+        contact.first_name,
+        contact.last_name,
+        contact.phone,
+        contact.email,
+        contact.company,
+      ].some((value) => value?.toLowerCase().includes(query));
+      const matchesStage = selectedStage === "all" || String(contact.stage_id) === selectedStage;
+      return matchesSearch && matchesStage;
+    });
+  }, [contacts, search, selectedStage]);
+
+  const emailCount = contacts.filter((contact) => Boolean(contact.email)).length;
+  const activeStageName = stages.find((stage) => String(stage.id) === selectedStage)?.name;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 md:p-8">
-      {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
-      {/* Header */}
-      <div className={panel.collectionHeader}>
-        <div>
-          <span className={panel.eyebrow}>GROWTH / RELATIONSHIPS</span><h1>Lead CRM &amp; Contacts</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Track voice campaign prospects, qualify inbound leads, and sync appointment outcomes.
-          </p>
+    <main className={styles.page}>
+      <section className={styles.hero} aria-labelledby="crm-title">
+        <div className={styles.heroCopy}>
+          <div className={styles.eyebrow}><span /> RELATIONSHIPS / CRM</div>
+          <h1 id="crm-title">Know every lead.<br /><em>Move the right ones forward.</em></h1>
+          <p>Keep contact details, qualification stage and call context together, so your team always knows what to do next.</p>
+          <div className={styles.heroActions}>
+            <Button onClick={openNewContact} className={styles.primaryAction}>
+              <UserPlus aria-hidden="true" /> Add a lead
+            </Button>
+            <Button variant="outline" onClick={() => void fetchData()} disabled={loading} className={styles.secondaryAction}>
+              <RefreshCw aria-hidden="true" className={loading ? "animate-spin" : ""} /> Refresh records
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <Button
-            size="sm"
-            className="gap-2"
-            onClick={() => {
-              setEditingContact({
-                first_name: "",
-                last_name: "",
-                phone: "",
-                email: "",
-                company: "",
-                stage_id: stages[0]?.id,
-                notes: "",
-              });
-              setModalOpen(true);
-            }}
-          >
-            <UserPlus className="h-4 w-4" /> Add Lead
-          </Button>
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="gap-2">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+        <aside className={styles.heroAside} aria-label="Contact snapshot">
+          <div className={styles.snapshotTop}><Users aria-hidden="true" /><span>YOUR CONTACT BOOK</span></div>
+          <strong>{loading ? "—" : contacts.length.toLocaleString()}</strong>
+          <span className={styles.snapshotLabel}>people and organizations</span>
+          <div className={styles.snapshotFoot}><span><Mail aria-hidden="true" /> {emailCount} with email</span><ArrowDownRight aria-hidden="true" /></div>
+        </aside>
+        <div className={styles.heroOrb} aria-hidden="true" />
+      </section>
+
+      <section className={styles.metrics} aria-label="Contact insights">
+        <article className={styles.metric}>
+          <span className={styles.metricIcon}><Users aria-hidden="true" /></span>
+          <div><span className={styles.metricLabel}>TOTAL CONTACTS</span><strong>{loading ? "—" : contacts.length.toLocaleString()}</strong><p>Across every qualification stage</p></div>
+        </article>
+        <article className={styles.metric}>
+          <span className={styles.metricIcon}><CheckCircle2 aria-hidden="true" /></span>
+          <div><span className={styles.metricLabel}>PIPELINE STAGES</span><strong>{loading ? "—" : stages.length}</strong><p>Steps your team uses to qualify leads</p></div>
+        </article>
+        <article className={styles.metric}>
+          <span className={styles.metricIcon}><Mail aria-hidden="true" /></span>
+          <div><span className={styles.metricLabel}>EMAIL COVERAGE</span><strong>{loading ? "—" : `${contacts.length ? Math.round((emailCount / contacts.length) * 100) : 0}%`}</strong><p>{loading ? "Loading contacts" : `${emailCount} of ${contacts.length} contacts have an email`}</p></div>
+        </article>
+      </section>
+
+      <section className={styles.pipeline} aria-labelledby="pipeline-heading">
+        <div className={styles.pipelineHeading}>
+          <div><span className={styles.sectionKicker}>QUALIFICATION</span><h2 id="pipeline-heading">Your pipeline</h2></div>
+          <span className={styles.pipelineHint}>Choose a stage to focus the contact list</span>
         </div>
-      </div>
-
-      {/* Filter and Search Bar */}
-      <div className={panel.metricRail} aria-label="Lead pipeline overview">
-        <Card className="border-border/60 bg-card p-5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">All contacts</span>
-          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{contacts.length.toLocaleString()}</span><Users className="h-4 w-4 text-primary" /></div>
-          <p className="mt-2 text-xs text-muted-foreground">People and organizations in this workspace</p>
-        </Card>
-        <Card className="border-border/60 bg-card p-5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pipeline stages</span>
-          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{stages.length}</span><CheckCircle2 className="h-4 w-4 text-primary" /></div>
-          <p className="mt-2 text-xs text-muted-foreground">Stages available for qualification</p>
-        </Card>
-        <Card className="border-border/60 bg-card p-5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">With email</span>
-          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{contacts.filter((contact) => Boolean(contact.email)).length}</span><Mail className="h-4 w-4 text-primary" /></div>
-          <p className="mt-2 text-xs text-muted-foreground">Contacts with an email address</p>
-        </Card>
-        <Card className="border-border/60 bg-card p-5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current view</span>
-          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{filteredContacts.length}</span><Search className="h-4 w-4 text-primary" /></div>
-          <p className="mt-2 text-xs text-muted-foreground">Contacts matching the selected filters</p>
-        </Card>
-      </div>
-
-      <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search leads by name, phone, company..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-9 text-xs"
-          />
+        <div className={styles.stageRail} role="group" aria-label="Filter contacts by pipeline stage">
+          <button type="button" aria-pressed={selectedStage === "all"} className={selectedStage === "all" ? styles.stageActive : styles.stageButton} onClick={() => setSelectedStage("all")}>
+            <span>All contacts</span><strong>{contacts.length}</strong>
+          </button>
+          {stages.map((stage) => {
+            const active = selectedStage === String(stage.id);
+            return (
+                <button key={stage.id} type="button" aria-pressed={active} className={active ? styles.stageActive : styles.stageButton} onClick={() => setSelectedStage(String(stage.id))}>
+                  <span>{stage.name}</span><strong>{stageCounts.get(String(stage.id)) || 0}</strong>
+                </button>
+            );
+          })}
         </div>
+      </section>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <span className="text-xs text-muted-foreground">Pipeline Stage:</span>
-          <Select value={selectedStage} onValueChange={setSelectedStage}>
-            <SelectTrigger className="h-9 text-xs w-44">
-              <SelectValue placeholder="All Stages" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Stages ({contacts.length})</SelectItem>
-              {stages.map((st) => (
-                <SelectItem key={st.id} value={String(st.id)}>
-                  {st.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <section className={styles.records} aria-labelledby="records-heading">
+        <header className={styles.recordsHeader}>
+          <div className={styles.recordsTitle}>
+            <span className={styles.sectionKicker}>WORKSPACE DIRECTORY</span>
+            <h2 id="records-heading">Contacts <span>{loading ? "…" : filteredContacts.length}</span></h2>
+            <p>{activeStageName ? `Showing ${activeStageName} leads` : "Every person and organization in your workspace, in one clear list."}</p>
+          </div>
+          <div className={styles.filters}>
+            <label className={styles.searchBox}>
+              <Search aria-hidden="true" />
+              <span className="sr-only">Search contacts</span>
+              <Input placeholder="Search name, phone, email or company" value={search} onChange={(event) => setSearch(event.target.value)} />
+              {search && <button type="button" aria-label="Clear search" onClick={() => setSearch("")}>×</button>}
+            </label>
+            <label className={styles.stageSelect}>
+              <span className="sr-only">Pipeline stage</span>
+              <Select value={selectedStage} onValueChange={setSelectedStage}>
+                <SelectTrigger aria-label="Pipeline stage"><SelectValue placeholder="All stages" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All stages ({contacts.length})</SelectItem>
+                  {stages.map((stage) => <SelectItem key={stage.id} value={String(stage.id)}>{stage.name} ({stageCounts.get(String(stage.id)) || 0})</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </label>
+          </div>
+        </header>
 
-      <Card className="border-border/60">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table className="min-w-[900px]">
-              <TableHeader className="bg-muted/40">
-                <TableRow>
-                  <TableHead className="text-xs">Contact Name</TableHead>
-                  <TableHead className="text-xs">Phone Number</TableHead>
-                  <TableHead className="text-xs">Email</TableHead>
-                  <TableHead className="text-xs">Company</TableHead>
-                  <TableHead className="text-xs">Stage</TableHead>
-                  <TableHead className="text-xs">Notes</TableHead>
-                  <TableHead className="text-xs text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredContacts.length === 0 ? (
+        {loadError ? (
+          <div role="alert" className={styles.errorState}>
+            <div><strong>Contacts could not be loaded</strong><p>{loadError}</p></div>
+            <Button variant="outline" onClick={() => void fetchData()} disabled={loading}>Try again</Button>
+          </div>
+        ) : loading ? (
+          <div role="status" aria-live="polite" className={styles.loadingState}>
+            <RefreshCw aria-hidden="true" className="animate-spin" /><span>Loading your contacts…</span>
+          </div>
+        ) : filteredContacts.length === 0 ? (
+          <div className={styles.emptyState}>
+            <span className={styles.emptyIcon}><Users aria-hidden="true" /></span>
+            <h3>{contacts.length === 0 ? "Start with your first lead" : "No contacts match this view"}</h3>
+            <p>{contacts.length === 0 ? "Add a contact to give your team a place to track conversations and qualification." : "Try another search or choose a different pipeline stage."}</p>
+            {contacts.length === 0
+              ? <Button onClick={openNewContact}><Plus aria-hidden="true" /> Add your first lead</Button>
+              : <Button variant="outline" onClick={() => { setSearch(""); setSelectedStage("all"); }}>Clear filters</Button>}
+          </div>
+        ) : (
+          <>
+            <div className={styles.desktopTable}>
+              <Table className="min-w-[900px]">
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-sm text-muted-foreground">
-                      No contacts found matching your criteria. Click &quot;Add Lead&quot; to create one.
-                    </TableCell>
+                    <TableHead>Contact</TableHead><TableHead>Contact details</TableHead><TableHead>Organization</TableHead><TableHead>Stage</TableHead><TableHead>Call notes</TableHead><TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  filteredContacts.map((c) => {
-                    const stage = stages.find((s) => s.id === c.stage_id);
+                </TableHeader>
+                <TableBody>
+                  {filteredContacts.map((contact) => {
+                    const stage = stages.find((item) => String(item.id) === String(contact.stage_id));
                     return (
-                      <TableRow key={c.id} className="hover:bg-muted/20">
-                        <TableCell className="font-semibold text-xs">
-                          {c.first_name} {c.last_name || ""}
-                        </TableCell>
-                        <TableCell className="text-xs font-mono">
-                          <span className="flex items-center gap-1.5">
-                            <Phone className="h-3 w-3 text-muted-foreground" />
-                            {c.phone}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {c.email ? (
-                            <span className="flex items-center gap-1.5">
-                              <Mail className="h-3 w-3 text-muted-foreground" />
-                              {c.email}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {c.company ? (
-                            <span className="flex items-center gap-1.5">
-                              <Building className="h-3 w-3 text-muted-foreground" />
-                              {c.company}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
+                      <TableRow key={contact.id}>
                         <TableCell>
-                          <Badge variant="outline" className="text-[10px] uppercase font-semibold">
-                            {stage?.name || "New Lead"}
-                          </Badge>
+                          <div className={styles.contactIdentity}><span className={styles.avatar}>{initials(contact)}</span><div><strong>{contactName(contact)}</strong><span>Contact #{contact.id}</span></div></div>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground max-w-xs truncate">
-                          {c.notes || "—"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => {
-                                setEditingContact(c);
-                                setModalOpen(true);
-                              }}
-                            >
-                              <Edit className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                              onClick={() => handleDeleteContact(c.id)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
+                        <TableCell><div className={styles.contactDetails}><span><Phone aria-hidden="true" />{contact.phone || "No phone"}</span><span><Mail aria-hidden="true" />{contact.email || "No email added"}</span></div></TableCell>
+                        <TableCell>{contact.company ? <span className={styles.company}><Building aria-hidden="true" />{contact.company}</span> : <span className={styles.mutedValue}>Not specified</span>}</TableCell>
+                        <TableCell><Badge variant="outline" className={styles.stageBadge}>{stage?.name || "New lead"}</Badge></TableCell>
+                        <TableCell><span className={styles.notes} title={contact.notes || undefined}>{contact.notes || "No notes yet"}</span></TableCell>
+                        <TableCell><div className={styles.rowActions}>
+                          <Button variant="ghost" size="sm" aria-label={`Edit ${contactName(contact)}`} onClick={() => { setEditingContact(contact); setModalOpen(true); }}><Edit aria-hidden="true" /> Edit</Button>
+                          <Button variant="ghost" size="icon" aria-label={`Delete ${contactName(contact)}`} className={styles.deleteButton} onClick={() => void handleDeleteContact(contact.id)}><Trash2 aria-hidden="true" /></Button>
+                        </div></TableCell>
                       </TableRow>
                     );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <div className={styles.mobileCards}>
+              {filteredContacts.map((contact) => {
+                const stage = stages.find((item) => String(item.id) === String(contact.stage_id));
+                return <article className={styles.mobileContact} key={contact.id}>
+                  <div className={styles.mobileContactHead}><span className={styles.avatar}>{initials(contact)}</span><div><strong>{contactName(contact)}</strong><span>{contact.company || "Individual contact"}</span></div><Badge variant="outline" className={styles.stageBadge}>{stage?.name || "New lead"}</Badge></div>
+                  <div className={styles.mobileContactDetails}><a href={`tel:${contact.phone}`}><Phone aria-hidden="true" />{contact.phone || "No phone"}</a>{contact.email && <a href={`mailto:${contact.email}`}><Mail aria-hidden="true" />{contact.email}</a>}</div>
+                  {contact.notes && <p className={styles.mobileNotes}>{contact.notes}</p>}
+                  <div className={styles.mobileActions}><Button variant="outline" size="sm" onClick={() => { setEditingContact(contact); setModalOpen(true); }}><Edit aria-hidden="true" /> Edit contact</Button><Button variant="ghost" size="sm" className={styles.deleteButton} onClick={() => void handleDeleteContact(contact.id)}><Trash2 aria-hidden="true" /> Delete</Button></div>
+                </article>;
+              })}
+            </div>
+          </>
+        )}
+      </section>
 
-      {/* CREATE / EDIT CONTACT MODAL */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingContact?.id ? "Edit Contact" : "Add New Lead"}</DialogTitle>
-            <DialogDescription>
-              Enter lead details for voice campaign outreach and call disposition logging.
-            </DialogDescription>
+            <DialogTitle>{editingContact?.id ? "Edit contact" : "Add a lead"}</DialogTitle>
+            <DialogDescription>Save the details your team needs to follow up and keep the conversation moving.</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">First Name *</Label>
-                <Input
-                  value={editingContact?.first_name || ""}
-                  onChange={(e) => setEditingContact((prev) => prev ? { ...prev, first_name: e.target.value } : null)}
-                  placeholder="Rahul"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Last Name</Label>
-                <Input
-                  value={editingContact?.last_name || ""}
-                  onChange={(e) => setEditingContact((prev) => prev ? { ...prev, last_name: e.target.value } : null)}
-                  placeholder="Sharma"
-                />
-              </div>
+              <div className="space-y-1"><Label htmlFor="crm-first-name" className="text-xs">First name *</Label><Input id="crm-first-name" autoComplete="given-name" value={editingContact?.first_name || ""} onChange={(event) => setEditingContact((prev) => prev ? { ...prev, first_name: event.target.value } : null)} placeholder="Rahul" /></div>
+              <div className="space-y-1"><Label htmlFor="crm-last-name" className="text-xs">Last name</Label><Input id="crm-last-name" autoComplete="family-name" value={editingContact?.last_name || ""} onChange={(event) => setEditingContact((prev) => prev ? { ...prev, last_name: event.target.value } : null)} placeholder="Sharma" /></div>
             </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Phone Number *</Label>
-              <Input
-                value={editingContact?.phone || ""}
-                onChange={(e) => setEditingContact((prev) => prev ? { ...prev, phone: e.target.value } : null)}
-                placeholder="+91 98765 43210"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Email Address</Label>
-              <Input
-                value={editingContact?.email || ""}
-                onChange={(e) => setEditingContact((prev) => prev ? { ...prev, email: e.target.value } : null)}
-                placeholder="rahul@company.com"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Company / Organization</Label>
-              <Input
-                value={editingContact?.company || ""}
-                onChange={(e) => setEditingContact((prev) => prev ? { ...prev, company: e.target.value } : null)}
-                placeholder="Innovate Tech"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Pipeline Stage</Label>
-              <Select
-                value={String(editingContact?.stage_id || stages[0]?.id || 1)}
-                onValueChange={(val) => setEditingContact((prev) => prev ? { ...prev, stage_id: val } : null)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {stages.map((st) => (
-                    <SelectItem key={st.id} value={String(st.id)}>
-                      {st.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-xs">Notes / Call Summary</Label>
-              <Textarea
-                rows={3}
-                value={editingContact?.notes || ""}
-                onChange={(e) => setEditingContact((prev) => prev ? { ...prev, notes: e.target.value } : null)}
-                placeholder="Lead interested in enterprise outbound voice agent..."
-              />
-            </div>
+            <div className="space-y-1"><Label htmlFor="crm-phone" className="text-xs">Phone number *</Label><Input id="crm-phone" autoComplete="tel" inputMode="tel" value={editingContact?.phone || ""} onChange={(event) => setEditingContact((prev) => prev ? { ...prev, phone: event.target.value } : null)} placeholder="+91 98765 43210" /></div>
+            <div className="space-y-1"><Label htmlFor="crm-email" className="text-xs">Email address</Label><Input id="crm-email" autoComplete="email" type="email" value={editingContact?.email || ""} onChange={(event) => setEditingContact((prev) => prev ? { ...prev, email: event.target.value } : null)} placeholder="rahul@company.com" /></div>
+            <div className="space-y-1"><Label htmlFor="crm-company" className="text-xs">Company or organization</Label><Input id="crm-company" autoComplete="organization" value={editingContact?.company || ""} onChange={(event) => setEditingContact((prev) => prev ? { ...prev, company: event.target.value } : null)} placeholder="Innovate Tech" /></div>
+            <div className="space-y-1"><Label htmlFor="crm-stage" className="text-xs">Pipeline stage</Label><Select value={String(editingContact?.stage_id || stages[0]?.id || 1)} onValueChange={(value) => setEditingContact((prev) => prev ? { ...prev, stage_id: value } : null)}><SelectTrigger id="crm-stage"><SelectValue /></SelectTrigger><SelectContent>{stages.map((stage) => <SelectItem key={stage.id} value={String(stage.id)}>{stage.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1"><Label htmlFor="crm-notes" className="text-xs">Notes or call summary</Label><Textarea id="crm-notes" rows={3} value={editingContact?.notes || ""} onChange={(event) => setEditingContact((prev) => prev ? { ...prev, notes: event.target.value } : null)} placeholder="What should the team remember before the next conversation?" /></div>
           </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveContact} disabled={saving}>
-              Save Lead
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>Cancel</Button><Button onClick={() => void handleSaveContact()} disabled={saving}>{saving ? "Saving…" : "Save contact"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
   );
 }
