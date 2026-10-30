@@ -93,10 +93,8 @@ def _resolve_auto_language(
             "excluded_language_to_previous_supported" if previous in LOCAL_REPLY_TTS_LANGUAGES
             else "excluded_language_to_hindi",
         )
-    if confidence is None:
-        return previous or None, "missing_detector_confidence"
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
-    if confidence < threshold and previous:
+    if confidence is not None and confidence < threshold and previous:
         return previous, "held_previous_low_confidence"
     return code, "detector"
 
@@ -159,7 +157,7 @@ def _trusted_tts_language(
         # response to a voice that is absent from the configured TTS inventory.
         return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else "hi"
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
-    if confidence is not None and confidence >= threshold:
+    if confidence is None or confidence >= threshold:
         return code
     return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
 
