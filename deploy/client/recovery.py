@@ -11,6 +11,8 @@ new offline directory; it never writes Docker volumes or modifies an install.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hashlib
 import io
 import json
@@ -241,6 +243,103 @@ def _check_regular_file(path: Path, description: str) -> None:
         raise ValueError(f"{description} must be a regular file, not a symlink")
 
 
+def _ed25519_types():
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    except ImportError as exc:
+        raise ValueError(
+            "Recovery signature verification requires the Python 'cryptography' package"
+        ) from exc
+    return InvalidSignature, Ed25519PublicKey
+
+
+def _read_release_public_key(path: Path) -> str:
+    """Load a separately trusted canonical Ed25519 release key."""
+    _check_regular_file(path, "Trusted release public key")
+    value = path.read_text(encoding="ascii").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", value):
+        raise ValueError("Trusted release public key is not canonical URL-safe Base64")
+    _invalid_signature, ed25519_public_key = _ed25519_types()
+    try:
+        raw = base64.b64decode(value + "=", altchars=b"-_", validate=True)
+        if base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii") != value:
+            raise ValueError("non-canonical URL-safe Base64")
+        ed25519_public_key.from_public_bytes(raw)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("Trusted release public key is invalid") from exc
+    return value
+
+
+def _verify_release_manifest(manifest_bytes: bytes, release_public_key: str) -> dict[str, object]:
+    """Authenticate and validate the signed manifest before recovery trusts image refs."""
+    invalid_signature, ed25519_public_key = _ed25519_types()
+    try:
+        signed = json.loads(manifest_bytes)
+        payload = signed["payload"]
+        signature = signed["signature"]
+        if not isinstance(payload, dict) or payload.get("edition") != "client":
+            raise ValueError("manifest is not a client release")
+        if (
+            not isinstance(payload.get("files"), dict)
+            or not isinstance(payload.get("ui_files"), dict)
+            or not all(
+                isinstance(name, str) and isinstance(digest, str)
+                and re.fullmatch(r"[0-9a-f]{64}", digest)
+                for inventory in (payload["files"], payload["ui_files"])
+                for name, digest in inventory.items()
+            )
+        ):
+            raise ValueError("manifest inventories are invalid")
+        images = payload.get("images")
+        schema = payload.get("schema_compatibility")
+        if not isinstance(images, dict) or set(images) != {"api", "ui"} or not isinstance(schema, dict):
+            raise ValueError("manifest image or schema metadata is invalid")
+        for name, image in images.items():
+            reference = image.get("reference") if isinstance(image, dict) else None
+            kind = image.get("kind") if isinstance(image, dict) else None
+            if (
+                kind not in {"registry_digest", "image_id"}
+                or not isinstance(reference, str)
+                or not (
+                    re.fullmatch(r"[^@]+@sha256:[0-9a-f]{64}", reference)
+                    if kind == "registry_digest"
+                    else re.fullmatch(r"sha256:[0-9a-f]{64}", reference)
+                )
+            ):
+                raise ValueError(f"manifest {name} image is invalid")
+        if (
+            not isinstance(schema.get("head"), str)
+            or not re.fullmatch(r"[A-Za-z0-9_]{1,64}", schema["head"])
+            or not isinstance(schema.get("upgrade_from"), list)
+            or not isinstance(schema.get("rollback_to"), list)
+            or not all(
+                isinstance(revision, str) and re.fullmatch(r"[A-Za-z0-9_]{1,64}", revision)
+                for revision in schema["upgrade_from"] + schema["rollback_to"]
+            )
+            or len(set(schema["upgrade_from"])) != len(schema["upgrade_from"])
+            or len(set(schema["rollback_to"])) != len(schema["rollback_to"])
+            or schema["head"] not in schema["upgrade_from"]
+            or not set(schema["rollback_to"]).issubset(schema["upgrade_from"])
+        ):
+            raise ValueError("manifest schema compatibility is invalid")
+        if not isinstance(signature, str) or not re.fullmatch(r"[A-Za-z0-9_-]{86}", signature):
+            raise ValueError("manifest signature is missing or invalid")
+        raw_signature = base64.b64decode(signature + "==", altchars=b"-_", validate=True)
+        if base64.urlsafe_b64encode(raw_signature).rstrip(b"=").decode("ascii") != signature:
+            raise ValueError("manifest signature is not canonical")
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        raw_key = base64.b64decode(release_public_key + "=", altchars=b"-_", validate=True)
+        ed25519_public_key.from_public_bytes(raw_key).verify(raw_signature, canonical)
+    except invalid_signature as exc:
+        raise ValueError("Client release manifest signature is invalid") from exc
+    except (KeyError, TypeError, ValueError, binascii.Error) as exc:
+        if isinstance(exc, ValueError) and "manifest signature" in str(exc):
+            raise
+        raise ValueError("Client release manifest is missing or invalid, including its signature") from exc
+    return payload
+
+
 def _check_nested_tar_file(path: Path, description: str) -> None:
     _check_regular_file(path, description)
     if path.stat().st_size > MAX_FILE_SIZE:
@@ -339,9 +438,9 @@ def create_archive(
         identity_mode = 0o640
 
     manifest_bytes = resolved_inputs["config/client-release-manifest.json"].read_bytes()
+    trusted_release_key = _read_release_public_key(resolved_inputs["config/release-public-key.txt"])
     try:
-        manifest_json = json.loads(manifest_bytes)
-        payload = manifest_json["payload"]
+        payload = _verify_release_manifest(manifest_bytes, trusted_release_key)
         manifest_images = payload["images"]
         env_api = _env_value(env_bytes, "CLIENT_API_IMAGE")
         env_ui = _env_value(env_bytes, "CLIENT_UI_IMAGE")
@@ -771,6 +870,7 @@ def _switch_compose_up(
 
 def _restore_to_docker_volumes_locked(
     *, archive_path: Path, compose_dir: Path, env_file: Path,
+    release_public_key: Path | None,
     confirm_maintenance: bool,
 ) -> dict[str, object]:
     """Restore into new labeled volumes, atomically switch Compose, retain rollback volumes."""
@@ -778,6 +878,7 @@ def _restore_to_docker_volumes_locked(
         raise ValueError("Docker restore requires --confirm-maintenance because client services will stop")
     compose_dir = compose_dir.resolve(strict=True)
     env_file = env_file.resolve(strict=True)
+    release_public_key = release_public_key or compose_dir / "release-public-key.txt"
     state_dir = _persisted_recovery_state(compose_dir)
     if state_dir.exists():
         raise ValueError("A prior recovery is still active; run rollback-docker before another restore")
@@ -785,7 +886,7 @@ def _restore_to_docker_volumes_locked(
     stage_parent = compose_dir / ".client-recovery-stage"
     stage_parent.mkdir(mode=0o700, exist_ok=True)
     stage_dir = stage_parent / f"restore-{uuid.uuid4().hex}"
-    summary = restore_to_directory(archive_path, stage_dir)
+    summary = restore_to_directory(archive_path, stage_dir, release_public_key=release_public_key)
     try:
         current_env = _staged_config_matches_installation(stage_dir, env_file, compose_dir)
         original_volumes = _compose_volume_names(model)
@@ -902,11 +1003,13 @@ def _restore_to_docker_volumes_locked(
 
 def restore_to_docker_volumes(
     *, archive_path: Path, compose_dir: Path, env_file: Path,
+    release_public_key: Path | None = None,
     confirm_maintenance: bool,
 ) -> dict[str, object]:
     with _recovery_operation_lock(compose_dir):
         return _restore_to_docker_volumes_locked(
             archive_path=archive_path, compose_dir=compose_dir, env_file=env_file,
+            release_public_key=release_public_key,
             confirm_maintenance=confirm_maintenance,
         )
 
@@ -973,7 +1076,9 @@ def rollback_docker_restore(*, compose_dir: Path, env_file: Path, confirm_mainte
         )
 
 
-def _validate_archive_handle(archive: tarfile.TarFile) -> tuple[dict[str, object], dict[str, str]]:
+def _validate_archive_handle(
+    archive: tarfile.TarFile, trusted_release_public_key: str,
+) -> tuple[dict[str, object], dict[str, str]]:
     """Validate one already-open archive and return summary and verified checksums."""
     files: dict[str, tarfile.TarInfo] = {}
     total_size = 0
@@ -1020,7 +1125,10 @@ def _validate_archive_handle(archive: tarfile.TarFile) -> tuple[dict[str, object
     if metadata.get("manifest_sha256") != hashlib.sha256(manifest_bytes).hexdigest():
         raise ValueError("Recovery manifest fingerprint does not match the archived manifest")
     try:
-        manifest_payload = json.loads(manifest_bytes)["payload"]
+        archive_key = _read_member(archive, files["config/release-public-key.txt"], MAX_METADATA_SIZE).decode("ascii").strip()
+        if archive_key != trusted_release_public_key:
+            raise ValueError("Archived release public key does not match the separately trusted key")
+        manifest_payload = _verify_release_manifest(manifest_bytes, trusted_release_public_key)
         if (
             manifest_payload.get("edition") != "client"
             or metadata.get("api_image") != _env_value(env_bytes, "CLIENT_API_IMAGE")
@@ -1095,20 +1203,23 @@ def _validate_archive_handle(archive: tarfile.TarFile) -> tuple[dict[str, object
     return summary, expected
 
 
-def validate_archive(path: Path) -> dict[str, object]:
-    """Validate exact archive layout, cold-snapshot declaration, and all hashes."""
+def validate_archive(path: Path, *, release_public_key: Path) -> dict[str, object]:
+    """Validate archive layout, checksums, and signatures against an external trust key."""
+    trusted_release_key = _read_release_public_key(release_public_key)
     try:
         archive_bytes = path.stat().st_size
         if archive_bytes < 1 or archive_bytes > MAX_ARCHIVE_SIZE:
             raise ValueError("Recovery archive exceeds the supported compressed size limit")
         with tarfile.open(path, mode="r:gz") as archive:
-            summary, _ = _validate_archive_handle(archive)
+            summary, _ = _validate_archive_handle(archive, trusted_release_key)
             return summary
     except (OSError, tarfile.TarError) as exc:
         raise ValueError("Recovery archive must be a readable gzip-compressed tar file") from exc
 
 
-def restore_to_directory(archive_path: Path, destination: Path) -> dict[str, object]:
+def restore_to_directory(
+    archive_path: Path, destination: Path, *, release_public_key: Path,
+) -> dict[str, object]:
     """Stage a validated recovery set to a new directory; never touch live volumes."""
     if destination.exists():
         raise ValueError("Restore destination already exists; refusing to overwrite")
@@ -1120,7 +1231,7 @@ def restore_to_directory(archive_path: Path, destination: Path) -> dict[str, obj
         if archive_bytes < 1 or archive_bytes > MAX_ARCHIVE_SIZE:
             raise ValueError("Recovery archive exceeds the supported compressed size limit")
         with tarfile.open(fileobj=archive_file, mode="r:gz") as archive:
-            summary, expected = _validate_archive_handle(archive)
+            summary, expected = _validate_archive_handle(archive, _read_release_public_key(release_public_key))
             volume_members = {
                 member.name: member
                 for member in archive.getmembers()
@@ -1195,6 +1306,10 @@ def main() -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     validate_parser = commands.add_parser("validate", help="validate an existing recovery archive")
     validate_parser.add_argument("archive", type=Path)
+    validate_parser.add_argument(
+        "--release-public-key", type=Path,
+        help="separately trusted release key (defaults to release-public-key.txt beside this script)",
+    )
     create_parser = commands.add_parser("create", help="package already-cold, pre-exported volume archives")
     create_parser.add_argument("--postgres-tar", required=True, type=Path)
     create_parser.add_argument("--minio-tar", required=True, type=Path)
@@ -1214,6 +1329,7 @@ def main() -> int:
     restore_mode.add_argument("--docker-volumes", action="store_true", help="restore to new Compose volumes and retain old volumes for rollback")
     restore_parser.add_argument("--compose-dir", type=Path, default=Path(__file__).resolve().parent)
     restore_parser.add_argument("--env-file", type=Path)
+    restore_parser.add_argument("--release-public-key", type=Path)
     restore_parser.add_argument("--confirm-maintenance", action="store_true")
     docker_backup_parser = commands.add_parser("backup-docker", help="stop client services and create a cold backup of Postgres and MinIO volumes")
     docker_backup_parser.add_argument("--compose-dir", type=Path, default=Path(__file__).resolve().parent)
@@ -1228,7 +1344,8 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "validate":
-            result = validate_archive(args.archive)
+            release_public_key = args.release_public_key or Path(__file__).resolve().parent / "release-public-key.txt"
+            result = validate_archive(args.archive, release_public_key=release_public_key)
         elif args.command == "create":
             result = create_archive(
                 postgres_tar=args.postgres_tar, minio_tar=args.minio_tar,
@@ -1237,11 +1354,14 @@ def main() -> int:
                 identity_key=args.identity_key, writers_stopped=args.confirm_stopped_writers,
             )
         elif args.command == "restore" and args.destination is not None:
-            result = restore_to_directory(args.archive, args.destination)
+            release_public_key = args.release_public_key or args.compose_dir / "release-public-key.txt"
+            result = restore_to_directory(args.archive, args.destination, release_public_key=release_public_key)
         elif args.command == "restore":
             env_file = args.env_file or args.compose_dir / ".env"
+            release_public_key = args.release_public_key or args.compose_dir / "release-public-key.txt"
             result = restore_to_docker_volumes(
                 archive_path=args.archive, compose_dir=args.compose_dir, env_file=env_file,
+                release_public_key=release_public_key,
                 confirm_maintenance=args.confirm_maintenance,
             )
         elif args.command == "backup-docker":

@@ -308,6 +308,7 @@ def test_disposable_compose_cold_backup_restore_and_rollback(tmp_path: Path) -> 
 
         restored = recovery.restore_to_docker_volumes(
             archive_path=archive, compose_dir=directory, env_file=env_file,
+            release_public_key=public_key,
             confirm_maintenance=True,
         )
         assert restored["status"] == "restored_to_new_volumes"

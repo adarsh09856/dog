@@ -6,13 +6,46 @@ import json
 import os
 import sys
 import tarfile
+import base64
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "deploy/client"))
 import recovery  # noqa: E402
+
+_RELEASE_SIGNING_KEY = Ed25519PrivateKey.generate()
+_RELEASE_PUBLIC_KEY = base64.urlsafe_b64encode(
+    _RELEASE_SIGNING_KEY.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+).rstrip(b"=").decode("ascii")
+
+
+def _trusted_key_file(directory: Path) -> Path:
+    path = directory / "trusted-release-public-key.txt"
+    path.write_text(_RELEASE_PUBLIC_KEY + "\n", encoding="ascii")
+    return path
+
+
+def _signed_manifest() -> bytes:
+    payload = {
+        "edition": "client",
+        "files": {},
+        "ui_files": {},
+        "images": {
+            "api": {"kind": "registry_digest", "reference": "registry.example.com/kodewaves/api@sha256:" + "a" * 64},
+            "ui": {"kind": "registry_digest", "reference": "registry.example.com/kodewaves/ui@sha256:" + "b" * 64},
+        },
+        "schema_compatibility": {"head": "head1", "upgrade_from": ["head1"], "rollback_to": []},
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    signature = base64.urlsafe_b64encode(_RELEASE_SIGNING_KEY.sign(canonical)).rstrip(b"=").decode("ascii")
+    return json.dumps({"payload": payload, "signature": signature}).encode("utf-8")
 
 
 def _archive(path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str | None = None):
@@ -35,15 +68,7 @@ def _archive(path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str
         + b"a" * 64 + b"\nCLIENT_UI_IMAGE=registry.example.com/kodewaves/ui@sha256:"
         + b"b" * 64 + b"\n"
     )
-    manifest_bytes = json.dumps({
-        "payload": {
-            "edition": "client",
-            "images": {
-                "api": {"reference": "registry.example.com/kodewaves/api@sha256:" + "a" * 64},
-                "ui": {"reference": "registry.example.com/kodewaves/ui@sha256:" + "b" * 64},
-            },
-        },
-    }).encode()
+    manifest_bytes = _signed_manifest()
     metadata = {
         "format": "kodewaves-client-recovery-v1",
         "snapshot_mode": "cold",
@@ -66,7 +91,7 @@ def _archive(path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str
         "volumes/minio.tar": volume_snapshot("minio"),
         "config/.env": env,
         "config/client-release-manifest.json": manifest_bytes,
-        "config/release-public-key.txt": b"trusted-public-key\n",
+        "config/release-public-key.txt": (_RELEASE_PUBLIC_KEY + "\n").encode("ascii"),
         "config/installation.key": b"k" * 32,
     }
     if extra:
@@ -124,8 +149,9 @@ def test_backup_rejects_a_different_installation_key(tmp_path):
 def test_recovery_archive_validates_without_extracting(tmp_path):
     path = tmp_path / "backup.tar.gz"
     _archive(path)
+    trusted_key = _trusted_key_file(tmp_path)
 
-    result = recovery.validate_archive(path)
+    result = recovery.validate_archive(path, release_public_key=trusted_key)
 
     assert result == {
         "status": "validated",
@@ -134,7 +160,72 @@ def test_recovery_archive_validates_without_extracting(tmp_path):
         "snapshot_mode": "cold",
         "restore_performed": False,
     }
-    assert list(tmp_path.iterdir()) == [path]
+    assert set(tmp_path.iterdir()) == {path, trusted_key}
+
+
+def test_recovery_archive_rejects_unsigned_release_manifest(tmp_path):
+    path = tmp_path / "unsigned.tar.gz"
+    _archive(path)
+    with tarfile.open(path, "r:gz") as source:
+        entries = {member.name: source.extractfile(member).read() for member in source.getmembers()}
+    manifest = json.loads(entries["config/client-release-manifest.json"])
+    manifest.pop("signature")
+    entries["config/client-release-manifest.json"] = json.dumps(manifest).encode()
+    metadata = json.loads(entries["recovery.json"])
+    metadata["manifest_sha256"] = hashlib.sha256(entries["config/client-release-manifest.json"]).hexdigest()
+    entries["recovery.json"] = json.dumps(metadata).encode()
+    entries["SHA256SUMS"] = "".join(
+        f"{hashlib.sha256(data).hexdigest()}  {name}\n"
+        for name, data in sorted(entries.items()) if name != "SHA256SUMS"
+    ).encode()
+    with tarfile.open(path, "w:gz") as target:
+        for name, data in entries.items():
+            member = tarfile.TarInfo(name)
+            member.size = len(data)
+            member.mode = 0o640 if name == "config/installation.key" else 0o600 if name == "config/.env" else 0o644
+            if name == "config/installation.key":
+                member.gid = 1234
+                member.uid = 0
+            target.addfile(member, io.BytesIO(data))
+
+    with pytest.raises(ValueError, match="signature"):
+        recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))
+
+
+def test_recovery_archive_rejects_attacker_replaced_manifest_and_key(tmp_path):
+    path = tmp_path / "attacker-signed.tar.gz"
+    _archive(path)
+    attacker = Ed25519PrivateKey.generate()
+    attacker_public = base64.urlsafe_b64encode(attacker.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode("ascii")
+    with tarfile.open(path, "r:gz") as source:
+        entries = {member.name: source.extractfile(member).read() for member in source.getmembers()}
+    manifest = json.loads(entries["config/client-release-manifest.json"])
+    canonical = json.dumps(manifest["payload"], sort_keys=True, separators=(",", ":")).encode("utf-8")
+    manifest["signature"] = base64.urlsafe_b64encode(attacker.sign(canonical)).rstrip(b"=").decode("ascii")
+    entries["config/client-release-manifest.json"] = json.dumps(manifest).encode()
+    entries["config/release-public-key.txt"] = (attacker_public + "\n").encode("ascii")
+    metadata = json.loads(entries["recovery.json"])
+    metadata["manifest_sha256"] = hashlib.sha256(entries["config/client-release-manifest.json"]).hexdigest()
+    entries["recovery.json"] = json.dumps(metadata).encode()
+    entries["SHA256SUMS"] = "".join(
+        f"{hashlib.sha256(data).hexdigest()}  {name}\n"
+        for name, data in sorted(entries.items()) if name != "SHA256SUMS"
+    ).encode()
+    with tarfile.open(path, "w:gz") as target:
+        for name, data in entries.items():
+            member = tarfile.TarInfo(name)
+            member.size = len(data)
+            member.mode = 0o640 if name == "config/installation.key" else 0o600 if name == "config/.env" else 0o644
+            if name == "config/installation.key":
+                member.gid = 1234
+                member.uid = 0
+            target.addfile(member, io.BytesIO(data))
+
+    with pytest.raises(ValueError, match="separately trusted key"):
+        recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))
 
 
 def _create_archive_inputs(tmp_path: Path) -> dict[str, Path]:
@@ -196,10 +287,10 @@ def test_create_and_stage_offline_recovery_archive(tmp_path):
         output=archive_path, writers_stopped=True,
     )
     assert created["status"] == "created"
-    assert recovery.validate_archive(archive_path)["installation_id"] == "customer-123"
+    assert recovery.validate_archive(archive_path, release_public_key=inputs["public_key"])["installation_id"] == "customer-123"
 
     destination = tmp_path / "offline-restore"
-    staged = recovery.restore_to_directory(archive_path, destination)
+    staged = recovery.restore_to_directory(archive_path, destination, release_public_key=inputs["public_key"])
     assert staged["status"] == "staged"
     assert staged["docker_volumes_modified"] is False
     assert (destination / "volumes/postgres.tar").read_bytes() == inputs["postgres"].read_bytes()
@@ -208,6 +299,23 @@ def test_create_and_stage_offline_recovery_archive(tmp_path):
     assert (destination / "volumes/minio-data/data/example").read_bytes() == b"minio-cold-data"
     assert (destination / "config/.env").read_bytes() == inputs["env"].read_bytes()
     assert (destination / "config/installation.key").read_bytes() == b"k" * 32
+
+
+def test_create_refuses_invalid_signed_release_manifest(tmp_path):
+    inputs = _create_archive_inputs(tmp_path)
+    manifest = json.loads(inputs["manifest"].read_bytes())
+    manifest["signature"] = "A" * 86
+    inputs["manifest"].write_text(json.dumps(manifest), encoding="utf-8")
+    output = tmp_path / "invalid-signature.tar.gz"
+
+    with pytest.raises(ValueError, match="signature"):
+        recovery.create_archive(
+            postgres_tar=inputs["postgres"], minio_tar=inputs["minio"],
+            env_file=inputs["env"], manifest=inputs["manifest"],
+            release_public_key=inputs["public_key"], identity_key=inputs["identity"],
+            output=output, writers_stopped=True,
+        )
+    assert not output.exists()
 
 
 def test_create_requires_maintenance_attestation_and_exclusive_destination(tmp_path):
@@ -238,7 +346,7 @@ def test_restore_refuses_existing_destination_without_touching_it(tmp_path):
     sentinel.write_text("keep")
 
     with pytest.raises(ValueError, match="already exists"):
-        recovery.restore_to_directory(archive_path, destination)
+        recovery.restore_to_directory(archive_path, destination, release_public_key=_trusted_key_file(tmp_path))
     assert sentinel.read_text() == "keep"
 
 
@@ -251,7 +359,7 @@ def test_recovery_archive_rejects_unsafe_or_unexpected_members(tmp_path, extra):
     _archive(path, extra=extra)
 
     with pytest.raises(ValueError):
-        recovery.validate_archive(path)
+        recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))
 
 
 def test_recovery_archive_rejects_checksum_mismatch(tmp_path):
@@ -259,7 +367,7 @@ def test_recovery_archive_rejects_checksum_mismatch(tmp_path):
     _archive(path, corrupt="volumes/minio.tar")
 
     with pytest.raises(ValueError, match="Checksum mismatch"):
-        recovery.validate_archive(path)
+        recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))
 
 
 def test_recovery_archive_rejects_identity_key_with_wrong_permissions(tmp_path):
@@ -276,7 +384,7 @@ def test_recovery_archive_rejects_identity_key_with_wrong_permissions(tmp_path):
             target.addfile(member, io.BytesIO(data))
 
     with pytest.raises(ValueError, match="0640 permissions"):
-        recovery.validate_archive(replacement)
+        recovery.validate_archive(replacement, release_public_key=_trusted_key_file(tmp_path))
 
 
 def test_recovery_archive_rejects_mismatched_installation_identity(tmp_path):
@@ -309,7 +417,7 @@ def test_recovery_archive_rejects_mismatched_installation_identity(tmp_path):
                 member.uid = 0
             target.addfile(member, io.BytesIO(data))
     with pytest.raises(ValueError, match="does not match the archived .env"):
-        recovery.validate_archive(replacement)
+        recovery.validate_archive(replacement, release_public_key=_trusted_key_file(tmp_path))
 
 
 def test_recovery_archive_rejects_non_cold_snapshot_declaration(tmp_path):
@@ -336,7 +444,7 @@ def test_recovery_archive_rejects_non_cold_snapshot_declaration(tmp_path):
             target.addfile(member, io.BytesIO(data))
 
     with pytest.raises(ValueError, match="cold snapshot"):
-        recovery.validate_archive(replacement)
+        recovery.validate_archive(replacement, release_public_key=_trusted_key_file(tmp_path))
 
 
 def test_recovery_archive_rejects_nested_path_traversal_and_links(tmp_path):
@@ -374,4 +482,4 @@ def test_recovery_archive_rejects_nested_path_traversal_and_links(tmp_path):
                     member.gid = 1234
                 target.addfile(member, io.BytesIO(data))
         with pytest.raises(ValueError):
-            recovery.validate_archive(replacement)
+            recovery.validate_archive(replacement, release_public_key=_trusted_key_file(tmp_path))
