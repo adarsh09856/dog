@@ -23,17 +23,11 @@ _OPENING_WORDS = (
 _GREETING_SEPARATORS = " \t\r\n!,.:;?।॥،؛"
 from api.services.workflow.direct_caller_reply import END_CALL_TOOL_NAMES as _END_CALL_TOOLS
 _LOCAL_CALLER_RESPONSE_GUARD = (
-    "Use a warm, constructive tone. Acknowledge what the caller has already told you, "
-    "then move the task forward with one clear next step. Avoid generic disclaimers "
-    "such as 'not verified' or 'not confirmed'; if an action fails, say briefly what "
-    "can happen next. Never claim a booking or other action succeeded unless its tool "
-    "returns success. Answer the latest caller message directly. Do not repeat the caller's words or "
-    "an earlier reply. Never invent service names. Remember their name and contact "
-    "details from the conversation; ask only for details that are missing or corrected. "
-    "For a booking, carry forward every date, service, and time the caller already "
-    "gave. Ask only for the next missing detail. If a date is ambiguous, ask one "
-    "short clarification about that date; do not restart the booking questions or "
-    "guess a year or time. After the date is clear, ask only for the time."
+    "Answer in the caller's language. Use their known name and contact details; ask "
+    "only for the next missing or corrected detail. Never repeat an earlier reply or "
+    "invent service names. For bookings, retain every caller-provided service, date, "
+    "and time. Ask one short clarification only when needed; never guess a date, year, "
+    "or time. After the date is clear, ask only for the time."
 )
 
 
