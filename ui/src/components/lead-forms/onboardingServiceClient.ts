@@ -3,10 +3,9 @@
 // (no auth token); identity is the email carried in the body. Every call is
 // BEST-EFFORT: failures are swallowed so a down/erroring service never blocks the user.
 
-// Base URL of the user_onboarding service. Unset (the default for self-hosted OSS —
-// .env.example ships this commented out) → fall back to our cloud leads backend so we
-// still receive OSS form submissions. Override the env var to point elsewhere (or to a
-// local backend) to stop sending leads to us.
+// Base URL of the separate user_onboarding service. Self-hosted deployments may
+// leave it unset; in that case forms must report that submission is unavailable
+// instead of claiming a lead was delivered.
 const BASE_URL = process.env.NEXT_PUBLIC_ONBOARDING_API_URL || "";
 
 // Bound every call so a slow/hung service can never freeze the UI. Best-effort:
@@ -25,7 +24,7 @@ export type LeadResult = {
 // body on success, or null on a non-2xx / network error / timeout (best-effort, never throws).
 async function post(path: string, body: unknown): Promise<LeadResult | null> {
   if (!BASE_URL) {
-    return { ok: true };
+    return null;
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);

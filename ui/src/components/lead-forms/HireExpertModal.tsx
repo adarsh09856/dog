@@ -102,6 +102,11 @@ export function HireExpertModal({ open, onOpenChange, source, onOpenEnterprise }
         origin,
         payload: { name, company, email, jobTitle, agentGoal, phone, volume },
       });
+      if (result?.ok !== true) {
+        toast.error("We couldn't submit your request. Please try again later or contact support.");
+        setSubmitting(false);
+        return;
+      }
       // The server decides whether to return a booking link; if it does, show the calendar
       // inline, else the email note. The app only reads the response — no logic of its own.
       if (result?.show_calendar && result.cal_link) {
