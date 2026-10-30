@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - codex/client-bundle-theme
   pull_request:
     branches:
       - main
