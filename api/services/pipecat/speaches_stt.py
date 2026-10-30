@@ -25,6 +25,37 @@ LOCAL_REPLY_TTS_LANGUAGES = frozenset({
     "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
     "ne", "pa", "sa", "ta", "te",
 })
+_DEVANAGARI_LANGUAGES = frozenset({"hi", "mr", "ne", "sa", "mai", "brx", "doi"})
+
+
+def _resolve_script_language_conflict(
+    detected: str | None,
+    text: str,
+    previous_stable: str | None,
+) -> tuple[str | None, str]:
+    """Reject a Punjabi label when the recognized words are Devanagari.
+
+    IndicConformer can confuse short Hindi/Hinglish utterances with Punjabi.
+    The transcript's Unicode script is a stronger signal for this specific
+    contradiction: Punjabi uses Gurmukhi, while Hindi and Hinglish use
+    Devanagari. Script alone cannot distinguish Hindi from other Devanagari
+    languages, so preserve a prior Devanagari language or use Hindi as the
+    configured product fallback.
+    """
+    code = str(detected or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    devanagari = sum(1 for char in text if 0x0900 <= ord(char) <= 0x097F)
+    gurmukhi = sum(1 for char in text if 0x0A00 <= ord(char) <= 0x0A7F)
+    latin = sum(1 for char in text if char.isascii() and char.isalpha())
+    if code == "pa" and devanagari > gurmukhi:
+        return (previous if previous in _DEVANAGARI_LANGUAGES else "hi"), "script_conflict_pa_to_devanagari"
+    if code in {"pa", "hi"} and latin > max(devanagari, gurmukhi):
+        if devanagari and previous in _DEVANAGARI_LANGUAGES:
+            return previous, "script_conflict_preserve_devanagari_context"
+        return "en", f"script_conflict_{code}_to_latin"
+    if code != "pa" and gurmukhi > max(devanagari, latin):
+        return "pa", "script_conflict_to_gurmukhi"
+    return detected, "script_consistent"
 
 
 def _is_auto_language(value: str | None) -> bool:
@@ -318,6 +349,22 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             self._latest_language_confidence = None
             result = await super()._transcribe(normalized)
         text = (getattr(result, "text", None) or "").strip()
+        if (
+            text
+            and local_indic
+            and auto_language
+            and self.latest_detected_language
+        ):
+            script_language, script_route = _resolve_script_language_conflict(
+                self.latest_detected_language,
+                text,
+                self._stable_detected_language,
+            )
+            if script_language != self.latest_detected_language:
+                self.latest_detected_language = script_language
+                language_route = script_route
+                if hasattr(result, "model_copy"):
+                    result = result.model_copy(update={"language": script_language})
         if text and not any(
             unicodedata.category(char)[0] in {"L", "N"} for char in text
         ):

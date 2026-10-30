@@ -28,7 +28,9 @@ _LOCAL_CALLER_RESPONSE_GUARD = (
     "invent service names. Never claim an action succeeded without tool success. "
     "For bookings, retain every caller-provided service, date, "
     "and time. Ask one short clarification only when needed; never guess a date, year, "
-    "or time. After the date is clear, ask only for the time."
+    "or time. After the date is clear, ask only for the time. Keep spoken replies "
+    "concise: use one short sentence when possible, and include every detail needed "
+    "to answer safely without repeating information the caller already gave."
 )
 
 
