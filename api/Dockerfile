@@ -127,6 +127,8 @@ RUN if [ "$KODEWAVES_EDITION" = "client" ]; then \
         > ./api/services/owner_public_keys.json; \
       rm -rf ./api/routes/admin ./api/routes/superuser.py ./api/tests \
         ./api/db/owner_user_management.py ./api/db/saas_plan_catalog.py \
+        ./api/services/owner_license_signer.py \
+        ./api/services/owner_license_signer_client.py \
         ./scripts/create_superuser.py; \
     elif [ "$KODEWAVES_EDITION" != "saas" ]; then \
       echo "KODEWAVES_EDITION must be saas or client" >&2; exit 1; \
