@@ -794,7 +794,15 @@ class KodewavesDBClient(BaseDBClient):
     # ------------------------------------------------------------------------
     # Platform Settings
     # ------------------------------------------------------------------------
-    async def get_setting(self, key: str) -> Optional[Dict[str, Any]]:
+    async def get_setting(
+        self, key: str, *, raise_on_error: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """Read a platform setting, optionally propagating database failures.
+
+        Callers enforcing entitlements or serving required configuration must be
+        able to fail closed when the settings store is unavailable. Legacy
+        callers keep the existing best-effort behavior by default.
+        """
         try:
             async with self.get_session() as session:
                 stmt = select(GlobalPlatformSettingModel).where(GlobalPlatformSettingModel.key == key)
@@ -802,6 +810,8 @@ class KodewavesDBClient(BaseDBClient):
                 setting = result.scalar_one_or_none()
                 return setting.value if setting else None
         except Exception:
+            if raise_on_error:
+                raise
             return None
 
     async def set_setting(self, key: str, value: Dict[str, Any], category: str = "general") -> GlobalPlatformSettingModel:
