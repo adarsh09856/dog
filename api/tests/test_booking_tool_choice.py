@@ -135,14 +135,13 @@ def test_local_qwen_keeps_response_guard_in_reusable_prefix_without_mutating_his
     )
     assert guard_index == 1
     guard = prepared["messages"][guard_index]["content"]
-    assert "warm, constructive tone" in guard
-    assert "Never claim a booking or other action succeeded" in guard
-    assert "not verified" in guard
-    assert "Answer the latest caller message directly" in guard
-    assert "Do not repeat the caller's words" in guard
-    assert "Never invent service names" in guard
-    assert "carry forward every date, service, and time" in guard
-    assert "do not restart the booking questions" in guard
+    assert "Answer in the caller's language" in guard
+    assert "known name and contact details" in guard
+    assert "ask only for the next missing or corrected detail" in guard
+    assert "Never repeat an earlier reply" in guard
+    assert "invent service names" in guard
+    assert "retain every caller-provided service, date, and time" in guard
+    assert "never guess a date, year, or time" in guard
 
     followup = deepcopy(request)
     followup["messages"].extend([
