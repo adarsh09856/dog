@@ -81,6 +81,11 @@ def _minor_units_to_gateway_units(amount: int) -> int:
     return max(0, int(amount or 0))
 
 
+def _require_purchasable_package(package) -> None:
+    if package.price_cents <= 0 or package.minutes <= 0 or (package.bonus_minutes or 0) < 0:
+        raise HTTPException(status_code=400, detail="This credit package is not available for purchase")
+
+
 def _plan_price_for_checkout(plan: SaaSPlanModel, billing_cycle: str) -> int:
     if billing_cycle not in {"monthly", "annual"}:
         raise HTTPException(status_code=422, detail="Billing cycle must be monthly or annual")
@@ -349,6 +354,7 @@ async def create_payment_order(req: CreateOrderRequest, user: UserModel = Depend
             package = pkg_res.scalar_one_or_none()
             if not package or not package.is_active:
                 raise HTTPException(status_code=404, detail="Active credit package not found")
+            _require_purchasable_package(package)
             item_title = package.name
             currency = package.currency or currency
             amount_units = _minor_units_to_gateway_units(package.price_cents)
