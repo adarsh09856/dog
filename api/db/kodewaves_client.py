@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -33,6 +33,37 @@ from api.db.kodewaves_models import (
     WebsiteWidgetModel,
     GlobalPlatformSettingModel,
 )
+
+
+def _materialize_paid_plan_assignment(
+    requested: Dict[str, Any], previous: Any
+) -> Dict[str, Any]:
+    """Compute a purchased term while the organization's wallet lock is held."""
+    assignment = dict(requested)
+    term_days = int(assignment.pop("_term_days"))
+    if term_days not in {30, 365}:
+        raise ValueError("Paid plan term must be 30 or 365 days")
+    assignment.pop("expires_at", None)
+    now = datetime.now(UTC)
+    start = now
+    previous_expiry = (
+        previous.get("expires_at")
+        if isinstance(previous, dict)
+        and previous.get("plan_code") == assignment.get("plan_code")
+        else None
+    )
+    if previous_expiry:
+        try:
+            parsed = datetime.fromisoformat(str(previous_expiry).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            if parsed > start:
+                start = parsed
+        except (TypeError, ValueError):
+            pass
+    assignment["updated_at"] = now.isoformat()
+    assignment["expires_at"] = (start + timedelta(days=term_days)).isoformat()
+    return assignment
 
 
 class KodewavesDBClient(BaseDBClient):
@@ -586,9 +617,10 @@ class KodewavesDBClient(BaseDBClient):
         reason: str = "credit_purchase",
         reference_id: Optional[str] = None,
         notes: Optional[str] = None,
+        plan_assignment: Optional[Dict[str, Any]] = None,
     ) -> OrganizationWalletModel:
-        if minutes <= 0:
-            raise ValueError("Minute credits must be positive")
+        if minutes < 0 or (minutes == 0 and plan_assignment is None):
+            raise ValueError("Minute credits must be positive unless granting a paid plan")
         async with self.get_session() as session:
             # An upsert also serializes first-time wallet creation: a SELECT
             # FOR UPDATE alone cannot lock a row that does not exist yet.
@@ -610,7 +642,7 @@ class KodewavesDBClient(BaseDBClient):
                 check_stmt = select(WalletLedgerModel).where(
                     WalletLedgerModel.organization_id == organization_id,
                     WalletLedgerModel.reference_id == str(reference_id),
-                    WalletLedgerModel.amount_minutes > 0,
+                    WalletLedgerModel.amount_minutes >= 0,
                 )
                 existing = await session.execute(check_stmt)
                 if existing.scalar_one_or_none() is not None:
@@ -630,6 +662,29 @@ class KodewavesDBClient(BaseDBClient):
                 notes=notes,
             )
             session.add(ledger_entry)
+
+            if plan_assignment is not None:
+                key = f"org_plan_{organization_id}"
+                setting_result = await session.execute(
+                    select(GlobalPlatformSettingModel).where(
+                        GlobalPlatformSettingModel.key == key
+                    )
+                )
+                setting = setting_result.scalar_one_or_none()
+                previous_value = setting.value if setting is not None else None
+                assignment = _materialize_paid_plan_assignment(
+                    plan_assignment, previous_value
+                )
+                if setting is None:
+                    session.add(
+                        GlobalPlatformSettingModel(
+                            key=key, value=assignment, category="plan"
+                        )
+                    )
+                else:
+                    setting.value = assignment
+                    setting.category = "plan"
+                    setting.updated_at = datetime.now(UTC)
 
             await session.commit()
             await session.refresh(wallet)

@@ -28,6 +28,35 @@ from api.db.kodewaves_client import (
 from api.services.workflow_run_billing import report_workflow_run_platform_usage
 
 
+def test_queued_run_downgrade_resets_processing_rows_before_enum_change(monkeypatch):
+    import importlib.util
+    from pathlib import Path
+
+    migration_path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic"
+        / "versions"
+        / "34c8537dfde5_add_processing_state_in_queued_runs.py"
+    )
+    spec = importlib.util.spec_from_file_location("queued_run_migration", migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    calls = []
+    monkeypatch.setattr(migration.op, "drop_index", lambda *args, **kwargs: calls.append(("drop_index", args, kwargs)))
+    monkeypatch.setattr(migration.op, "f", lambda name: name)
+    monkeypatch.setattr(migration.op, "execute", lambda statement: calls.append(("execute", str(statement))))
+    monkeypatch.setattr(migration.op, "sync_enum_values", lambda **kwargs: calls.append(("sync_enum_values", kwargs)))
+    monkeypatch.setattr(migration.op, "create_index", lambda *args, **kwargs: calls.append(("create_index", args, kwargs)))
+
+    migration.downgrade()
+
+    execute_index = next(index for index, call in enumerate(calls) if call[0] == "execute")
+    enum_index = next(index for index, call in enumerate(calls) if call[0] == "sync_enum_values")
+    assert "state = 'queued'" in calls[execute_index][1]
+    assert "state = 'processing'" in calls[execute_index][1]
+    assert execute_index < enum_index
+
+
 @pytest.mark.parametrize("term_days", [30, 365])
 def test_wallet_plan_grant_has_the_published_access_duration(term_days):
     from datetime import datetime, timedelta

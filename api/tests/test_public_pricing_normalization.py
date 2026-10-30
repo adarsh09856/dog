@@ -17,6 +17,7 @@ from api.routes.payments import (
     _fetch_paid_order,
     _validate_order_metadata,
     VerifyPaymentRequest,
+    VerifyPaymentResponse,
     verify_razorpay_signature,
     verify_razorpay_webhook_signature,
 )
@@ -377,6 +378,38 @@ async def test_stripe_paid_session_can_be_verified_without_trusting_browser_paym
     assert result["payment_id"] == "pi_live_456"
     assert result["amount"] == 2999
     assert result["currency"] == "USD"
+
+
+@pytest.mark.asyncio
+async def test_client_payment_verification_uses_catalog_checked_grant(monkeypatch):
+    paid_order = {
+        "amount": 2999,
+        "currency": "USD",
+        "metadata": {"organization_id": "42", "package_id": "pkg-1", "plan_code": ""},
+        "payment_id": "pi_live_456",
+    }
+    response = VerifyPaymentResponse(
+        success=True,
+        message="confirmed",
+        minutes_added=100,
+        new_wallet_balance=100,
+    )
+    fetch_paid_order = AsyncMock(return_value=paid_order)
+    grant_paid_order = AsyncMock(return_value=response)
+    monkeypatch.setattr(payments, "get_gateway_credentials", AsyncMock(return_value={}))
+    monkeypatch.setattr(payments, "_fetch_paid_order", fetch_paid_order)
+    monkeypatch.setattr(payments, "_grant_paid_order", grant_paid_order)
+
+    result = await payments.verify_payment(
+        VerifyPaymentRequest(gateway="stripe", order_id="cs_live_123"),
+        SimpleNamespace(selected_organization_id=42),
+    )
+
+    assert result is response
+    fetch_paid_order.assert_awaited_once()
+    grant_paid_order.assert_awaited_once_with(
+        paid_order, 42, "stripe", "pi_live_456", "cs_live_123"
+    )
 
 
 @pytest.mark.asyncio
