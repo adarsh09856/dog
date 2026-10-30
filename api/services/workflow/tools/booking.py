@@ -14,6 +14,7 @@ from pydantic import (
 from fastapi import HTTPException
 
 from api.db import appointments
+from api.services.client_worker_entitlements import require_client_worker_features
 from api.services.saas_entitlements import enforce_saas_feature
 
 
@@ -152,6 +153,7 @@ async def execute_booking(arguments, organization_id):
             "error": "Workspace unavailable; no booking was saved",
         }
     try:
+        await require_client_worker_features("appointments")
         await enforce_saas_feature(organization_id, "appointments")
         booking = BookingArguments.model_validate(arguments)
         if booking.start_time <= datetime.now(booking.start_time.tzinfo):

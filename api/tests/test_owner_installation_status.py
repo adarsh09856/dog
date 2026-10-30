@@ -35,6 +35,18 @@ class FakeRedis:
     async def hgetall(self, _key):
         return self.fields
 
+    async def eval(self, script, _count, _key, field, expected, acknowledged):
+        key = field.encode() if isinstance(field, str) else field
+        expected_value = expected.encode() if isinstance(expected, str) else expected
+        acknowledged_key = acknowledged.encode() if isinstance(acknowledged, str) else acknowledged
+        if "HEXISTS" in script:
+            if acknowledged_key not in self.fields:
+                self.fields[key] = expected_value
+            return
+        if self.fields.get(key) == expected_value:
+            self.fields[acknowledged_key] = b"1"
+            del self.fields[key]
+
 
 @pytest.mark.asyncio
 async def test_integrity_scan_leaves_the_event_loop_available(monkeypatch):

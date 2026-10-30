@@ -320,7 +320,13 @@ export default function PricingPage() {
                 No credit bundles are published right now.
               </p>
             )}
-            {packages.map((pkg) => (
+            {packages.map((pkg) => {
+              const available = Number.isSafeInteger(pkg.price_cents) && pkg.price_cents > 0 &&
+                Number.isSafeInteger(pkg.minutes) && pkg.minutes > 0 &&
+                Number.isSafeInteger(pkg.bonus_minutes) && pkg.bonus_minutes >= 0 &&
+                typeof pkg.currency === "string" && /^[A-Za-z]{3}$/.test(pkg.currency) &&
+                (typeof pkg.id === "string" ? pkg.id.trim().length > 0 : Number.isSafeInteger(pkg.id));
+              return (
               <article
                 key={pkg.id}
                 className={`${styles.creditCard} ${pageStyles.bundleCard} rounded-2xl border border-border bg-card p-7`}
@@ -330,26 +336,26 @@ export default function PricingPage() {
                   {pkg.is_popular && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Popular</span>}
                 </div>
                 <p className="mt-5 text-3xl font-medium tracking-tight">
-                  {money(pkg.price_cents, pkg.currency)}
+                  {available ? money(pkg.price_cents, pkg.currency) : "Price unavailable"}
                 </p>
                 <p className="mt-3 text-sm text-muted-foreground">
-                  {pkg.minutes.toLocaleString()} minutes
-                  {pkg.bonus_minutes > 0
+                  {available ? `${pkg.minutes.toLocaleString()} minutes` : "Bundle details unavailable"}
+                  {available && pkg.bonus_minutes > 0
                     ? ` + ${pkg.bonus_minutes.toLocaleString()} bonus minutes`
                     : ""}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   One-time payment. Wallet minutes do not expire.
                 </p>
-                <Link
+                {available && <Link
                   href={`/auth/login?credit_package=${encodeURIComponent(String(pkg.id))}`}
                   className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-cta-text"
                 >
                   Continue to wallet
                   <ArrowRight className="size-4" />
-                </Link>
+                </Link>}
               </article>
-            ))}
+            ); })}
           </div>
           </div>
         </section>
