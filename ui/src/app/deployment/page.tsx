@@ -7,6 +7,7 @@ import {
   Globe,
   LockKeyhole,
   Server,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -36,6 +37,29 @@ const deploymentOptions = [
       "Owner-managed license and installation status",
       "Customer-managed workspace operations and local access",
     ],
+  },
+];
+
+const dataVisibility = [
+  {
+    title: "Public information",
+    text: "Marketing pages and public entry points are visible without a workspace login. They do not expose private workflows or provider credentials.",
+    icon: Globe,
+  },
+  {
+    title: "Private workspace records",
+    text: "Agents, workflows, contacts, appointments, transcripts and recordings belong to the selected organization and are shown to signed-in members according to their access.",
+    icon: Users,
+  },
+  {
+    title: "Visitor submissions",
+    text: "Details a visitor provides through a form, widget or conversation are saved to the owning workspace when that flow is configured to collect them; they are not public page content.",
+    icon: Database,
+  },
+  {
+    title: "Owner and operator metadata",
+    text: "Plan, license, installation, domain, usage and service-health information supports account administration. Hosted service operators manage the infrastructure; a customer installation keeps its application data on the customer-managed server.",
+    icon: Server,
   },
 ];
 
@@ -108,6 +132,30 @@ export default function DeploymentPage() {
                 </article>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className={styles.sectionMuted}>
+          <div className={`${styles.pageFrame} ${styles.section}`}>
+            <div className={styles.sectionHead}>
+              <div>
+                <p className={styles.eyebrow}>Data visibility</p>
+                <h2>Know what is public, private and operational.</h2>
+              </div>
+              <p>Visibility depends on where Kodewaves runs and which providers your workspace connects.</p>
+            </div>
+            <div className={styles.capabilityGrid}>
+              {dataVisibility.map(({ title, text, icon: Icon }) => (
+                <article key={title} className={styles.capability}>
+                  <span className={styles.capabilityIcon}><Icon aria-hidden className="size-5" /></span>
+                  <h3>{title}</h3>
+                  <p>{text}</p>
+                </article>
+              ))}
+            </div>
+            <p className="mt-5 max-w-4xl text-xs leading-6 text-muted-foreground">
+              Connected speech, LLM, telephony and storage providers receive the audio, transcript or record fields needed for the enabled service. Check each provider’s retention and privacy terms when configuring it.
+            </p>
           </div>
         </section>
 
