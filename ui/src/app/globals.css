@@ -395,13 +395,6 @@
 .lead-form-slab [data-slot="button"]:disabled {
   opacity: 0.78;
 }
-.lead-form-underline :is(input, textarea, [data-slot="select-trigger"]):disabled,
-.lead-form-underline [data-slot="select-trigger"][data-disabled] {
-  opacity: 0.78;
-}
-.lead-form-slab [data-slot="button"]:disabled {
-  opacity: 0.78;
-}
 
 /* Event banner (Kodewaves Cloud only, NEXT_PUBLIC_EVENT_BANNER=1). The bar is
    sticky at top-0 in the root layout, so while it is up it permanently owns
