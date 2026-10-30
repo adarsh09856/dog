@@ -104,6 +104,8 @@ services:
       ENABLE_SIGNUP: "${ENABLE_SIGNUP:-true}"
       PUBLIC_BASE_URL: "${PUBLIC_BASE_URL:-https://your-domain.com}"
       PUBLIC_HOST: "${PUBLIC_HOST:-your-domain.com}"
+      # Public UI origin used when generating copy-paste widget snippets.
+      UI_APP_URL: "${UI_APP_URL:-}"
       BACKEND_API_ENDPOINT: "${PUBLIC_BASE_URL:-https://your-domain.com}"
       # Set this to the aaPanel/Nginx proxy peer as seen by the API container.
       # Wildcard trust allows spoofed X-Forwarded-For values to bypass IP policy.
