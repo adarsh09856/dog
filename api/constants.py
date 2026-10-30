@@ -57,7 +57,11 @@ SERVER_IP = os.getenv("SERVER_IP", "")
 BACKEND_API_ENDPOINT = (
     os.getenv("BACKEND_API_ENDPOINT") or PUBLIC_BASE_URL or "http://localhost:8000"
 )
-UI_APP_URL = os.getenv("UI_APP_URL", "http://localhost:3010")
+# The embed script is served from the public UI origin.  `PUBLIC_BASE_URL` is
+# already passed to the API in production Compose deployments; use it when the
+# optional, UI-specific override is not set so copied client snippets never
+# silently point at the API container's localhost default.
+UI_APP_URL = os.getenv("UI_APP_URL") or PUBLIC_BASE_URL or "http://localhost:3010"
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
