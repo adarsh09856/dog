@@ -38,9 +38,15 @@ class FakeRedis:
     async def hget(self, _key, field):
         return self.fields.get(field.encode())
 
-    async def eval(self, _script, _count, _key, field, expected):
-        key = field.encode()
+    async def eval(self, _script, _count, _key, field, expected, acknowledged):
+        key = field.encode() if isinstance(field, str) else field
+        acknowledged = acknowledged.encode() if isinstance(acknowledged, str) else acknowledged
+        if "HEXISTS" in _script:
+            if acknowledged not in self.fields:
+                self.fields[key] = expected.encode() if isinstance(expected, str) else expected
+            return
         if self.fields.get(key) == expected:
+            self.fields[acknowledged] = b"1"
             del self.fields[key]
 
 
@@ -316,11 +322,22 @@ async def test_local_integrity_failure_latches_even_when_owner_unreachable(monke
             assert kwargs["json"]["integrity_finding"]["component"] == "release"
             raise RuntimeError("owner unavailable")
 
+    class OfflineSecondHttp:
+        async def post(self, _url, **kwargs):
+            raise RuntimeError("owner unavailable")
+
     redis = FakeRedis()
     with pytest.raises(RuntimeError, match="unavailable"):
         await owner_status.poll_owner_status_once(redis, OfflineHttp())
     assert redis.fields[b"integrity_failed_latched"] == b"1"
-    assert b"pending_integrity_finding" in redis.fields
+    assert any(key.startswith(b"pending_integrity_finding:") for key in redis.fields)
+    # A distinct scan failure during the same outage must also survive.
+    def fail_manifest():
+        raise owner_status.ReleaseIntegrityError("manifest changed", component="manifest")
+    monkeypatch.setattr(owner_status, "verify_configured_release", fail_manifest)
+    with pytest.raises(RuntimeError, match="unavailable"):
+        await owner_status.poll_owner_status_once(redis, OfflineSecondHttp())
+    assert len([key for key in redis.fields if key.startswith(b"pending_integrity_finding:")]) == 2
     monkeypatch.setattr(owner_status, "verify_configured_release", lambda: None)
     def reject_status(*_args, **_kwargs):
         raise InstallationLicenseError("invalid owner signature")
@@ -330,25 +347,51 @@ async def test_local_integrity_failure_latches_even_when_owner_unreachable(monke
             return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"signed_status": "invalid"})
     with pytest.raises(InstallationLicenseError, match="invalid owner signature"):
         await owner_status.poll_owner_status_once(redis, InvalidHttp())
-    assert b"pending_integrity_finding" in redis.fields
+    assert any(key.startswith(b"pending_integrity_finding:") for key in redis.fields)
     monkeypatch.setattr(owner_status, "verify_installation_status_claims", lambda *_, **__: {"revoked": False})
+    delivered = []
     class RecoveredHttp:
         async def post(self, _url, **kwargs):
             assert kwargs["json"]["integrity_ok"] is False
-            assert kwargs["json"]["integrity_finding"]["component"] == "release"
+            delivered.append(kwargs["json"]["integrity_finding"]["component"])
             return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"signed_status": "signed"})
     await owner_status.poll_owner_status_once(redis, RecoveredHttp())
-    assert b"pending_integrity_finding" not in redis.fields
+    await owner_status.poll_owner_status_once(redis, RecoveredHttp())
+    assert set(delivered) == {"release", "manifest"}
+    assert not any(key.startswith(b"pending_integrity_finding:") for key in redis.fields)
+
+    # Repeatedly detecting acknowledged A must not starve a queued B.
+    redis.fields = {b"integrity_failed_latched": b"1"}
+    findings = sorted([
+        owner_status._finding_field(owner_status.ReleaseIntegrityError("persistent", component=component).finding())
+        for component in ("persistent-a", "pending-b")
+    ])
+    for field, value in findings:
+        await redis.hset("ignored", {field: value})
+    import json
+    persistent_component = json.loads(findings[0][1])["component"]
+    def persistent_failure():
+        raise owner_status.ReleaseIntegrityError("persistent", component=persistent_component)
+    monkeypatch.setattr(owner_status, "verify_configured_release", persistent_failure)
+    delivered.clear()
+    await owner_status.poll_owner_status_once(redis, RecoveredHttp())
+    await owner_status.poll_owner_status_once(redis, RecoveredHttp())
+    assert set(delivered) == {"persistent-a", "pending-b"}
+    assert not any(key.startswith(b"pending_integrity_finding:") for key in redis.fields)
+    monkeypatch.setattr(owner_status, "verify_configured_release", lambda: None)
 
     # A second poll must not erase a different finding recorded while its
     # owner request was in flight.
     await redis.hset("ignored", {"pending_integrity_finding": '{"reason":"unknown","component":"release"}'})
+    concurrent_field, concurrent_value = owner_status._finding_field({"reason": "unknown", "component": "manifest"})
     class ConcurrentHttp:
         async def post(self, _url, **kwargs):
             await redis.hset("ignored", {"pending_integrity_finding": '{"reason":"unknown","component":"manifest"}'})
+            await redis.hset("ignored", {concurrent_field: concurrent_value})
             return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"signed_status": "signed"})
     await owner_status.poll_owner_status_once(redis, ConcurrentHttp())
     assert b'"component":"manifest"' in redis.fields[b"pending_integrity_finding"]
+    assert redis.fields[concurrent_field.encode()] == concurrent_value.encode()
     license_data = InstallationLicense(
         "client-1", "buyer-1", "client", ("example.com",), now + 3600,
         frozenset({"voice"}), {"max_concurrent_calls": 2},
