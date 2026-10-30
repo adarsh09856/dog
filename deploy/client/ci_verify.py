@@ -563,6 +563,7 @@ def _verify_compose_runtime(
     compose_override = directory / f"{project}-internal-network.yaml"
     owner_trust_override = directory / f"{project}-owner-trust.yaml"
     compose_file = root / "deploy/client/docker-compose.client.yaml"
+    api_port, ui_port, minio_port = secrets.SystemRandom().sample(range(20000, 60000), 3)
     values = {
         "CLIENT_API_IMAGE": api_image,
         "CLIENT_UI_IMAGE": ui_image,
@@ -588,10 +589,11 @@ def _verify_compose_runtime(
         "TELEPHONY_WS_TOKEN_SECRET": secrets.token_urlsafe(32),
         "TURN_SECRET": secrets.token_urlsafe(32),
         "CLIENT_RELEASE_MANIFEST_FILE": str(manifest.resolve()),
-        # Docker selects unused loopback ports for each published service.
-        "API_PORT": "0",
-        "UI_PORT": "0",
-        "MINIO_PORT": "0",
+        # Compose's `port` command needs an explicit published port; port 0
+        # starts containers but yields no binding for the runtime smoke.
+        "API_PORT": str(api_port),
+        "UI_PORT": str(ui_port),
+        "MINIO_PORT": str(minio_port),
     }
     identity_key = None
     identity_gid = None
