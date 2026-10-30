@@ -606,6 +606,7 @@ function RenderWorkflow({
                     <div className="flex h-full min-w-0">
                         <section className={`${workspace.canvas} relative min-w-0 flex-1 bg-background`} aria-label="Workflow canvas">
                             <ReactFlow
+                                proOptions={{ hideAttribution: true }}
                                 key={activeVersionId ?? 'current'}
                                 nodes={displayNodes}
                                 edges={edges}
