@@ -26,7 +26,7 @@ import {
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
@@ -180,8 +180,6 @@ export default function OverviewPage() {
       ],
     },
   ];
-  const toolDirectoryItemRows = Math.max(...sections.map((section) => section.items.length));
-
   return (
     <div className={dashboard.dashboard}>
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
