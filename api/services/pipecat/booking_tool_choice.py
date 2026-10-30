@@ -404,6 +404,7 @@ class _BookingToolChoiceMixin:
         from api.services.pipecat.caller_language_context import (
             CallerLanguageContext,
             standalone_language_request,
+            sync_contact_reply_language,
         )
 
         requested_language = standalone_language_request(latest_user_text)
@@ -435,6 +436,18 @@ class _BookingToolChoiceMixin:
                 else "ज़रूर, हम हिंदी में बात कर सकते हैं।"
             )
             return
+
+        # Deterministic contact replies run before the normal LLM-parameter
+        # hook. Refresh the call-scoped language route here so phone/date
+        # follow-ups do not keep an old explicit language after auto routing
+        # has already switched the caller back to Hindi or English.
+        source = getattr(self, "_caller_language_source", None)
+        if source is not None:
+            if not hasattr(self, "_caller_language_context"):
+                self._caller_language_context = CallerLanguageContext()
+            self._caller_language_context.apply(messages, source)
+            sync_contact_reply_language(contact_state, source)
+
         direct_reply = direct_caller_reply(
             latest_user_text,
             # Ending a call cannot retrieve an order. Other tools remain
