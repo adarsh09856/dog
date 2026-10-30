@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 
@@ -18,6 +19,8 @@ from api.db.models import OrganizationModel, UserModel, WorkflowModel, WorkflowR
 from api.enums import WorkflowRunState
 from api.services.auth.depends import get_superuser
 from api.services.call_concurrency import call_concurrency
+from api.services.worker_sync.manager import get_worker_sync_manager
+from api.services.worker_sync.protocol import WorkerSyncEventType
 
 router = APIRouter(prefix="/monitoring", tags=["admin-monitoring"])
 
@@ -368,33 +371,87 @@ async def kill_active_call_path(run_id: int, _user=Depends(get_superuser)):
 
 
 async def _terminate_call(run_id: int, reason: Optional[str] = None) -> Dict[str, Any]:
+    reason = reason or "Admin emergency kill switch triggered"
     async with kodewaves_db_client.get_session() as session:
         stmt = select(WorkflowRunModel).where(WorkflowRunModel.id == run_id)
         result = await session.execute(stmt)
         run = result.scalar_one_or_none()
         if not run:
             raise HTTPException(status_code=404, detail=f"Call run #{run_id} not found")
+        if run.is_completed or run.state == WorkflowRunState.COMPLETED.value:
+            raise HTTPException(status_code=409, detail=f"Call run #{run_id} is already complete")
+        organization_id = str(run.organization_id or "")
 
-        run.state = WorkflowRunState.COMPLETED.value
-        run.is_completed = True
-        if run.logs is None:
-            run.logs = {}
-        if isinstance(run.logs, dict):
-            run.logs["termination_reason"] = reason or "Admin emergency kill switch triggered"
-        await session.commit()
+    try:
+        acknowledgement = await get_worker_sync_manager().request(
+            WorkerSyncEventType.CALL_TERMINATION,
+            "terminate",
+            organization_id,
+            {"run_id": run_id, "reason": reason},
+            timeout=25.0,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503, detail="Live call termination service is unavailable"
+        ) from exc
 
-        # Deduct usage if applicable
-        try:
-            from api.services.workflow_run_billing import report_completed_workflow_run_platform_usage
-            await report_completed_workflow_run_platform_usage(run_id)
-        except Exception:
-            pass
+    if acknowledgement is None:
+        # Pub/sub is only a delivery mechanism; a response is required from the
+        # worker that owns the media pipeline before its DB row can be changed.
+        async with kodewaves_db_client.get_session() as session:
+            result = await session.execute(
+                select(WorkflowRunModel).where(WorkflowRunModel.id == run_id)
+            )
+            current_run = result.scalar_one_or_none()
+            if current_run and (
+                current_run.is_completed
+                or current_run.state == WorkflowRunState.COMPLETED.value
+            ):
+                raise HTTPException(status_code=409, detail=f"Call run #{run_id} ended before the kill request was handled")
+        raise HTTPException(
+            status_code=503,
+            detail=f"No active worker acknowledged termination of call run #{run_id}; run was not marked complete",
+        )
 
-        return {
-            "message": f"Run record #{run_id} marked complete; carrier and browser audio are not disconnected",
-            "run_id": run_id,
-            "status": "record_completed",
-        }
+    status = acknowledgement.get("status")
+    if status == "inactive":
+        raise HTTPException(status_code=409, detail=f"Call run #{run_id} has no active media pipeline")
+    if status == "shutdown_requested_unconfirmed":
+        raise HTTPException(
+            status_code=503,
+            detail=f"Shutdown was requested for call run #{run_id}, but the worker did not confirm pipeline exit; run was not marked complete",
+        )
+    if status != "terminated":
+        raise HTTPException(
+            status_code=503,
+            detail=f"The worker did not confirm termination of call run #{run_id}; run was not marked complete",
+        )
+
+    async with kodewaves_db_client.get_session() as session:
+        result = await session.execute(
+            select(WorkflowRunModel).where(WorkflowRunModel.id == run_id)
+        )
+        run = result.scalar_one_or_none()
+        if run:
+            run.state = WorkflowRunState.COMPLETED.value
+            run.is_completed = True
+            logs = dict(run.logs) if isinstance(run.logs, dict) else {}
+            logs["termination_reason"] = reason
+            run.logs = logs
+            await session.commit()
+
+    try:
+        from api.services.workflow_run_billing import report_completed_workflow_run_platform_usage
+
+        await report_completed_workflow_run_platform_usage(run_id)
+    except Exception:
+        logger.exception("Failed billing completed admin-terminated call run {}", run_id)
+
+    return {
+        "message": f"Call run #{run_id} and its active media pipeline were terminated",
+        "run_id": run_id,
+        "status": "terminated",
+    }
 
 
 class ProcessHealthItem(BaseModel):

@@ -42,10 +42,10 @@ import {
     TEMPLATE_CATEGORIES,
 } from '@/constants/agentTemplates';
 import { INDIAN_TEMPLATE_LANGUAGES } from '@/constants/languages';
-import { useAuth } from '@/lib/auth';
 import { detailFromError } from '@/lib/apiError';
-import { configuredTemplateLanguage } from '@/lib/templateLanguage';
+import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
+import { configuredTemplateLanguage } from '@/lib/templateLanguage';
 
 interface TemplateSelectorModalProps {
     open: boolean;
@@ -120,9 +120,9 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
         iconBg: 'bg-cyan-500 text-white',
     },
     slate: {
-        bg: 'bg-slate-50 dark:bg-slate-900/30',
-        text: 'text-slate-700 dark:text-slate-300',
-        border: 'border-slate-200 dark:border-slate-800',
+        bg: 'bg-muted/50',
+        text: 'text-muted-foreground',
+        border: 'border-border',
         iconBg: 'bg-slate-600 text-white',
     },
     orange: {
@@ -240,7 +240,7 @@ export function TemplateSelectorModal({
             <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
                 <DialogHeader className="px-6 pt-6 pb-4 border-b">
                     <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-md">
+                        <div className="h-10 w-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md">
                             <Wand2 className="h-5 w-5" />
                         </div>
                         <div>

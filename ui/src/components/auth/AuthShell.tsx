@@ -1,80 +1,56 @@
-// Shared dark two-column auth shell for Kodewaves sovereign platform.
-// LEFT: centered card wrapping the auth form.
-// RIGHT: Kodewaves sovereign brand/value panel.
+"use client";
 
+import { AudioLines, ArrowUpRight, Check, Globe2, Phone, Workflow } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
-
 import { BrandLogo } from "@/components/BrandLogo";
+import { useClientBranding } from "@/context/ClientBrandingContext";
+import styles from "./AuthShell.module.css";
 
-const HIGHLIGHTS = [
-  "Speech-to-speech",
-  "Sovereign Infrastructure",
-  "Zero Cloud Dependency",
-  "BYOK & Private Telephony",
+const stages = [
+  { icon: Phone, label: "Caller speaks", detail: "Web or telephone" },
+  { icon: Workflow, label: "Agent responds", detail: "Your workflow and models" },
+  { icon: Check, label: "Work moves forward", detail: "Actions and call review" },
 ];
 
-export function AuthShell({
-  children,
-  enterpriseSlot,
-}: {
-  children: ReactNode;
-  enterpriseSlot?: ReactNode;
-}) {
+export function AuthShell({ children, enterpriseSlot }: { children: ReactNode; enterpriseSlot?: ReactNode }) {
+  const branding = useClientBranding();
   return (
-    <div className="grid min-h-screen w-full bg-background lg:grid-cols-[55%_45%]">
-      {/* Form column (LEFT) — scrolls and stays centered */}
-      <main className="flex min-h-screen flex-col overflow-y-auto">
-        <div className="flex min-h-full items-center justify-center p-6 sm:p-10">
-          <div className="w-full max-w-md space-y-6 rounded-2xl border border-border/60 bg-card p-6 shadow-lg sm:p-8">
-            {/* Mobile-only wordmark (brand panel is hidden) */}
-            <div className="lg:hidden">
-              <BrandLogo className="h-7" />
-            </div>
-            {children}
-          </div>
+    <div className={styles.shell}>
+      <main id="main-content" className={styles.formSide}>
+        <div className={styles.formHeader}>
+          <Link href="/" aria-label="Back to home" className={styles.brand}><BrandLogo className="h-8" /></Link>
+          <Link href="/" className={styles.homeLink}>Back to site <ArrowUpRight aria-hidden className="size-4" /></Link>
         </div>
-      </main>
-
-      {/* Brand / value panel (RIGHT) — hidden on mobile */}
-      <aside className="relative hidden flex-col justify-between overflow-hidden border-l border-border/60 bg-zinc-950 p-10 lg:flex xl:p-14">
-        {/* Ambient depth: soft radial glow behind the content */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-24 top-1/3 size-[28rem] rounded-full opacity-20 blur-3xl"
-          style={{ background: "radial-gradient(circle, var(--cta), transparent 70%)" }}
-        />
-
-        <div className="relative">
-          <BrandLogo inverse className="h-8" />
-        </div>
-
-        <div className="relative max-w-md space-y-5">
-          <h1 className="text-3xl font-semibold leading-tight tracking-tight text-zinc-50 xl:text-4xl">
-            The Sovereign Voice AI Platform.
-          </h1>
-          <ul className="flex flex-wrap gap-2">
-            {HIGHLIGHTS.map((point) => (
-              <li
-                key={point}
-                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-medium text-zinc-300"
-              >
-                {point}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Enterprise value block */}
-        <div className="relative mb-12 max-w-md space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-5 xl:mb-16">
-          <h2 className="text-sm font-semibold text-zinc-100">
-            Enterprise Voice AI &amp; Private Infrastructure
-          </h2>
-          <p className="text-sm text-zinc-400">
-            Kodewaves delivers sovereign voice intelligence with ultra-low latency,
-            complete telemetry ownership, and telephony privacy.
+        <section className={styles.mobileStory} aria-label="Voice operations overview">
+          <span className={styles.mobileStoryLabel}>VOICE OPERATIONS</span>
+          <p className={styles.mobileStoryTitle}>{branding.tagline || "Every conversation. A clear next step."}</p>
+          <p className={styles.mobileStoryDescription}>
+            Build the conversation, connect your channels, and review what happened after every call.
           </p>
-          {enterpriseSlot}
+        </section>
+        <div className={styles.formWrap}>
+          <div className={styles.formIntro}><span className={styles.eyebrow}>YOUR WORKSPACE</span><span aria-hidden className={styles.rule} /></div>
+          <div className={styles.formCard}>{children}</div>
+          <p className={styles.formFoot}>A secure workspace for building and operating voice agents.</p>
         </div>
+        <div className={styles.formBottom}>© {new Date().getFullYear()} {branding.company_name}</div>
+      </main>
+      <aside className={styles.storySide} aria-label="Voice operation overview">
+        <div className={styles.storyTop}><span className={styles.storyIndex}>{branding.company_name} / VOICE OPERATIONS</span><Globe2 aria-hidden className="size-5" /></div>
+        <div className={styles.storyContent}>
+          <span className={styles.eyebrow}>FROM FIRST HELLO TO NEXT ACTION</span>
+          <h2>{branding.tagline}</h2>
+          <p>One place to shape the conversation, connect the channel, and see what happened after every call.</p>
+          <div className={styles.signal} aria-hidden="true">
+            {[11,28,17,37,22,53,33,61,42,67,30,49,19,39,14,25,11].map((height,i) => <span key={i} style={{height:`${height}%`,animationDelay:`${i*65}ms`}} />)}
+            <AudioLines className="size-5" />
+          </div>
+          <ol className={styles.stages}>
+            {stages.map(({icon:Icon,label,detail},index) => <li key={label}><span className={styles.stageNumber}>0{index+1}</span><Icon aria-hidden className="size-5" /><span><strong>{label}</strong><small>{detail}</small></span></li>)}
+          </ol>
+        </div>
+        <div className={styles.storyBottom}><div><strong>Need a private deployment?</strong><span>Discuss an installation scoped to your infrastructure.</span></div>{enterpriseSlot}</div>
       </aside>
     </div>
   );

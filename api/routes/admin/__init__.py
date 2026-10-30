@@ -2,6 +2,8 @@ from fastapi import APIRouter
 
 from api.routes.admin.audit_logs import router as audit_logs_router
 from api.routes.admin.credit_packages import router as credit_packages_router
+from api.routes.admin.client_installations import router as client_installations_router
+from api.routes.admin.client_installation_check import router as client_installation_check_router
 from api.routes.admin.master_keys import router as master_keys_router
 from api.routes.admin.models import router as models_router
 from api.routes.admin.moderation import router as moderation_router
@@ -17,6 +19,8 @@ admin_router.include_router(models_router)
 admin_router.include_router(users_router)
 admin_router.include_router(plans_router)
 admin_router.include_router(credit_packages_router)
+admin_router.include_router(client_installations_router)
+admin_router.include_router(client_installation_check_router)
 admin_router.include_router(monitoring_router)
 admin_router.include_router(moderation_router)
 admin_router.include_router(settings_router)

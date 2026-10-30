@@ -2,8 +2,8 @@ import "./globals.css";
 
 import { GoogleTagManager } from "@next/third-parties/google";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { Suspense } from "react";
+import localFont from "next/font/local";
+import { type CSSProperties, Suspense } from "react";
 
 import { EventBanner } from "@/components/EventBanner";
 import AppLayout from "@/components/layout/AppLayout";
@@ -15,41 +15,56 @@ import SpinLoader from "@/components/SpinLoader";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 import { AppConfigProvider } from "@/context/AppConfigContext";
+import { ClientBrandingProvider } from "@/context/ClientBrandingContext";
+import { ClientEntitlementsProvider } from "@/context/ClientEntitlementsContext";
 import { OnboardingProvider } from "@/context/OnboardingContext";
 import { OrgConfigProvider } from "@/context/OrgConfigContext";
 import { TelephonyConfigWarningsProvider } from "@/context/TelephonyConfigWarningsContext";
 import { AuthProvider } from "@/lib/auth";
+import { brandingCssVariables } from "@/lib/brandingTheme";
+import { getServerBranding } from "@/lib/serverBranding";
 
 
-const geistSans = Geist({
+const geistSans = localFont({
+  src: "../../public/fonts/geist-latin.woff2",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../../public/fonts/geist-mono-latin.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Kodewaves",
-  description: "Kodewaves Sovereign Voice AI Platform",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getServerBranding();
+  return {
+    title: { default: branding.company_name, template: `%s | ${branding.company_name}` },
+    description: branding.tagline,
+    icons: { icon: branding.favicon_url || "/kodewaves-mark.svg" },
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: {
   children: React.ReactNode
 }) {
+  const branding = await getServerBranding();
   const gtmId = process.env.NEXT_PUBLIC_GTM_ID?.trim();
   const metaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim();
   const reoClientId = process.env.NEXT_PUBLIC_REO_CLIENT_ID?.trim();
   // Kodewaves Cloud only. Self-hosted/OSS installs leave this blank and never
   // render the event bar — same gating shape as the Meta Pixel above.
   const showEventBanner = process.env.NEXT_PUBLIC_EVENT_BANNER?.trim() === "1";
+  const lightBrandVariables = JSON.stringify(brandingCssVariables(branding, "light"));
+  const darkBrandVariables = brandingCssVariables(branding, "dark") as CSSProperties;
 
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className="dark" style={darkBrandVariables} data-brand-light={lightBrandVariables} suppressHydrationWarning>
       <head>
         {/* Inline script to prevent flash of light theme - runs before React hydrates.
             Dark is the locked default: only an explicit stored 'light' opts out. */}
@@ -61,6 +76,8 @@ export default function RootLayout({
                   var theme = localStorage.getItem('theme');
                   if (theme === 'light') {
                     document.documentElement.classList.remove('dark');
+                    var styles = JSON.parse(document.documentElement.getAttribute('data-brand-light') || '{}');
+                    Object.keys(styles).forEach(function(key) { document.documentElement.style.setProperty(key, styles[key]); });
                   } else {
                     document.documentElement.classList.add('dark');
                   }
@@ -77,30 +94,34 @@ export default function RootLayout({
         {gtmId ? <GoogleTagManager gtmId={gtmId} /> : null}
         {metaPixelId ? <MetaPixel pixelId={metaPixelId} /> : null}
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
+          <ClientBrandingProvider initialBranding={branding}>
           <SentryErrorBoundary>
             {/* Above the app chrome on every route (auth pages included). It
                 is sticky at top-0 and publishes --event-banner-h, which the
                 header/sidebar offsets in AppLayout + globals.css consume. */}
             {showEventBanner ? <EventBanner /> : null}
             <AuthProvider>
-              <AppConfigProvider>
-                <Suspense fallback={<SpinLoader />}>
-                  <OrgConfigProvider>
-                    <TelephonyConfigWarningsProvider>
-                      <OnboardingProvider>
-                        <PostHogIdentify />
-                        {reoClientId ? <ReoProvider clientId={reoClientId} /> : null}
-                        <AppLayout>
-                          {children}
-                        </AppLayout>
-                        <Toaster />
-                      </OnboardingProvider>
-                    </TelephonyConfigWarningsProvider>
-                  </OrgConfigProvider>
-                </Suspense>
-              </AppConfigProvider>
+              <ClientEntitlementsProvider>
+                <AppConfigProvider>
+                  <Suspense fallback={<SpinLoader />}>
+                    <OrgConfigProvider>
+                      <TelephonyConfigWarningsProvider>
+                        <OnboardingProvider>
+                          <PostHogIdentify />
+                          {reoClientId ? <ReoProvider clientId={reoClientId} /> : null}
+                          <AppLayout>
+                            {children}
+                          </AppLayout>
+                          <Toaster />
+                        </OnboardingProvider>
+                      </TelephonyConfigWarningsProvider>
+                    </OrgConfigProvider>
+                  </Suspense>
+                </AppConfigProvider>
+              </ClientEntitlementsProvider>
             </AuthProvider>
           </SentryErrorBoundary>
+          </ClientBrandingProvider>
         </ThemeProvider>
       </body>
     </html>

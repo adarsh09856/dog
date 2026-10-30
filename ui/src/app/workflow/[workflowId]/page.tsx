@@ -1,6 +1,8 @@
 'use client';
 
 import { useParams, useSearchParams } from 'next/navigation';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 import posthog from 'posthog-js';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -14,6 +16,7 @@ import { detailFromError } from '@/lib/apiError';
 import { useAuth } from '@/lib/auth';
 import logger from '@/lib/logger';
 import { WorkflowConfigurations } from '@/types/workflow-configurations';
+import { Button } from '@/components/ui/button';
 
 import WorkflowLayout from '../WorkflowLayout';
 
@@ -122,9 +125,33 @@ export default function WorkflowDetailPage() {
     else if (error || !workflow) {
         return (
             <WorkflowLayout showFeaturesNav={false}>
-                <div className="flex items-center justify-center min-h-screen">
-                    <div className="text-lg text-destructive">{error || 'Workflow not found'}</div>
-                </div>
+                <main className="flex min-h-[65vh] items-center justify-center px-4 py-10 sm:px-6">
+                    <section
+                        aria-labelledby="workflow-unavailable-title"
+                        className="w-full max-w-xl rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-8"
+                    >
+                        <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+                            <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+                        </div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            Build / Voice agents
+                        </p>
+                        <h1 id="workflow-unavailable-title" className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+                            Agent editor unavailable
+                        </h1>
+                        <p role="alert" className="mt-3 text-sm leading-6 text-muted-foreground">
+                            {error || 'Workflow not found'}
+                        </p>
+                        <div className="mt-6 flex flex-wrap gap-3">
+                            <Button asChild>
+                                <Link href="/workflow">
+                                    <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
+                                    Back to agents
+                                </Link>
+                            </Button>
+                        </div>
+                    </section>
+                </main>
             </WorkflowLayout>
         );
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -19,26 +20,23 @@ export default function ThemeToggle({
   variant = "ghost",
   size = "icon"
 }: ThemeToggleProps) {
-  // Start with null to avoid hydration mismatch - theme is set by inline script in layout.tsx
-  const [theme, setTheme] = useState<"light" | "dark" | null>(null);
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Read the current theme from the DOM (already set by inline script in layout.tsx)
-    const isDark = document.documentElement.classList.contains("dark");
-    setTheme(isDark ? "dark" : "light");
+    setMounted(true);
   }, []);
 
   const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    document.documentElement.classList.toggle("dark", newTheme === "dark");
+    setTheme(resolvedTheme === "light" ? "dark" : "light");
   };
+  const theme = mounted ? (resolvedTheme === "light" ? "light" : "dark") : null;
 
   return (
     <Button
       variant={variant}
       size={size}
+      disabled={!mounted}
       className={cn(
         showLabel && "w-full justify-start",
         className

@@ -1,18 +1,17 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import {
-  AlertTriangle,
   CheckCircle2,
   Clock,
   Cpu,
   HardDrive,
   Layers,
-  PhoneCall,
   PhoneOff,
   Radio,
   RefreshCw,
   ShieldAlert,
-  Zap,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
@@ -32,7 +31,6 @@ import { adminApi, LiveCallItem, SystemResources } from "@/lib/kodewavesApi";
 export default function AdminMonitoringPage() {
   const [calls, setCalls] = useState<LiveCallItem[]>([]);
   const [resources, setResources] = useState<SystemResources | null>(null);
-  const [loading, setLoading] = useState(true);
   const [killingId, setKillingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -55,7 +53,6 @@ export default function AdminMonitoringPage() {
       setError(failures.join(' ') || null);
     } finally {
       inFlight.current = false;
-      if (mounted.current) setLoading(false);
     }
   }, []);
 
@@ -67,13 +64,13 @@ export default function AdminMonitoringPage() {
   }, [fetchCalls]);
 
   const handleKillCall = async (runId: number) => {
-    if (!confirm(`Mark run #${runId} ended in Kodewaves? This does not hang up the carrier call.`)) return;
+    if (!confirm(`Mark run #${runId} ended in the platform? This does not hang up the carrier call.`)) return;
     setKillingId(runId);
     try {
       await adminApi.killCall(runId, "Admin emergency kill switch triggered");
       await fetchCalls();
-    } catch (err: any) {
-      alert(err.message || "Failed to terminate call");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to terminate call");
     } finally {
       setKillingId(null);
     }
@@ -86,16 +83,17 @@ export default function AdminMonitoringPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="OPERATIONS / LIVE CALLS">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Real-Time Voice Call Telemetry</h1>
+          <span className={admin.kicker}>OPERATIONS / LIVE CALLS</span>
+          <h1 className={admin.title}>Real-Time Voice Call Telemetry</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Live monitoring of voice sessions and run records.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             {error ? 'Refresh failed' : 'Live Polling (3s)'}
@@ -144,10 +142,10 @@ export default function AdminMonitoringPage() {
         <Card className="border-border/60">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Host / Container Memory</CardTitle>
-            <Cpu className="h-4 w-4 text-indigo-500" />
+            <Cpu className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-extrabold text-indigo-500">
+            <div className="text-2xl font-extrabold text-primary">
               {resources ? `${resources.memory_percent}%` : "Unavailable"}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -188,7 +186,7 @@ export default function AdminMonitoringPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="overflow-x-auto rounded-xl border border-border/60">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>

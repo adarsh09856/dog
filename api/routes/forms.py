@@ -1,15 +1,23 @@
 import uuid
+import re
+import unicodedata
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc, func, select
+from sqlalchemy.exc import IntegrityError
 
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import FormModel, FormSubmissionModel
 from api.db.models import UserModel
 from api.services.auth.depends import get_user
+from api.services.saas_entitlements import require_saas_feature
 
-router = APIRouter(prefix="/forms", tags=["forms"])
+router = APIRouter(
+    prefix="/forms",
+    tags=["forms"],
+    dependencies=[Depends(require_saas_feature("forms"))],
+)
 
 
 class FormItem(BaseModel):
@@ -28,11 +36,28 @@ class FormItem(BaseModel):
 class FormCreateRequest(BaseModel):
     name: Optional[str] = None
     title: Optional[str] = None
-    slug: Optional[str] = None
+    slug: Optional[str] = Field(default=None, min_length=1, max_length=100)
     description: Optional[str] = None
     fields_schema: Optional[List[Dict[str, Any]]] = None
     fields: Optional[List[Dict[str, Any]]] = None
     is_active: Optional[bool] = True
+
+    @field_validator("slug", mode="before")
+    @classmethod
+    def normalize_slug(cls, value):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Slug must be text")
+        value = re.sub(r"[\s_]+", "-", value.strip().lower())
+        value = re.sub(r"-+", "-", value).strip("-")
+        if not value or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", value):
+            raise ValueError(
+                "Slug may contain lowercase letters, numbers, and single hyphens"
+            )
+        if len(value) > 100:
+            raise ValueError("Slug must be at most 100 characters")
+        return value
 
     @field_validator("fields", "fields_schema")
     @classmethod
@@ -62,6 +87,64 @@ class SubmitFormRequest(BaseModel):
     contact_id: Optional[str] = None
 
 
+def _default_slug(name: str) -> str:
+    ascii_name = (
+        unicodedata.normalize("NFKD", name)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .lower()
+    )
+    slug = re.sub(r"[^a-z0-9]+", "-", ascii_name).strip("-")
+    return (slug or "form")[:100].rstrip("-") or "form"
+
+
+async def _find_form(session, org_id: int, form_identifier: str):
+    """Resolve UUIDs and workspace slugs, retaining the legacy name lookup."""
+    try:
+        form_uuid = uuid.UUID(form_identifier)
+    except ValueError:
+        form_uuid = None
+    if form_uuid is not None:
+        result = await session.execute(
+            select(FormModel).where(
+                FormModel.id == form_uuid, FormModel.organization_id == org_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    result = await session.execute(
+        select(FormModel).where(
+            FormModel.slug == form_identifier,
+            FormModel.organization_id == org_id,
+        )
+    )
+    form = result.scalar_one_or_none()
+    if form is not None:
+        return form
+    result = await session.execute(
+        select(FormModel).where(
+            FormModel.name == form_identifier,
+            FormModel.organization_id == org_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def _ensure_slug_available(session, org_id: int, slug: str, exclude_id=None):
+    stmt = select(FormModel.id).where(
+        FormModel.organization_id == org_id,
+        FormModel.slug == slug,
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(FormModel.id != exclude_id)
+    result = await session.execute(stmt)
+    if result.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="A form with this slug already exists in this workspace",
+        )
+
+
 @router.get("", response_model=List[FormItem])
 async def list_forms(user: UserModel = Depends(get_user)):
     """List dynamic forms for the organization with real submission counts."""
@@ -86,13 +169,12 @@ async def list_forms(user: UserModel = Depends(get_user)):
         for form, sub_count in rows:
             f_list = form.fields_schema or []
             f_name = form.name
-            f_slug = f_name.lower().replace(" ", "-")
             items.append(
                 FormItem(
                     id=str(form.id),
                     name=f_name,
                     title=f_name,
-                    slug=f_slug,
+                    slug=form.slug,
                     description=form.description,
                     fields_schema=f_list,
                     fields=f_list,
@@ -112,19 +194,15 @@ async def get_form(form_id: str, user: UserModel = Depends(get_user)):
         raise HTTPException(status_code=400, detail="Organization required")
 
     async with kodewaves_db_client.get_session() as session:
-        try:
-            f_uuid = uuid.UUID(form_id)
-            stmt = select(FormModel).where(FormModel.id == f_uuid, FormModel.organization_id == org_id)
-        except ValueError:
-            stmt = select(FormModel).where(FormModel.name == form_id, FormModel.organization_id == org_id)
-
-        result = await session.execute(stmt)
-        form = result.scalar_one_or_none()
+        form = await _find_form(session, org_id, form_id)
         if not form:
             raise HTTPException(status_code=404, detail="Form not found")
 
         # Get count
-        c_stmt = select(func.count(FormSubmissionModel.id)).where(FormSubmissionModel.form_id == form.id)
+        c_stmt = select(func.count(FormSubmissionModel.id)).where(
+            FormSubmissionModel.form_id == form.id,
+            FormSubmissionModel.organization_id == org_id,
+        )
         sub_count = (await session.execute(c_stmt)).scalar() or 0
         f_list = form.fields_schema or []
 
@@ -132,7 +210,7 @@ async def get_form(form_id: str, user: UserModel = Depends(get_user)):
             id=str(form.id),
             name=form.name,
             title=form.name,
-            slug=form.name.lower().replace(" ", "-"),
+            slug=form.slug,
             description=form.description,
             fields_schema=f_list,
             fields=f_list,
@@ -154,19 +232,34 @@ async def create_form(req: FormCreateRequest, user: UserModel = Depends(get_user
         raise HTTPException(status_code=400, detail="Form title or name is required")
 
     fields = req.fields if req.fields is not None else (req.fields_schema or [])
+    slug = req.slug or _default_slug(name)
 
     async with kodewaves_db_client.get_session() as session:
+        await _ensure_slug_available(session, org_id, slug)
         form = FormModel(
             organization_id=org_id,
             name=name,
+            slug=slug,
             description=req.description,
             fields_schema=fields,
             is_active=req.is_active if req.is_active is not None else True,
         )
         session.add(form)
-        await session.commit()
+        try:
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="A form with this slug already exists in this workspace",
+            ) from exc
         await session.refresh(form)
-        return {"id": str(form.id), "name": form.name, "message": "Form created successfully"}
+        return {
+            "id": str(form.id),
+            "name": form.name,
+            "slug": form.slug,
+            "message": "Form created successfully",
+        }
 
 
 @router.put("/{form_id}", response_model=Dict[str, Any])
@@ -177,20 +270,16 @@ async def update_form(form_id: str, req: FormCreateRequest, user: UserModel = De
         raise HTTPException(status_code=400, detail="Organization required")
 
     async with kodewaves_db_client.get_session() as session:
-        try:
-            f_uuid = uuid.UUID(form_id)
-            stmt = select(FormModel).where(FormModel.id == f_uuid, FormModel.organization_id == org_id)
-        except ValueError:
-            stmt = select(FormModel).where(FormModel.name == form_id, FormModel.organization_id == org_id)
-
-        result = await session.execute(stmt)
-        form = result.scalar_one_or_none()
+        form = await _find_form(session, org_id, form_id)
         if not form:
             raise HTTPException(status_code=404, detail="Form not found")
 
         name = req.title or req.name
         if name:
             form.name = name
+        if "slug" in req.model_fields_set and req.slug is not None:
+            await _ensure_slug_available(session, org_id, req.slug, exclude_id=form.id)
+            form.slug = req.slug
         if req.description is not None:
             form.description = req.description
         if req.fields is not None:
@@ -200,8 +289,15 @@ async def update_form(form_id: str, req: FormCreateRequest, user: UserModel = De
         if "is_active" in req.model_fields_set and req.is_active is not None:
             form.is_active = req.is_active
 
-        await session.commit()
-        return {"id": str(form.id), "message": "Form updated successfully"}
+        try:
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="A form with this slug already exists in this workspace",
+            ) from exc
+        return {"id": str(form.id), "slug": form.slug, "message": "Form updated successfully"}
 
 
 @router.delete("/{form_id}", response_model=Dict[str, Any])
@@ -212,14 +308,7 @@ async def delete_form(form_id: str, user: UserModel = Depends(get_user)):
         raise HTTPException(status_code=400, detail="Organization required")
 
     async with kodewaves_db_client.get_session() as session:
-        try:
-            f_uuid = uuid.UUID(form_id)
-            stmt = select(FormModel).where(FormModel.id == f_uuid, FormModel.organization_id == org_id)
-        except ValueError:
-            stmt = select(FormModel).where(FormModel.name == form_id, FormModel.organization_id == org_id)
-
-        result = await session.execute(stmt)
-        form = result.scalar_one_or_none()
+        form = await _find_form(session, org_id, form_id)
         if not form:
             raise HTTPException(status_code=404, detail="Form not found")
 
@@ -236,14 +325,12 @@ async def list_submissions(form_id: str, user: UserModel = Depends(get_user)):
         return []
 
     async with kodewaves_db_client.get_session() as session:
-        try:
-            f_uuid = uuid.UUID(form_id)
-        except ValueError:
-            return []
-
+        form = await _find_form(session, org_id, form_id)
+        if not form:
+            raise HTTPException(status_code=404, detail="Form not found")
         stmt = (
             select(FormSubmissionModel)
-            .where(FormSubmissionModel.form_id == f_uuid, FormSubmissionModel.organization_id == org_id)
+            .where(FormSubmissionModel.form_id == form.id, FormSubmissionModel.organization_id == org_id)
             .order_by(desc(FormSubmissionModel.created_at))
             .limit(100)
         )

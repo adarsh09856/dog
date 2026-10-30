@@ -8,6 +8,7 @@ from loguru import logger
 from api.db import db_client
 from api.db.models import EmbedSessionModel, EmbedTokenModel
 from api.services.quota_service import QuotaCheckResult, authorize_workflow_run_start
+from api.services.saas_entitlements import enforce_saas_feature
 
 
 class EmbedSessionValidationError(Exception):
@@ -118,6 +119,9 @@ async def resolve_embed_session(
         )
         raise EmbedOriginNotAllowedError(f"Domain not allowed: {origin}")
 
+    # Recheck each request: a session must not retain access after an owner
+    # disables widgets or its organization moves to a plan without them.
+    await enforce_saas_feature(embed_token.organization_id, "widgets")
     return embed_session, embed_token
 
 

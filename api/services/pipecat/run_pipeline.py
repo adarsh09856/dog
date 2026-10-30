@@ -29,6 +29,11 @@ from api.services.observability.active_calls import (
     unregister_active_call as unregister_worker_active_call,
 )
 from api.services.pipecat.agent_bridge import AgentBridgeProcessor
+from api.services.pipecat.active_runtime import (
+    bind_active_engine,
+    register_active_runtime,
+    unregister_active_runtime,
+)
 from api.services.pipecat.agent_generation_processor import AgentGenerationProcessor
 from api.services.pipecat.agent_runtime_factory import (
     AgentGenerationCallbacks,
@@ -130,6 +135,101 @@ ensure_tracing()
 DEFAULT_USER_TURN_STOP_TIMEOUT = 5.0
 EXTERNAL_TURN_USER_STOP_TIMEOUT = 30.0
 
+# Pre-call fetches are started during setup so their HTTP latency overlaps model
+# resolution and service construction. Keep ownership by the current pipeline
+# task so setup failures drain only their own fetch, even for duplicate run IDs.
+_PRE_CALL_FETCH_TASKS: dict[asyncio.Task, asyncio.Task] = {}
+
+
+def _schedule_pre_call_fetch(
+    *,
+    workflow_run_id: int,
+    start_node,
+    call_direction: str | None,
+    call_context_vars: dict,
+    workflow_id: int,
+    organization_id: int,
+) -> asyncio.Task | None:
+    if not (
+        start_node
+        and start_node.should_run_pre_call_fetch(call_direction)
+        and start_node.pre_call_fetch_url
+    ):
+        return None
+
+    logger.info(
+        "Pre-call fetch enabled for {} workflow run {}, starting alongside setup",
+        call_direction or "unknown",
+        workflow_run_id,
+    )
+    task = asyncio.create_task(
+        execute_pre_call_fetch(
+            url=start_node.pre_call_fetch_url,
+            credential_uuid=start_node.pre_call_fetch_credential_uuid,
+            call_context_vars=dict(call_context_vars),
+            workflow_id=workflow_id,
+            organization_id=organization_id,
+        ),
+        name=f"pre-call-fetch-{workflow_run_id}",
+    )
+    owner_task = asyncio.current_task()
+    if owner_task is not None:
+        _PRE_CALL_FETCH_TASKS[owner_task] = task
+    return task
+
+
+def _schedule_pre_call_fetch_for_run(
+    *,
+    workflow_run,
+    workflow_run_id: int,
+    workflow_id: int,
+    organization_id: int,
+    call_context_vars: dict | None = None,
+    provider_call_id: str | None = None,
+) -> asyncio.Task | None:
+    if organization_id is None:
+        return None
+    if getattr(workflow_run, "is_completed", False):
+        return None
+    definition = getattr(workflow_run, "definition", None)
+    workflow_json = getattr(definition, "workflow_json", None)
+    if not isinstance(workflow_json, dict):
+        return None
+    graph = WorkflowGraph(
+        ReactFlowDTO.model_validate(workflow_json),
+        skip_instance_constraints_for={"trigger"},
+    )
+    merged_context = dict(getattr(workflow_run, "initial_context", None) or {})
+    if call_context_vars:
+        merged_context = merge_external_initial_context(
+            merged_context, call_context_vars
+        )
+    merged_context["workflow_run_id"] = workflow_run_id
+    if provider_call_id is not None:
+        merged_context["call_id"] = provider_call_id
+    direction = getattr(workflow_run, "call_type", None)
+    if hasattr(direction, "value"):
+        direction = direction.value
+    direction = direction or merged_context.get("direction")
+    return _schedule_pre_call_fetch(
+        workflow_run_id=workflow_run_id,
+        start_node=graph.nodes.get(graph.start_node_id),
+        call_direction=direction,
+        call_context_vars=merged_context,
+        workflow_id=workflow_id,
+        organization_id=organization_id,
+    )
+
+
+async def _cleanup_pre_call_fetch() -> None:
+    owner_task = asyncio.current_task()
+    task = _PRE_CALL_FETCH_TASKS.pop(owner_task, None) if owner_task else None
+    if task is None:
+        return
+    if not task.done():
+        task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
 
 def _create_answer_supervisor(
     voicemail_config,
@@ -205,7 +305,8 @@ def _resolve_turn_start_min_words(run_configs: dict) -> int:
 
 
 def _create_non_realtime_user_turn_start_strategies(
-    run_configs: dict, *, uses_external_turns: bool
+    run_configs: dict, *, uses_external_turns: bool,
+    local_segmented_stt: bool = False,
 ):
     """Return user turn start strategies for non-realtime pipelines."""
 
@@ -229,11 +330,18 @@ def _create_non_realtime_user_turn_start_strategies(
             )
         ]
 
+    if local_segmented_stt:
+        # This HTTP recognizer receives VAD-cut segments and may still be
+        # decoding one when a new raw VAD start fires. Interrupting on that
+        # raw start repeatedly cancels TTS before any usable transcript is
+        # ready. A final transcript remains a valid barge-in signal.
+        return [TranscriptionUserTurnStartStrategy(use_interim=False)]
     return [TranscriptionUserTurnStartStrategy(), VADUserTurnStartStrategy()]
 
 
 def _create_non_realtime_user_turn_stop_strategies(
-    run_configs: dict, *, uses_external_turns: bool
+    run_configs: dict, *, uses_external_turns: bool, phone_pending=None,
+    local_segmented_stt: bool = False,
 ):
     """Return user turn stop strategies for non-realtime pipelines."""
 
@@ -252,6 +360,15 @@ def _create_non_realtime_user_turn_stop_strategies(
             )
         ]
 
+    if phone_pending is not None:
+        from api.services.pipecat.contact_turn_stop import ContactAwareTurnStopStrategy
+
+        # Local segmented STT has already waited for VAD and drained its
+        # recognition queue before emitting a final transcript. Avoid another
+        # 600 ms fallback pause for ordinary speech; the contact-aware strategy
+        # retains its longer pause while a phone number is being dictated.
+        kwargs = {"user_speech_timeout": 0.2} if local_segmented_stt else {}
+        return [ContactAwareTurnStopStrategy(phone_pending=phone_pending, **kwargs)]
     return [SpeechTimeoutUserTurnStopStrategy()]
 
 
@@ -336,6 +453,7 @@ async def run_pipeline_telephony(
     # Register before any async setup so deploy drains see calls that are still
     # resolving DB/config/transport state.
     register_worker_active_call(workflow_run_id)
+    register_active_runtime(workflow_run_id, organization_id)
     try:
         await _run_pipeline_telephony_impl(
             websocket,
@@ -348,9 +466,13 @@ async def run_pipeline_telephony(
         )
     finally:
         try:
-            await call_concurrency.unregister_active_call(workflow_run_id)
+            await _cleanup_pre_call_fetch()
         finally:
-            unregister_worker_active_call(workflow_run_id)
+            try:
+                await call_concurrency.unregister_active_call(workflow_run_id)
+            finally:
+                unregister_active_runtime(workflow_run_id)
+                unregister_worker_active_call(workflow_run_id)
 
 
 async def _run_pipeline_telephony_impl(
@@ -409,6 +531,14 @@ async def _run_pipeline_telephony_impl(
     if workflow_run.workflow_id != workflow_id:
         raise HTTPException(status_code=400, detail="workflow_run_workflow_mismatch")
 
+    pre_call_fetch_task = _schedule_pre_call_fetch_for_run(
+        workflow_run=workflow_run,
+        workflow_run_id=workflow_run_id,
+        workflow_id=workflow_id,
+        organization_id=organization_id,
+        provider_call_id=call_id,
+    )
+
     telephony_configuration_id = None
     if workflow_run.initial_context:
         telephony_configuration_id = workflow_run.initial_context.get(
@@ -455,6 +585,7 @@ async def _run_pipeline_telephony_impl(
             resolved_user_config=user_config,
             organization_id=organization_id,
             provider_call_id=call_id,
+            pre_call_fetch_task=pre_call_fetch_task,
         )
     except Exception as e:
         # Closest layer to the failure and the only one with the traceback, so
@@ -480,6 +611,7 @@ async def run_pipeline_smallwebrtc(
     # Register before any async setup so deploy drains see calls that are still
     # resolving DB/config/transport state.
     register_worker_active_call(workflow_run_id)
+    register_active_runtime(workflow_run_id, organization_id)
     try:
         await _run_pipeline_smallwebrtc_impl(
             webrtc_connection,
@@ -492,9 +624,13 @@ async def run_pipeline_smallwebrtc(
         )
     finally:
         try:
-            await call_concurrency.unregister_active_call(workflow_run_id)
+            await _cleanup_pre_call_fetch()
         finally:
-            unregister_worker_active_call(workflow_run_id)
+            try:
+                await call_concurrency.unregister_active_call(workflow_run_id)
+            finally:
+                unregister_active_runtime(workflow_run_id)
+                unregister_worker_active_call(workflow_run_id)
 
 
 async def _run_pipeline_smallwebrtc_impl(
@@ -551,6 +687,14 @@ async def _run_pipeline_smallwebrtc_impl(
             detail="workflow_run_workflow_mismatch",
         )
 
+    pre_call_fetch_task = _schedule_pre_call_fetch_for_run(
+        workflow_run=workflow_run,
+        workflow_run_id=workflow_run_id,
+        workflow_id=workflow_id,
+        organization_id=workflow.organization_id if workflow else organization_id,
+        call_context_vars=call_context_vars,
+    )
+
     run_configs = (
         (workflow_run.definition.workflow_configurations or {}) if workflow_run else {}
     )
@@ -578,6 +722,7 @@ async def _run_pipeline_smallwebrtc_impl(
         workflow_run=workflow_run,
         resolved_user_config=user_config,
         organization_id=organization_id,
+        pre_call_fetch_task=pre_call_fetch_task,
     )
 
 
@@ -595,6 +740,7 @@ async def _run_pipeline(
 ) -> None:
     """Run the pipeline with active-call drain accounting."""
     register_worker_active_call(workflow_run_id)
+    register_active_runtime(workflow_run_id, organization_id)
     try:
         await _run_pipeline_impl(
             transport,
@@ -610,9 +756,13 @@ async def _run_pipeline(
         )
     finally:
         try:
-            await call_concurrency.unregister_active_call(workflow_run_id)
+            await _cleanup_pre_call_fetch()
         finally:
-            unregister_worker_active_call(workflow_run_id)
+            try:
+                await call_concurrency.unregister_active_call(workflow_run_id)
+            finally:
+                unregister_active_runtime(workflow_run_id)
+                unregister_worker_active_call(workflow_run_id)
 
 
 async def _run_pipeline_impl(
@@ -627,6 +777,7 @@ async def _run_pipeline_impl(
     resolved_user_config=None,
     organization_id: int | None = None,
     provider_call_id: str | None = None,
+    pre_call_fetch_task: asyncio.Task | None = None,
 ) -> None:
     """
     Run the pipeline with the given transport and configuration
@@ -688,6 +839,29 @@ async def _run_pipeline_impl(
     run_definition = workflow_run.definition
     run_workflow_json = run_definition.workflow_json
     run_configs = run_definition.workflow_configurations or {}
+    workflow_graph = WorkflowGraph(
+        ReactFlowDTO.model_validate(run_workflow_json),
+        skip_instance_constraints_for={"trigger"},
+    )
+
+    # Start external context lookup as soon as the pinned start node is known.
+    # It can now overlap effective model config resolution, model service
+    # construction and the remaining pipeline setup. The complete result is
+    # still awaited and merged before the initial node renders its templates.
+    start_node = workflow_graph.nodes.get(workflow_graph.start_node_id)
+    call_direction = getattr(workflow_run, "call_type", None)
+    if hasattr(call_direction, "value"):
+        call_direction = call_direction.value
+    call_direction = call_direction or merged_call_context_vars.get("direction")
+    if pre_call_fetch_task is None:
+        pre_call_fetch_task = _schedule_pre_call_fetch(
+            workflow_run_id=workflow_run_id,
+            start_node=start_node,
+            call_direction=call_direction,
+            call_context_vars=merged_call_context_vars,
+            workflow_id=workflow_id,
+            organization_id=workflow.organization_id,
+        )
 
     # Extract configurations from the version's workflow_configurations
     max_call_duration_seconds = DEFAULT_MAX_CALL_DURATION_SECONDS
@@ -726,10 +900,6 @@ async def _run_pipeline_impl(
     else:
         user_config = resolved_user_config
 
-    workflow_graph = WorkflowGraph(
-        ReactFlowDTO.model_validate(run_workflow_json),
-        skip_instance_constraints_for={"trigger"},
-    )
     call_dispositions = WorkflowConfigurationDefaults.model_validate(
         {"call_dispositions": run_configs.get("call_dispositions") or []}
     ).call_dispositions
@@ -772,6 +942,18 @@ async def _run_pipeline_impl(
             keyterms=keyterms,
             correlation_id=mps_correlation_id,
         )
+        if (
+            stt is not None
+            and getattr(user_config.stt, "model", None) == "indicconformer-ctc-int8"
+            and getattr(user_config.stt, "api_key", None)
+            in {"sovereign-local-cpu", "local-cpu-token"}
+        ):
+            # Local STT can try its already-warm English decoder during phone
+            # capture. This stays per segment and does not change the selected
+            # language for the rest of the call.
+            stt.phone_capture_pending = lambda: bool(
+                getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+            )
         tts = create_tts_service(
             user_config,
             audio_config,
@@ -785,6 +967,8 @@ async def _run_pipeline_impl(
         # request, without adding diagnostic text to transcript history.
         if llm is not None and stt is not None:
             llm._caller_language_source = stt
+        if tts is not None and stt is not None:
+            tts._caller_language_source = stt
         inference_llm = None
 
     # Variable and disposition extraction may share this out-of-band LLM. A
@@ -833,35 +1017,19 @@ async def _run_pipeline_impl(
         workflow_run_id, initial_context=merged_call_context_vars
     )
 
-    # Pre-call fetch: fire early so it runs concurrently with remaining setup
-    pre_call_fetch_task = None
-    start_node = workflow_graph.nodes.get(workflow_graph.start_node_id)
-    call_direction = getattr(workflow_run, "call_type", None)
-    if hasattr(call_direction, "value"):
-        call_direction = call_direction.value
-    call_direction = call_direction or merged_call_context_vars.get("direction")
-    if (
-        start_node
-        and start_node.should_run_pre_call_fetch(call_direction)
-        and start_node.pre_call_fetch_url
-    ):
-        logger.info(
-            f"Pre-call fetch enabled for {call_direction or 'unknown'} workflow "
-            f"run {workflow_run_id}, "
-            f"firing request to {start_node.pre_call_fetch_url}"
-        )
-        pre_call_fetch_task = asyncio.create_task(
-            execute_pre_call_fetch(
-                url=start_node.pre_call_fetch_url,
-                credential_uuid=start_node.pre_call_fetch_credential_uuid,
-                call_context_vars=merged_call_context_vars,
-                workflow_id=workflow_id,
-                organization_id=workflow.organization_id,
-            )
-        )
-
     # Create in-memory logs buffer early so it can be used by engine callbacks
     in_memory_logs_buffer = InMemoryLogsBuffer(workflow_run_id)
+
+    async def record_llm_stream_trace(event: dict) -> None:
+        """Persist numeric per-request model timing, never prompt or reply text."""
+        await in_memory_logs_buffer.append(event)
+
+    for service in {
+        id(value): value
+        for value in (llm, inference_llm, variable_extraction_llm)
+        if value is not None
+    }.values():
+        service._llm_trace_sink = record_llm_stream_trace
 
     # Create node transition callback (always logs to buffer, optionally streams to WS)
     ws_sender = get_ws_sender(workflow_run_id)
@@ -990,10 +1158,9 @@ async def _run_pipeline_impl(
         get_parent_context=engine._get_otel_context,
     )
     user_mute_strategies = _create_user_mute_strategies(engine, answer_supervisor)
-    # Segmented local Whisper needs the full phrase for reliable language
-    # detection. A 200 ms pause splits ordinary Hinglish speech into tiny
-    # clips; the resulting fragments can be empty or misdetected. Preserve an
-    # explicit workflow override and keep the faster default for streaming STT.
+    # Segmented local STT needs a whole phrase for language detection and
+    # spoken numbers. Use longer endpointing only while collecting a phone
+    # number; ordinary turns keep the low-latency 200 ms default.
     local_segmented_stt = (
         not is_realtime
         and getattr(user_config.stt, "provider", None) in {
@@ -1009,8 +1176,19 @@ async def _run_pipeline_impl(
             None,
         }
     )
-    vad_stop_s = float(run_configs.get("vad_stop_secs", 0.5 if local_segmented_stt else 0.2))
-    user_vad_analyzer = SileroVADAnalyzer(params=VADParams(stop_secs=vad_stop_s))
+    vad_stop_s = float(run_configs.get("vad_stop_secs", 0.2))
+    vad_params = VADParams(stop_secs=vad_stop_s)
+    if local_segmented_stt and "vad_stop_secs" not in run_configs:
+        from api.services.pipecat.contact_vad import ContactAwareSileroVADAnalyzer
+
+        user_vad_analyzer = ContactAwareSileroVADAnalyzer(
+            params=vad_params,
+            phone_pending=lambda: bool(
+                getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+            ),
+        )
+    else:
+        user_vad_analyzer = SileroVADAnalyzer(params=vad_params)
 
     # Configure turn strategies based on STT provider, model, and workflow configuration
     if is_realtime:
@@ -1028,6 +1206,7 @@ async def _run_pipeline_impl(
         user_turn_start_strategies = _create_non_realtime_user_turn_start_strategies(
             run_configs,
             uses_external_turns=uses_external_turns,
+            local_segmented_stt=local_segmented_stt,
         )
         turn_start_strategy = run_configs.get(
             "turn_start_strategy", DEFAULT_TURN_START_STRATEGY
@@ -1044,6 +1223,10 @@ async def _run_pipeline_impl(
         user_turn_stop_strategies = _create_non_realtime_user_turn_stop_strategies(
             run_configs,
             uses_external_turns=uses_external_turns,
+            local_segmented_stt=local_segmented_stt,
+            phone_pending=lambda: bool(
+                getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+            ),
         )
         user_turn_strategies = UserTurnStrategies(
             start=user_turn_start_strategies,
@@ -1237,6 +1420,11 @@ async def _run_pipeline_impl(
         ws_sender=ws_sender,
         logs_buffer=in_memory_logs_buffer,
         selected_visit=lambda: engine.selected_visit_id,
+        workflow_id=workflow_id,
+        workflow_run_id=workflow_run_id,
+        phone_pending=lambda: bool(
+            getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+        ),
         call_event_recorder=call_events_session.recorder
         if call_events_session
         else None,
@@ -1267,6 +1455,8 @@ async def _run_pipeline_impl(
             on_agent_error=engine.handle_agent_error,
             use_draft=bool(workflow_run.extra.get("use_draft")),
             observers=[feedback_observer],
+            caller_language_source=stt,
+            llm_trace_sink=record_llm_stream_trace,
         )
         engine.set_agent_factory(agent_factory)
         # The agent this call starts on. Its services were resolved above from
@@ -1347,6 +1537,9 @@ async def _run_pipeline_impl(
     )
 
     register_audio_data_handler(audio_buffer, workflow_run_id, in_memory_audio_buffer)
+    # Bind only after the worker task and its completion handlers are ready. An
+    # admin kill delivered during setup waits on engine_ready until this point.
+    bind_active_engine(workflow_run_id, engine)
 
     try:
         # Run the pipeline

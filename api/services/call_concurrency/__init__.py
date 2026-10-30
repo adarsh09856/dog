@@ -11,6 +11,7 @@ from api.services.call_concurrency.service import (
     CallConcurrencyService,
     CallConcurrencySlot,
     WorkflowRunSlotAlreadyBoundError,
+    authorize_call_entitlement,
     call_concurrency,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "CallConcurrencyService",
     "CallConcurrencySlot",
     "WorkflowRunSlotAlreadyBoundError",
+    "authorize_call_entitlement",
     "call_concurrency",
 ]

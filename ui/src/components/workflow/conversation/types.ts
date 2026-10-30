@@ -15,6 +15,7 @@ export interface RealtimeFeedbackMessage {
     type: RealtimeFeedbackMessageType;
     text: string;
     final?: boolean;
+    audioStatus?: "unconfirmed" | "partial";
     timestamp: string;
     functionName?: string;
     toolCallId?: string;
@@ -67,6 +68,25 @@ export interface RealtimeFeedbackEvent {
 
 export interface WorkflowRunLogs {
     realtime_feedback_events?: RealtimeFeedbackEvent[];
+    speech_diagnostics?: Array<{
+        type: string;
+        timestamp?: string;
+        turn?: number;
+        payload: {
+            stage?: string;
+            first_audio_ms?: number | null;
+            first_frame_ms?: number | null;
+            first_speech_frame_ms?: number | null;
+            synthesis_wall_ms?: number;
+            output_wall_ms?: number;
+            audio_frames?: number;
+            audio_duration_ms?: number;
+            max_gap_ms?: number;
+            max_internal_silence_ms?: number;
+            gaps_over_750ms?: number;
+            no_audio?: boolean;
+        };
+    }>;
 }
 
 interface ConversationItemBase {
@@ -82,6 +102,7 @@ export interface ConversationMessageItem extends ConversationItemBase {
     role: "user" | "assistant";
     text: string;
     final?: boolean;
+    audioStatus?: "unconfirmed" | "partial";
     tone?: "default" | "muted";
 }
 

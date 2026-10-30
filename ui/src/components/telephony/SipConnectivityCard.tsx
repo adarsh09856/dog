@@ -103,8 +103,8 @@ export function SipConnectivityCard({
                 {/* Every endpoint below is region-specific, so the picker is
                     easy to walk past and read the wrong hostnames from. */}
                 <span aria-hidden className="relative flex h-3 w-3 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/40 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-primary" />
                 </span>
               </p>
               <Select value={region.region} onValueChange={setSelectedRegion}>
@@ -125,7 +125,7 @@ export function SipConnectivityCard({
               <div className="border-b bg-muted/20 p-4">
                 <h3 className="font-semibold">Inbound</h3>
                 <p className="text-sm text-muted-foreground">
-                  Route calls to {details.provider_display_name}/Kodewaves using this
+                  Route calls from {details.provider_display_name} to your platform using this
                   SIP endpoint.
                 </p>
               </div>
@@ -164,7 +164,7 @@ export function SipConnectivityCard({
               <div className="border-b bg-muted/20 p-4">
                 <h3 className="font-semibold">Outbound</h3>
                 <p className="text-sm text-muted-foreground">
-                  Send calls from {details.provider_display_name}/Kodewaves to your SIP
+                  Send calls through {details.provider_display_name} to your SIP
                   carrier or PBX.
                 </p>
               </div>

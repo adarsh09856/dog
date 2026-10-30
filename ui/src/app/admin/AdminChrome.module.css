@@ -1,0 +1,21 @@
+.shell { --admin-rail: #10231f; --admin-rail-border: #29433a; background: var(--background); }
+.navigation { background: var(--admin-rail); border-color: var(--admin-rail-border); box-shadow: 8px 0 28px -28px color-mix(in srgb, #061713 75%, transparent); }
+.navigation > div:first-child { border-color: var(--admin-rail-border); background: linear-gradient(120deg, #142d27, #10231f 75%); }
+.navigation nav { scrollbar-color: #466255 transparent; scrollbar-width: thin; }
+.navigation nav > a { color: #c4d4cb; border-radius: 8px; }
+.navigation nav > a:hover { color: #f4f8f4; background: #1a3931; }
+.navigation nav > a[aria-current="page"] { color: #f3f7f3; border-left-color: #b7d3b3; background: #224239; box-shadow: inset 0 0 0 1px #a7cbb21a; }
+.navigation nav > a[aria-current="page"] svg { color: #c4ddbd; }
+.navigation nav > div { color: #8ca699; font-size: 9px; letter-spacing: .16em; }
+.navigation nav > a :global([aria-label$="installation integrity alerts"]) { color: #fff; }
+.footer { border-color: var(--admin-rail-border); background: #112722; }
+.footer :global(a) { color: #bdcec4; border-radius: 8px; }
+.footer :global(a:hover) { color: #fff; background: #1a3931; }
+.footer :global(div.bg-muted\/40) { border: 1px solid #304c41; border-radius: 9px; background: #172e28; }
+.footer :global(span) { color: #cad8d0; }
+.content { min-height: calc(100vh - 3.5rem); }
+.mobileBar { background: color-mix(in srgb, var(--background) 92%, transparent); border-color: var(--border); }
+.mobileBar :global(button) { border-radius: 8px; }
+@media (prefers-reduced-motion: reduce) {
+  .navigation nav > a { transition: none; }
+}

@@ -1,0 +1,13 @@
+.runShell{background:var(--background)}
+.mainScroll{background:radial-gradient(circle at 78% 0%,color-mix(in srgb,var(--primary) 7%,transparent),transparent 360px),var(--background)}
+.runContent{max-width:1040px;padding:clamp(20px,3vw,42px)}
+.runContent :global([data-slot="card"]){border-radius:12px;box-shadow:0 12px 28px -28px var(--foreground)}
+.runContent :global([data-slot="card-title"]){letter-spacing:-.035em}
+.runHero{border-radius:14px!important;overflow:hidden;border-color:var(--border);background:color-mix(in srgb,var(--card) 94%,var(--primary))!important;box-shadow:0 18px 45px -38px var(--foreground)!important}
+.runHero :global([data-slot="card-header"]){border-bottom:1px solid var(--border);padding-block:26px}
+.runHero :global([data-slot="card-content"]){padding-top:20px}
+.heroTitle :global([data-slot="card-title"]){font-size:clamp(23px,2.6vw,32px);font-weight:550;line-height:1.2}
+.metric{min-width:0;padding:16px 18px;border-left:2px solid var(--primary);background:var(--muted);border-radius:0 8px 8px 0}.metric p:last-child{font-size:clamp(21px,2vw,27px);letter-spacing:-.045em;font-variant-numeric:tabular-nums}
+.conversationPane{background:color-mix(in srgb,var(--background) 92%,var(--primary))}
+@media(max-width:1100px){.runShell{flex-direction:column;overflow-y:auto}.mainScroll{overflow:visible}.conversationPane{width:100%;height:min(55vh,520px);min-height:300px;border-left:0;border-top:1px solid var(--border)}}
+@media(max-width:640px){.runContent{padding:16px}.runHero :global([data-slot="card-header"]){padding:20px}.conversationPane{padding:12px}}

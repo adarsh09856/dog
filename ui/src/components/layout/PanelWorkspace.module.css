@@ -1,0 +1,183 @@
+.workspace { padding-top: 2rem; padding-bottom: 4rem; }
+.workspaceHero { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(250px,1fr); gap: 3rem; padding: 1rem 0 2.5rem; }
+.eyebrow { color: var(--muted-foreground); font-size: 9px; letter-spacing: .16em; font-weight: 650; margin-bottom: 1rem; }
+.workspaceHero h1 { font-size: clamp(2rem,3.4vw,3.25rem); font-weight: 550; letter-spacing: -.055em; line-height: 1.12; margin-bottom: 1rem; }
+.heroDescription { color: var(--muted-foreground); max-width: 490px; font-size: 14px; line-height: 1.8; }
+.heroActions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1.5rem; }
+.workspaceSummary { border-left: 1px solid var(--border); padding: .25rem 0 .25rem 2rem; align-self: center; }
+.workspaceSummary > div { display: flex; align-items: center; justify-content: space-between; }
+.workspaceSummary > div span { color: var(--muted-foreground); font-size: 9px; letter-spacing: .15em; }
+.workspaceSummary strong { display: block; font-size: 21px; letter-spacing: -.035em; font-weight: 550; margin: .75rem 0; }
+.workspaceSummary p { color: var(--muted-foreground); font-size: 12px; line-height: 1.7; max-width: 270px; }
+.workspaceSummary > a { display: inline-flex; gap: 8px; align-items: center; font-size: 11px; font-weight: 600; margin-top: 1.2rem; color: var(--primary); }
+.metricRail { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--card); }
+.metricRail > div { border: 0; border-radius: 0; border-right: 1px solid var(--border); box-shadow: none; background-image: none; min-width: 0; padding: 1.35rem; }
+.metricRail > div:last-child { border-right: 0; }
+.metricRail > div > div:first-child { padding: 0; }
+.metricRail :global([data-slot="card-content"]) { padding: 1rem 0 0; }
+.metricRail :global([data-slot="card-title"]) { font-size: 9px; letter-spacing: .09em; line-height: 1.6; }
+.metricRail :global(.text-3xl) { font-size: clamp(1.7rem,2.4vw,2.4rem); font-weight: 550; letter-spacing: -.045em; font-variant-numeric: tabular-nums; }
+.toolDirectory { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 2rem; padding-top: 1rem; }
+.toolGroup { min-width: 0; }
+.groupHeading { display: flex; align-items: center; gap: 10px; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+.groupHeading > span { font-family: var(--font-geist-mono),monospace; font-size: 10px; color: var(--primary); }
+.groupHeading h2 { font-size: 10px; letter-spacing: .09em; font-weight: 650; }
+.groupDescription { color: var(--muted-foreground); font-size: 11px; line-height: 1.7; min-height: 3.25rem; margin: .9rem 0; }
+.toolLink { display: flex; align-items: flex-start; gap: 12px; border-bottom: 1px solid var(--border); padding: 1.1rem 0; transition: color 150ms, padding 150ms; }
+.toolLink > svg:first-child { margin-top: 2px; color: var(--primary); flex-shrink: 0; }
+.toolLink > svg:last-child { margin-left: auto; color: var(--muted-foreground); flex-shrink: 0; margin-top: 3px; }
+.toolLink h3 { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.toolLink p { font-size: 10px; line-height: 1.7; color: var(--muted-foreground); }
+.toolLink:hover { color: var(--primary); padding-left: 6px; }
+.toolLink:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; border-radius: 3px; }
+.adminHero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: .5rem 0 2rem; border-bottom: 1px solid var(--border); }
+.adminHero h1 { font-size: clamp(1.9rem,3.2vw,3rem); font-weight: 550; letter-spacing: -.055em; }
+.adminHero > div:last-child { flex-shrink: 0; }
+.adminLaunchpad { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.adminLaunchpad > div { border: 0; border-right: 1px solid var(--border); border-radius: 0; box-shadow: none; background-image: none; }
+.adminLaunchpad > div:last-child { border-right: 0; }
+.adminLaunchpad :global([data-slot="card-header"]) { min-height: 155px; }
+.adminLaunchpad :global([data-slot="card-title"]) { font-size: 14px; align-items: flex-start; line-height: 1.5; }
+.adminLaunchpad :global([data-slot="card-description"]) { font-size: 12px; line-height: 1.7; }
+.adminLaunchpad button { justify-content: space-between; background: transparent; border: 1px solid var(--border); font-size: 11px; }
+.governance { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.4fr); gap: 3rem; border-top: 1px solid var(--border); padding: 2.5rem 0; }
+.governance h2 { font-size: 25px; letter-spacing: -.04em; font-weight: 550; max-width: 300px; line-height: 1.25; }
+.governance > div > p:last-child { font-size: 12px; line-height: 1.8; color: var(--muted-foreground); max-width: 320px; margin-top: 1rem; }
+.governanceLinks a { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid var(--border); }
+.governanceLinks strong { font-size: 12px; font-weight: 600; }
+.governanceLinks small { display: block; color: var(--muted-foreground); margin-top: 4px; font-size: 11px; }
+.governanceLinks svg { color: var(--primary); }
+.adminNavigation { background: var(--sidebar); }
+.adminNavigation > div:first-child { min-height: 88px; }
+.adminNavigation nav a { font-size: 12px; min-height: 39px; border-left-width: 3px; }
+.adminNavigation nav a[aria-current="page"] { background: var(--sidebar-accent); border-color: var(--cta); color: var(--sidebar-accent-foreground); }
+.adminShell > main { background: var(--background); }
+.collectionHeader { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; border-bottom: 1px solid var(--border); padding: .5rem 0 1.7rem; margin-bottom: 2rem; }
+.collectionHeader h1 { font-size: clamp(2rem,3.2vw,3rem); font-weight: 550; letter-spacing: -.05em; }
+.collectionHeader p { font-size: 13px; color: var(--muted-foreground); line-height: 1.7; margin-top: .6rem; max-width: 500px; }
+@media (max-width: 1000px) { .metricRail { grid-template-columns: repeat(2,minmax(0,1fr)); } .metricRail > div:nth-child(2) { border-right: 0; } .metricRail > div:nth-child(-n+2) { border-bottom: 1px solid var(--border); } .toolDirectory { gap: 1.2rem; } .adminHero { align-items: flex-start; flex-direction: column; } .adminLaunchpad :global([data-slot="card-header"]) { min-height: 190px; } }
+@media (max-width: 700px) { .workspaceHero,.toolDirectory,.governance,.adminLaunchpad { grid-template-columns: minmax(0,1fr); } .workspaceHero { gap: 2rem; } .workspaceSummary { border-left: 0; border-top: 1px solid var(--border); padding: 1.4rem 0 0; } .groupDescription { min-height: auto; } .adminLaunchpad > div { border-right: 0; border-bottom: 1px solid var(--border); } .adminLaunchpad > div:last-child { border-bottom: 0; } .adminLaunchpad :global([data-slot="card-header"]) { min-height: auto; } .governance { gap: 1rem; } .collectionHeader { flex-direction: column; align-items: flex-start; } }
+@media (prefers-reduced-motion: reduce) { .toolLink { transition: none; } .toolLink:hover { padding-left: 0; } }
+.billingMetrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.billingMetrics > div { border: 0; border-radius: 0; box-shadow: none; border-right: 1px solid var(--border); background-image: none; }
+.billingMetrics > div:last-child { border-right: 0; }
+.billingMetrics :global(.text-3xl) { font-size: clamp(1.8rem,3vw,2.7rem); font-weight: 550; letter-spacing: -.045em; }
+@media(max-width:639px) { .billingMetrics { grid-template-columns: 1fr; } .billingMetrics > div { border-right: 0; border-bottom: 1px solid var(--border); } .billingMetrics > div:last-child { border-bottom: 0; } }
+/* Let page actions flow within the available inset width, including at zoom. */
+.collectionHeader { flex-wrap: wrap; min-width: 0; }
+.collectionHeader > div:first-child { min-width: min(100%,260px); flex: 1 1 330px; }
+.collectionHeader > div:last-child { max-width: 100%; flex-shrink: 1; flex-wrap: wrap; }
+.collectionHeader h1 { overflow-wrap: anywhere; }
+
+/* Editorial page masthead shared by workspace, operations and admin lists.
+   Give these screens a real surface and a clear action rail so each panel
+   reads as a purpose-built workspace, not a heading followed by a divider. */
+.collectionHeader {
+  position: relative;
+  isolation: isolate;
+  align-items: center;
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  min-height: 132px;
+  margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
+  padding: clamp(1.25rem, 2.5vw, 2rem);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: 0 12px 30px -26px color-mix(in srgb, var(--foreground) 48%, transparent);
+  animation: workspace-masthead-in 420ms cubic-bezier(.2,.75,.25,1) both;
+}
+.collectionHeader::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--cta);
+  content: "";
+}
+.collectionHeader > div:first-child { padding-left: .25rem; }
+.collectionHeader .eyebrow,
+.collectionHeader :global([class*="eyebrow"]) {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  margin-bottom: .65rem;
+  color: var(--primary);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.collectionHeader h1 {
+  max-width: 20ch;
+  font-size: clamp(1.8rem, 3.2vw, 2.75rem);
+  font-weight: 620;
+  letter-spacing: -.055em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+.collectionHeader p {
+  max-width: 58ch;
+  margin-top: .7rem;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.collectionHeader > div:not(:first-child) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .6rem;
+}
+.collectionHeader > div:not(:first-child) :global(button),
+.collectionHeader > div:not(:first-child) :global(a) {
+  min-height: 40px;
+  border-radius: 9px;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.collectionHeader > div:not(:first-child) :global(button:hover),
+.collectionHeader > div:not(:first-child) :global(a:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px -10px color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+.metricRail,
+.billingMetrics {
+  border-radius: 15px;
+  box-shadow: 0 14px 32px -28px color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+.metricRail > div,
+.billingMetrics > div {
+  transition: background-color 160ms ease;
+}
+.metricRail > div:hover,
+.billingMetrics > div:hover {
+  background-color: color-mix(in srgb, var(--primary) 5%, var(--card));
+}
+.adminLaunchpad {
+  border-radius: 15px;
+  background: var(--card);
+  box-shadow: 0 14px 32px -28px color-mix(in srgb, var(--foreground) 55%, transparent);
+}
+.adminLaunchpad > div { transition: background-color 160ms ease; }
+.adminLaunchpad > div:hover { background-color: color-mix(in srgb, var(--primary) 4%, var(--card)); }
+
+@keyframes workspace-masthead-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 700px) {
+  .collectionHeader { min-height: 0; padding: 1.25rem; border-radius: 13px; }
+  .collectionHeader > div:not(:first-child) { justify-content: flex-start; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collectionHeader { animation: none; }
+  .collectionHeader > div:not(:first-child) :global(button),
+  .collectionHeader > div:not(:first-child) :global(a),
+  .metricRail > div,
+  .billingMetrics > div,
+  .adminLaunchpad > div { transition: none; }
+  .collectionHeader > div:not(:first-child) :global(button:hover),
+  .collectionHeader > div:not(:first-child) :global(a:hover) { transform: none; box-shadow: none; }
+}

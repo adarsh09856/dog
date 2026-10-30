@@ -11,16 +11,13 @@ import {
   Loader2,
   Mail,
   Mic,
-  Palette,
   Play,
   RefreshCw,
   Save,
   Send,
   Server,
   ShieldCheck,
-  Square,
   Trash2,
-  Volume2,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
@@ -31,20 +28,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { adminApi, PlatformSettings } from "@/lib/kodewavesApi";
+import { notifyBrandingChanged, useClientBranding } from "@/context/ClientBrandingContext";
+import { useAuth } from "@/lib/auth";
+import { adminApi, apiFetch, PlatformSettings } from "@/lib/kodewavesApi";
+
+import admin from "../AdminWorkspace.module.css";
 import IndicSttTest from "./IndicSttTest";
 
 const POPULAR_OLLAMA_MODELS = [
-  { value: "qwen3.5:2b", label: "Qwen 3.5 2B (installed on this server)" },
+  { value: "qwen3.5:2b-q4_K_M", label: "Qwen 3.5 2B Q4 (CPU)" },
 ];
 
 
+type OllamaModel = Awaited<ReturnType<typeof adminApi.getOllamaModels>>["models"][number];
+type OllamaTestResult = Partial<Awaited<ReturnType<typeof adminApi.testOllama>>> & { success: boolean; error?: string };
+function errorMessage(error: unknown, fallback = "Request failed") { return error instanceof Error ? error.message : fallback; }
+
 export default function AdminSettingsPage() {
+  const { user, loading: authLoading } = useAuth();
+  const branding = useClientBranding();
   const [settings, setSettings] = useState<PlatformSettings>({
     company_name: "Kodewaves",
+    tagline: "Voice agents for web and phone",
+    favicon_url: "",
+    font: "geist",
     logo_url: "",
     support_email: "support@kodewaves.ai",
-    primary_color: "#6366f1",
+    primary_color: branding.primary_color || "#426b57",
     allow_user_byok: false,
     enforce_wallet_balance: true,
     enable_local_ai_engine: false,
@@ -63,13 +73,16 @@ export default function AdminSettingsPage() {
     stripe_secret_key: "",
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [brandSaving, setBrandSaving] = useState(false);
+  const [brandSaved, setBrandSaved] = useState(false);
 
   // Ollama Model Manager state
-  const [ollamaModels, setOllamaModels] = useState<any[]>([]);
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
-  const [pullModelName, setPullModelName] = useState("qwen3.5:2b");
+  const [pullModelName, setPullModelName] = useState("qwen3.5:2b-q4_K_M");
   const [customPullModel, setCustomPullModel] = useState("");
   const [isPulling, setIsPulling] = useState(false);
   const [pullStatusMessage, setPullStatusMessage] = useState<string | null>(null);
@@ -77,7 +90,7 @@ export default function AdminSettingsPage() {
 
   // Ollama test state
   const [testingOllamaModel, setTestingOllamaModel] = useState<string | null>(null);
-  const [ollamaTestResult, setOllamaTestResult] = useState<any | null>(null);
+  const [ollamaTestResult, setOllamaTestResult] = useState<OllamaTestResult | null>(null);
 
   // Test email state
   const [testEmailRecipient, setTestEmailRecipient] = useState("");
@@ -86,13 +99,14 @@ export default function AdminSettingsPage() {
 
   const fetchSettings = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await adminApi.getSettings();
       if (data && Object.keys(data).length > 0) {
         setSettings((prev) => ({ ...prev, ...data }));
       }
     } catch (err) {
-      console.error("Failed to load platform settings:", err);
+      setLoadError(errorMessage(err, "Unable to load platform settings. Try again before making changes."));
     } finally {
       setLoading(false);
     }
@@ -104,7 +118,7 @@ export default function AdminSettingsPage() {
       const res = await adminApi.getOllamaModels();
       setOllamaModels(res.models || []);
       setOllamaEndpointStatus(res.status || "online");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to fetch Ollama models:", err);
       setOllamaEndpointStatus("unreachable");
     } finally {
@@ -118,27 +132,54 @@ export default function AdminSettingsPage() {
     try {
       const res = await adminApi.testOllama(modelName);
       setOllamaTestResult(res);
-    } catch (err: any) {
-      setOllamaTestResult({ success: false, error: err.message || "Test failed" });
+    } catch (err: unknown) {
+      setOllamaTestResult({ success: false, error: errorMessage(err, "Test failed") });
     } finally {
       setTestingOllamaModel(null);
     }
   };
 
   useEffect(() => {
+    if (authLoading || !user) return;
     fetchSettings();
     fetchOllamaModels();
-  }, []);
+  }, [authLoading, user]);
+
+  const handleSaveBranding = async () => {
+    setBrandSaving(true);
+    setBrandSaved(false);
+    try {
+      await apiFetch("/installation/branding", {
+        method: "PUT",
+        body: JSON.stringify({
+          company_name: settings.company_name,
+          tagline: settings.tagline || "",
+          logo_url: settings.logo_url || "",
+          favicon_url: settings.favicon_url || "",
+          support_email: settings.support_email || "",
+          primary_color: settings.primary_color || branding.primary_color || "#426b57",
+          font: settings.font || "geist",
+        }),
+      });
+      notifyBrandingChanged();
+      setBrandSaved(true);
+    } catch (err) {
+      alert(errorMessage(err, "Unable to save branding"));
+    } finally {
+      setBrandSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
     setSavedSuccess(false);
     try {
       await adminApi.saveSettings(settings);
+      notifyBrandingChanged();
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);
-    } catch (err: any) {
-      alert(err.message || "Failed to save settings");
+    } catch (err: unknown) {
+      alert(errorMessage(err, "Failed to save settings"));
     } finally {
       setSaving(false);
     }
@@ -154,8 +195,8 @@ export default function AdminSettingsPage() {
       setPullStatusMessage(`Successfully downloaded ${targetModel}!`);
       await fetchOllamaModels();
       setCustomPullModel("");
-    } catch (err: any) {
-      setPullStatusMessage(`Failed to pull model: ${err.message}`);
+    } catch (err: unknown) {
+      setPullStatusMessage(`Failed to pull model: ${errorMessage(err)}`);
     } finally {
       setIsPulling(false);
     }
@@ -166,8 +207,8 @@ export default function AdminSettingsPage() {
     try {
       await adminApi.deleteOllamaModel(modelName);
       await fetchOllamaModels();
-    } catch (err: any) {
-      alert(`Failed to delete model: ${err.message}`);
+    } catch (err: unknown) {
+      alert(`Failed to delete model: ${errorMessage(err)}`);
     }
   };
 
@@ -181,8 +222,8 @@ export default function AdminSettingsPage() {
     try {
       const res = await adminApi.testEmail(testEmailRecipient);
       setTestEmailResult({ success: true, message: res.message });
-    } catch (err: any) {
-      setTestEmailResult({ success: false, message: err.message || "Failed to send test email" });
+    } catch (err: unknown) {
+      setTestEmailResult({ success: false, message: errorMessage(err, "Failed to send test email") });
     } finally {
       setSendingTestEmail(false);
     }
@@ -195,17 +236,21 @@ export default function AdminSettingsPage() {
     return `${mb.toFixed(1)} MB`;
   };
 
+  if (authLoading || loading) return <div role="status" className="flex items-center gap-3 p-8 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading platform settings…</div>;
+  if (loadError) return <div role="alert" className="space-y-4 rounded-xl border border-destructive/30 p-8"><p className="text-sm text-destructive">{loadError}</p><Button variant="outline" onClick={() => void fetchSettings()}>Retry</Button></div>;
+
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="PLATFORM / CONFIGURATION">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Platform Settings & Sovereignty</h1>
+          <span className={admin.kicker}>PLATFORM / CONFIGURATION</span>
+          <h1 className={admin.title}>Platform Settings & Sovereignty</h1>
           <p className="text-sm text-muted-foreground mt-1">
             White-label Kodewaves, configure sovereign SMTP credentials, manage self-hosted server Ollama models, and set payment gateways.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {savedSuccess && (
             <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" /> Settings Saved Successfully
@@ -227,22 +272,30 @@ export default function AdminSettingsPage() {
               White-Label Branding
             </CardTitle>
             <CardDescription>
-              Configure the platform identity displayed across the UI, invoices, and client widgets.
+              Update the name, logo, tagline, browser icon and colors across public pages, the workspace and this admin panel.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-1"><Label htmlFor="platform-tagline" className="text-xs">Tagline</Label><Input id="platform-tagline" maxLength={160} value={settings.tagline || ""} onChange={(e) => setSettings({ ...settings, tagline: e.target.value })} /></div>
+            <div className="space-y-1"><Label htmlFor="platform-favicon" className="text-xs">Browser icon URL or site path</Label><Input id="platform-favicon" value={settings.favicon_url || ""} placeholder="/favicon.ico or https://example.com/icon.png" onChange={(e) => setSettings({ ...settings, favicon_url: e.target.value })} /></div>
+            <div className="space-y-1"><Label htmlFor="platform-font" className="text-xs">Platform font</Label><select id="platform-font" value={settings.font || "geist"} onChange={(e) => setSettings({ ...settings, font: e.target.value as "geist" | "system" })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="geist">Geist</option><option value="system">System</option></select></div>
             <div className="space-y-1">
-              <Label className="text-xs">Company / Brand Name</Label>
+              <Label htmlFor="platform-brand-name" className="text-xs">Company / Brand Name</Label>
               <Input
+                id="platform-brand-name"
+                maxLength={80}
+                required
                 value={settings.company_name}
                 onChange={(e) => setSettings({ ...settings, company_name: e.target.value })}
-                placeholder="e.g. Kodewaves"
+                placeholder="e.g. Acme Voice"
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Brand Logo URL</Label>
+              <Label htmlFor="platform-brand-logo" className="text-xs">Brand Logo URL</Label>
               <Input
+                id="platform-brand-logo"
+                maxLength={500}
                 value={settings.logo_url || ""}
                 onChange={(e) => setSettings({ ...settings, logo_url: e.target.value })}
                 placeholder="https://example.com/logo.png"
@@ -250,8 +303,10 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Support Email Address</Label>
+              <Label htmlFor="platform-support-email" className="text-xs">Support Email Address</Label>
               <Input
+                id="platform-support-email"
+                type="email"
                 value={settings.support_email || ""}
                 onChange={(e) => setSettings({ ...settings, support_email: e.target.value })}
                 placeholder="support@kodewaves.ai"
@@ -263,17 +318,18 @@ export default function AdminSettingsPage() {
               <div className="flex items-center gap-3">
                 <input
                   type="color"
-                  value={settings.primary_color || "#6366f1"}
+                  value={settings.primary_color || branding.primary_color || "#426b57"}
                   onChange={(e) => setSettings({ ...settings, primary_color: e.target.value })}
                   className="h-9 w-12 rounded border border-border cursor-pointer bg-transparent"
                 />
                 <Input
-                  value={settings.primary_color || "#6366f1"}
+                  value={settings.primary_color || branding.primary_color || "#426b57"}
                   onChange={(e) => setSettings({ ...settings, primary_color: e.target.value })}
                   className="font-mono text-xs"
                 />
               </div>
             </div>
+            <div className="flex items-center gap-3 pt-2"><Button type="button" onClick={() => void handleSaveBranding()} disabled={brandSaving || saving}>{brandSaving ? "Saving branding…" : "Save branding"}</Button>{brandSaved && <p role="status" className="text-xs text-muted-foreground">Branding updated across the platform.</p>}</div>
           </CardContent>
         </Card>
 
@@ -337,7 +393,7 @@ export default function AdminSettingsPage() {
                   Self-Hosted AI Engine (CPU Stack)
                 </CardTitle>
                 <CardDescription>
-                  Runs inference on the server hosting this Kodewaves deployment (for example, your VPS), not on each user computer. Current services: Ollama CPU and Indus Pocket TTS.
+                  Runs speech recognition, response generation and speech synthesis on your Kodewaves server. Available models and voices are discovered from the configured services.
                 </CardDescription>
               </div>
               <Badge variant={settings.enable_local_ai_engine ? "default" : "secondary"} className="text-xs">
@@ -349,7 +405,7 @@ export default function AdminSettingsPage() {
             <div className="p-4 rounded-xl border border-border/60 bg-muted/20 flex items-center justify-between">
               <div>
                 <div className="text-xs font-semibold flex items-center gap-1.5">
-                  <Cpu className="h-3.5 w-3.5 text-indigo-500" />
+                  <Cpu className="h-3.5 w-3.5 text-primary" />
                   Enable Sovereign Self-hosted AI Engine
                 </div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">
@@ -363,7 +419,7 @@ export default function AdminSettingsPage() {
             </div>
 
             {settings.enable_local_ai_engine && (
-              <div className="p-4 rounded-xl border border-indigo-500/30 bg-indigo-500/5 space-y-3">
+              <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
                     <div className="text-xs font-semibold text-foreground">Self-Hosted Server Access Policy</div>
@@ -373,7 +429,7 @@ export default function AdminSettingsPage() {
                   </div>
                   <Select
                     value={settings.local_ai_access_policy || "public"}
-                    onValueChange={(val: any) => setSettings({ ...settings, local_ai_access_policy: val })}
+                    onValueChange={(val) => setSettings({ ...settings, local_ai_access_policy: val === "restricted" ? "restricted" : "public" })}
                   >
                     <SelectTrigger className="w-56 h-8 text-xs bg-background">
                       <SelectValue placeholder="Select Policy" />
@@ -399,26 +455,27 @@ export default function AdminSettingsPage() {
                 <p className="text-[10px] text-muted-foreground">Internal Docker address for the server Ollama container; models use server CPU, RAM, and disk.</p>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-xs">Speaches TTS Endpoint (Compatibility)</Label>
+              <details className="space-y-1">
+                <summary className="cursor-pointer text-xs font-medium">Additional TTS server (advanced)</summary>
+                <Label className="text-xs">OpenAI-compatible TTS endpoint</Label>
                 <Input
                   value={settings.whisper_endpoint || ""}
                   onChange={(e) => setSettings({ ...settings, whisper_endpoint: e.target.value })}
-                  placeholder="http://whisper:8000/v1"
+                  placeholder="http://tts-service:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">Used for installed local TTS models. Self-hosted STT uses the IndicConformer endpoint below.</p>
-              </div>
+                <p className="text-[10px] text-muted-foreground">Optional additional speech server. This address does not install a model or configure speech recognition. Available models and voices come from the running server.</p>
+              </details>
 
               <div className="space-y-1">
-                <Label className="text-xs">Regional VITS TTS Endpoint</Label>
+                <Label className="text-xs">Combined Local TTS Endpoint</Label>
                 <Input
                   value={settings.indic_vits_tts_endpoint || ""}
                   onChange={(e) => setSettings({ ...settings, indic_vits_tts_endpoint: e.target.value })}
                   placeholder="http://indic-vits-tts:8000/v1"
                   disabled={!settings.enable_local_ai_engine}
                 />
-                <p className="text-[10px] text-muted-foreground">CPU voice service for its 13 installed regional languages. Hindi and English are not available in this model.</p>
+                <p className="text-[10px] text-muted-foreground">Shared endpoint for installed local voices. Supported languages and speakers are discovered from the running service and shown in model configuration.</p>
               </div>
 
               <div className="space-y-1">
@@ -547,7 +604,7 @@ export default function AdminSettingsPage() {
                 </div>
               ) : (
                 <div className="border rounded-xl divide-y overflow-hidden text-xs">
-                  {ollamaModels.map((m: any, idx: number) => (
+                  {ollamaModels.map((m, idx) => (
                     <div
                       key={m.name || idx}
                       className="p-3 flex items-center justify-between hover:bg-muted/30 transition-colors"
@@ -577,7 +634,7 @@ export default function AdminSettingsPage() {
                           {testingOllamaModel === m.name ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
-                            <Play className="h-3.5 w-3.5 text-indigo-500 fill-indigo-500" />
+                            <Play className="h-3.5 w-3.5 text-primary fill-primary" />
                           )}
                           Test Tools
                         </Button>
@@ -607,7 +664,7 @@ export default function AdminSettingsPage() {
                   <div className="font-semibold flex items-center gap-2">
                     {ollamaTestResult.success ? "✓ Ollama Test Passed" : "✕ Ollama Test Failed"}
                     {ollamaTestResult.latency_ms && <Badge variant="outline">{ollamaTestResult.latency_ms}ms</Badge>}
-                    {ollamaTestResult.supports_tools && <Badge className="bg-indigo-500/10 text-indigo-600 border-indigo-500/20">Tools Supported</Badge>}
+                    {ollamaTestResult.supports_tools && <Badge className="bg-primary/10 text-primary border-primary/20">Tools Supported</Badge>}
                   </div>
                   <div className="text-[11px] mt-1 text-muted-foreground">
                     {ollamaTestResult.message || ollamaTestResult.error || ollamaTestResult.response}
@@ -639,7 +696,7 @@ export default function AdminSettingsPage() {
               Self-hosted Indian speech recognition
             </CardTitle>
             <CardDescription>
-              Test the installed CPU IndicConformer languages against real WAV audio. The selected language is used for recognition; this local model does not auto-detect languages.
+              Test a selected CPU IndicConformer language against WAV audio. Live calls can use automatic detection for the supported installed speech languages shown in Model Configurations.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -788,7 +845,7 @@ export default function AdminSettingsPage() {
 
               <div className="p-4 rounded-xl border border-border/60 bg-muted/20 space-y-3">
                 <div className="text-xs font-semibold flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-indigo-500" />
+                  <CreditCard className="h-4 w-4 text-primary" />
                   Stripe (Global USD Payments)
                 </div>
                 <div className="space-y-2">

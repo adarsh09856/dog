@@ -1,0 +1,45 @@
+{
+	admin off
+}
+
+{$PUBLIC_HOST} {
+	encode zstd gzip
+
+	# This handler covers proxy failures, including startup failures. Do not
+	# identify all outages as tampering: only the integrity checker can do that.
+	handle_errors {
+		header Cache-Control "no-store"
+		@api_error path /api/v1 /api/v1/*
+		handle @api_error {
+			header Content-Type "application/json; charset=utf-8"
+			respond `{"detail":"Service temporarily unavailable. Contact your installation administrator."}` 503
+		}
+		handle {
+			header Content-Type "text/html; charset=utf-8"
+			respond `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Service temporarily unavailable</title></head><body><main><h1>Service temporarily unavailable</h1><p>The installation could not serve this request. Contact your installation administrator, who can check service and integrity logs.</p></main></body></html>` 503
+		}
+	}
+
+	@api path /api/v1 /api/v1/*
+	handle @api {
+		reverse_proxy api:8000 {
+			header_up Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	@audio path /voice-audio /voice-audio/*
+	handle @audio {
+		reverse_proxy minio:9000 {
+			header_up Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	handle {
+		reverse_proxy ui:3010 {
+			header_up Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}

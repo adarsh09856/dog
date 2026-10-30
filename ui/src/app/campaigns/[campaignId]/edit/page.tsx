@@ -1,4 +1,5 @@
 "use client";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { ArrowLeft } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -314,20 +315,24 @@ export default function EditCampaignPage() {
     }
 
     return (
-        <div className="container mx-auto p-6 pb-12 space-y-6 max-w-2xl">
-            <div>
+        <div className={`${chrome.detailPage} container mx-auto max-w-screen-2xl space-y-6 px-4 py-6 pb-12 sm:px-6 lg:px-8`}>
+            <div className="space-y-4">
                 <Button
                     variant="ghost"
                     onClick={handleBack}
-                    className="mb-4"
+                    className="-ml-3"
                 >
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Campaign
                 </Button>
-                <h1 className="text-3xl font-bold mb-2">Edit Campaign</h1>
-                <p className="text-muted-foreground">Modify campaign settings</p>
+                <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Outbound · Campaigns</p>
+                    <h1 className={chrome.detailTitle}>Edit campaign</h1>
+                    <p className="text-muted-foreground">Update routing, pacing, retries, and schedules without losing the current setup.</p>
+                </div>
             </div>
 
+            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
             <Card>
                 <CardHeader>
                     <CardTitle>Campaign Settings</CardTitle>
@@ -397,10 +402,11 @@ export default function EditCampaignPage() {
                             </div>
                         )}
 
-                        <div className="flex gap-4 pt-4">
+                        <div className="flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:justify-end">
                             <Button
                                 type="submit"
                                 disabled={isSubmitting || !campaignName.trim()}
+                                className="sm:min-w-36"
                             >
                                 {isSubmitting ? 'Saving...' : 'Save Changes'}
                             </Button>
@@ -409,6 +415,7 @@ export default function EditCampaignPage() {
                                 variant="outline"
                                 onClick={handleBack}
                                 disabled={isSubmitting}
+                                className="sm:min-w-28"
                             >
                                 Cancel
                             </Button>
@@ -416,6 +423,44 @@ export default function EditCampaignPage() {
                     </form>
                 </CardContent>
             </Card>
+            <aside className="space-y-4 xl:sticky xl:top-6" aria-label="Campaign edit context">
+                <Card className="border-primary/20 bg-primary/[0.035]">
+                    <CardHeader>
+                        <CardTitle className="text-base">Current campaign</CardTitle>
+                        <CardDescription>Changes apply to this campaign configuration.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-1">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</p>
+                            <p className="text-sm font-medium capitalize">{campaign.state}</p>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Workflow routes</p>
+                            <p className="text-sm font-medium">{variants.length} {variants.length === 1 ? 'workflow' : 'workflows'} configured</p>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Caller IDs available</p>
+                            <p className="text-sm font-medium">{fromNumbersCount}</p>
+                        </div>
+                        {outboundBlockedReason && (
+                            <p role="status" className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+                                Outbound is blocked: {outboundBlockedReason}
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-base">Review before saving</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm text-muted-foreground">
+                        <p>Confirm the workflow split totals 100%.</p>
+                        <p>Call limits remain capped by your organization limit of <span className="font-medium text-foreground">{orgConcurrentLimit}</span>.</p>
+                        <p className="border-t pt-3">Completed or failed campaigns are read-only. Their run history remains available from campaign details.</p>
+                    </CardContent>
+                </Card>
+            </aside>
+            </div>
         </div>
     );
 }

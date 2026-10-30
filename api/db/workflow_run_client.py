@@ -1,7 +1,7 @@
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -14,7 +14,7 @@ from api.db.models import (
     WorkflowModel,
     WorkflowRunModel,
 )
-from api.enums import CallType, StorageBackend
+from api.enums import CallType, StorageBackend, WorkflowRunState
 from api.schemas.workflow import WorkflowRunResponseSchema
 from api.services.workflow.run_usage_response import format_public_cost_info
 from api.utils.recording_artifacts import get_recording_storage_key
@@ -240,6 +240,32 @@ class WorkflowRunClient(BaseDBClient):
 
             result = await session.execute(query)
             return result.scalars().first()
+
+    async def claim_initialized_workflow_run(
+        self, run_id: int, workflow_id: int, organization_id: int
+    ) -> bool:
+        """Atomically reserve an initialized run for its first telephony socket.
+
+        The WebSocket handler's earlier read validates provider/workflow details,
+        but two simultaneous callbacks can both observe ``initialized``. This
+        conditional update is the single-use gate: exactly one callback can
+        transition the org-owned run to ``running``.
+        """
+        async with self.async_session() as session:
+            result = await session.execute(
+                update(WorkflowRunModel)
+                .where(
+                    WorkflowRunModel.id == run_id,
+                    WorkflowRunModel.workflow_id == workflow_id,
+                    WorkflowRunModel.workflow.has(
+                        WorkflowModel.organization_id == organization_id
+                    ),
+                    WorkflowRunModel.state == WorkflowRunState.INITIALIZED.value,
+                )
+                .values(state=WorkflowRunState.RUNNING.value)
+            )
+            await session.commit()
+            return result.rowcount == 1
 
     async def get_workflow_run_by_id(self, run_id: int) -> WorkflowRunModel | None:
         """Get workflow run by ID without user filtering - for background tasks"""

@@ -18,6 +18,7 @@ from api.constants import (
 from api.db import db_client
 from api.db.models import WorkflowRunTextSessionModel
 from api.enums import WorkflowRunMode
+from api.services.client_worker_entitlements import require_client_worker_features
 from api.services.workflow.text_chat_session_service import (
     TextChatSessionRevisionConflictError,
     complete_text_chat_session,
@@ -111,6 +112,9 @@ async def complete_inactive_text_chat_session(
     completed_at_iso: str,
 ) -> None:
     """Complete one inactivity candidate after reloading it through its owner org."""
+    # This job may remain queued after the text-chat request was licensed. Do
+    # not reload customer data or run completion integrations after revocation.
+    await require_client_worker_features("voice")
     set_current_run_id(run_id)
     organization_id = await db_client.get_organization_id_by_workflow_run_id(run_id)
     if organization_id is None:

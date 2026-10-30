@@ -212,6 +212,25 @@ def _is_hinglish(language: str) -> bool:
     }
 
 
+def validate_local_tts_speed(model: dict, voice_id: str, speed: float) -> None:
+    """Validate every voice reachable by automatic routing before a call starts."""
+    if speed == 1.0:
+        return
+    voices = model.get("voices") or []
+    if not isinstance(voices, list):
+        return
+    automatic_routing = bool(model.get("automatic_voice_routing"))
+    for voice in voices:
+        if not isinstance(voice, dict) or voice.get("installed") is False:
+            continue
+        selected = (voice.get("id") or voice.get("voice_id") or voice.get("name")) == voice_id
+        if (automatic_routing or selected) and voice.get("speed_adjustable") is False:
+            raise ValueError(
+                "This speech configuration includes a fixed-speed voice. "
+                "Set voice speed to 1.0 before saving or starting a call."
+            )
+
+
 def local_model_voice_catalog(model: dict) -> list[dict]:
     """Expose only voices and locales actually advertised for this model."""
     rows = []

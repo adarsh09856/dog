@@ -1,7 +1,5 @@
 "use client";
 
-import { getUserEmail } from "@/lib/auth/userDisplay";
-
 import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle, ChevronLeft, ChevronRight, ExternalLink, FileText, Info, Loader2, RefreshCw, ShieldAlert } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -25,11 +23,14 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDispositionCodes } from '@/hooks/useDispositionCodes';
 import { useAuth } from '@/lib/auth';
+import { getUserEmail } from "@/lib/auth/userDisplay";
 import { formatDateTime } from '@/lib/dateTime';
 import { superadminFilterAttributes, withDispositionCodeOptions } from "@/lib/filterAttributes";
 import { decodeFiltersFromURL, encodeFiltersToURL } from '@/lib/filters';
 import { impersonateAsSuperadmin } from '@/lib/utils';
 import { ActiveFilter } from '@/types/filters';
+
+import admin from "../../admin/AdminWorkspace.module.css";
 
 interface WorkflowRun {
     id: number;
@@ -320,14 +321,15 @@ export default function RunsPage() {
     }
 
     return (
-        <div className="container mx-auto p-6 space-y-6 max-w-full">
-            <div>
-                <h1 className="text-3xl font-bold mb-2">Workflow Runs</h1>
-                <p className="text-muted-foreground">View and manage all workflow runs across organizations</p>
+        <div className={admin.surface}>
+            <div className={admin.hero}>
+                <span className={admin.kicker}>Owner control / activity</span>
+                <h1 className={admin.title}>Workflow Runs</h1>
+                <p>Review workflow activity across organizations and filter the run history.</p>
             </div>
 
             {error && (
-                    <div className="mb-6 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg">
+                    <div className="mb-6 bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg">
                         {error}
                     </div>
                 )}
@@ -368,7 +370,7 @@ export default function RunsPage() {
                             </div>
                         ) : (
                             <>
-                                <div className="bg-card border rounded-lg overflow-hidden shadow-sm">
+                                <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
                                     <Table>
                                         <TableHeader>
                                             <TableRow className="bg-muted">
@@ -461,7 +463,7 @@ export default function RunsPage() {
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="text-sm whitespace-pre-wrap break-words">
-                                                        <span className={!run.is_completed ? "font-semibold text-blue-600" : ""}>
+                                                        <span className={!run.is_completed ? "font-semibold text-primary" : ""}>
                                                             {calculateDuration(run.is_completed, run.usage_info)}
                                                         </span>
                                                     </TableCell>
@@ -483,7 +485,7 @@ export default function RunsPage() {
                                                             {run.gathered_context && (
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
-                                                                        <Info className="h-4 w-4 text-blue-500 cursor-pointer" />
+                                                                        <Info className="h-4 w-4 text-primary cursor-pointer" />
                                                                     </TooltipTrigger>
                                                                     <TooltipContent sideOffset={4} className="max-w-sm whitespace-pre-wrap break-words">
                                                                         <p className="font-semibold text-xs mb-1">Gathered Context</p>

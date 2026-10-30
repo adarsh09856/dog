@@ -301,15 +301,23 @@ export const PhoneCallDialog = ({
                 if (typeof response.error === "string") {
                     errMsg = response.error;
                 } else if (response.error && typeof response.error === "object") {
-                    const detail = (response.error as any).detail;
+                    const errorObject = response.error as Record<string, unknown>;
+                    const detail = errorObject.detail;
                     if (typeof detail === "string") {
                         errMsg = detail;
                     } else if (Array.isArray(detail)) {
-                        errMsg = detail.map((d: any) => d.msg || d.message || JSON.stringify(d)).join("; ");
+                        errMsg = detail.map((item: unknown) => {
+                            if (item && typeof item === "object") {
+                                const fields = item as Record<string, unknown>;
+                                return String(fields.msg || fields.message || JSON.stringify(item));
+                            }
+                            return JSON.stringify(item);
+                        }).join("; ");
                     } else if (detail && typeof detail === "object") {
-                        errMsg = (detail as any).message || (detail as any).msg || JSON.stringify(detail);
+                        const fields = detail as Record<string, unknown>;
+                        errMsg = String(fields.message || fields.msg || JSON.stringify(detail));
                     } else {
-                        errMsg = (response.error as any).message || JSON.stringify(response.error);
+                        errMsg = String(errorObject.message || JSON.stringify(response.error));
                     }
                 }
                 setCallError(errMsg);
@@ -380,7 +388,7 @@ export const PhoneCallDialog = ({
                 <DialogHeader>
                     <DialogTitle>Connect phone service</DialogTitle>
                     <DialogDescription>
-                        Kodewaves doesn&apos;t sell phone numbers or minutes. Choose how
+                        Connect your carrier account to manage phone numbers and carrier usage. Choose how
                         this agent should place and receive calls.
                     </DialogDescription>
                 </DialogHeader>
@@ -414,7 +422,7 @@ export const PhoneCallDialog = ({
                         <div className="space-y-1">
                             <h3 className="text-sm font-medium">Bring your own SIP</h3>
                             <p className="text-sm text-muted-foreground">
-                                Already have a SIP trunk or a PBX? Point it at Kodewaves and
+                                Already have a SIP trunk or a PBX? Point it at your platform and
                                 keep your existing carrier and numbers.
                                 {sipConfig
                                     ? ` “${sipConfig.name}” is provisioned and waiting for your carrier details.`

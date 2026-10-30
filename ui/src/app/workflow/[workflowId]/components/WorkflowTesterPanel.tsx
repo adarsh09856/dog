@@ -15,11 +15,11 @@ import { WORKFLOW_RUN_MODES } from "@/constants/workflowRunModes";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { useAuth } from "@/lib/auth";
 import { cn, getRandomId } from "@/lib/utils";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
-import { AiSimulatorPlaceholder } from "./workflow-tester/AiSimulatorPlaceholder";
 import { EmbeddedVoiceTester } from "./workflow-tester/EmbeddedVoiceTester";
 import { ManualTextChatPanel } from "./workflow-tester/ManualTextChatPanel";
-import { ChatModeToggle, DisabledNotice, EmptyState } from "./workflow-tester/shared";
+import { DisabledNotice, EmptyState } from "./workflow-tester/shared";
 import type { WorkflowRuntimeNodeTransition } from "./workflow-tester/types";
 import { extractSdkErrorMessage, getErrorMessage } from "./workflow-tester/utils";
 
@@ -51,7 +51,6 @@ export function WorkflowTesterPanel({
     const { isAuthenticated, loading: authLoading, getAccessToken } = auth;
     const [accessToken, setAccessToken] = useState<string | null>(null);
     const [activeMode, setActiveMode] = useState<"audio" | "text">("audio");
-    const [chatMode, setChatMode] = useState<"manual" | "simulated">("manual");
     const [chatSessionKey, setChatSessionKey] = useState(0);
     const [chatActive, setChatActive] = useState(false);
     const [voiceRunId, setVoiceRunId] = useState<number | null>(null);
@@ -155,20 +154,21 @@ export function WorkflowTesterPanel({
     };
 
     return (
-        <div className={cn("flex h-full min-h-0 flex-col bg-background", className)}>
+        <div className={cn(chrome.testerPanel, "flex h-full min-h-0 flex-col bg-card text-card-foreground", className)}>
             <Tabs
                 value={activeMode}
                 onValueChange={handleModeChange}
                 className="min-h-0 flex-1 gap-0"
             >
-                <div className="border-b border-border/70 px-4 py-3">
+                <div className="border-b border-border/80 bg-card px-4 pb-3 pt-4">
+                    <p className="mb-2 font-mono text-[9px] font-medium uppercase tracking-[.16em] text-muted-foreground">Agent workspace <span className="px-1 text-border">/</span> Live test</p>
                     <div className="flex items-center gap-3">
-                        <TabsList className="grid h-9 flex-1 grid-cols-2 rounded-lg bg-muted/60 p-1">
-                            <TabsTrigger value="audio" className="rounded-md text-sm">
+                        <TabsList className="grid h-10 flex-1 grid-cols-2 rounded-xl border border-border/70 bg-muted/70 p-1 shadow-inner shadow-foreground/[0.03]">
+                            <TabsTrigger value="audio" className="rounded-lg text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                                 <Mic className="h-4 w-4" />
                                 Test Audio
                             </TabsTrigger>
-                            <TabsTrigger value="text" className="rounded-md text-sm">
+                            <TabsTrigger value="text" className="rounded-lg text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                                 <MessageSquareText className="h-4 w-4" />
                                 Test Chat
                             </TabsTrigger>
@@ -187,7 +187,7 @@ export function WorkflowTesterPanel({
                     </div>
                 </div>
 
-                <TabsContent value="audio" className="min-h-0 flex-1 px-4 py-4">
+                <TabsContent value="audio" className="min-h-0 flex-1 bg-background/50 px-4 py-4">
                     <div className="flex h-full min-h-0 flex-col gap-3">
                         {!tokenReady ? (
                             <div className="space-y-4">
@@ -239,11 +239,11 @@ export function WorkflowTesterPanel({
                     </div>
                 </TabsContent>
 
-                <TabsContent value="text" className="min-h-0 flex-1 px-4 py-3">
+                <TabsContent value="text" className="min-h-0 flex-1 bg-background/50 px-4 py-3">
                     <div className="flex h-full min-h-0 flex-col gap-3">
                         <div className="flex items-center justify-between gap-2">
-                            <ChatModeToggle value={chatMode} onChange={setChatMode} />
-                            {chatMode === "manual" && chatActive ? (
+                            <span className="text-xs font-medium text-muted-foreground">Manual test</span>
+                            {chatActive ? (
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -257,8 +257,7 @@ export function WorkflowTesterPanel({
                             ) : null}
                         </div>
 
-                        {chatMode === "manual" ? (
-                            <ManualTextChatPanel
+                        <ManualTextChatPanel
                                 key={chatSessionKey}
                                 workflowId={workflowId}
                                 ready={tokenReady && !!accessToken}
@@ -267,10 +266,7 @@ export function WorkflowTesterPanel({
                                 disabledReason={effectiveDisabledReason}
                                 onActiveChange={setChatActive}
                                 onNodeTransition={onRuntimeNodeTransition}
-                            />
-                        ) : (
-                            <AiSimulatorPlaceholder disabledReason={effectiveDisabledReason} />
-                        )}
+                        />
                     </div>
                 </TabsContent>
             </Tabs>

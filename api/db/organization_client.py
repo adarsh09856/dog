@@ -12,6 +12,7 @@ from api.db.models import (
     UserModel,
     organization_users_association,
 )
+from api.services.client_creation_limits import enforce_client_creation_limit
 from api.utils.api_key import generate_api_key
 
 
@@ -61,6 +62,16 @@ class OrganizationClient(BaseDBClient):
             organization = result.scalars().first()
 
             if organization is None:
+                existing_after_lock = await enforce_client_creation_limit(
+                    session,
+                    limit_name="max_workspaces",
+                    model=OrganizationModel,
+                    existing_query=select(OrganizationModel).where(
+                        OrganizationModel.provider_id == org_provider_id
+                    ),
+                )
+                if existing_after_lock is not None:
+                    return existing_after_lock, False
                 # Use PostgreSQL's INSERT ... ON CONFLICT DO NOTHING
                 # This is atomic and handles race conditions at the database level
 

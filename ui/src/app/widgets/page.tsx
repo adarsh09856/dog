@@ -1,23 +1,20 @@
 "use client";
-
 import {
   Check,
   CheckCircle2,
   Code,
   Copy,
   Edit,
-  Globe,
-  Loader2,
-  MessageSquare,
   Plus,
-  Radio,
   RefreshCw,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import React, { useEffect, useRef, useState } from "react";
 
+import { getWorkflowsApiV1WorkflowFetchGet } from "@/client/sdk.gen";
+import type { WorkflowListResponse } from "@/client/types.gen";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,13 +45,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { WebsiteWidget, widgetsApi } from "@/lib/kodewavesApi";
-import { getWorkflowsApiV1WorkflowFetchGet } from "@/client/sdk.gen";
-import type { WorkflowListResponse } from "@/client/types.gen";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { detailFromError } from "@/lib/apiError";
+import { useAuth } from "@/lib/auth";
+import { WebsiteWidget, widgetsApi } from "@/lib/kodewavesApi";
 
 export default function WidgetsPage() {
   const { user, loading: authLoading } = useAuth();
+  const branding = useClientBranding();
+  const defaultWidgetColor = branding.primary_color || "#426b57";
   const [widgets, setWidgets] = useState<WebsiteWidget[]>([]);
   const [agents, setAgents] = useState<WorkflowListResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,7 +72,7 @@ export default function WidgetsPage() {
   const listRequest = useRef(0);
   const embedRequest = useRef(0);
 
-  const fetchWidgets = async () => {
+  const fetchWidgets = useCallback(async () => {
     if (authLoading || !user) return;
     const request = ++listRequest.current;
     setLoadError(null);
@@ -92,7 +91,7 @@ export default function WidgetsPage() {
     } finally {
       if (request === listRequest.current) setLoading(false);
     }
-  };
+  }, [authLoading, user]);
 
   useEffect(() => {
     setWidgets([]);
@@ -122,7 +121,7 @@ export default function WidgetsPage() {
     try {
       const payload = {
         name: editingWidget.name, workflow_id: workflowId,
-        primary_color: editingWidget.primary_color || "#6366f1",
+        primary_color: editingWidget.primary_color || defaultWidgetColor,
         welcome_message: editingWidget.welcome_message || "Talk to our AI Agent",
         bubble_subtitle: editingWidget.bubble_subtitle ?? "Click to start voice call",
         position: editingWidget.position || "bottom-right",
@@ -136,8 +135,8 @@ export default function WidgetsPage() {
       setModalOpen(false);
       setEditingWidget(null);
       await fetchWidgets();
-    } catch (err: any) {
-      alert(err.message || "Failed to save widget");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save widget");
     } finally {
       setSaving(false);
     }
@@ -148,8 +147,8 @@ export default function WidgetsPage() {
     try {
       await widgetsApi.deleteWidget(id);
       await fetchWidgets();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete widget");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete widget");
     }
   };
 
@@ -180,12 +179,12 @@ export default function WidgetsPage() {
   };
 
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
+    <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 md:p-8">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className={panel.collectionHeader}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Website Voice Calling Widgets</h1>
+          <span className={panel.eyebrow}>CHANNELS / WEBSITE</span><h1>Website Voice Calling Widgets</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Embed an interactive WebRTC voice button on your website for instant 1-click customer calls.
           </p>
@@ -199,7 +198,7 @@ export default function WidgetsPage() {
               setAllowedDomainsText("");
               setEditingWidget({
                 name: "Homepage Voice Assistant",
-                primary_color: "#6366f1",
+                primary_color: defaultWidgetColor,
                 position: "bottom-right",
                 welcome_message: "Hi! How can I help you today? Tap to talk with our voice AI.",
                 is_active: true,
@@ -214,6 +213,29 @@ export default function WidgetsPage() {
             Refresh
           </Button>
         </div>
+      </header>
+
+      <div className={panel.metricRail} aria-label="Website widget overview">
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Configured widgets</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{widgets.length.toLocaleString()}</span><Code className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Voice entry points for your websites</p>
+        </Card>
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active widgets</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{widgets.filter((widget) => widget.is_active).length}</span><CheckCircle2 className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Available for visitors to launch</p>
+        </Card>
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Connected agents</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{agents.length}</span><Code className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Active workflows available to connect</p>
+        </Card>
+        <Card className="border-border/60 bg-card p-5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Embed code ready</span>
+          <div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold tabular-nums tracking-tight">{widgets.filter((widget) => Boolean(widget.embed_code || widget.embed_snippet)).length}</span><Copy className="h-4 w-4 text-primary" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">Widgets with a provisioned script</p>
+        </Card>
       </div>
 
       <Card className="border-border/60">
@@ -229,8 +251,8 @@ export default function WidgetsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="rounded-lg overflow-hidden">
-            <Table>
+          <div className="overflow-x-auto">
+            <Table className="min-w-[980px]">
               <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead className="text-xs">Widget Name</TableHead>
@@ -361,7 +383,7 @@ export default function WidgetsPage() {
                 <Label className="text-xs">Position on Screen</Label>
                 <Select
                   value={editingWidget?.position || "bottom-right"}
-                  onValueChange={(val: any) => setEditingWidget((prev) => prev ? { ...prev, position: val } : null)}
+                  onValueChange={(value) => setEditingWidget((prev) => prev ? { ...prev, position: value } : null)}
                 >
                   <SelectTrigger className="text-xs">
                     <SelectValue />
@@ -378,12 +400,12 @@ export default function WidgetsPage() {
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
-                    value={editingWidget?.primary_color || "#6366f1"}
+                    value={editingWidget?.primary_color || defaultWidgetColor}
                     onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, primary_color: e.target.value } : null)}
                     className="h-9 w-10 rounded border border-border cursor-pointer bg-transparent"
                   />
                   <Input
-                    value={editingWidget?.primary_color || "#6366f1"}
+                    value={editingWidget?.primary_color || defaultWidgetColor}
                     onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, primary_color: e.target.value } : null)}
                     className="font-mono text-xs"
                   />

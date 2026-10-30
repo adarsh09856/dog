@@ -44,6 +44,7 @@ from api.services.workflow.embed_text_chat_service import (
     build_public_chat_session_response,
     start_embed_text_chat,
 )
+from api.services.saas_entitlements import enforce_saas_feature
 from api.services.workflow.run_creation import prepare_workflow_run_inputs
 from api.services.workflow.text_chat_session_service import (
     TextChatPendingTurnLostError,
@@ -291,6 +292,7 @@ async def initialize_embed_session(
     embed_token = await db_client.get_embed_token_by_token(init_request.token)
     if not embed_token:
         raise HTTPException(status_code=404, detail="Invalid embed token")
+    await enforce_saas_feature(embed_token.organization_id, "widgets")
 
     # Check if token is active
     if not embed_token.is_active:
@@ -470,6 +472,7 @@ async def get_embed_config(token: str, request: Request, response: Response):
     embed_token = await db_client.get_embed_token_by_token(token)
     if not embed_token:
         raise HTTPException(status_code=404, detail="Invalid embed token")
+    await enforce_saas_feature(embed_token.organization_id, "widgets")
 
     # Check if token is active
     if not embed_token.is_active:

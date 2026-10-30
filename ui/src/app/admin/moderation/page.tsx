@@ -1,5 +1,7 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import {
   AlertOctagon,
   AlertTriangle,
@@ -126,16 +128,17 @@ export default function AdminModerationPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="TRUST / MODERATION">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Content Moderation & Safeguards</h1>
+          <span className={admin.kicker}>TRUST / MODERATION</span>
+          <h1 className={admin.title}>Content Moderation & Safeguards</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Enforce real-time speech guardrails, ban illegal/abusive vocabulary, and inspect violation incidents.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <Button
             size="sm"
             className="gap-2"
@@ -177,7 +180,7 @@ export default function AdminModerationPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg border border-border/60 overflow-hidden">
+              <div className="overflow-x-auto rounded-xl border border-border/60">
                 <Table>
                   <TableHeader className="bg-muted/40">
                     <TableRow>
@@ -257,7 +260,7 @@ export default function AdminModerationPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg border border-border/60 overflow-hidden">
+              <div className="overflow-x-auto rounded-xl border border-border/60">
                 <Table>
                   <TableHeader className="bg-muted/40">
                     <TableRow>

@@ -257,9 +257,13 @@ async def get_file_metadata(
     # Validate key and extract workflow_run_id (allow special paths for metadata)
     run_id = await _validate_and_extract_workflow_run_id(key, allow_special_paths=True)
 
-    # Authorize and get workflow run (for special paths, run_id might be None)
+    # Unscoped voicemail keys cannot be tied to an organization.
+    if run_id is None and not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # A regular user must have an accessible run before reading its metadata.
     workflow_run = await _authorize_and_get_workflow_run(
-        run_id, user, require_workflow_run=False
+        run_id, user
     )
 
     # ------------------------------------------------------------------

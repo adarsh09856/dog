@@ -2,10 +2,12 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 import { LEGACY_OSS_TOKEN_COOKIE, OSS_TOKEN_COOKIE } from '@/lib/auth/cookies';
+import { isHiddenInClientEdition } from '@/lib/deploymentEdition';
 
 // Paths that don't require authentication.
-// '/' (Landing page), '/pricing' (SaaS pricing), '/embed' (widget), and '/widget.js' are public.
-const PUBLIC_PATHS = ['/', '/pricing', '/auth', '/handler', '/embed', '/widget.js'];
+// Marketing routes, auth, handlers, and embeds are public. Tenant workspace
+// routes remain behind the token check below.
+const PUBLIC_PATHS = ['/', '/pricing', '/platform', '/deployment', '/auth', '/handler', '/embed', '/widget.js'];
 
 function isTokenValid(token?: string): boolean {
   if (!token || typeof token !== 'string') return false;
@@ -37,6 +39,13 @@ function isTokenValid(token?: string): boolean {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Owner-only control-plane screens are absent from client installations.
+  // The API independently omits these routes in KODEWAVES_EDITION=client.
+  if (isHiddenInClientEdition(pathname, process.env.KODEWAVES_EDITION)) {
+    return new NextResponse(null, { status: 404 });
+  }
+
   const rawToken =
     request.cookies.get(OSS_TOKEN_COOKIE)?.value ||
     request.cookies.get(LEGACY_OSS_TOKEN_COOKIE)?.value ||
@@ -95,7 +104,7 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public static assets (anything with a file extension, e.g. /kodewaves-logo.png)
+     * - public static assets (anything with a file extension, e.g. /kodewaves-brand.svg)
      */
     '/((?!api|_next/static|_next/image|favicon.ico|widget\\.js|.*\\.(?:png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf)).*)',
   ],

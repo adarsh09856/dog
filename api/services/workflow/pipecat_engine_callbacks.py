@@ -29,24 +29,83 @@ if TYPE_CHECKING:
 
 
 async def handle_user_idle(engine: "PipecatEngine", aggregator, attempt: int) -> None:
-    """Execute the monitor's idle decision; timing and retry state live there."""
+    """Give one short idle prompt without another expensive conversation turn."""
     logger.debug(f"Handling user_idle, attempt: {attempt}")
-    content = (
-        "The user has been quiet. Continue the existing conversation naturally: "
-        "do not greet or introduce yourself again. Ask one short check-in question "
-        "in the language the caller used most recently."
-        if attempt == 1
-        else "The user has been quiet and this call is ending. Do not greet or "
-        "introduce yourself again. Give one short, polite goodbye in the language "
-        "the caller used most recently."
-    )
-    await aggregator.push_frame(
-        LLMMessagesAppendFrame([{"role": "system", "content": content}], run_llm=True)
-    )
+    if getattr(engine, "_is_realtime", False):
+        # Speech-to-speech providers own their output path; keep their native
+        # response mechanism. Local text LLM pipelines use fixed TTS below.
+        content = (
+            "The user has been quiet. Continue the existing conversation naturally: "
+            "do not greet or introduce yourself again. Ask one short check-in question "
+            "in the language the caller used most recently."
+            if attempt == 1
+            else "The user has been quiet and this call is ending. Do not greet or "
+            "introduce yourself again. Give one short, polite goodbye in the language "
+            "the caller used most recently."
+        )
+        await aggregator.push_frame(
+            LLMMessagesAppendFrame([{"role": "system", "content": content}], run_llm=True)
+        )
+    else:
+        language = _idle_prompt_language(engine)
+        phrases = {
+            "hi": (
+                "क्या आपको थोड़ा और समय चाहिए?",
+                "धन्यवाद। आपका दिन शुभ हो।",
+            ),
+            "en": (
+                "Would you like a little more time?",
+                "Thank you. Have a good day.",
+            ),
+        }
+        phrase_set = phrases.get(language)
+        if phrase_set:
+            engine.call_monitor.expect_idle_prompt()
+            speech = await engine.queue_speech(
+                phrase_set[0 if attempt == 1 else 1],
+                mute_user=attempt > 1,
+                timeout=15,
+            )
+            # On the final idle attempt, don't close the call while the goodbye
+            # is still in the TTS/output queue.
+            if attempt > 1:
+                await speech.wait()
+        else:
+            logger.info(
+                "Skipping generated idle speech because the caller language "
+                "has no safe fixed prompt"
+            )
+            engine.call_monitor.skip_idle_prompt()
     if attempt > 1:
         await engine.end_call_with_reason(
             EndTaskReason.USER_IDLE_MAX_DURATION_EXCEEDED.value
         )
+
+
+def _idle_prompt_language(engine: "PipecatEngine") -> str | None:
+    """Resolve only Hindi or English for the fixed local idle prompts."""
+    agent = getattr(engine, "active_agent", None)
+    llm = getattr(agent, "llm", None)
+    source = getattr(llm, "_caller_language_source", None)
+    latest_text = getattr(source, "latest_detected_text", None)
+    if isinstance(latest_text, str) and any("\u0900" <= char <= "\u097f" for char in latest_text):
+        return "hi"
+
+    candidates = [getattr(source, "latest_detected_language", None)]
+    settings = getattr(source, "_settings", None)
+    candidates.append(getattr(settings, "language", None))
+    user_config = getattr(agent, "user_config", None)
+    for service_name in ("stt", "tts"):
+        service = getattr(user_config, service_name, None)
+        candidates.append(getattr(service, "language", None))
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        code = str(candidate).strip().lower().replace("_", "-").split(".")[-1]
+        code = code.split("-", 1)[0]
+        if code in {"hi", "en"}:
+            return code
+    return None
 
 
 # ---------------------------------------------------------------------------

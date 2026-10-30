@@ -277,6 +277,7 @@ UI_APP_URL=https://$DOMAIN
 # Service Port Bindings (Collision-free)
 UI_PORT=$UI_PORT
 API_PORT=$API_PORT
+FORWARDED_ALLOW_IPS=127.0.0.1
 POSTGRES_PORT=$POSTGRES_PORT
 REDIS_PORT=$REDIS_PORT
 MINIO_PORT=$MINIO_PORT
@@ -373,6 +374,13 @@ ENVFILE
         # Ensure collision-free ports are present in existing .env
         grep -q '^UI_PORT=' .env || echo "UI_PORT=$UI_PORT" >> .env
         grep -q '^API_PORT=' .env || echo "API_PORT=$API_PORT" >> .env
+        EXISTING_FORWARDED_ALLOW_IPS=$(sed -n 's/^FORWARDED_ALLOW_IPS=//p' .env | tail -n 1 | tr -d "\"'")
+        if [ "$EXISTING_FORWARDED_ALLOW_IPS" = "*" ]; then
+            sed -i 's|^FORWARDED_ALLOW_IPS=.*|FORWARDED_ALLOW_IPS=127.0.0.1|' .env
+            log_warn "Removed unsafe wildcard forwarded-header trust; proxy peer will be detected during setup."
+        elif [ -z "$EXISTING_FORWARDED_ALLOW_IPS" ]; then
+            echo "FORWARDED_ALLOW_IPS=127.0.0.1" >> .env
+        fi
         grep -q '^POSTGRES_PORT=' .env || echo "POSTGRES_PORT=$POSTGRES_PORT" >> .env
         grep -q '^REDIS_PORT=' .env || echo "REDIS_PORT=$REDIS_PORT" >> .env
         grep -q '^MINIO_PORT=' .env || echo "MINIO_PORT=$MINIO_PORT" >> .env
@@ -423,6 +431,23 @@ deploy_containers() {
 
     # Start infrastructure services first (database, cache, storage)
     docker compose -f "$compose_file" up -d postgres redis minio
+
+    # aaPanel/Nginx reaches the API through its localhost-published port. Docker
+    # NAT presents the bridge gateway as the API peer; trust only that address.
+    if [ "$compose_file" = "docker-compose.aapanel.yaml" ]; then
+        local proxy_peer
+        proxy_peer=$(docker inspect kodewaves_postgres --format '{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}' 2>/dev/null || true)
+        if [ -z "$proxy_peer" ]; then
+            log_error "Could not determine the Docker bridge gateway for proxy-header trust."
+            exit 1
+        fi
+        if grep -q '^FORWARDED_ALLOW_IPS=' .env; then
+            sed -i "s|^FORWARDED_ALLOW_IPS=.*|FORWARDED_ALLOW_IPS=$proxy_peer|" .env
+        else
+            echo "FORWARDED_ALLOW_IPS=$proxy_peer" >> .env
+        fi
+        log_success "Restricted forwarded-header trust to the local Docker gateway ($proxy_peer)."
+    fi
 
     log_info "Waiting for PostgreSQL database container to become healthy..."
     local attempts=0

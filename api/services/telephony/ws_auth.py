@@ -8,12 +8,14 @@ triple can open the socket and drive the run.
 When ``TELEPHONY_WS_TOKEN_SECRET`` is configured, the URL is minted with an HMAC
 token — a trailing path segment for carriers, ``?token=`` for ARI (see
 :func:`build_media_ws_url`) — that the handler verifies. An attacker can then no
-longer connect by guessing ids — only by holding the server secret, or by
-reading a log line: the token appears in full in uvicorn's and nginx's access
-logs. This is a stateless capability token (HMAC over the id triple); it
-deliberately does *not* attempt the one-shot redemption / state-race hardening
-the handler's ``TODO(security)`` sketches, which needs a run-creation schema
-change and is left to a follow-up.
+longer connect by guessing ids. These URLs are bearer capabilities, so the
+application logging boundary redacts their tokens. Reverse proxies must also
+avoid recording token-bearing media paths. The HMAC itself is stateless, while
+the shared WebSocket handler atomically claims the workflow run's
+``initialized -> running`` transition so only one media socket can use that
+run. Authentication still depends on an operator setting the secret and
+enabling enforcement; a configured secret with enforcement disabled is only
+logged, not rejected.
 
 Backward-compatible by construction: with no secret set, :func:`build_media_ws_url`
 returns exactly the legacy URL and :func:`verify_ws_token` is never consulted, so
@@ -149,9 +151,8 @@ def build_media_ws_url(
     With no secret configured this returns the exact legacy URL, so switching a
     provider over to this helper changes nothing until an operator opts in.
 
-    The returned URL carries a bearer capability. :func:`redact_token` only
-    masks the ``?token=`` form, so the path form does reach the logs — see the
-    note there.
+    The returned URL carries a bearer capability. Use :func:`redact_token`
+    before logging it; the application logger also masks media path tokens.
     """
     url = (
         f"{wss_base.rstrip('/')}{_WS_PATH}"
@@ -167,16 +168,14 @@ def build_media_ws_url(
 # Stops at whatever delimits the token in the surrounding document: whitespace,
 # a quote (TwiML/CXML attribute), & (another query param) or < (element text).
 _TOKEN_IN_TEXT = re.compile(r"(token=)[^\s\"'&<>]+")
+_MEDIA_TOKEN_IN_TEXT = re.compile(
+    r"(/api/v1/telephony/ws/[0-9]+/[0-9]+/[0-9]+/)[0-9a-fA-F]{64}(?=$|[^0-9a-fA-F])"
+)
 
 
 def redact_token(text: str) -> str:
-    """Mask any ``token=…`` in *text* so it is safe to log.
-
-    Only the query form. Since the carrier token moved into the URL path it is
-    no longer masked anywhere — deliberately: uvicorn and nginx both log the
-    request path in full, so masking our own lines bought little for the
-    machinery it took. Treat log access to this deployment as socket access.
-    """
+    """Mask query and carrier media-path tokens while preserving routing ids."""
+    text = _MEDIA_TOKEN_IN_TEXT.sub(r"\1[REDACTED]", text)
     return _TOKEN_IN_TEXT.sub(r"\1[REDACTED]", text)
 
 

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Suspense } from 'react';
 
 import { getWorkflowsApiV1WorkflowFetchGet, listFoldersApiV1FolderGet } from '@/client/sdk.gen';
@@ -9,10 +10,11 @@ import { AgentFolderView } from '@/components/workflow/folders/AgentFolderView';
 import { CreateFolderButton } from '@/components/workflow/folders/CreateFolderButton';
 import { FolderSection } from '@/components/workflow/folders/FolderSection';
 import { UploadWorkflowButton } from '@/components/workflow/UploadWorkflowButton';
+import { detailFromError } from '@/lib/apiError';
 import { getServerAccessToken, getServerAuthProvider } from '@/lib/auth/server';
 import logger from '@/lib/logger';
-import { detailFromError } from '@/lib/apiError';
 
+import library from "./AgentLibrary.module.css";
 import WorkflowLayout from "./WorkflowLayout";
 
 export const dynamic = 'force-dynamic';
@@ -80,18 +82,27 @@ async function WorkflowList() {
         return (
             <>
                 {/* Active Workflows Section */}
-                <div className="mb-8">
-                    <h2 className="text-xl font-semibold mb-4">Active Agents</h2>
+                <section className={library.activeSection} aria-labelledby="active-agents-heading">
+                    <div className={library.sectionHead}>
+                        <div>
+                            <h2 id="active-agents-heading" className="text-xl font-semibold tracking-tight">Active agents</h2>
+                            <p className="mt-1 text-sm text-muted-foreground">Organize workflows, make edits, and test before publishing.</p>
+                        </div>
+                        <div className={library.counts}>
+                            <span><strong>{activeWorkflows.length}</strong>active agents</span>
+                            <span><strong>{folders.length}</strong>folders</span>
+                        </div>
+                    </div>
                     {activeWorkflows.length > 0 || folders.length > 0 ? (
                         <AgentFolderView workflows={activeWorkflows} folders={folders} />
                     ) : (
                         <EmptyWorkflowState />
                     )}
-                </div>
+                </section>
 
                 {/* Archived Section — collapsible, same design as the folder/Uncategorized sections */}
                 {archivedWorkflows.length > 0 && (
-                    <div className="mb-8">
+                    <div className="mt-6">
                         <FolderSection kind="archived" workflows={archivedWorkflows} />
                     </div>
                 )}
@@ -102,7 +113,7 @@ async function WorkflowList() {
         return (
             <div role="alert" className="text-red-500">
                 <p>{err instanceof Error ? err.message : 'Unable to load agents. Please retry.'}</p>
-                <a className="underline" href="/workflow">Retry loading agents</a>
+                <Link className="underline" href="/workflow">Retry loading agents</Link>
             </div>
         );
     }
@@ -113,17 +124,20 @@ async function PageContent() {
     const workflowList = await WorkflowList();
 
     return (
-        <div className="container mx-auto px-4 py-8">
-            {/* Your Workflows Section */}
-            <div className="mb-6">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-bold">Your Agents</h1>
-                    <div className="flex gap-2">
+        <div className={library.page}>
+            <div className={library.content}>
+                <header className={library.hero}>
+                    <div className={library.heroCopy}>
+                        <span className={library.eyebrow}>BUILD / VOICE OPERATIONS</span>
+                        <h1>Your Agents</h1>
+                        <p>Design conversations, connect business tools, and validate every workflow before it goes live.</p>
+                    </div>
+                    <div className={library.actions} aria-label="Agent library actions">
                         <UploadWorkflowButton />
                         <CreateFolderButton />
                         <CreateWorkflowButton />
                     </div>
-                </div>
+                </header>
                 {workflowList}
             </div>
         </div>
@@ -132,7 +146,7 @@ async function PageContent() {
 
 function WorkflowsLoading() {
     return (
-        <div className="container mx-auto px-4 py-8">
+        <div className={library.loadingPage}>
             {/* Get Started Section Loading */}
             <div className="mb-12">
                 <div className="h-8 w-48 bg-muted rounded mb-6"></div>

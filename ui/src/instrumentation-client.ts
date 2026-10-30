@@ -50,7 +50,7 @@ const initSentry = () => {
   }
 };
 
-if (process.env.NEXT_PUBLIC_NODE_ENV !== 'development') {
+if (process.env.NEXT_PUBLIC_KODEWAVES_EDITION !== 'client' && process.env.NEXT_PUBLIC_NODE_ENV !== 'development') {
   initSentry();
 }
 
@@ -97,7 +97,7 @@ const initPostHog = () => {
   }
 };
 
-if (process.env.NEXT_PUBLIC_NODE_ENV !== 'development') {
+if (process.env.NEXT_PUBLIC_KODEWAVES_EDITION !== 'client' && process.env.NEXT_PUBLIC_NODE_ENV !== 'development') {
   initPostHog();
 }
 

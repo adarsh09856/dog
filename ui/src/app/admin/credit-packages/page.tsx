@@ -1,13 +1,13 @@
 "use client";
 
+import admin from "../AdminWorkspace.module.css";
+
 import {
-  Coins,
   Edit,
   Flame,
   Loader2,
   Plus,
   RefreshCw,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
@@ -35,6 +35,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { adminApi, CreditPackage } from "@/lib/kodewavesApi";
+
+function formatMoney(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+}
 
 export default function AdminCreditPackagesPage() {
   const [packages, setPackages] = useState<CreditPackage[]>([]);
@@ -73,8 +85,8 @@ export default function AdminCreditPackagesPage() {
       setModalOpen(false);
       setEditingPackage(null);
       await fetchPackages();
-    } catch (err: any) {
-      alert(err.message || "Failed to save credit bundle");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save credit bundle");
     } finally {
       setSaving(false);
     }
@@ -85,22 +97,23 @@ export default function AdminCreditPackagesPage() {
     try {
       await adminApi.deleteCreditPackage(id);
       await fetchPackages();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete package");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete package");
     }
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="COMMERCE / TOP-UPS">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Voice Minute Bundles (Top-ups)</h1>
+          <span className={admin.kicker}>COMMERCE / TOP-UPS</span>
+          <h1 className={admin.title}>Voice Minute Bundles (Top-ups)</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Create on-demand minute packages with bonus credits and sovereign INR/USD retail rates.
+            Create on-demand minute packages with bonus credits and one explicitly configured currency price.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <Button
             size="sm"
             className="gap-2"
@@ -109,8 +122,8 @@ export default function AdminCreditPackagesPage() {
                 name: "1,000 Minutes Pack",
                 minutes: 1000,
                 bonus_minutes: 100,
-                price_inr: 1999,
-                price_usd: 25,
+                price_cents: 199900,
+                currency: "INR",
                 is_popular: false,
                 is_active: true,
               });
@@ -139,7 +152,7 @@ export default function AdminCreditPackagesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="overflow-x-auto rounded-xl border border-border/60">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>
@@ -147,7 +160,7 @@ export default function AdminCreditPackagesPage() {
                   <TableHead className="text-xs text-right">Base Minutes</TableHead>
                   <TableHead className="text-xs text-right">Bonus Mins</TableHead>
                   <TableHead className="text-xs text-right font-bold">Total Delivered</TableHead>
-                  <TableHead className="text-xs text-right">Price (₹ INR / $ USD)</TableHead>
+                  <TableHead className="text-xs text-right">Configured price</TableHead>
                   <TableHead className="text-xs text-center">Badge</TableHead>
                   <TableHead className="text-xs text-center">Status</TableHead>
                   <TableHead className="text-xs text-right">Actions</TableHead>
@@ -172,7 +185,7 @@ export default function AdminCreditPackagesPage() {
                         {(pkg.minutes + pkg.bonus_minutes).toLocaleString()} mins
                       </TableCell>
                       <TableCell className="text-xs text-right font-mono font-medium">
-                        ₹{pkg.price_inr.toLocaleString()} / ${pkg.price_usd}
+                        {formatMoney(pkg.price_cents / 100, pkg.currency)} / bundle
                       </TableCell>
                       <TableCell className="text-center">
                         {pkg.is_popular ? (
@@ -232,7 +245,7 @@ export default function AdminCreditPackagesPage() {
           <DialogHeader>
             <DialogTitle>{editingPackage?.id ? "Edit Credit Bundle" : "Create Minute Bundle"}</DialogTitle>
             <DialogDescription>
-              Configure package name, minute count, bonus incentive, and pricing.
+              Configure package name, minute count, bonus incentive, and its price in one currency.
             </DialogDescription>
           </DialogHeader>
 
@@ -268,20 +281,24 @@ export default function AdminCreditPackagesPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Price (₹ INR)</Label>
-                <Input
-                  type="number"
-                  value={editingPackage?.price_inr ?? 0}
-                  onChange={(e) => setEditingPackage((prev) => prev ? { ...prev, price_inr: parseFloat(e.target.value) || 0 } : null)}
-                />
+                <Label className="text-xs">Currency</Label>
+                <select
+                  value={editingPackage?.currency ?? "INR"}
+                  onChange={(e) => setEditingPackage((prev) => prev ? { ...prev, currency: e.target.value } : null)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="INR">INR (₹)</option>
+                  <option value="USD">USD ($)</option>
+                </select>
               </div>
-
               <div className="space-y-1">
-                <Label className="text-xs">Price ($ USD)</Label>
+                <Label className="text-xs">Price ({editingPackage?.currency ?? "INR"})</Label>
                 <Input
                   type="number"
-                  value={editingPackage?.price_usd ?? 0}
-                  onChange={(e) => setEditingPackage((prev) => prev ? { ...prev, price_usd: parseFloat(e.target.value) || 0 } : null)}
+                  min="0"
+                  step="0.01"
+                  value={((editingPackage?.price_cents ?? 0) / 100).toFixed(2)}
+                  onChange={(e) => setEditingPackage((prev) => prev ? { ...prev, price_cents: Math.max(0, Math.round((Number(e.target.value) || 0) * 100)) } : null)}
                 />
               </div>
             </div>

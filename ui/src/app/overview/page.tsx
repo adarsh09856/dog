@@ -1,7 +1,5 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
@@ -23,25 +21,31 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   UserCheck,
   Wallet,
   Wrench,
 } from "lucide-react";
+import Link from "next/link";
+import React, { useCallback, useEffect, useState } from "react";
 
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { useAuth } from "@/lib/auth";
 import { overviewApi, OverviewStatsResponse } from "@/lib/kodewavesApi";
 
+import dashboard from "./OverviewWorkspace.module.css";
+
 export default function OverviewPage() {
+  const branding = useClientBranding();
   const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<OverviewStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     if (authLoading || !user) return;
     setLoadError(null);
     try {
@@ -54,12 +58,11 @@ export default function OverviewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authLoading, user]);
 
   useEffect(() => {
-    if (authLoading || !user) return;
     loadStats();
-  }, [authLoading, user]);
+  }, [loadStats]);
 
   const sections = [
     {
@@ -71,20 +74,20 @@ export default function OverviewPage() {
           href: "/workflow",
           icon: Bot,
           badge: stats?.agents.total_agents_count ? `${stats.agents.total_agents_count} Agents` : "Core",
-          desc: "Build and deploy conversational voice agents with low-latency speech pipelines.",
+          desc: "Build agents with prompts, workflow branches, speech settings and channel connections.",
         },
         {
           title: "Campaigns",
           href: "/campaigns",
           icon: Megaphone,
-          desc: "Schedule and execute outbound calling campaigns with smart retry logic.",
+          desc: "Schedule outbound calls and review campaign progress and outcomes.",
         },
         {
           title: "Models & Engines",
           href: "/model-configurations",
           icon: Brain,
           badge: stats?.model_health.total_models ? `${stats.model_health.total_models} Models` : "BYOK + Cloud",
-          desc: "Configure LLM, STT, and TTS engines across Cloud (Gemini, OpenAI) & Self-hosted.",
+          desc: "Choose configured cloud or self-hosted LLM, STT and TTS providers.",
         },
         {
           title: "Telephony",
@@ -102,7 +105,7 @@ export default function OverviewPage() {
           title: "Knowledge Base",
           href: "/files",
           icon: Database,
-          desc: "Upload documents and knowledge files for instant retrieval (RAG) during calls.",
+          desc: "Upload and manage documents used by agents during conversations.",
         },
         {
           title: "Recordings & Cache",
@@ -113,7 +116,7 @@ export default function OverviewPage() {
       ],
     },
     {
-      category: "GROWTH & LEADS",
+      category: "GROWTH AND LEADS",
       description: "Convert callers into customers with automated qualification and scheduling",
       items: [
         {
@@ -151,7 +154,7 @@ export default function OverviewPage() {
       ],
     },
     {
-      category: "MANAGE & OBSERVABILITY",
+      category: "MANAGE AND OBSERVABILITY",
       description: "Monitor call executions, review analytics, and manage minute balances",
       items: [
         {
@@ -179,78 +182,37 @@ export default function OverviewPage() {
   ];
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className={dashboard.dashboard}>
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* Sovereign Platform Banner */}
-        <Card className="border border-border/70 bg-gradient-to-br from-card via-card/90 to-card/50 shadow-sm">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-primary text-xs font-semibold tracking-wider uppercase">
-                <Sparkles className="h-4 w-4" />
-                Kodewaves Sovereign Voice AI Command Center
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  onClick={loadStats}
-                  disabled={loading}
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-                </Button>
-                <Badge variant="outline" className="border-emerald-500/30 text-emerald-500 bg-emerald-500/5">
-                  ● Platform Active
-                </Badge>
-              </div>
+      <div className={dashboard.inner}>
+        <header className={dashboard.masthead}>
+          <div className={dashboard.mastheadCopy}>
+            <p className={dashboard.mastheadEyebrow}>{branding.company_name} / OPERATIONS DESK</p>
+            <h1>{user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}.` : `Welcome to ${branding.company_name}`}</h1>
+            <p className={dashboard.mastheadDescription}>Your voice operation, at a glance. Build the next conversation or review what happened in the last one.</p>
+            <span className={dashboard.trustLine}><ShieldCheck className="h-3.5 w-3.5 text-primary" />Hosted or customer-managed deployment</span>
+            <div className={dashboard.mastheadActions}>
+              <Button asChild><Link href="/workflow/create"><Plus className="h-4 w-4" /> Create Agent</Link></Button>
+              <Button asChild variant="outline"><Link href="/usage">Review call activity <ArrowRight className="h-4 w-4" /></Link></Button>
+              <Button asChild variant="ghost"><Link href="/billing-sovereign"><Wallet className="h-4 w-4 text-primary" /> Top Up</Link></Button>
             </div>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mt-2">
-              <div>
-                <CardTitle className="text-3xl font-bold tracking-tight">
-                  {user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}!` : "Welcome to Kodewaves"}
-                </CardTitle>
-                <CardDescription className="text-sm text-muted-foreground mt-1 max-w-2xl">
-                  Enterprise conversational voice AI platform with sovereign telephony, direct BYOK model pools, and low-latency voice orchestration.
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button asChild size="sm" className="gap-1.5 shadow-sm">
-                  <Link href="/workflow/create">
-                    <Plus className="h-4 w-4" /> Create Agent
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="sm" className="gap-1.5">
-                  <Link href="/billing-sovereign">
-                    <Wallet className="h-4 w-4 text-emerald-500" /> Top Up
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex flex-wrap items-center gap-3 border-t border-border/40 pt-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5 font-medium text-foreground">
-                <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                100% Self-Hosted &amp; Sovereign
-              </span>
-              <span>•</span>
-              <span>Cloud Models (Gemini 3.5, OpenAI, Deepgram, Sarvam, Cartesia)</span>
-              <span>•</span>
-              <span>Self-hosted Speech Engines (Piper ONNX &amp; Faster-Whisper)</span>
-            </div>
-          </CardContent>
-        </Card>
-
+          </div>
+          <div className={dashboard.workspaceCard}>
+            <div className={dashboard.workspaceCardTop}><span>YOUR WORKSPACE</span><Button variant="ghost" size="icon" aria-label="Refresh overview" onClick={loadStats} disabled={loading}><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /></Button></div>
+            <strong>Build. Connect. Operate.</strong>
+            <p>Agent workflows, speech providers and conversation records in one place.</p>
+            <Link href="/model-configurations">Configure your voice stack <ArrowRight size={14} /></Link>
+          </div>
+        </header>
         {/* Real Dynamic Stat Tiles */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`${panel.metricRail} ${dashboard.metrics}`} aria-label="Workspace performance">
           {/* Wallet Minutes */}
           <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Voice Minutes
               </span>
-              <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <Wallet className="h-4 w-4" />
               </div>
             </div>
@@ -274,7 +236,7 @@ export default function OverviewPage() {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Calls Handled
               </span>
-              <div className="h-8 w-8 rounded-lg bg-blue-500/10 text-blue-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <PhoneCall className="h-4 w-4" />
               </div>
             </div>
@@ -298,15 +260,17 @@ export default function OverviewPage() {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Success Rate
               </span>
-              <div className="h-8 w-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <CheckCircle2 className="h-4 w-4" />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-3xl font-bold tracking-tight text-foreground">
-                {stats ? `${stats.calls.success_rate_percent}%` : "--%"}
+                {stats && stats.recent_runs.length > 0 ? `${stats.calls.success_rate_percent}%` : "—"}
               </span>
-              <span className="text-xs text-muted-foreground">completed</span>
+              <span className="text-xs text-muted-foreground">
+                {stats && stats.recent_runs.length > 0 ? "recent calls" : "no calls yet"}
+              </span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>{stats ? `${stats.calls.active_calls} active calls` : ""}</span>
@@ -322,7 +286,7 @@ export default function OverviewPage() {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Voice Agents
               </span>
-              <div className="h-8 w-8 rounded-lg bg-violet-500/10 text-violet-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <Bot className="h-4 w-4" />
               </div>
             </div>
@@ -331,11 +295,11 @@ export default function OverviewPage() {
                 {stats ? stats.agents.active_agents_count : "--"}
               </span>
               <span className="text-xs text-muted-foreground">
-                of {stats ? stats.agents.total_agents_count : "--"} active
+                of {stats ? stats.agents.total_agents_count : "--"} total
               </span>
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-              <span className="text-emerald-500 font-medium">Ready</span>
+              <span className="font-medium text-muted-foreground">Active</span>
               <Link href="/workflow" className="text-primary hover:underline font-medium flex items-center gap-1">
                 View all <ArrowRight className="h-3 w-3" />
               </Link>
@@ -344,12 +308,12 @@ export default function OverviewPage() {
         </div>
 
         {/* Model Health Banner */}
-        {stats && stats.model_health.warnings && stats.model_health.warnings.length > 0 ? (
+        {stats ? stats.model_health.warnings.length > 0 ? (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-600 dark:text-amber-400">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
               <div className="flex-1 text-xs">
-                <div className="font-semibold text-sm">Capability Notice: Missing Layer Credentials</div>
+              <div className="font-semibold text-sm">Model configuration needs attention</div>
                 <div className="mt-1 space-y-0.5">
                   {stats.model_health.warnings.map((w, idx) => (
                     <p key={idx}>• {w}</p>
@@ -357,17 +321,24 @@ export default function OverviewPage() {
                 </div>
               </div>
               <Button asChild size="sm" variant="outline" className="border-amber-500/50 hover:bg-amber-500/10 text-xs shrink-0">
-                <Link href="/admin/models">Configure Keys</Link>
+                <Link href="/model-configurations">Configure models</Link>
               </Button>
             </div>
           </div>
         ) : (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 px-4 flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400">
+          <div className="rounded-xl border border-border bg-muted/30 p-3 px-4 flex items-center justify-between text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              <span className="font-medium">All Voice AI Layers Operational:</span>
-              <span className="text-muted-foreground">LLM, STT, and TTS voice engines verified in catalog.</span>
+              <Brain className="h-4 w-4 text-primary" />
+              <span className="font-medium text-foreground">Model settings</span>
+              <span>No model availability warnings.</span>
             </div>
+            <Link href="/model-configurations" className="text-primary hover:underline font-medium flex items-center gap-1">
+              Model Settings <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-muted/30 p-3 px-4 flex items-center justify-between text-xs text-muted-foreground" role="status">
+            <span>{loadError ? "Model availability could not be checked." : "Checking model availability…"}</span>
             <Link href="/model-configurations" className="text-primary hover:underline font-medium flex items-center gap-1">
               Model Settings <ArrowRight className="h-3 w-3" />
             </Link>
@@ -376,17 +347,14 @@ export default function OverviewPage() {
 
         {/* Recent Runs Table */}
         {stats && stats.recent_runs && stats.recent_runs.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
-                Recent Calls &amp; Executions
-              </h2>
+          <section className={dashboard.contentBlock} aria-labelledby="recent-calls-heading">
+            <div className={dashboard.blockHeading}>
+              <div><h2 id="recent-calls-heading">Recent calls &amp; executions</h2><p>Review the latest agent activity and open a run for its transcript and execution details.</p></div>
               <Link href="/usage" className="text-xs text-primary hover:underline font-medium flex items-center gap-1">
                 View all runs <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
-            <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
-              <div className="divide-y divide-border/60 text-xs">
+            <div className={`${dashboard.callRows} divide-y divide-border/60 text-xs`}>
                 {stats.recent_runs.map((run) => (
                   <div key={run.id} className="p-3.5 px-5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                     <div className="flex items-center gap-3">
@@ -426,82 +394,45 @@ export default function OverviewPage() {
                     </div>
                   </div>
                 ))}
-              </div>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Section Groups */}
-        {sections.map((section) => (
-          <div key={section.category} className="space-y-4">
-            <div>
-              <h2 className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
-                {section.category}
-              </h2>
-              <p className="text-xs text-muted-foreground/80 mt-0.5">
-                {section.description}
-              </p>
+        <section aria-label="Workspace tools" className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}>
+          {sections.map((section, index) => (
+            <div key={section.category} className={panel.toolGroup}>
+              <div className={panel.groupHeading}><span>0{index + 1}</span><h2>{section.category}</h2></div>
+              <p className={panel.groupDescription}>{section.description}</p>
+              <div>
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  return <Link key={item.href} href={item.href} className={panel.toolLink}><Icon size={17} /><div><h3>{item.title}</h3><p>{item.desc}</p></div><ArrowRight size={15} /></Link>;
+                })}
+              </div>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="group relative flex flex-col justify-between rounded-xl border border-border/60 bg-card p-5 transition-all hover:border-primary/50 hover:bg-accent/10 hover:shadow-xs"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        {item.badge && (
-                          <Badge variant="secondary" className="text-[10px] font-medium px-2 py-0.5">
-                            {item.badge}
-                          </Badge>
-                        )}
-                      </div>
-                      <h3 className="font-semibold text-sm group-hover:text-primary transition-colors">
-                        {item.title}
-                      </h3>
-                      <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">
-                        {item.desc}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                      Open {item.title} <ArrowRight className="h-3.5 w-3.5" />
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-
+          ))}
+        </section>
         {/* Platform administration is available only to backend superusers. */}
-        {user?.is_superuser === true && <Card className="border border-border/70 bg-muted/20">
+        {user?.is_superuser === true && <Card className={`${dashboard.adminCard} border-border/70 bg-muted/20`}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-emerald-500" />
-                <CardTitle className="text-base font-semibold">Sovereign Administration</CardTitle>
+                <ShieldCheck className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base font-semibold">Platform administration</CardTitle>
               </div>
               <Badge variant="outline" className="text-xs">
                 Admin Console
               </Badge>
             </div>
             <CardDescription className="text-xs">
-              Manage platform master API keys, toggle self-hosted AI permissions, inspect system audit logs, and configure email SMTP settings.
+              Manage shared model credentials, client installations, platform plans and audit records.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
               <Button asChild size="sm">
                 <Link href="/admin">
-                  Open Sovereign Admin <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                  Open administration <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">

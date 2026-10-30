@@ -19,13 +19,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-
-    # 1. Identify duplicate groups: same (org, transcript, tts config).
-    #    Within each group the earliest row (by created_at) is canonical;
-    #    every other row is an alias that will be remapped and soft-deleted.
-    rows = conn.execute(
-        sa.text("""
+    # Keep this data migration runnable both online and through Alembic's
+    # offline SQL renderer. An explicit PostgreSQL block preserves the
+    # row-by-row remapping behavior without fetching results from the
+    # migration connection (which has no result set in offline mode).
+    op.execute(sa.text("""
+        DO $$
+        DECLARE
+            duplicate RECORD;
+            alias_pattern TEXT;
+            canonical_pattern TEXT;
+        BEGIN
+            FOR duplicate IN
             WITH ranked AS (
                 SELECT
                     recording_id,
@@ -58,48 +63,29 @@ def upgrade() -> None:
               AND r.tts_model       = c.tts_model
               AND r.tts_voice_id    = c.tts_voice_id
             WHERE r.rn > 1
-        """)
-    ).fetchall()
+            LOOP
+                alias_pattern := 'RECORDING_ID: ' || duplicate.alias_id;
+                canonical_pattern := 'RECORDING_ID: ' || duplicate.canonical_id;
 
-    if not rows:
-        return
-
-    # 2. Replace alias recording_ids with canonical ones in workflow JSON.
-    #    Both draft definitions (workflows.workflow_definition) and published
-    #    versions (workflow_definitions.workflow_json) are updated.
-    for alias_id, canonical_id in rows:
-        alias_pattern = f"RECORDING_ID: {alias_id}"
-        canonical_pattern = f"RECORDING_ID: {canonical_id}"
-        conn.execute(
-            sa.text("""
+                -- Remap IDs in both draft and published workflow JSON.
                 UPDATE workflows
                 SET workflow_definition =
-                    REPLACE(workflow_definition::text, :alias, :canonical)::json
-                WHERE workflow_definition::text LIKE '%%' || :alias || '%%'
-            """),
-            {"alias": alias_pattern, "canonical": canonical_pattern},
-        )
-        conn.execute(
-            sa.text("""
+                    REPLACE(workflow_definition::text, alias_pattern, canonical_pattern)::json
+                WHERE workflow_definition::text LIKE '%' || alias_pattern || '%';
+
                 UPDATE workflow_definitions
                 SET workflow_json =
-                    REPLACE(workflow_json::text, :alias, :canonical)::json
-                WHERE workflow_json::text LIKE '%%' || :alias || '%%'
-            """),
-            {"alias": alias_pattern, "canonical": canonical_pattern},
-        )
+                    REPLACE(workflow_json::text, alias_pattern, canonical_pattern)::json
+                WHERE workflow_json::text LIKE '%' || alias_pattern || '%';
 
-    # 3. Soft-delete every alias row.
-    alias_ids = [r[0] for r in rows]
-    conn.execute(
-        sa.text("""
-            UPDATE workflow_recordings
-            SET is_active = false
-            WHERE recording_id = ANY(:ids)
-              AND is_active = true
-        """),
-        {"ids": alias_ids},
-    )
+                -- Soft-delete every alias only after its references are remapped.
+                UPDATE workflow_recordings
+                SET is_active = false
+                WHERE recording_id = duplicate.alias_id
+                  AND is_active = true;
+            END LOOP;
+        END $$
+    """))
 
 
 def downgrade() -> None:

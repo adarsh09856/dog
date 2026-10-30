@@ -205,6 +205,8 @@ def normalize_stt_language(provider: Optional[str], lang: Optional[str]) -> str:
             return "unknown"
         if provider_key in ("google", "gemini"):
             return "auto"
+        if provider_key == "elevenlabs":
+            return "auto"
         return "multi"
     return normalize_language_code(lang, target_provider=provider)
 

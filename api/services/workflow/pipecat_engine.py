@@ -835,6 +835,15 @@ class PipecatEngine:
         self, agent: AgentRuntime, node: Node, *, apply_settings=True
     ) -> None:
         """Prepare one runtime's prompt and tools without changing the call."""
+        from api.services.workflow.contact_context import (
+            contact_context_instruction,
+            known_contact,
+        )
+
+        agent.llm._known_contact = known_contact(self._call_context_vars)
+        if not hasattr(self, "_contact_conversation_state"):
+            self._contact_conversation_state = {}
+        agent.llm._contact_conversation_state = self._contact_conversation_state
         manager = (
             self._custom_tool_manager
             if agent is self.active_agent
@@ -870,6 +879,9 @@ class PipecatEngine:
             speech_instructions.append(
                 await selected_voice_persona_instruction(agent.user_config)
             )
+        # Keep caller-specific values after the stable language and voice rules
+        # so changing contacts does not invalidate that reusable model prefix.
+        speech_instructions.append(contact_context_instruction(self._call_context_vars))
         prompt = compose_system_prompt_for_node(
             node=node,
             workflow=agent.workflow,
@@ -1369,7 +1381,7 @@ class PipecatEngine:
         # mapping-less view of a run is read from.
         self.record_call_tags([call_disposition])
 
-        if call_status not in (
+        if not abort_immediately and call_status not in (
             EndTaskReason.PIPELINE_ERROR.value,
             EndTaskReason.VOICEMAIL_DETECTED.value,
             *ANSWER_TERMINAL_REASONS,

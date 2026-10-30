@@ -1,11 +1,11 @@
 "use client";
 
-import { ArrowLeftRight, Calendar, Calculator, Cog, Globe, type LucideIcon, PhoneForwarded, PhoneOff, Puzzle } from "lucide-react";
+import { ArrowLeftRight, Calculator, Calendar, Cog, Globe, type LucideIcon, PhoneForwarded, PhoneOff, Puzzle } from "lucide-react";
 import { type ReactNode } from "react";
 
 import type {
-    CalculatorToolDefinition,
     BookAppointmentToolDefinition,
+    CalculatorToolDefinition,
     ContextDestinationMappingConfig,
     ContextDestinationRoute,
     ContextDestinationRule,
@@ -142,7 +142,7 @@ export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
     {
         value: "transfer_agent",
         label: "Transfer To Agent",
-        description: "Hand the live call to another Kodewaves agent, without dropping the caller",
+        description: "Hand the live call to another platform agent, without dropping the caller",
         icon: ArrowLeftRight,
         iconName: "arrow-left-right",
         iconColor: "#0EA5E9",
@@ -173,8 +173,9 @@ export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
     },
     {
         value: "native",
-        label: "Native (Coming Soon)",
-        description: "Built-in tools like call transfer, DTMF input",
+        label: "Native (Not Available)",
+        description:
+            "Native DTMF tools are not available in this release. Use the supported End Call, Transfer Call, Transfer To Agent, or Calculator tools.",
         icon: Cog,
         iconName: "cog",
         iconColor: "#6B7280",
@@ -182,8 +183,9 @@ export const TOOL_CATEGORIES: ToolCategoryConfig[] = [
     },
     {
         value: "integration",
-        label: "Integration (Coming Soon)",
-        description: "Third-party integrations like Google Calendar",
+        label: "Integration (Not Available)",
+        description:
+            "Built-in third-party integrations such as Google Calendar are not available in this release. Connect a service with External HTTP API or MCP Server instead.",
         icon: Puzzle,
         iconName: "puzzle",
         iconColor: "#8B5CF6",

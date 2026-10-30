@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import { Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -80,6 +81,11 @@ export default function CampaignsPage() {
         router.push('/campaigns/new');
     };
 
+    const campaignRows = campaignsData?.campaigns ?? [];
+    const runningCampaigns = campaignRows.filter((campaign) => campaign.state === 'running').length;
+    const completedCampaigns = campaignRows.filter((campaign) => campaign.state === 'completed').length;
+    const queuedCalls = campaignRows.reduce((total, campaign) => total + (campaign.total_queued_count ?? 0), 0);
+
     const getStateBadgeVariant = (state: string) => {
         switch (state) {
             case 'created':
@@ -98,23 +104,40 @@ export default function CampaignsPage() {
     };
 
     return (
-        <div className="container mx-auto p-6 space-y-6">
-            <div className="flex justify-between items-center">
+        <div className="container mx-auto max-w-screen-2xl px-4 py-7 sm:px-6 lg:px-8">
+            <div className={panel.collectionHeader}>
                 <div>
-                    <h1 className="text-3xl font-bold mb-2">Campaigns</h1>
-                    <p>Manage your bulk workflow execution campaigns</p>
+                    <span className={panel.eyebrow}>CHANNELS / CAMPAIGNS</span>
+                    <h1>Campaigns</h1>
+                    <p>Run workflows across a contact list and track progress from one place.</p>
                 </div>
-                    <Button onClick={handleCreateCampaign}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create Campaign
-                    </Button>
-                </div>
+                <Button onClick={handleCreateCampaign}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Campaign
+                </Button>
+            </div>
 
-                <Card>
+            {!isLoading && !error && campaignsData && (
+                <section aria-label="Campaign overview" className="mb-7 grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-card sm:grid-cols-4">
+                    {[
+                        { label: 'Campaigns', value: campaignRows.length },
+                        { label: 'Running now', value: runningCampaigns },
+                        { label: 'Completed', value: completedCampaigns },
+                        { label: 'Contacts queued', value: queuedCalls },
+                    ].map((metric, index) => (
+                        <div key={metric.label} className={`border-border p-4 sm:p-5 ${index % 2 === 0 ? 'border-r' : ''} ${index < 3 ? 'sm:border-r' : ''} ${index < 2 ? 'border-b sm:border-b-0' : ''}`}>
+                            <p className="text-[10px] font-semibold uppercase tracking-[.13em] text-muted-foreground">{metric.label}</p>
+                            <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums text-foreground">{metric.value.toLocaleString()}</p>
+                        </div>
+                    ))}
+                </section>
+            )}
+
+                <Card className="overflow-hidden rounded-xl border-border shadow-sm">
                     <CardHeader>
-                        <CardTitle>All Campaigns</CardTitle>
+                        <CardTitle>Campaign activity</CardTitle>
                         <CardDescription>
-                            View and manage your campaigns
+                            View current state, workflow and execution progress.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -147,7 +170,7 @@ export default function CampaignsPage() {
                                         {campaignsData.campaigns.map((campaign) => (
                                             <TableRow
                                                 key={campaign.id}
-                                                className="cursor-pointer hover:bg-muted/50"
+                                                className="cursor-pointer transition-colors hover:bg-muted/50"
                                                 onClick={() => handleRowClick(campaign.id)}
                                             >
                                                 <TableCell>{campaign.id}</TableCell>
@@ -159,7 +182,15 @@ export default function CampaignsPage() {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {campaign.executed_count} / {campaign.total_queued_count}
+                                                    <div className="min-w-28 space-y-1.5">
+                                                        <div className="flex justify-between gap-3 text-xs tabular-nums">
+                                                            <span>{campaign.executed_count ?? 0} / {campaign.total_queued_count ?? 0}</span>
+                                                            <span className="text-muted-foreground">{(campaign.total_queued_count ?? 0) > 0 ? `${Math.min(100, Math.round(((campaign.executed_count ?? 0) / (campaign.total_queued_count ?? 1)) * 100))}%` : '—'}</span>
+                                                        </div>
+                                                        <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                                                            <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${(campaign.total_queued_count ?? 0) > 0 ? Math.min(100, ((campaign.executed_count ?? 0) / (campaign.total_queued_count ?? 1)) * 100) : 0}%` }} />
+                                                        </div>
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell>
                                                     {formatDate(campaign.created_at, organizationTimezone)}

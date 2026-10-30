@@ -5,7 +5,8 @@ import { getTurnCredentialsApiV1TurnCredentialsGet, validateUserConfigurationsAp
 import { TurnCredentialsResponse } from "@/client/types.gen";
 import { WorkflowValidationError } from "@/components/flow/types";
 import type { ConversationNodeTransitionItem, RealtimeFeedbackMessage as FeedbackMessage } from "@/components/workflow/conversation";
-import { activeBotMessageIndex } from "@/components/workflow/conversation/activeBotMessage";
+import { activeBotMessageIndex, finalizeActiveBotMessage } from "@/components/workflow/conversation/activeBotMessage";
+import { replacePendingTranscription } from "@/components/workflow/conversation/pendingTranscription";
 import { isLlmTtfb } from "@/components/workflow/conversation/adapters/fromRealtimeFeedback";
 import { useAppConfig } from "@/context/AppConfigContext";
 import { resolveBrowserBackendUrl } from '@/lib/apiClient';
@@ -45,6 +46,9 @@ const HANDLED_SERVICE_ERROR_TYPES = new Set([
 // refusal, so the session is closed out as completed and the caller is left to
 // start a fresh run rather than being offered a retry that cannot succeed.
 const SPENT_RUN_ERROR_TYPES = new Set(['workflow_run_already_completed']);
+const DISCONNECTED_GRACE_MS = 5000;
+let feedbackMessageSequence = 0;
+const nextFeedbackMessageId = (kind: string) => `${kind}-${Date.now()}-${++feedbackMessageSequence}`;
 
 export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initialContextVariables, onNodeTransition }: UseWebSocketRTCProps) => {
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
@@ -88,6 +92,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
     const connectionActiveRef = useRef(connectionActive);
     const isCompletedRef = useRef(isCompleted);
     const gracefulDisconnectRef = useRef(false);
+    const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         onNodeTransitionRef.current = onNodeTransition;
@@ -181,6 +186,10 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
     }, []);
 
     const cleanupConnection = useCallback((options: CleanupConnectionOptions = {}) => {
+        if (disconnectTimerRef.current) {
+            clearTimeout(disconnectTimerRef.current);
+            disconnectTimerRef.current = null;
+        }
         const graceful = options.graceful ?? true;
         const status = options.status ?? (graceful ? 'idle' : 'failed');
 
@@ -191,6 +200,10 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
         setConnectionActive(false);
         setIsCompleted(graceful);
         setConnectionStatus(status);
+        const confirmedBeforeClose = spokenTextRef.current;
+        setFeedbackMessages(prev => finalizeActiveBotMessage(prev, confirmedBeforeClose));
+        previewTextRef.current = '';
+        spokenTextRef.current = '';
 
         if (options.closeWebSocket !== false) {
             const ws = wsRef.current;
@@ -276,6 +289,38 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
         const handlePeerStateChange = () => {
             logger.info(`Peer connection state changed: ${pc.connectionState}; ICE: ${pc.iceConnectionState}`);
 
+            if (pcRef.current !== pc) return;
+
+            if (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed') {
+                cleanupConnection({ graceful: false, status: 'failed' });
+                return;
+            }
+
+            if (pc.connectionState === 'closed' || pc.iceConnectionState === 'closed') {
+                cleanupConnection({ graceful: true, status: 'idle' });
+                return;
+            }
+
+            if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected') {
+                // ICE disconnection can recover without renegotiation. Closing
+                // immediately stops the microphone and clips the current reply.
+                if (!disconnectTimerRef.current) {
+                    disconnectTimerRef.current = setTimeout(() => {
+                        disconnectTimerRef.current = null;
+                        if (pcRef.current === pc &&
+                            (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected')) {
+                            cleanupConnection({ graceful: false, status: 'failed' });
+                        }
+                    }, DISCONNECTED_GRACE_MS);
+                }
+                return;
+            }
+
+            if (disconnectTimerRef.current) {
+                clearTimeout(disconnectTimerRef.current);
+                disconnectTimerRef.current = null;
+            }
+
             if (
                 pc.connectionState === 'connected' ||
                 pc.iceConnectionState === 'connected' ||
@@ -285,20 +330,6 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                 return;
             }
 
-            if (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed') {
-                cleanupConnection({ graceful: false, status: 'failed' });
-                return;
-            }
-
-            if (
-                pc.connectionState === 'closed' ||
-                pc.connectionState === 'disconnected' ||
-                pc.iceConnectionState === 'closed' ||
-                pc.iceConnectionState === 'disconnected'
-            ) {
-                logger.info('Peer connection ended - cleaning up connection');
-                cleanupConnection({ graceful: true, status: 'idle' });
-            }
         };
 
         pc.addEventListener('iceconnectionstatechange', handlePeerStateChange);
@@ -432,8 +463,8 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                         case 'rtf-user-transcription': {
                             const transcription = message.payload;
-                            // A preview may include words that were never played when
-                            // the caller interrupts. Keep only audio-confirmed text.
+                            // Retain generated text when interrupted; mark any portion
+                            // without audio confirmation instead of erasing history.
                             const confirmedBotText = spokenTextRef.current;
                             previewTextRef.current = '';
                             spokenTextRef.current = '';
@@ -448,7 +479,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             ) {
                                 interruptWarningShownRef.current = true;
                                 setFeedbackMessages(prev => [...prev, {
-                                    id: `interrupt-warning-${Date.now()}`,
+                                    id: nextFeedbackMessageId('interrupt-warning'),
                                     type: 'interrupt-warning',
                                     text: 'Interruption is disabled for this step. The bot will finish speaking before processing your input. You can enable interruption in the workflow editor.',
                                     timestamp: new Date().toISOString(),
@@ -457,28 +488,18 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
 
                             setFeedbackMessages(prev => {
                                 // Step 1: Finalize the last bot message (user started speaking)
-                                const activeBotIndex = activeBotMessageIndex(prev);
-                                const messagesWithBotFinalized = prev.map((msg, idx) => {
-                                    const isUnfinalizedBotMessage = msg.type === 'bot-text' && !msg.final;
-                                    return idx === activeBotIndex && isUnfinalizedBotMessage
-                                        ? { ...msg, text: confirmedBotText, final: true }
-                                        : msg;
-                                });
+                                const messagesWithBotFinalized = finalizeActiveBotMessage(prev, confirmedBotText);
 
-                                // Step 2: Remove any previous interim transcription
-                                const messagesWithoutInterim = messagesWithBotFinalized.filter(
-                                    msg => !(msg.type === 'user-transcription' && !msg.final) &&
-                                        !(msg.type === 'bot-text' && msg.final && !msg.text.trim())
-                                );
-
-                                // Step 3: Add new transcription (interim or final)
-                                return [...messagesWithoutInterim, {
-                                    id: `user-${Date.now()}`,
+                                // Replace only this utterance's interim text. Older
+                                // unfinished turns may lack a final STT event and
+                                // still belong in the visible conversation.
+                                return replacePendingTranscription(messagesWithBotFinalized, {
+                                    id: nextFeedbackMessageId('user'),
                                     type: 'user-transcription',
                                     text: transcription.text,
                                     final: transcription.final,
                                     timestamp: new Date().toISOString(),
-                                }];
+                                });
                             });
                             break;
                         }
@@ -496,7 +517,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                     return updated;
                                 }
                                 return [...prev, {
-                                    id: `bot-${Date.now()}`,
+                                    id: nextFeedbackMessageId('bot'),
                                     type: 'bot-text',
                                     text: visibleText,
                                     final: false,
@@ -522,7 +543,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 }
                                 // Start new bot message
                                 return [...prev, {
-                                    id: `bot-${Date.now()}`,
+                                    id: nextFeedbackMessageId('bot'),
                                     type: 'bot-text',
                                     text: visibleText,
                                     final: false,
@@ -538,7 +559,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 // Check if we already have this function call
                                 const existingId = tool_call_id
                                     ? `func-${tool_call_id}`
-                                    : `func-${Date.now()}`;
+                                    : nextFeedbackMessageId('func');
                                 if (prev.some(msg => msg.id === existingId)) {
                                     return prev;
                                 }
@@ -578,7 +599,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             const transitionTimestamp = new Date().toISOString();
                             const transition: ConversationNodeTransitionItem = {
                                 kind: 'node-transition',
-                                id: `node-${Date.now()}`,
+                                id: nextFeedbackMessageId('node'),
                                 timestamp: transitionTimestamp,
                                 nodeId: node_id,
                                 nodeName: node_name ?? 'Node',
@@ -610,7 +631,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                                 break;
                             }
                             setFeedbackMessages(prev => [...prev, {
-                                id: `ttfb-${Date.now()}`,
+                                id: nextFeedbackMessageId('ttfb'),
                                 type: 'ttfb-metric',
                                 text: `${(ttfb_seconds * 1000).toFixed(0)}ms`,
                                 ttfbSeconds: ttfb_seconds,
@@ -625,7 +646,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             const latencySeconds = Number(message.payload?.latency_seconds);
                             if (!Number.isFinite(latencySeconds) || latencySeconds < 0) break;
                             setFeedbackMessages(prev => [...prev, {
-                                id: `latency-${Date.now()}`,
+                                id: nextFeedbackMessageId('latency'),
                                 type: 'latency-metric',
                                 text: `${(latencySeconds * 1000).toFixed(0)}ms`,
                                 latencySeconds,
@@ -640,11 +661,9 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             previewTextRef.current = '';
                             spokenTextRef.current = '';
                             setFeedbackMessages(prev => [
-                                ...prev.map(msg => msg.type === 'bot-text' && !msg.final
-                                    ? { ...msg, text: confirmedBeforeError, final: true }
-                                    : msg).filter(msg => msg.type !== 'bot-text' || !!msg.text.trim()),
+                                ...finalizeActiveBotMessage(prev, confirmedBeforeError),
                                 {
-                                    id: `error-${Date.now()}`,
+                                    id: nextFeedbackMessageId('error'),
                                     type: 'pipeline-error',
                                     text: error,
                                     fatal,
@@ -665,19 +684,7 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                             }
                             // Finalize the last bot message so "speaking..." indicator is removed
                             const completedSpokenText = spokenTextRef.current;
-                            setFeedbackMessages(prev => {
-                                const lastIdx = activeBotMessageIndex(prev);
-                                if (lastIdx >= 0) {
-                                    const updated = [...prev];
-                                    if (!completedSpokenText) {
-                                        updated.splice(lastIdx, 1);
-                                        return updated;
-                                    }
-                                    updated[lastIdx] = { ...updated[lastIdx], text: completedSpokenText, final: true };
-                                    return updated;
-                                }
-                                return prev;
-                            });
+                            setFeedbackMessages(prev => finalizeActiveBotMessage(prev, completedSpokenText));
                             previewTextRef.current = '';
                             spokenTextRef.current = '';
                             break;
@@ -760,31 +767,18 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
             // Fetch time-limited TURN credentials from backend API only if the
             // server reports a TURN server is configured. Skipping the request
             // avoids a 503 on OSS local deployments that don't run coturn.
-            if (appConfig?.turnEnabled === false) {
-                logger.info('TURN server disabled in app config, using STUN only');
-            } else {
-                try {
-                    const turnResponse = await getTurnCredentialsApiV1TurnCredentialsGet({
-                        headers: {
-                            'Authorization': `Bearer ${accessToken}`,
-                        },
-                    });
-                    if (turnResponse.data) {
-                        turnCredentialsRef.current = turnResponse.data;
-                        logger.info(`TURN credentials obtained, TTL: ${turnResponse.data.ttl}s`);
-                    } else if (turnResponse.response?.status === 503) {
-                        // TURN not configured on server - this is OK, we'll use STUN only
-                        logger.info('TURN server not configured, using STUN only');
-                    } else {
-                        logger.warn(`Failed to fetch TURN credentials: ${turnResponse.response?.status}`);
-                    }
-                } catch (e) {
-                    logger.warn('Failed to fetch TURN credentials, continuing without TURN:', e);
-                }
-            }
+            const turnPromise = appConfig?.turnEnabled === false
+                ? Promise.resolve(null)
+                : getTurnCredentialsApiV1TurnCredentialsGet({
+                    headers: { 'Authorization': `Bearer ${accessToken}` },
+                }).catch((error) => {
+                    logger.warn('Failed to fetch TURN credentials, continuing without TURN:', error);
+                    return null;
+                });
 
-            // Validate API keys
-            const response = await validateUserConfigurationsApiV1UserConfigurationsUserValidateGet({
+            // These checks do not depend on one another. Start them together
+            // so connection setup waits for the slowest check, not their sum.
+            const configurationPromise = validateUserConfigurationsApiV1UserConfigurationsUserValidateGet({
                 headers: {
                     'Authorization': `Bearer ${accessToken}`,
                 },
@@ -792,6 +786,23 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
                     validity_ttl_seconds: 86400
                 },
             });
+            const workflowPromise = validateWorkflowApiV1WorkflowWorkflowIdValidatePost({
+                path: { workflow_id: workflowId },
+                headers: { 'Authorization': `Bearer ${accessToken}` },
+            });
+            const [turnResponse, response, workflowResponse] = await Promise.all([
+                turnPromise, configurationPromise, workflowPromise,
+            ]);
+            if (appConfig?.turnEnabled === false) {
+                logger.info('TURN server disabled in app config, using STUN only');
+            } else if (turnResponse?.data) {
+                turnCredentialsRef.current = turnResponse.data;
+                logger.info(`TURN credentials obtained, TTL: ${turnResponse.data.ttl}s`);
+            } else if (turnResponse?.response?.status === 503) {
+                logger.info('TURN server not configured, using STUN only');
+            } else if (turnResponse) {
+                logger.warn(`Failed to fetch TURN credentials: ${turnResponse.response?.status}`);
+            }
 
             if (response.error) {
                 const isServiceUnavailable = response.response?.status === 503;
@@ -821,15 +832,6 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
             }
 
             // Validate workflow
-            const workflowResponse = await validateWorkflowApiV1WorkflowWorkflowIdValidatePost({
-                path: {
-                    workflow_id: workflowId,
-                },
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            });
-
             if (workflowResponse.error) {
                 setWorkflowConfigModalOpen(true);
                 let msg = 'Workflow validation failed';
@@ -907,6 +909,10 @@ export const useWebSocketRTC = ({ workflowId, workflowRunId, accessToken, initia
     // Cleanup on unmount
     useEffect(() => {
         return () => {
+            if (disconnectTimerRef.current) {
+                clearTimeout(disconnectTimerRef.current);
+                disconnectTimerRef.current = null;
+            }
             stopLocalStream();
             if (wsRef.current) {
                 wsRef.current.close();

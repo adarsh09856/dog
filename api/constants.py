@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from api.enums import Environment
+from api.services.deployment_edition import public_signup_enabled, runtime_edition
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", Environment.LOCAL.value)
 # Absolute path to the project root directory (i.e. the directory containing
@@ -62,11 +63,14 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 REDIS_URL = os.environ["REDIS_URL"]
 
 DEPLOYMENT_MODE = os.getenv("DEPLOYMENT_MODE", "oss")
+# `saas` includes the Kodewaves owner control plane. `client` is the distributable
+# data-plane edition and must not register owner-only API routes.
+KODEWAVES_EDITION = runtime_edition()
 CORS_ALLOWED_ORIGINS = [
     o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
 ]
 AUTH_PROVIDER = os.getenv("AUTH_PROVIDER", "local")
-ENABLE_SIGNUP = os.getenv("ENABLE_SIGNUP", "true").lower() == "true"
+ENABLE_SIGNUP = public_signup_enabled(KODEWAVES_EDITION)
 # Stack Auth public client config. These are safe to expose to the browser (the
 # publishable client key is public by design, and the project id is non-sensitive),
 # and are served to the UI at runtime via /api/v1/health so the frontend no longer

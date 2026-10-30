@@ -1,13 +1,8 @@
 "use client";
 
-import {
-  Download,
-  FileText,
-  Filter,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-} from "lucide-react";
+import admin from "../AdminWorkspace.module.css";
+
+import { Download, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -22,9 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { adminApi, AuditLogItem } from "@/lib/kodewavesApi";
 
 export default function AdminAuditLogsPage() {
+  const { company_name } = useClientBranding();
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -78,16 +75,17 @@ export default function AdminAuditLogsPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className={admin.surface} data-area="SECURITY / AUDIT">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className={admin.hero}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">System Audit Trail</h1>
+          <span className={admin.kicker}>SECURITY / AUDIT</span>
+          <h1 className={admin.title}>System Audit Trail</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Immutable log of all administrative actions, key rotations, credit adjustments, and kill-switch executions.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           <div className="relative w-64">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -117,12 +115,12 @@ export default function AdminAuditLogsPage() {
             </Badge>
           </CardTitle>
           <CardDescription>
-            Records every high-privilege mutation performed within the Kodewaves sovereign control plane.
+            Records every high-privilege mutation performed within the {company_name} control plane.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {error && <p role="alert" className="mb-3 text-sm text-destructive">{error} Use Refresh to retry.</p>}
-          <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="overflow-x-auto rounded-xl border border-border/60">
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>

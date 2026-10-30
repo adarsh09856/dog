@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Download, Globe } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -442,10 +443,11 @@ export default function UsagePage() {
     return (
         <div className="container mx-auto p-6 space-y-6">
             <div>
-                <div className="flex justify-between items-start">
+                <div className={panel.collectionHeader}>
                     <div>
-                        <h1 className="text-3xl font-bold mb-2">Agent Runs</h1>
-                        <p className="text-muted-foreground">See all your Agent Runs across all Voice Agents. You can use filters to filter out required Agent Runs.</p>
+                        <span className={panel.eyebrow}>OPERATIONS / USAGE</span>
+                        <h1>Call usage</h1>
+                        <p className="text-muted-foreground">Inspect organization call activity, duration, outcomes, and usage charges. Filter the run history to find the conversations you need.</p>
                     </div>
                         <div className="flex items-center gap-2">
                             <Globe className="h-4 w-4 text-muted-foreground" />
@@ -561,7 +563,7 @@ export default function UsagePage() {
                 {/* Usage History */}
                 <Card>
                     <CardHeader>
-                        <div className="flex justify-between items-start">
+                        <div className={panel.collectionHeader}>
                             <div className="space-y-1.5">
                                 <CardTitle>All Runs</CardTitle>
                                 <CardDescription>

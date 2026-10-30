@@ -5,11 +5,11 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Float,
     ForeignKey,
-    Index,
     Integer,
     String,
     Text,
@@ -19,6 +19,109 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from api.db.models import Base
+
+
+class ClientInstallationModel(Base):
+    """Owner-side record of an issued client installation entitlement."""
+
+    __tablename__ = "client_installations"
+
+    installation_id = Column(String(100), primary_key=True)
+    customer_id = Column(String(100), nullable=False, index=True)
+    domains = Column(JSON, nullable=False)
+    ip_ranges = Column(JSON, nullable=False, default=list)
+    features = Column(JSON, nullable=False)
+    limits = Column(JSON, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    token_fingerprint = Column(String(64), nullable=False)
+    installation_public_key = Column(String(43), nullable=True)
+    enrollment_token_fingerprint = Column(String(64), nullable=True)
+    enrollment_expires_at = Column(DateTime(timezone=True), nullable=True)
+    enrolled_at = Column(DateTime(timezone=True), nullable=True)
+    previous_token_fingerprint = Column(String(64), nullable=True)
+    previous_token_valid_until = Column(DateTime(timezone=True), nullable=True)
+    issued_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    renewed_at = Column(DateTime(timezone=True), nullable=True)
+    renewed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    observed_ip = Column(String(45), nullable=True)
+    integrity_failed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+
+class ClientDomainChallengeModel(Base):
+    """Owner-side proof of DNS control before a domain enters a license."""
+
+    __tablename__ = "client_domain_challenges"
+
+    customer_id = Column(String(100), primary_key=True)
+    domain = Column(String(253), primary_key=True)
+    token_sha256 = Column(String(64), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class ClientInstallationNonceModel(Base):
+    """Short-lived replay protection for signed owner checks."""
+
+    __tablename__ = "client_installation_nonces"
+
+    installation_id = Column(
+        String(100), ForeignKey("client_installations.installation_id", ondelete="CASCADE"), primary_key=True
+    )
+    nonce_fingerprint = Column(String(64), primary_key=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class ClientIntegrityAlertModel(Base):
+    """Deduplicated owner notification for protected client-file changes."""
+
+    __tablename__ = "client_integrity_alerts"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    installation_id = Column(String(100), ForeignKey("client_installations.installation_id"), nullable=False, index=True)
+    event_fingerprint = Column(String(64), nullable=False)
+    reason = Column(String(30), nullable=False)
+    component = Column(String(500), nullable=False)
+    expected_sha256 = Column(String(64), nullable=True)
+    observed_sha256 = Column(String(64), nullable=True)
+    first_seen_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False)
+    occurrence_count = Column(Integer, nullable=False, default=1)
+    acknowledged_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    acknowledged_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    __table_args__ = (UniqueConstraint("installation_id", "event_fingerprint", name="uq_client_integrity_alert_event"),)
+
+
+class ClientBindingRequestModel(Base):
+    """Owner-reviewed domain or IP change requested by an enrolled installation."""
+
+    __tablename__ = "client_binding_requests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    installation_id = Column(
+        String(100), ForeignKey("client_installations.installation_id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    requested_domains = Column(JSON, nullable=False)
+    requested_ip_ranges = Column(JSON, nullable=False)
+    reason = Column(String(1000), nullable=False)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    license_issued_at = Column(Integer, nullable=True)
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected')",
+            name="ck_client_binding_requests_status",
+        ),
+    )
 
 # ============================================================================
 # 1. PLATFORM MASTER CREDENTIALS (Centralized Sovereign Keys)
@@ -149,9 +252,11 @@ class SaaSPlanModel(Base):
     has_appointments_access = Column(Boolean, default=True, nullable=False)
     has_forms_access = Column(Boolean, default=True, nullable=False)
     has_widget_access = Column(Boolean, default=True, nullable=False)
+    has_campaigns_access = Column(Boolean, default=True, nullable=False)
     allow_user_byok = Column(Boolean, default=False, nullable=False)               # Admin per-plan BYOK control
     is_default = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
+    is_public = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 
@@ -165,6 +270,7 @@ class CreditPackageModel(Base):
     bonus_minutes = Column(Integer, default=0, nullable=False)
     price_cents = Column(Integer, nullable=False)                                  # In cents or paise
     currency = Column(String(10), default="INR", nullable=False)
+    is_popular = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
@@ -311,10 +417,16 @@ class AppointmentModel(Base):
 class FormModel(Base):
     """Custom form definition populated by voice agents"""
     __tablename__ = "forms"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "slug", name="uq_forms_organization_slug"
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
+    slug = Column(String(100), nullable=False)
     description = Column(Text, nullable=True)
     fields_schema = Column(JSON, default=list, nullable=False)                     # [{id: 'f1', label: 'Company Size', type: 'select'}]
     is_active = Column(Boolean, default=True, nullable=False)

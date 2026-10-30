@@ -107,16 +107,45 @@ RUN set -eu ; \
     chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe ; \
     rm -rf /tmp/ffmpeg
 
+# Prepare a filtered source stage. Deleting owner code in the final stage would
+# leave it recoverable from the preceding image layer.
+FROM alpine:3.20 AS api-source
+ARG KODEWAVES_EDITION=saas
+ARG KODEWAVES_LICENSE_PUBLIC_KEY=
+ARG KODEWAVES_LICENSE_PREVIOUS_PUBLIC_KEYS=
+ARG KODEWAVES_RELEASE_PUBLIC_KEY=
+ARG KODEWAVES_OWNER_STATUS_URL=
+WORKDIR /app
+COPY ./api ./api
+COPY ./scripts ./scripts
+RUN if [ "$KODEWAVES_EDITION" = "client" ]; then \
+      test -n "$KODEWAVES_LICENSE_PUBLIC_KEY" && test -n "$KODEWAVES_RELEASE_PUBLIC_KEY" && \
+        test -n "$KODEWAVES_OWNER_STATUS_URL" || \
+        { echo "Client build requires owner verification keys and HTTPS status URL" >&2; exit 1; }; \
+      printf '{"license":"%s","license_previous":"%s","release":"%s","owner_status_url":"%s"}\n' \
+        "$KODEWAVES_LICENSE_PUBLIC_KEY" "$KODEWAVES_LICENSE_PREVIOUS_PUBLIC_KEYS" "$KODEWAVES_RELEASE_PUBLIC_KEY" "$KODEWAVES_OWNER_STATUS_URL" \
+        > ./api/services/owner_public_keys.json; \
+      rm -rf ./api/routes/admin ./api/routes/superuser.py ./api/tests \
+        ./api/db/owner_user_management.py ./api/db/saas_plan_catalog.py \
+        ./api/services/owner_license_signer.py \
+        ./api/services/owner_license_signer_client.py \
+        ./scripts/create_superuser.py; \
+    elif [ "$KODEWAVES_EDITION" != "saas" ]; then \
+      echo "KODEWAVES_EDITION must be saas or client" >&2; exit 1; \
+    fi && sed -i "s/^IMAGE_EDITION = None$/IMAGE_EDITION = \"$KODEWAVES_EDITION\"/" ./api/services/deployment_edition.py
+
 # Stage 4: Runtime - Minimal image with only runtime dependencies
 FROM python:3.13-slim AS runner
+ARG KODEWAVES_EDITION=saas
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl tzdata tzdata-legacy \
  && rm -rf /var/lib/apt/lists/* \
- && groupadd --system kodewaves \
- && useradd --system --gid kodewaves --no-log-init --home-dir /app --shell /usr/sbin/nologin kodewaves \
- && chown kodewaves:kodewaves /app
+ && groupadd --gid 10001 kodewaves \
+ && useradd --uid 10001 --gid 10001 --no-create-home --no-log-init --home-dir /app --shell /usr/sbin/nologin kodewaves \
+ && mkdir -p /app/kodewaves_pcm_cache \
+ && chown kodewaves:kodewaves /app /app/kodewaves_pcm_cache
 
 # Static ffmpeg + ffprobe (used by audio_converter, audio_file_cache, etc.)
 COPY --from=ffmpeg-static /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
@@ -142,8 +171,9 @@ ENV PYTHONUNBUFFERED=1
 
 # Copy application code and pipecat framework (chown at copy-time avoids a duplicate /app layer
 # from a later `RUN chown -R`, which would double the on-disk size of /app).
-COPY --chown=kodewaves:kodewaves ./api ./api
+COPY --from=api-source --chown=kodewaves:kodewaves /app/api ./api
 COPY --chown=kodewaves:kodewaves ./pipecat ./pipecat
+ENV KODEWAVES_EDITION=${KODEWAVES_EDITION}
 
 # Entrypoint scripts.
 #   start_services_docker.sh — single-container (docker-compose) entrypoint
@@ -154,11 +184,21 @@ COPY --chown=kodewaves:kodewaves ./pipecat ./pipecat
 #     with the command:[] entries in deploy/helm/kodewaves/templates/*.yaml.
 #   drain_web.sh             — web pod preStop hook (call-safe scale-down); see
 #     lifecycle.preStop in deploy/helm/kodewaves/templates/web-deployment.yaml.
-COPY --chown=kodewaves:kodewaves ./scripts/ ./scripts/
+COPY --from=api-source --chown=kodewaves:kodewaves /app/scripts ./scripts
 
 # ts_validator Node deps (built in ts-deps stage with full node:22-slim image).
 # The validator runs as a short-lived subprocess from api/mcp_server/ts_bridge.py.
 COPY --from=ts-deps --chown=kodewaves:kodewaves /ts_validator/node_modules ./api/mcp_server/ts_validator/node_modules
+
+# The client integrity scanner rejects symlinks in protected application files.
+# The shipped RNNoise names must still resolve to the library; npm's .bin links
+# are not used by the validator, which invokes its TypeScript entry with node.
+# Materialize the two library aliases and remove only the unused CLI links.
+RUN if [ "$KODEWAVES_EDITION" = "client" ]; then \
+      cp --remove-destination /app/api/native/rnnoise/librnnoise.so.0.4.1 /app/api/native/rnnoise/librnnoise.so && \
+      cp --remove-destination /app/api/native/rnnoise/librnnoise.so.0.4.1 /app/api/native/rnnoise/librnnoise.so.0 && \
+      rm -rf /app/api/mcp_server/ts_validator/node_modules/.bin; \
+    fi
 
 # Product documentation — read at runtime by the MCP docs tools
 # (search_kodewaves_docs / fetch_kodewaves_doc) so agents can learn Kodewaves.

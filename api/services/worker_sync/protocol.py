@@ -6,7 +6,7 @@ Defines the message format for cross-worker state synchronization via Redis pub/
 import json
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -16,6 +16,7 @@ class WorkerSyncEventType(str, Enum):
 
     LANGFUSE_CREDENTIALS = "langfuse_credentials"
     MODEL_CATALOG = "model_catalog"
+    CALL_TERMINATION = "call_termination"
 
 
 @dataclass
@@ -30,6 +31,7 @@ class WorkerSyncEvent:
     action: str  # "update" or "delete"
     org_id: str = ""
     timestamp: Optional[str] = None
+    payload: dict[str, Any] | None = None
 
     def __post_init__(self):
         if self.timestamp is None:

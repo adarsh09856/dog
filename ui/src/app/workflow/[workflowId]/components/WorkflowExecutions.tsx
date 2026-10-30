@@ -1,4 +1,5 @@
 "use client";
+import { WorkspacePageHeader } from "@/components/layout/WorkspacePageHeader";
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -179,7 +180,7 @@ export function WorkflowExecutions({ workflowId, searchParams }: WorkflowExecuti
     }, [fetchWorkflowRuns, currentPage, appliedFilters, sortBy, sortOrder]);
 
     return (
-        <div className="container mx-auto py-8">
+        <div className="container mx-auto px-4 py-8"><WorkspacePageHeader area="OPERATIONS / AGENT HISTORY" title="Conversation history" description="Review agent runs, inspect outcomes, and filter the calls you need to follow up." />
             <WorkflowRunsTable
                 runs={workflowRuns}
                 loading={loading}

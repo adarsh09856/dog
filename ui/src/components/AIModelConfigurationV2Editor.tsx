@@ -1,10 +1,9 @@
 "use client";
 
-import { AlertTriangle, Bot, CheckCircle2, Cloud, Cpu, Info, Key, Layers, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
+import { AlertTriangle, Bot, Cloud, Cpu, Info, Key, Layers, Mic, Save, ShieldCheck, Sparkles, Volume2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getVoicesApiV1UserConfigurationsVoicesProviderGet } from "@/client/sdk.gen";
-import { detailFromError } from "@/lib/apiError";
 
+import { getVoicesApiV1UserConfigurationsVoicesProviderGet } from "@/client/sdk.gen";
 import type {
     ModelConfigurationMetricPrice,
     ModelConfigurationPricingResponse,
@@ -24,9 +23,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VoiceSelectorModal } from "@/components/VoiceSelectorModal";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
-import { formatRoundingPolicy } from "@/lib/billingDisplay";
+import { detailFromError } from "@/lib/apiError";
 import { catalogApi, type AvailableCatalogResponse } from "@/lib/kodewavesApi";
 import { useAuth } from "@/lib/auth";
+import {
+    inferSttEngineType,
+    languageForLocalSttSelection,
+    recognitionLanguagesForSttModel,
+    sttModelValueForSelection,
+} from "./sttEngineType";
 
 type ModelMode = "realtime" | "kodewaves" | "dograh" | "byok";
 
@@ -138,7 +143,6 @@ function isKodewavesEffectiveConfig(config: Record<string, unknown> | null | und
            (tts?.provider === "kodewaves" || tts?.provider === "dograh" || tts?.provider === "speaches") &&
            (stt?.provider === "kodewaves" || stt?.provider === "dograh" || stt?.provider === "speaches");
 }
-const isDograhEffectiveConfig = isKodewavesEffectiveConfig;
 
 function byokDefaults(defaults: ModelConfigurationDefaultsV2): ServiceConfigurationDefaults {
     return {
@@ -235,7 +239,7 @@ function buildKodewavesState(
             : configuration?.mode === "dograh"
             ? asRecord(configuration.dograh)
             : null;
-    const cleanVoice = (v: unknown, lang?: string) => {
+    const cleanVoice = (v: unknown) => {
         const s = String(v || "");
         if (!s || s === "default" || s.startsWith("kw_") || s.startsWith("dg_") || s.startsWith("af_") || s.startsWith("am_")) {
             return "Puck";
@@ -248,17 +252,18 @@ function buildKodewavesState(
 
     if (configuredKodewaves) {
         const apiKey = String(configuredKodewaves.api_key || "");
-        const isLocalCpu = apiKey === "sovereign-local-cpu" || apiKey.includes("local-cpu") || apiKey.endsWith("-cpu");
         const lang = String(configuredKodewaves.language || fallback.language);
         const llmModel = configuredKodewaves.llm_model ? String(configuredKodewaves.llm_model) : undefined;
         const sttModel = configuredKodewaves.stt_model ? String(configuredKodewaves.stt_model) : undefined;
         const ttsModel = configuredKodewaves.tts_model ? String(configuredKodewaves.tts_model) : undefined;
-        const chosenVoice = cleanVoice(configuredKodewaves.voice || fallback.voice, lang);
+        const chosenVoice = cleanVoice(configuredKodewaves.voice || fallback.voice);
 
         const llmEngineType = (configuredKodewaves.llm_engine_type as "cloud" | "local_cpu") ||
             (llmModel && (llmModel.startsWith("qwen") || llmModel.startsWith("llama3.2") || llmModel.startsWith("phi")) ? "local_cpu" : "cloud");
-        const sttEngineType = (configuredKodewaves.stt_engine_type as "cloud" | "local_cpu") ||
-            (sttModel && sttModel.startsWith("Systran/") ? "local_cpu" : "cloud");
+        const sttEngineType = inferSttEngineType(
+            configuredKodewaves.stt_engine_type as "cloud" | "local_cpu" | undefined,
+            sttModel,
+        );
         const ttsEngineType = (configuredKodewaves.tts_engine_type as "cloud" | "local_cpu") ||
             (ttsModel === "piper" || (chosenVoice.startsWith("hi_IN-") && !["Journey", "Puck", "Charon", "Aoede", "Fenrir", "Kore", "alloy"].includes(chosenVoice)) ? "local_cpu" : "cloud");
 
@@ -293,10 +298,14 @@ function buildKodewavesState(
         const llmModel = llm?.model ? String(llm.model) : undefined;
         const sttModel = stt?.model ? String(stt.model) : undefined;
         const ttsModel = tts?.model ? String(tts.model) : undefined;
-        const chosenVoice = cleanVoice(tts?.voice || fallback.voice, lang);
+        const chosenVoice = cleanVoice(tts?.voice || fallback.voice);
 
         const llmEngineType = (llm?.provider === "speaches" || (llmModel && llmModel.startsWith("qwen"))) ? "local_cpu" : "cloud";
-        const sttEngineType = (stt?.provider === "speaches" || (sttModel && sttModel.startsWith("Systran/"))) ? "local_cpu" : "cloud";
+        const sttEngineType = inferSttEngineType(
+            undefined,
+            sttModel,
+            typeof stt?.provider === "string" ? stt.provider : undefined,
+        );
         const ttsEngineType = (tts?.provider === "speaches" || tts?.provider === "piper" || ttsModel === "piper") ? "local_cpu" : "cloud";
 
         return {
@@ -319,7 +328,7 @@ function buildKodewavesState(
 
     return {
         api_key: "",
-        voice: cleanVoice(fallback.voice, fallback.language),
+        voice: cleanVoice(fallback.voice),
         speed: fallback.speed,
         language: fallback.language,
         engine_type: "cloud",
@@ -334,7 +343,6 @@ function buildKodewavesState(
         realtime_model: "",
     };
 }
-const buildDograhState = buildKodewavesState;
 
 function preferredMode(
     configuration: Record<string, unknown> | null,
@@ -403,7 +411,7 @@ function ThirdPartyProviderNotice() {
             <div>
                 <p className="font-medium">Third-party provider data notice</p>
                 <p className="mt-1 leading-6">
-                    Kodewaves sends data required by the selected model service. This may include prompts,
+                    The platform sends data required by the selected model service. This may include prompts,
                     transcripts, audio, generated text, tool data, and request metadata depending on the
                     provider and service type. Review the provider&apos;s data and retention policies before
                     using sensitive data.
@@ -454,7 +462,7 @@ function PricingSummary({
 }) {
     const platformPrice = pricing?.platform_usage;
     const shouldInclude = includeManagedModel ?? includeDograhModel ?? false;
-    const managedModelPrice = shouldInclude ? ((pricing as any)?.kodewaves_model || pricing?.dograh_model) : null;
+    const managedModelPrice = shouldInclude ? (pricing?.kodewaves_model || pricing?.dograh_model) : null;
     if (!platformPrice && !managedModelPrice) return null;
 
     return (
@@ -534,13 +542,13 @@ export function AIModelConfigurationV2Editor({
             return catalogManifest?.local_llm_models || [];
         }
         let list = catalogManifest?.cloud_llm_models || [];
-        
+
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
             const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
             if (allowed.has("gemini")) allowed.add("google");
             if (allowed.has("google")) allowed.add("gemini");
-            list = list.filter((m: any) => {
+            list = list.filter((m) => {
                 const prov = (m.provider || "").toLowerCase();
                 return prov === "auto" || allowed.has(prov) || m.has_master_key;
             });
@@ -554,13 +562,13 @@ export function AIModelConfigurationV2Editor({
             return catalogManifest?.local_stt_models || [];
         }
         let list = catalogManifest?.cloud_stt_models || [];
-        
+
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
             const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
             if (allowed.has("gemini")) allowed.add("google");
             if (allowed.has("google")) allowed.add("gemini");
-            list = list.filter((m: any) => {
+            list = list.filter((m) => {
                 const prov = (m.provider || "").toLowerCase();
                 return prov === "auto" || allowed.has(prov) || m.has_master_key;
             });
@@ -568,11 +576,130 @@ export function AIModelConfigurationV2Editor({
         return list;
     }, [kodewaves.stt_engine_type, catalogManifest]);
 
+    const selectedSttModelValue = sttModelValueForSelection(
+        kodewaves.stt_model,
+        effectiveSttModels,
+        kodewaves.stt_engine_type === "local_cpu",
+    );
+    const selectedSttModel = effectiveSttModels.find(
+        (model) => model.value === selectedSttModelValue,
+    );
+    const supportsRecognitionAutoDetect = mode === "realtime"
+        || selectedSttModel?.supports_auto_detect === true;
+    const recognitionLanguages = useMemo(() => {
+        return recognitionLanguagesForSttModel(
+            kodewavesDefaults.languages,
+            selectedSttModel?.languages || [],
+            kodewaves.stt_engine_type === "local_cpu",
+            supportsRecognitionAutoDetect,
+        );
+    }, [kodewavesDefaults.languages, kodewaves.stt_engine_type, selectedSttModel, supportsRecognitionAutoDetect]);
+
+    const recognitionLanguageLabel = (language: string) => {
+        const localLanguageNames: Record<string, string> = {
+            as: "Assamese",
+            brx: "Bodo",
+            doi: "Dogri",
+            mai: "Maithili",
+            pa: "Punjabi",
+            sa: "Sanskrit",
+        };
+        const isIndianEnglish = language === "en"
+            && (selectedSttModel?.languages || []).some(
+                (installed) => installed.toLowerCase() === "en-in",
+            );
+        return isIndianEnglish
+            ? LANGUAGE_DISPLAY_NAMES["en-IN"]
+            : LANGUAGE_DISPLAY_NAMES[language]
+                || LANGUAGE_DISPLAY_NAMES[`${language}-IN`]
+                || localLanguageNames[language]
+                || language;
+    };
+
+    useEffect(() => {
+        if (
+            !catalogManifest
+            || effectiveSttModels.length === 0
+            || mode === "realtime"
+        ) return;
+        if (kodewaves.stt_engine_type === "local_cpu" && selectedSttModel) {
+            const nextLanguage = languageForLocalSttSelection(
+                kodewaves.language,
+                supportsRecognitionAutoDetect,
+                selectedSttModel.languages || [],
+                kodewavesDefaults.languages,
+                kodewavesDefaults.defaults.language,
+            );
+            if (nextLanguage !== kodewaves.language) {
+                setKodewaves((current) => ({ ...current, language: nextLanguage }));
+            }
+            return;
+        }
+        if (kodewaves.language !== MULTILINGUAL_LANGUAGE_CODE || supportsRecognitionAutoDetect) return;
+        const installed = selectedSttModel?.languages || [];
+        const installedCodes = new Set(installed.map((language) => language.toLowerCase()));
+        const fallbackLanguage = kodewavesDefaults.languages.find((language) =>
+            language !== MULTILINGUAL_LANGUAGE_CODE
+            && (installed.length === 0
+                || installedCodes.has(language.toLowerCase())
+                || installedCodes.has(language.toLowerCase().split("-")[0])),
+        ) || kodewavesDefaults.defaults.language;
+        setKodewaves((current) => ({ ...current, language: fallbackLanguage }));
+    }, [
+        catalogManifest,
+        effectiveSttModels.length,
+        kodewaves.stt_engine_type,
+        kodewaves.language,
+        kodewavesDefaults.defaults.language,
+        kodewavesDefaults.languages,
+        mode,
+        selectedSttModel,
+        supportsRecognitionAutoDetect,
+    ]);
+
+    useEffect(() => {
+        if (
+            !catalogManifest
+            || mode === "realtime"
+            || kodewaves.stt_engine_type !== "local_cpu"
+            || !selectedSttModel
+            || kodewaves.stt_model === selectedSttModel.value
+        ) return;
+
+        // Saved configs can refer to a removed local model (or have no model
+        // ID). Bind them to the installed inventory entry so its languages,
+        // auto-detection capability, selector, and save payload stay aligned.
+        setKodewaves((current) => {
+            if (
+                current.stt_engine_type !== "local_cpu"
+                || effectiveSttModels.some((model) => model.value === current.stt_model)
+            ) return current;
+            return {
+                ...current,
+                stt_model: selectedSttModel.value,
+                language: languageForLocalSttSelection(
+                    current.language,
+                    selectedSttModel.supports_auto_detect === true,
+                    selectedSttModel.languages || [],
+                    kodewavesDefaults.languages,
+                    kodewavesDefaults.defaults.language,
+                ),
+            };
+        });
+    }, [
+        catalogManifest,
+        effectiveSttModels,
+        kodewaves.stt_engine_type,
+        kodewaves.stt_model,
+        kodewavesDefaults.defaults.language,
+        kodewavesDefaults.languages,
+        mode,
+        selectedSttModel,
+    ]);
+
     const setRecognitionLanguage = (language: string) => {
-        if (language === MULTILINGUAL_LANGUAGE_CODE
-            && kodewaves.stt_engine_type === "local_cpu"
-            && kodewaves.stt_model === "indicconformer-ctc-int8") {
-            setError("Self-hosted IndicConformer needs one selected Indian language. Choose a language, or switch STT to cloud for automatic detection.");
+        if (language === MULTILINGUAL_LANGUAGE_CODE && !supportsRecognitionAutoDetect) {
+            setError("Automatic recognition is not supported by the selected STT model. Choose one of its supported languages or select a model that supports auto-detection.");
             return;
         }
         setKodewaves({ ...kodewaves, language });
@@ -585,13 +712,13 @@ export function AIModelConfigurationV2Editor({
             return catalogManifest?.local_tts_models || [];
         }
         let list = catalogManifest?.cloud_tts_models || [];
-        
+
         const activeProvs = catalogManifest?.active_providers;
         if (activeProvs && activeProvs.length > 0) {
             const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
             if (allowed.has("gemini")) allowed.add("google");
             if (allowed.has("google")) allowed.add("gemini");
-            list = list.filter((m: any) => {
+            list = list.filter((m) => {
                 const prov = (m.provider || "").toLowerCase();
                 return prov === "auto" || allowed.has(prov) || m.has_master_key;
             });
@@ -614,7 +741,7 @@ export function AIModelConfigurationV2Editor({
             const allowed = new Set(activeProvs.map((p) => p.toLowerCase()));
             if (allowed.has("gemini")) allowed.add("google");
             if (allowed.has("google")) allowed.add("gemini");
-            list = list.filter((m: any) => {
+            list = list.filter((m) => {
                 const prov = (m.provider || "").toLowerCase();
                 return allowed.has(prov) || m.has_master_key;
             });
@@ -659,8 +786,11 @@ export function AIModelConfigurationV2Editor({
             const isRt = overrideRealtime !== undefined ? overrideRealtime : Boolean(kodewaves.is_realtime);
             if (!catalogManifest || catalogError) throw new Error("Refresh the model catalog before saving.");
             if (!isRt) {
-                if (kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
-                    throw new Error("Self-hosted IndicConformer needs a specific Indian language. Select one, or switch STT to cloud for automatic language detection.");
+                if (kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && !supportsRecognitionAutoDetect) {
+                    throw new Error("The selected STT model does not support automatic language detection. Choose a supported language or select an STT model that supports auto-detection.");
+                }
+                if (kodewaves.stt_engine_type === "local_cpu" && !recognitionLanguages.includes(kodewaves.language)) {
+                    throw new Error("Select a recognition language supported by the installed STT model before saving.");
                 }
                 if (!kodewaves.voice.trim()) throw new Error("Select a voice for the selected TTS model before saving.");
                 for (const [label, selected, models] of [
@@ -720,8 +850,6 @@ export function AIModelConfigurationV2Editor({
             setIsSavingKodewaves(false);
         }
     };
-    const saveDograhConfiguration = saveKodewavesConfiguration;
-
     const saveByokConfiguration = async (config: Record<string, unknown>) => {
         setError(null);
         const isRealtime = Boolean(config.is_realtime);
@@ -1100,13 +1228,24 @@ export function AIModelConfigurationV2Editor({
                                                 type="button"
                                                 onClick={() => {
                                                     if (catalogManifest && catalogManifest.has_local_ai_access === false) return;
+                                                    const localModels = catalogManifest?.local_stt_models || [];
+                                                    const localModel = localModels.find((model) => model.value === kodewaves.stt_model) || localModels[0];
+
                                                     setKodewaves({
                                                         ...kodewaves,
                                                         stt_engine_type: "local_cpu",
                                                         stt_model: kodewaves.stt_engine_type === "local_cpu"
                                                             ? kodewaves.stt_model
-                                                            : catalogManifest?.local_stt_models?.[0]?.value,
+                                                            : localModel?.value,
+                                                        language: languageForLocalSttSelection(
+                                                            kodewaves.language,
+                                                            localModel?.supports_auto_detect === true,
+                                                            localModel?.languages || [],
+                                                            kodewavesDefaults.languages,
+                                                            kodewavesDefaults.defaults.language,
+                                                        ),
                                                     });
+                                                    setError(null);
                                                 }}
                                                 className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-medium transition-all ${
                                                     kodewaves.stt_engine_type === "local_cpu"
@@ -1123,13 +1262,41 @@ export function AIModelConfigurationV2Editor({
                                         value={
                                             effectiveSttModels.length === 0
                                                 ? "none"
-                                                : (kodewaves.stt_model && effectiveSttModels.some((m) => m.value === kodewaves.stt_model)
-                                                    ? kodewaves.stt_model
-                                                    : (!kodewaves.stt_model && effectiveSttModels.some(model => model.value === "auto") ? "auto" : ""))
+                                                : (selectedSttModelValue || "")
                                         }
                                         onValueChange={(stt_model) => {
-                                            if (stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE) {
-                                                setError("Select an installed Indian language. Whisper has been removed from new self-hosted model choices, and IndicConformer needs a language selection.");
+                                            const nextModel = effectiveSttModels.find((model) => model.value === stt_model);
+                                            if (kodewaves.stt_engine_type === "local_cpu" && nextModel) {
+                                                setKodewaves({
+                                                    ...kodewaves,
+                                                    stt_model,
+                                                    language: languageForLocalSttSelection(
+                                                        kodewaves.language,
+                                                        nextModel.supports_auto_detect === true,
+                                                        nextModel.languages || [],
+                                                        kodewavesDefaults.languages,
+                                                        kodewavesDefaults.defaults.language,
+                                                    ),
+                                                });
+                                                setError(null);
+                                                return;
+                                            }
+                                            if (kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && nextModel?.supports_auto_detect !== true) {
+                                                const nextModelLanguages = nextModel?.languages || [];
+                                                const nextModelCodes = new Set(nextModelLanguages.map((language) => language.toLowerCase()));
+                                                const fallbackLanguage = kodewavesDefaults.languages.find((language) =>
+                                                    language !== MULTILINGUAL_LANGUAGE_CODE
+                                                    && (nextModelLanguages.length === 0
+                                                        || nextModelCodes.has(language.toLowerCase())
+                                                        || nextModelCodes.has(language.toLowerCase().split("-")[0])),
+                                                )
+                                                    || kodewavesDefaults.defaults.language;
+                                                setKodewaves({
+                                                    ...kodewaves,
+                                                    stt_model: stt_model === "auto" || stt_model === "none" ? undefined : stt_model,
+                                                    language: fallbackLanguage,
+                                                });
+                                                setError(null);
                                                 return;
                                             }
                                             setKodewaves({ ...kodewaves, stt_model: stt_model === "auto" || stt_model === "none" ? undefined : stt_model });
@@ -1161,9 +1328,14 @@ export function AIModelConfigurationV2Editor({
                                             Selected transcriber &quot;{kodewaves.stt_model}&quot; is no longer active in the catalog.
                                         </div>
                                     )}
-                                    {kodewaves.stt_model === "indicconformer-ctc-int8" && kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
-                                        <p className="text-xs text-amber-600 dark:text-amber-300">
-                                            Choose a specific Indian language for IndicConformer. Cloud STT supports automatic language detection.
+                                    {kodewaves.stt_engine_type === "local_cpu" && selectedSttModel?.languages?.length ? (
+                                        <p className="text-xs text-muted-foreground">
+                                            Installed recognizer languages: {selectedSttModel.languages.map((language) => LANGUAGE_DISPLAY_NAMES[language] || LANGUAGE_DISPLAY_NAMES[language.split("-")[0]] || language).join(", ")}.
+                                        </p>
+                                    ) : null}
+                                    {kodewaves.stt_engine_type === "cloud" && !supportsRecognitionAutoDetect && (
+                                        <p className="text-xs text-muted-foreground">
+                                            Automatic language detection is hidden because the selected STT model does not advertise it. Select a model with auto-detection to enable it.
                                         </p>
                                     )}
                                 </div>
@@ -1287,29 +1459,45 @@ export function AIModelConfigurationV2Editor({
                                         allowManualInput={allowCustomVoice}
                                     />}
                                     {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "indic-vits-rasa-13" && (
-                                        <p className="text-xs text-muted-foreground">
-                                            This voice sets the preferred gender for demos. Live speech switches to a matching installed regional voice when the reply script identifies one. This model supports 13 language groups; shared scripts and languages without a matching speaker do not auto-switch.
-                                        </p>
+                                        <div className="space-y-1 rounded-md border p-3">
+                                            <p className="text-sm font-medium">TTS language: Automatic — enabled</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Replies use matching installed voices automatically. The preferred voice sets the demo and preferred speaker gender; it does not lock the reply language. Shared scripts use the call language context. Unsupported languages and unavailable matching voices cannot be synthesized.
+                                            </p>
+                                        </div>
                                     )}
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">
                                     <Label>Recognition language (STT)</Label>
+                                    <p className="text-xs text-muted-foreground">
+                                        This controls how your speech is transcribed. It is separate from automatic TTS voice routing above.
+                                    </p>
                                     <Select value={kodewaves.language} onValueChange={setRecognitionLanguage}>
                                         <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Select language" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {kodewavesDefaults.languages.map((language) => (
+                                            {kodewaves.stt_engine_type === "local_cpu" && !supportsRecognitionAutoDetect && (
+                                                <SelectItem value={MULTILINGUAL_LANGUAGE_CODE} disabled>
+                                                    Auto detection unavailable for this STT model
+                                                </SelectItem>
+                                            )}
+                                            {recognitionLanguages.map((language) => (
                                                 <SelectItem key={language} value={language}>
-                                                    {LANGUAGE_DISPLAY_NAMES[language] || language}
+                                                    {recognitionLanguageLabel(language)}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>
+                                    {kodewaves.stt_engine_type === "local_cpu" && selectedSttModel?.supports_auto_detect !== true && (
+                                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                                            Automatic detection is unavailable for this installed CPU recognizer. Select one of its installed recognition languages.
+                                        </p>
+                                    )}
                                     {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
                                         <p className="text-xs text-muted-foreground">
-                                            Speech recognition auto-detects only languages supported by the selected STT model. Regional VITS can switch between installed voices for unambiguous reply scripts; other voice models use the selected voice.
+                                            Speech recognition auto-detects {selectedSttModel?.auto_detect_languages?.length || 0} installed STT languages. Assistant speech also requires a matching installed TTS voice. Very short or unclear speech may need repeating; switching languages within one utterance is not fully supported.
                                         </p>
                                     )}
                                     {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "piper" && /^([a-z]{2,3})[-_][A-Z]{2}[-_]/.test(kodewaves.voice) && (

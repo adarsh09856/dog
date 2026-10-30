@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import WorkflowLayout from '@/app/workflow/WorkflowLayout';
+import styles from './RunWorkspace.module.css';
 import {
     getWorkflowApiV1WorkflowFetchWorkflowIdGet,
     getWorkflowRunApiV1WorkflowWorkflowIdRunsRunIdGet,
@@ -90,7 +91,7 @@ function getTranscriptMetrics(logs: WorkflowRunLogs | null, gatheredContext: Rec
 
 function MetricCard({ label, value }: { label: string; value: string }) {
     return (
-        <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
+        <div className={styles.metric}>
             <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
             <p className="mt-2 text-lg font-semibold text-foreground">{value}</p>
         </div>
@@ -547,6 +548,9 @@ function RunMetricsSection({
     gatheredContext: Record<string, string | number | boolean | object> | null;
 }) {
     const metrics = getTranscriptMetrics(logs, gatheredContext);
+    const speechDiagnostics = logs?.speech_diagnostics ?? [];
+    const audioHealth = speechDiagnostics.filter((event) => event.type === 'rtf-audio-health');
+    const formatMs = (value?: number | null) => value == null ? 'N/A' : `${Math.round(value)} ms`;
 
     return (
         <Card className="border-border">
@@ -560,6 +564,31 @@ function RunMetricsSection({
                 <MetricCard label="Tool Calls" value={String(metrics.toolCalls)} />
                 <MetricCard label="Nodes Visited" value={String(metrics.visitedNodes)} />
             </CardContent>
+            {audioHealth.length > 0 && (
+                <CardContent className="border-t border-border pt-4">
+                    <h3 className="mb-3 text-sm font-semibold">Speech timing and audio continuity</h3>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {audioHealth.map((event, index) => {
+                            const payload = event.payload;
+                            const stage = payload.stage ?? 'audio';
+                            const isPlayback = stage === 'transport_playback';
+                            const label = `Turn ${event.turn ?? index + 1} ${isPlayback ? 'playback' : 'TTS'}`;
+                            const value = isPlayback
+                                ? `First frame ${formatMs(payload.first_frame_ms)} · first audible ${formatMs(payload.first_speech_frame_ms)} · max silence ${formatMs(payload.max_internal_silence_ms)} · ${payload.gaps_over_750ms ?? 0} frame gaps >750 ms`
+                                : payload.no_audio
+                                    ? 'No audio'
+                                    : `First PCM ${formatMs(payload.first_audio_ms)} · synthesis ${formatMs(payload.synthesis_wall_ms)} · max gap ${formatMs(payload.max_gap_ms)} · ${payload.gaps_over_750ms ?? 0} gaps >750 ms`;
+                            return (
+                                <MetricCard
+                                    key={`${event.turn ?? index}-${stage}-${index}`}
+                                    label={label}
+                                    value={value}
+                                />
+                            );
+                        })}
+                    </div>
+                </CardContent>
+            )}
         </Card>
     );
 }
@@ -717,10 +746,10 @@ export default function WorkflowRunPage() {
     }
     else if (showRunDetailsView) {
         returnValue = (
-            <div className={`flex ${RUN_SHELL_HEIGHT_CLASS} min-h-0 w-full overflow-hidden bg-background`}>
-                <div className="min-w-0 flex-1 overflow-y-auto">
-                    <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
-                    <Card className="border-border">
+            <div className={`${styles.runShell} flex ${RUN_SHELL_HEIGHT_CLASS} min-h-0 w-full overflow-hidden bg-background`}>
+                <div className={`${styles.mainScroll} min-w-0 flex-1 overflow-y-auto`}>
+                    <div className={`${styles.runContent} mx-auto w-full max-w-4xl space-y-6 p-6`}>
+                    <Card className={styles.runHero}>
                         <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0 flex-1 space-y-2">
                                 {workflowName && (
@@ -742,7 +771,7 @@ export default function WorkflowRunPage() {
                                     <CopyDebugIdButton label="Agent ID" value={workflowId} />
                                     <CopyDebugIdButton label="Run ID" value={runId} />
                                 </div>
-                                <div className="flex min-w-0 items-center gap-4 pt-1">
+                                <div className={`${styles.heroTitle} flex min-w-0 items-center gap-4 pt-1`}>
                                     <CardTitle className="min-w-0 text-2xl">
                                         {isTextChatRun ? 'Text Chat Session' : 'Agent Run Completed'}
                                     </CardTitle>
@@ -876,7 +905,7 @@ export default function WorkflowRunPage() {
                     </div>
                 </div>
 
-                <div className="h-full min-h-0 w-[420px] shrink-0 border-l border-border bg-background p-5">
+                <div className={`${styles.conversationPane} h-full min-h-0 w-[420px] shrink-0 border-l border-border bg-background p-5`}>
                     <ConversationRailFrame className="h-full">
                         <RealtimeFeedback mode="historical" logs={workflowRun?.logs ?? null} />
                     </ConversationRailFrame>

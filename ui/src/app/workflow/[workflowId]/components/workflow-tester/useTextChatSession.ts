@@ -7,6 +7,7 @@ import {
     appendTextChatMessageApiV1WorkflowWorkflowIdTextChatSessionsRunIdMessagesPost,
     createTextChatSessionApiV1WorkflowWorkflowIdTextChatSessionsPost,
     endTextChatSessionApiV1WorkflowWorkflowIdTextChatSessionsRunIdEndPost,
+    getTextChatSessionApiV1WorkflowWorkflowIdTextChatSessionsRunIdGet,
     rewindTextChatSessionApiV1WorkflowWorkflowIdTextChatSessionsRunIdRewindPost,
 } from "@/client/sdk.gen";
 import { conversationItemsFromTextChatTurns } from "@/components/workflow/conversation/adapters/fromTextChatTurns";
@@ -174,6 +175,20 @@ export function useTextChatSession({
             setDraft("");
             setEditingTurnId(null);
         } catch (error) {
+            // A failed turn can still advance the server revision (for example
+            // when its failure is persisted). Reload before the next send so
+            // the caller sees that turn and can retry with the current version.
+            // Do not automatically resend: the original request may have run tools.
+            try {
+                const refreshed = await getTextChatSessionApiV1WorkflowWorkflowIdTextChatSessionsRunIdGet({
+                    path: { workflow_id: workflowId, run_id: session.workflow_run_id },
+                });
+                if (!refreshed.error && refreshed.data) {
+                    setSession(toTextChatSession(refreshed.data));
+                }
+            } catch {
+                // Preserve the original error and the caller's draft if offline.
+            }
             toast.error(getErrorMessage(error));
         } finally {
             setSendingMessage(false);

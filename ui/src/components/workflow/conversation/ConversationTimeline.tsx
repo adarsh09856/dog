@@ -29,17 +29,27 @@ export function ConversationTimeline({
     className,
 }: ConversationTimelineProps) {
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-    const scrollEndRef = useRef<HTMLDivElement | null>(null);
+    const followLatestRef = useRef(true);
+
+    const handleScroll = () => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        followLatestRef.current =
+            container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+    };
 
     useEffect(() => {
-        if (!autoScroll) {
+        if (!autoScroll || !followLatestRef.current) {
             return;
         }
-        scrollEndRef.current?.scrollIntoView({ behavior: scrollBehavior, block: "end" });
+        const container = scrollContainerRef.current;
+        if (container) {
+            container.scrollTo({ top: container.scrollHeight, behavior: scrollBehavior });
+        }
     }, [autoScroll, items, pendingIndicator, scrollBehavior]);
 
     return (
-        <div ref={scrollContainerRef} className={cn("flex-1 overflow-y-auto", className)}>
+        <div ref={scrollContainerRef} onScroll={handleScroll} className={cn("flex-1 overflow-y-auto", className)}>
             {items.length === 0 && !pendingIndicator ? (
                 <ConversationEmptyState title={emptyState.title} subtitle={emptyState.subtitle} />
             ) : (
@@ -52,7 +62,6 @@ export function ConversationTimeline({
                         />
                     ))}
                     {pendingIndicator}
-                    <div ref={scrollEndRef} />
                 </div>
             )}
         </div>

@@ -32,7 +32,10 @@ class ContextSummarizationManager:
         self._summarization_task: Optional[asyncio.Task] = None
         self._config = LLMContextSummaryConfig(
             target_context_tokens=4000,
-            min_messages_after_summary=2,
+            # Keep several complete caller/assistant turns verbatim. On local
+            # CPU models an early summary both costs another inference and can
+            # erase booking/contact details needed by the next follow-up.
+            min_messages_after_summary=8,
             summarization_timeout=30.0,
         )
 
@@ -82,15 +85,45 @@ class ContextSummarizationManager:
                 )
                 return
             messages = context.messages
-            # Not worth summarizing if context is small
-            if len(messages) <= 6:
+            # A system prompt plus the last eight messages are always retained.
+            # Also require at least four older messages before paying for a
+            # summary inference; otherwise compaction adds CPU contention while
+            # preserving almost no useful context budget.
+            system_message_count = int(
+                bool(
+                    messages
+                    and isinstance(messages[0], dict)
+                    and messages[0].get("role") == "system"
+                )
+            )
+            older_message_count = (
+                len(messages) - system_message_count
+                - self._config.min_messages_after_summary
+            )
+            if older_message_count < 4:
                 return
 
             config = self._config
+            # Pipecat's generic selector keeps the last N *messages*. When
+            # the cut falls immediately before an assistant message, that
+            # leaves the answer without the user turn that prompted it. Keep
+            # one more message in that case so the retained suffix starts at
+            # the matching caller turn. The bound remains N or N+1 messages.
+            messages_to_keep = config.min_messages_after_summary
+            summary_start = len(messages) - messages_to_keep
+            if (
+                0 < summary_start < len(messages)
+                and isinstance(messages[summary_start], dict)
+                and messages[summary_start].get("role") == "assistant"
+                and isinstance(messages[summary_start - 1], dict)
+                and messages[summary_start - 1].get("role") == "user"
+            ):
+                messages_to_keep += 1
+
             request_frame = LLMContextSummaryRequestFrame(
                 request_id=f"node-transition-{current_node.id}",
                 context=context,
-                min_messages_to_keep=config.min_messages_after_summary,
+                min_messages_to_keep=messages_to_keep,
                 target_context_tokens=config.target_context_tokens,
                 summarization_prompt=config.summary_prompt,
                 summarization_timeout=config.summarization_timeout,

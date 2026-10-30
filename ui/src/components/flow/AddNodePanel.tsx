@@ -1,11 +1,11 @@
-import * as LucideIcons from 'lucide-react';
-import { Circle, ExternalLink, type LucideIcon, X } from 'lucide-react';
+import { ExternalLink, X } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 
 import type { NodeSpec } from '@/client/types.gen';
 import { useNodeSpecs } from '@/components/flow/renderer';
 import { Button } from '@/components/ui/button';
 
+import { resolveNodeIcon } from './nodeIcons';
 import { FlowNode, NodeType } from './types';
 
 type AddNodePanelProps = {
@@ -30,11 +30,6 @@ const SECTIONS: Array<{ title: string; matches: (spec: NodeSpec) => boolean }> =
     },
 ];
 
-function resolveIcon(name: string): LucideIcon {
-    const icons = LucideIcons as unknown as Record<string, LucideIcon>;
-    return icons[name] ?? Circle;
-}
-
 function NodeSection({
     title,
     specs,
@@ -54,7 +49,7 @@ function NodeSection({
             </h3>
             <div className="space-y-2">
                 {specs.map((spec) => {
-                    const Icon = resolveIcon(spec.icon);
+                    const Icon = resolveNodeIcon(spec.icon);
                     const maxInstances = spec.graph_constraints?.max_instances;
                     const disabled =
                         maxInstances !== undefined &&

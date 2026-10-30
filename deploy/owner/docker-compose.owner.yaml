@@ -1,0 +1,50 @@
+# Owner control plane only. Combine with a SaaS Compose stack, never a client
+# installation. Private signing keys are mounted only into the internal signer.
+services:
+  api:
+    environment:
+      KODEWAVES_EDITION: saas
+      KODEWAVES_OWNER_LICENSE_SIGNER_URL: http://owner-license-signer:8765
+      KODEWAVES_OWNER_LICENSE_SIGNER_TOKEN: "${KODEWAVES_OWNER_LICENSE_SIGNER_TOKEN:?Set a random API-to-signer bearer token of at least 32 characters}"
+      KODEWAVES_OWNER_TRUSTED_PROXY_CIDRS: "${KODEWAVES_OWNER_TRUSTED_PROXY_CIDRS:?Set the actual Docker/Nginx proxy peer CIDR; do not use a client-supplied value}"
+    depends_on:
+      owner-license-signer:
+        condition: service_healthy
+    networks:
+      - app-network
+      - owner-signer-network
+
+  owner-license-signer:
+    image: "${REGISTRY:-kodewaves}/kodewaves-api:${VERSION:-v2.0.0}"
+    command: ["python", "-m", "api.services.owner_license_signer"]
+    restart: unless-stopped
+    environment:
+      KODEWAVES_OWNER_LICENSE_SIGNER_TOKEN: "${KODEWAVES_OWNER_LICENSE_SIGNER_TOKEN:?Set a random API-to-signer bearer token of at least 32 characters}"
+      KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE: /run/kodewaves-owner-keys/current.key
+      KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES: "${KODEWAVES_OWNER_LEGACY_LICENSE_SIGNING_KEY_FILES:-}"
+    expose:
+      - "8765"
+    networks:
+      - owner-signer-network
+    volumes:
+      - type: bind
+        source: "${KODEWAVES_OWNER_KEYS_DIR:?Set an absolute owner license key directory outside the repository}"
+        target: /run/kodewaves-owner-keys
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+networks:
+  owner-signer-network:
+    internal: true

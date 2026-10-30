@@ -1,4 +1,5 @@
 "use client";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
@@ -314,21 +315,25 @@ export default function NewCampaignPage() {
     };
 
     return (
-        <div className="container mx-auto p-6 pb-12 space-y-6 max-w-2xl">
-            <div>
+        <div className={`${chrome.detailPage} container mx-auto max-w-screen-2xl space-y-6 px-4 py-6 pb-12 sm:px-6 lg:px-8`}>
+            <div className="space-y-4">
                 <Button
                     variant="ghost"
                     onClick={handleBack}
-                    className="mb-4"
+                    className="-ml-3"
                 >
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Campaigns
                 </Button>
-                <h1 className="text-3xl font-bold mb-2">Create New Campaign</h1>
-                <p className="text-muted-foreground">Set up a new campaign to execute workflows at scale</p>
+                <div className="max-w-3xl space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Outbound · Campaigns</p>
+                    <h1 className={chrome.detailTitle}>Create a campaign</h1>
+                    <p className="text-muted-foreground">Choose the workflow, contact source, and call safeguards before your first outbound run.</p>
+                </div>
             </div>
 
-            <Card>
+            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+            <Card className="min-w-0">
                     <CardHeader>
                         <CardTitle>Campaign Details</CardTitle>
                         <CardDescription>
@@ -488,10 +493,11 @@ export default function NewCampaignPage() {
                                 </div>
                             )}
 
-                            <div className="flex gap-4 pt-4">
+                            <div className="flex flex-col-reverse gap-3 border-t pt-5 sm:flex-row sm:justify-end">
                                 <Button
                                     type="submit"
                                     disabled={isSubmitting || !campaignName || !!trafficSplitError(variants) || !sourceId || !selectedTelephonyConfigId}
+                                    className="sm:min-w-40"
                                 >
                                     {isSubmitting ? 'Creating...' : 'Create Campaign'}
                                 </Button>
@@ -500,6 +506,7 @@ export default function NewCampaignPage() {
                                     variant="outline"
                                     onClick={handleBack}
                                     disabled={isSubmitting}
+                                    className="sm:min-w-28"
                                 >
                                     Cancel
                                 </Button>
@@ -507,6 +514,43 @@ export default function NewCampaignPage() {
                         </form>
                     </CardContent>
                 </Card>
+                <aside className="space-y-4 xl:sticky xl:top-6" aria-label="Campaign setup summary">
+                    <Card className="border-primary/20 bg-primary/[0.035]">
+                        <CardHeader>
+                            <CardTitle className="text-base">Setup summary</CardTitle>
+                            <CardDescription>Review the essentials as you configure the run.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-1">
+                                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Campaign</p>
+                                <p className="break-words text-sm font-medium">{campaignName.trim() || 'Name not set'}</p>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Workflow split</p>
+                                <p className="text-sm font-medium">{variants.length} {variants.length === 1 ? 'workflow' : 'workflows'} · {variants.reduce((total, variant) => total + (Number(variant.weight) || 0), 0)}% assigned</p>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Caller route</p>
+                                <p className="break-words text-sm font-medium">{selectedTelephonyConfig?.name || (isLoadingTelephonyConfigs ? 'Loading configurations…' : 'Select a telephony configuration')}</p>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Contact source</p>
+                                <p className="break-words text-sm font-medium">{selectedFileName || 'Upload a CSV file'}</p>
+                            </div>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">Before you launch</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3 text-sm text-muted-foreground">
+                            <p>Confirm that your workflow and caller IDs are ready for outbound calls.</p>
+                            <p>Advanced settings let you control retries, call schedules, rate limits, and failure safeguards.</p>
+                            <p className="border-t pt-3">Organization concurrency limit: <span className="font-medium text-foreground">{orgConcurrentLimit}</span></p>
+                        </CardContent>
+                    </Card>
+                </aside>
+            </div>
         </div>
     );
 }

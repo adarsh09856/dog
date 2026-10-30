@@ -1,4 +1,5 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import { ExternalLink, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -354,8 +355,8 @@ export default function ToolsPage() {
         <div className="min-h-screen">
             <div className="container mx-auto px-4 py-8">
                 <div className="max-w-6xl mx-auto">
-                    <div className="mb-8">
-                        <h1 className="text-3xl font-bold mb-2">Tools</h1>
+                    <div className={panel.collectionHeader}>
+                        <h1>Tools</h1>
                         <p className="text-muted-foreground">
                             Manage reusable tools that can be used across your workflows.
                         </p>
@@ -370,7 +371,7 @@ export default function ToolsPage() {
 
                     <Card className="mb-6">
                         <CardHeader>
-                            <div className="flex justify-between items-center">
+                            <div className={panel.collectionHeader}>
                                 <div>
                                     <CardTitle>Your Tools</CardTitle>
                                     <CardDescription>

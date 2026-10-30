@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -33,6 +33,37 @@ from api.db.kodewaves_models import (
     WebsiteWidgetModel,
     GlobalPlatformSettingModel,
 )
+
+
+def _materialize_paid_plan_assignment(
+    requested: Dict[str, Any], previous: Any
+) -> Dict[str, Any]:
+    """Compute a purchased term while the organization's wallet lock is held."""
+    assignment = dict(requested)
+    term_days = int(assignment.pop("_term_days"))
+    if term_days not in {30, 365}:
+        raise ValueError("Paid plan term must be 30 or 365 days")
+    assignment.pop("expires_at", None)
+    now = datetime.now(UTC)
+    start = now
+    previous_expiry = (
+        previous.get("expires_at")
+        if isinstance(previous, dict)
+        and previous.get("plan_code") == assignment.get("plan_code")
+        else None
+    )
+    if previous_expiry:
+        try:
+            parsed = datetime.fromisoformat(str(previous_expiry).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            if parsed > start:
+                start = parsed
+        except (TypeError, ValueError):
+            pass
+    assignment["updated_at"] = now.isoformat()
+    assignment["expires_at"] = (start + timedelta(days=term_days)).isoformat()
+    return assignment
 
 
 class KodewavesDBClient(BaseDBClient):
@@ -586,22 +617,32 @@ class KodewavesDBClient(BaseDBClient):
         reason: str = "credit_purchase",
         reference_id: Optional[str] = None,
         notes: Optional[str] = None,
+        plan_assignment: Optional[Dict[str, Any]] = None,
     ) -> OrganizationWalletModel:
+        if minutes < 0 or (minutes == 0 and plan_assignment is None):
+            raise ValueError("Minute credits must be positive unless granting a paid plan")
         async with self.get_session() as session:
-            stmt = select(OrganizationWalletModel).where(OrganizationWalletModel.organization_id == organization_id)
+            # An upsert also serializes first-time wallet creation: a SELECT
+            # FOR UPDATE alone cannot lock a row that does not exist yet.
+            await session.execute(
+                insert(OrganizationWalletModel).values(
+                    organization_id=organization_id,
+                    credit_balance_minutes=0,
+                    bonus_minutes=0,
+                ).on_conflict_do_nothing(index_elements=["organization_id"])
+            )
+            stmt = select(OrganizationWalletModel).where(
+                OrganizationWalletModel.organization_id == organization_id
+            ).with_for_update()
             result = await session.execute(stmt)
             wallet = result.scalar_one_or_none()
-
-            if not wallet:
-                wallet = OrganizationWalletModel(organization_id=organization_id, credit_balance_minutes=0)
-                session.add(wallet)
 
             # Idempotency check: avoid double crediting same payment reference
             if reference_id:
                 check_stmt = select(WalletLedgerModel).where(
                     WalletLedgerModel.organization_id == organization_id,
                     WalletLedgerModel.reference_id == str(reference_id),
-                    WalletLedgerModel.amount_minutes > 0,
+                    WalletLedgerModel.amount_minutes >= 0,
                 )
                 existing = await session.execute(check_stmt)
                 if existing.scalar_one_or_none() is not None:
@@ -622,6 +663,29 @@ class KodewavesDBClient(BaseDBClient):
             )
             session.add(ledger_entry)
 
+            if plan_assignment is not None:
+                key = f"org_plan_{organization_id}"
+                setting_result = await session.execute(
+                    select(GlobalPlatformSettingModel).where(
+                        GlobalPlatformSettingModel.key == key
+                    )
+                )
+                setting = setting_result.scalar_one_or_none()
+                previous_value = setting.value if setting is not None else None
+                assignment = _materialize_paid_plan_assignment(
+                    plan_assignment, previous_value
+                )
+                if setting is None:
+                    session.add(
+                        GlobalPlatformSettingModel(
+                            key=key, value=assignment, category="plan"
+                        )
+                    )
+                else:
+                    setting.value = assignment
+                    setting.category = "plan"
+                    setting.updated_at = datetime.now(UTC)
+
             await session.commit()
             await session.refresh(wallet)
             return wallet
@@ -629,6 +693,36 @@ class KodewavesDBClient(BaseDBClient):
     # ------------------------------------------------------------------------
     # CRM & Contacts
     # ------------------------------------------------------------------------
+    async def import_contacts(self, organization_id: int, items: List[Dict[str, Any]]) -> int:
+        """Import one batch atomically after validating every referenced stage."""
+        prepared = []
+        for item in items:
+            values = dict(item)
+            if not str(values.get("phone") or "").strip():
+                continue
+            values["stage_id"] = uuid.UUID(values["stage_id"]) if values.get("stage_id") else None
+            fields = dict(values.get("custom_fields") or {})
+            if "notes" in values:
+                fields["notes"] = values.pop("notes") or ""
+            values["custom_fields"] = fields
+            prepared.append(values)
+        async with self.get_session() as session:
+            stages = {values["stage_id"] for values in prepared if values["stage_id"] is not None}
+            if stages:
+                owned = set((await session.execute(select(LeadStageModel.id).where(
+                    LeadStageModel.id.in_(stages),
+                    LeadStageModel.organization_id == organization_id,
+                ))).scalars().all())
+                if owned != stages:
+                    raise LookupError("Stage not found")
+            for values in prepared:
+                allowed = {key: values[key] for key in (
+                    "first_name", "last_name", "phone", "email", "company", "stage_id", "tags", "custom_fields"
+                ) if key in values}
+                session.add(ContactModel(organization_id=organization_id, **allowed))
+            await session.commit()
+        return len(prepared)
+
     async def save_contact(self, organization_id: int, values: Dict[str, Any], contact_id: str | None = None) -> ContactModel:
         """Save contact fields and validate stage ownership in the same transaction."""
         async with self.get_session() as session:

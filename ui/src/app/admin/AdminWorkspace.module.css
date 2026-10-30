@@ -1,0 +1,192 @@
+.surface {
+  display: grid;
+  gap: 1.75rem;
+  min-width: 0;
+  padding-bottom: 3rem;
+}
+
+.hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1.5rem 2.5rem;
+  overflow: hidden;
+  min-height: 12rem;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+  border: 1px solid color-mix(in srgb, var(--brand-primary-color, #426b57) 32%, #35504b);
+  border-radius: 1.5rem;
+  color: #f2f7f1;
+  background:
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--brand-primary-color, #426b57) 27%, transparent), transparent 34%),
+    linear-gradient(118deg, #102523 0%, #15322f 58%, #1c4039 100%);
+  box-shadow: 0 24px 54px -38px rgba(8, 27, 24, .82);
+  animation: admin-hero-in 420ms cubic-bezier(.2,.75,.25,1) both;
+}
+
+.hero::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  content: "";
+  opacity: .2;
+  background: repeating-linear-gradient(108deg, transparent 0, transparent 32px, rgba(205,233,212,.16) 33px, transparent 34px);
+  mask-image: linear-gradient(to left, #000, transparent 65%);
+  pointer-events: none;
+}
+
+.hero > div:first-child {
+  max-width: 48rem;
+}
+
+.kicker {
+  display: block;
+  margin-bottom: .85rem;
+  color: #b8d9c1;
+  font-size: .66rem;
+  font-weight: 750;
+  letter-spacing: .18em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.title {
+  font-size: clamp(1.65rem, 2.4vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -.055em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+.hero p {
+  max-width: 56rem;
+  margin-top: .85rem;
+  color: #bfd0c6;
+  line-height: 1.55;
+}
+
+.hero :global(button) {
+  border-color: rgba(255,255,255,.28);
+}
+
+.hero :global(button[data-variant="outline"]) {
+  color: #f2f7f1;
+  background: rgba(255,255,255,.07);
+}
+
+.hero :global(input) {
+  color: #f2f7f1;
+  border-color: rgba(255,255,255,.25);
+  background: rgba(255,255,255,.09);
+}
+
+.hero :global(input::placeholder) {
+  color: #b8cbbf;
+}
+
+.surface :global([data-slot="card"]) {
+  border-color: color-mix(in oklab, var(--primary) 9%, var(--border));
+  border-radius: 1.1rem;
+  box-shadow: 0 6px 25px -22px color-mix(in srgb, var(--foreground) 24%, transparent);
+}
+
+.surface :global([data-slot="tabs-list"]) {
+  height: auto;
+  min-height: 2.9rem;
+  padding: .28rem;
+  border: 1px solid var(--border);
+  border-radius: .85rem;
+}
+
+.surface :global(table thead) {
+  background: color-mix(in oklab, var(--primary) 4%, var(--background));
+}
+
+.surface :global(table tr) {
+  transition: background-color .18s ease;
+}
+
+.surface :global(table tbody tr:hover) {
+  background: color-mix(in oklab, var(--primary) 4%, var(--background));
+}
+
+@keyframes admin-hero-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.formSection {
+  grid-column: 1 / -1;
+  margin-top: .5rem;
+  padding: 1.2rem 0 .45rem;
+  border-top: 1px solid var(--border);
+}
+
+.formSection:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+.formSection span {
+  color: var(--primary);
+  font-size: .69rem;
+  font-weight: 750;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.formSection p { margin-top: .3rem; color: var(--muted-foreground); font-size: .84rem; }
+.formFooter {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.formFooter span { color: var(--muted-foreground); font-size: .8rem; }
+.installationRow {
+  position: relative;
+  overflow: hidden;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: .85rem;
+  background: color-mix(in oklab, var(--primary) 2%, var(--card));
+  font-size: .875rem;
+}
+.installationRow + .installationRow { margin-top: .75rem; }
+.installationRow strong { font-size: 1rem; letter-spacing: -.02em; }
+.prerequisite {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  border: 1px solid color-mix(in oklab, var(--primary) 30%, var(--border));
+  border-radius: .9rem;
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--primary) 5%, var(--background));
+}
+.prerequisite svg { color: var(--primary); }
+.prerequisite strong { font-size: .88rem; }
+.prerequisite p { margin-top: .2rem; color: var(--muted-foreground); font-size: .82rem; line-height: 1.5; }
+.setupError {
+  padding: 1rem 1.2rem;
+  border: 1px solid color-mix(in oklab, var(--destructive) 40%, var(--border));
+  border-radius: .9rem;
+  color: var(--destructive);
+  background: color-mix(in oklab, var(--destructive) 7%, var(--background));
+  font-size: .85rem;
+  line-height: 1.5;
+}
+.setupError code { font-size: .8em; overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .hero { min-height: 0; padding: 1.4rem; border-radius: 1.15rem; }
+  .hero > div, .hero > div:last-child { width: 100%; }
+  .hero :global(input) { max-width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero { animation: none; }
+  .surface :global(table tr) { transition: none; }
+}

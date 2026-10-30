@@ -1,6 +1,7 @@
 'use client';
 
 import { Loader2 } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import React, { createContext, lazy, Suspense, useContext, useEffect, useState } from 'react';
 
 import logger from '@/lib/logger';
@@ -50,12 +51,17 @@ interface ResolvedAuthConfig {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const publicPage = ['/', '/pricing', '/auth/login', '/auth/signup'].includes(pathname);
   const [config, setConfig] = useState<ResolvedAuthConfig | null>(null);
 
   useEffect(() => {
+    if (publicPage) return;
+    let active = true;
     fetch('/api/config/auth')
       .then((res) => res.json())
       .then((data) => {
+        if (!active) return;
         logger.debug(`Setting auth provider as ${data.provider}`)
         setConfig({
           provider: data.provider || 'local',
@@ -69,10 +75,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
       })
       .catch((e) => {
+        if (!active) return;
         logger.error(`Got error ${e} while setting auth provider`)
         setConfig({ provider: 'local', stack: null })
       });
-  }, []);
+    return () => { active = false; };
+  }, [publicPage]);
+
+  if (publicPage) {
+    return <AuthContext.Provider value={{
+      user: null, isAuthenticated: false, loading: false, provider: 'public',
+      getAccessToken: async () => '',
+      redirectToLogin: () => { window.location.href = '/auth/login'; },
+      logout: async () => { window.location.href = '/auth/login'; },
+    }}>{children}</AuthContext.Provider>;
+  }
 
   if (!config) {
     return LoadingFallback;

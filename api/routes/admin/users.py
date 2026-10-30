@@ -3,16 +3,22 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import desc, func, select, or_
 
 from api.db import db_client
+from api.db import saas_plan_catalog, owner_user_management
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import OrganizationWalletModel, SaaSPlanModel, WalletLedgerModel
 from api.db.models import OrganizationModel, UserModel, WorkflowRunModel
 from api.services.auth.depends import get_superuser
 from api.services.catalog.catalog_service import catalog_service
 from api.services.organization_bootstrap import ensure_organization_bootstrapped
+from api.services.saas_entitlements import (
+    get_org_saas_plan,
+    resolve_plan_feature,
+    resolve_plan_limit,
+)
 from api.utils.auth import create_jwt_token, hash_password
 
 logger = logging.getLogger(__name__)
@@ -41,6 +47,7 @@ class UserAdminResponse(BaseModel):
     organization_name: Optional[str] = None
     wallet_balance_minutes: int = 0
     plan_name: str = "Starter"
+    plan_code: Optional[str] = None
     total_calls: int = 0
 
 
@@ -50,7 +57,7 @@ class CreateUserRequest(BaseModel):
     name: Optional[str] = None
     is_superuser: bool = False
     has_local_ai_access: bool = False
-    plan_code: Optional[str] = "starter"
+    plan_code: Optional[str] = None
     initial_minutes: int = 60
     is_active: bool = True
 
@@ -60,10 +67,11 @@ class UpdateUserRequest(BaseModel):
     is_active: Optional[bool] = None
     has_local_ai_access: Optional[bool] = None
     plan_name: Optional[str] = None
+    plan_code: Optional[str] = None
     wallet_balance_minutes: Optional[int] = None
     is_wallet_frozen: Optional[bool] = None
-    max_concurrent_calls: Optional[int] = None
-    max_agents: Optional[int] = None
+    max_concurrent_calls: Optional[int] = Field(default=None, ge=0)
+    max_agents: Optional[int] = Field(default=None, ge=0)
     enable_campaigns: Optional[bool] = None
     enable_crm: Optional[bool] = None
     enable_widgets: Optional[bool] = None
@@ -163,16 +171,20 @@ async def list_admin_users(
             org_plan_val = "Starter Plan"
             org_features = {}
             org_quotas = {}
+            active_plan = None
             if org:
                 custom_name = await kodewaves_db_client.get_setting(f"org_name_{org.id}")
                 org_name_val = custom_name.get("name") if custom_name and custom_name.get("name") else org.provider_id
 
-                plan_setting = await kodewaves_db_client.get_setting(f"org_plan_{org.id}")
-                if plan_setting and plan_setting.get("plan_code"):
-                    org_plan_val = f"{plan_setting['plan_code'].capitalize()} Plan"
+                active_plan = await get_org_saas_plan(org.id)
+                if active_plan:
+                    org_plan_val = active_plan.name
 
                 org_features = await kodewaves_db_client.get_setting(f"org_features_{org.id}") or {}
                 org_quotas = await kodewaves_db_client.get_setting(f"org_quotas_{org.id}") or {}
+
+            effective_calls = resolve_plan_limit(active_plan, org_quotas, "max_concurrent_calls")
+            effective_agents = resolve_plan_limit(active_plan, org_quotas, "max_agents")
 
             response.append(
                 UserAdminResponse(
@@ -183,19 +195,20 @@ async def list_admin_users(
                     is_active=is_active_val,
                     has_local_ai_access=has_local_ai,
                     is_wallet_frozen=is_frozen,
-                    max_concurrent_calls=org_quotas.get("max_concurrent_calls", 2),
-                    max_agents=org_quotas.get("max_agents", 10),
-                    enable_campaigns=org_features.get("enable_campaigns", True),
-                    enable_crm=org_features.get("enable_crm", True),
-                    enable_widgets=org_features.get("enable_widgets", True),
-                    enable_appointments=org_features.get("enable_appointments", True),
-                    enable_forms=org_features.get("enable_forms", True),
-                    enable_byok=org_features.get("enable_byok", True),
+                    max_concurrent_calls=effective_calls if effective_calls is not None else 2,
+                    max_agents=effective_agents if effective_agents is not None else 10,
+                    enable_campaigns=resolve_plan_feature(active_plan, org_features, "campaigns"),
+                    enable_crm=resolve_plan_feature(active_plan, org_features, "crm"),
+                    enable_widgets=resolve_plan_feature(active_plan, org_features, "widgets"),
+                    enable_appointments=resolve_plan_feature(active_plan, org_features, "appointments"),
+                    enable_forms=resolve_plan_feature(active_plan, org_features, "forms"),
+                    enable_byok=resolve_plan_feature(active_plan, org_features, "byok"),
                     created_at=u.created_at.isoformat() if u.created_at else None,
                     organization_id=org.id if org else None,
                     organization_name=org_name_val,
                     wallet_balance_minutes=wallet_mins,
                     plan_name=org_plan_val,
+                    plan_code=active_plan.code if active_plan else None,
                     total_calls=call_count,
                 )
             )
@@ -207,6 +220,10 @@ async def list_admin_users(
 @router.post("", response_model=Dict[str, Any])
 async def create_admin_user(req: CreateUserRequest, _user=Depends(get_superuser)):
     """Superadmin provisions a new user account with credentials, organization, and minute grant."""
+    try:
+        selected_plan = await saas_plan_catalog.resolve_owner_plan(req.plan_code)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     existing_user = await db_client.get_user_by_email(req.email)
     if existing_user:
         raise HTTPException(status_code=409, detail=f"User with email '{req.email}' already exists.")
@@ -216,17 +233,8 @@ async def create_admin_user(req: CreateUserRequest, _user=Depends(get_superuser)
         email=req.email,
         password_hash=hashed,
         name=req.name,
+        is_superuser=req.is_superuser,
     )
-
-    # Set superadmin flag if requested
-    if req.is_superuser:
-        async with kodewaves_db_client.get_session() as session:
-            stmt = select(UserModel).where(UserModel.id == user.id)
-            res = await session.execute(stmt)
-            u_rec = res.scalar_one_or_none()
-            if u_rec:
-                u_rec.is_superuser = True
-                await session.commit()
 
     # Create primary organization
     org_provider_id = f"org_{user.provider_id}"
@@ -236,6 +244,8 @@ async def create_admin_user(req: CreateUserRequest, _user=Depends(get_superuser)
 
     await db_client.add_user_to_organization(user.id, organization.id)
     await db_client.update_user_selected_organization(user.id, organization.id)
+    if selected_plan is not None:
+        await saas_plan_catalog.assign_org_plan(organization.id, selected_plan.code)
 
     # Bootstrap default service configs
     await ensure_organization_bootstrapped(
@@ -272,35 +282,12 @@ async def create_admin_user(req: CreateUserRequest, _user=Depends(get_superuser)
 async def update_admin_user(user_id: int, req: UpdateUserRequest, _user=Depends(get_superuser)):
     """Update user role, active status, local AI access, or manually set wallet minute balance."""
     try:
-        selected_org_id = None
-        async with kodewaves_db_client.get_session() as session:
-            stmt = select(UserModel).where(UserModel.id == user_id)
-            res = await session.execute(stmt)
-            user = res.scalar_one_or_none()
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
-
-            selected_org_id = user.selected_organization_id
-
-            if req.is_superuser is not None:
-                user.is_superuser = req.is_superuser
-            if req.is_active is not None and hasattr(user, "is_active"):
-                user.is_active = req.is_active
-
-            # Update wallet balance or freeze status if requested
-            if selected_org_id:
-                wallet_stmt = select(OrganizationWalletModel).where(
-                    OrganizationWalletModel.organization_id == selected_org_id
-                )
-                w_res = await session.execute(wallet_stmt)
-                wallet = w_res.scalar_one_or_none()
-                if wallet:
-                    if req.wallet_balance_minutes is not None:
-                        wallet.credit_balance_minutes = max(0.0, float(req.wallet_balance_minutes))
-                    if req.is_wallet_frozen is not None:
-                        wallet.is_frozen = bool(req.is_wallet_frozen)
-
-            await session.commit()
+        selected_plan = await saas_plan_catalog.resolve_owner_plan(req.plan_code, req.plan_name)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    try:
+        account_values = req.model_dump(include={"is_superuser", "is_active", "wallet_balance_minutes", "is_wallet_frozen"}, exclude_none=True)
+        selected_org_id = await owner_user_management.update_account(_user.id, user_id, account_values)
 
         # Perform settings updates cleanly outside the UserModel session block
         if req.has_local_ai_access is not None:
@@ -317,13 +304,8 @@ async def update_admin_user(user_id: int, req: UpdateUserRequest, _user=Depends(
                 )
             await catalog_service.notify_changed()
 
-        if req.plan_name and selected_org_id:
-            clean_plan = req.plan_name.lower().replace(" plan", "").strip()
-            await kodewaves_db_client.set_setting(
-                f"org_plan_{selected_org_id}",
-                {"plan_code": clean_plan, "updated_at": datetime.now(UTC).isoformat()},
-                category="plan",
-            )
+        if selected_plan is not None and selected_org_id:
+            await saas_plan_catalog.assign_org_plan(selected_org_id, selected_plan.code)
 
         if selected_org_id:
             existing_features = await kodewaves_db_client.get_setting(f"org_features_{selected_org_id}") or {}
@@ -417,30 +399,9 @@ async def grant_promo_minutes_by_org(organization_id: int, req: PromoMinutesRequ
 @router.put("/{user_id}/status", response_model=Dict[str, Any])
 async def update_user_status(user_id: int, req: UserStatusRequest, _user=Depends(get_superuser)):
     """Suspend or reactivate a user account and freeze/unfreeze their wallet."""
-    async with kodewaves_db_client.get_session() as session:
-        stmt = select(UserModel).where(UserModel.id == user_id)
-        res = await session.execute(stmt)
-        user = res.scalar_one_or_none()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        if hasattr(user, "is_active"):
-            user.is_active = req.is_active
-
-        # Freeze/unfreeze organization wallet
-        if user.selected_organization_id:
-            w_stmt = select(OrganizationWalletModel).where(
-                OrganizationWalletModel.organization_id == user.selected_organization_id
-            )
-            w_res = await session.execute(w_stmt)
-            wallet = w_res.scalar_one_or_none()
-            if wallet:
-                wallet.is_frozen = not req.is_active
-
-        await session.commit()
-
-        status_str = "activated" if req.is_active else "suspended"
-        return {"message": f"User #{user_id} has been {status_str}."}
+    await owner_user_management.update_account(_user.id, user_id, {"is_active": req.is_active}, freeze_with_status=True)
+    status_str = "activated" if req.is_active else "suspended"
+    return {"message": f"User #{user_id} has been {status_str}."}
 
 
 @router.post("/{user_id}/reset-password", response_model=Dict[str, Any])
@@ -484,45 +445,5 @@ async def impersonate_user(user_id: int, _user=Depends(get_superuser)):
 @router.delete("/{user_id}", response_model=Dict[str, Any])
 async def delete_user(user_id: int, current_user=Depends(get_superuser)):
     """Permanently delete a user account with cascading cleanup."""
-    if user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="Superadmin cannot delete their own account.")
-
-    async with kodewaves_db_client.get_session() as session:
-        stmt = select(UserModel).where(UserModel.id == user_id)
-        res = await session.execute(stmt)
-        user = res.scalar_one_or_none()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        user_email = user.email or user.provider_id
-
-        # Clean up associations and child rows safely
-        from api.db.models import organization_users_association, UserConfigurationModel, WorkflowModel, APIKeyModel
-        from sqlalchemy import delete as sql_delete, update as sql_update
-
-        await session.execute(
-            sql_delete(organization_users_association).where(organization_users_association.c.user_id == user_id)
-        )
-        await session.execute(
-            sql_delete(UserConfigurationModel).where(UserConfigurationModel.user_id == user_id)
-        )
-        await session.execute(
-            sql_update(WorkflowModel).where(WorkflowModel.user_id == user_id).values(user_id=None)
-        )
-        await session.execute(
-            sql_update(APIKeyModel).where(APIKeyModel.created_by == user_id).values(created_by=None)
-        )
-
-        await session.delete(user)
-        await session.commit()
-
-        await kodewaves_db_client.record_audit_log(
-            actor_id=current_user.id,
-            actor_email=getattr(current_user, "email", None),
-            action="user.delete",
-            resource_type="user",
-            resource_id=str(user_id),
-            changes={"email": user_email},
-        )
-
-        return {"message": f"User #{user_id} ({user_email}) deleted permanently."}
+    user_email = await owner_user_management.delete_account(current_user.id, user_id)
+    return {"message": f"User #{user_id} ({user_email}) deleted permanently."}

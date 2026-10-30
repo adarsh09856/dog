@@ -1,452 +1,425 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { ArrowRight, Check, ChevronDown, Globe2, Server } from "lucide-react";
 import Link from "next/link";
-import {
-  Check,
-  Zap,
-  ArrowRight,
-  ChevronDown,
-  HelpCircle,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+
+import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { publicApi, SaaSPlan, CreditPackage } from "@/lib/kodewavesApi";
+import {
+  publicApi,
+  type PublicCreditPackage,
+  type PublicSaaSPlan,
+} from "@/lib/kodewavesApi";
+
+import pageStyles from "../PublicPages.module.css";
+import styles from "./PricingSurface.module.css";
+
+function money(cents: number, currency: string) {
+  try {
+    // Preserve Indian digit grouping for INR; other configured currencies use
+    // the page's general English grouping instead of lakh/crore separators.
+    const locale = currency.toUpperCase() === "INR" ? "en-IN" : "en-US";
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    }).format(cents / 100);
+  } catch {
+    return `${currency} ${(cents / 100).toFixed(2)}`;
+  }
+}
+
+function formatCount(value: number | null | undefined) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value.toLocaleString()
+    : "—";
+}
+
+const faqs = [
+  {
+    q: "What is included in the displayed price?",
+    a: "Each card shows the configured plan amount and enabled features. A monthly selection is a one-time payment for 30 days of plan access; an annual selection is a one-time payment for 365 days. Plans do not renew automatically. A free plan grants its configured trial minutes once when activated; paid plans credit configured minutes once per payment. Minutes do not replenish monthly. Telephony, model providers and infrastructure may add separate costs.",
+  },
+  {
+    q: "Can I use my own model provider keys?",
+    a: "Plans that enable bring-your-own-provider keys list this in their features. Your provider bills its usage separately, according to its own rates and terms.",
+  },
+  {
+    q: "How do annual plans work?",
+    a: "An annual amount appears only when configured. It is a one-time checkout for 365 days of plan access. It does not renew automatically; included minutes are credited once with that payment, not monthly.",
+  },
+  {
+    q: "Can I deploy the platform on my own server?",
+    a: "A client installation requires its own installation license and server capacity. The scope depends on your models, expected simultaneous calls, provider connections and support needs. Hosted subscription prices do not include a private installation.",
+  },
+  {
+    q: "Which languages are available?",
+    a: "Available languages and voices come from the STT and TTS models enabled for your agent. Support differs by model and deployment, so confirm that both selected models support each required language and code-switching pattern before launch.",
+  },
+  {
+    q: "Do credits or included minutes expire?",
+    a: "Plan access lasts 30 days for a monthly selection or 365 days for an annual selection, then falls back to the configured default plan unless you pay to renew. Renewing the same plan adds time after its current expiry. Switching to a different plan starts a new term immediately; unused time on the previous plan is not carried over. Free-plan trial minutes are granted once at activation; paid-plan minutes are credited once per payment. They do not replenish monthly, and wallet minutes remain available until used.",
+  },
+];
 
 export default function PricingPage() {
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
-  const [currency, setCurrency] = useState<"INR" | "USD">("INR");
-  const [plans, setPlans] = useState<SaaSPlan[]>([]);
-  const [packages, setPackages] = useState<CreditPackage[]>([]);
-  const [plansState, setPlansState] = useState<"loading" | "ready" | "error">("loading");
-  const [packagesState, setPackagesState] = useState<"loading" | "ready" | "error">("loading");
+  const [plans, setPlans] = useState<PublicSaaSPlan[]>([]);
+  const [packages, setPackages] = useState<PublicCreditPackage[]>([]);
+  const [planState, setPlanState] = useState("loading");
+  const [packageState, setPackageState] = useState("loading");
   const [reloadKey, setReloadKey] = useState(0);
+  const [annual, setAnnual] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-
   useEffect(() => {
     let active = true;
-    async function loadData() {
-      const [plansData, packagesData] = await Promise.allSettled([
-        publicApi.getPublicPlans(),
-        publicApi.getPublicCreditPackages(),
-      ]);
-      if (!active) return;
-
-      if (plansData.status === "fulfilled") {
-        setPlans(plansData.value.filter((plan) => plan.is_active));
-        setPlansState("ready");
-      } else {
+    setPlanState("loading");
+    setPackageState("loading");
+    void publicApi.getPublicPlans().then(
+      (result) => {
+        if (!active) return;
+        setPlans(result.filter((plan) => plan.is_active));
+        setPlanState("ready");
+      },
+      () => {
+        if (!active) return;
         setPlans([]);
-        setPlansState("error");
-      }
-      if (packagesData.status === "fulfilled") {
-        setPackages(packagesData.value.filter((pkg) => pkg.is_active));
-        setPackagesState("ready");
-      } else {
+        setPlanState("error");
+      },
+    );
+    void publicApi.getPublicCreditOffers().then(
+      (result) => {
+        if (!active) return;
+        setPackages(result);
+        setPackageState("ready");
+      },
+      () => {
+        if (!active) return;
         setPackages([]);
-        setPackagesState("error");
-      }
-    }
-    void loadData();
-    return () => { active = false; };
+        setPackageState("error");
+      },
+    );
+    return () => {
+      active = false;
+    };
   }, [reloadKey]);
-
-  const displayPlans = plans;
-  const displayPackages = packages;
-
-  const faqs = [
-    {
-      q: "What determines my total voice cost?",
-      a: "Your plan and credit bundle are shown above. Total cost also depends on call volume, carrier charges, selected speech and language providers, and any infrastructure you host yourself. Review the active plan and provider rates for your deployment before estimating a monthly total.",
-    },
-    {
-      q: "Can I bring my own API keys (BYOK)?",
-      a: "Yes! Kodewaves fully supports Bring-Your-Own-Key for all providers (OpenAI, Gemini, Anthropic, ElevenLabs, Deepgram, Cartesia, Twilio, Exotel). If you use your own keys, you only pay for the platform base subscription without any voice minute markups.",
-    },
-    {
-      q: "How does the self-hosted AI engine use server hardware?",
-      a: "The local engine runs on the server hosting your deployment, not on an end user's device. Hardware needs depend on the installed STT, LLM and TTS models and the number of simultaneous calls. Size the server using measured performance for your chosen configuration.",
-    },
-    {
-      q: "Which Indian languages and accents are supported?",
-      a: "Language and voice availability depends on the model and provider configured for your agent. Check the current voice and model catalog for your deployment before publishing an agent.",
-    },
-    {
-      q: "Do unused voice minutes expire?",
-      a: "Prepaid wallet minutes and bonus package minutes never expire as long as your account remains active. Subscription plan included minutes reset on your monthly billing cycle.",
-    },
-  ];
+  const hasCycleChoice = plans.some(
+    (plan) => plan.monthly_price_cents > 0 && plan.annual_price_cents > 0,
+  );
 
   return (
-    <div className="min-h-screen bg-[#0c0d0e] text-stone-100 selection:bg-amber-500/30 selection:text-amber-200">
-      {/* Background Glow */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-gradient-to-b from-amber-500/10 via-orange-500/5 to-transparent blur-3xl opacity-70" />
-        <div className="absolute top-[800px] -right-40 w-[600px] h-[600px] bg-amber-600/5 blur-3xl rounded-full" />
-      </div>
-
-      {/* Navigation Header */}
-      <header className="sticky top-0 z-50 border-b border-white/5 bg-[#0c0d0e]/80 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-stone-950 font-bold text-lg shadow-lg shadow-amber-500/20">
-              K
+    <div className="public-site public-pricing min-h-screen bg-background text-foreground">
+      <PublicHeader />
+      <main id="main-content" className={pageStyles.pageFrame}>
+        <section className={pageStyles.priceHero}>
+          <div className={pageStyles.priceHeroGrid}>
+            <div className={pageStyles.heroCopy}>
+              <p className={pageStyles.eyebrow}>Plans / Configured terms</p>
+              <h1 className={pageStyles.headline}>Choose a plan.<br /><span className={pageStyles.headlineAccent}>Know what it covers.</span></h1>
+              <p className={pageStyles.lede}>
+                See the configured price, included usage and enabled features for each workspace plan. Provider and deployment costs are listed separately.
+              </p>
             </div>
-            <span className="font-bold text-lg tracking-tight text-white">
-              Kodewaves <span className="text-amber-400 font-mono text-xs uppercase px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">Sovereign</span>
-            </span>
-          </Link>
-
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-stone-300">
-            <Link href="/" className="hover:text-amber-400 transition-colors">Platform</Link>
-            <Link href="/pricing" className="text-amber-400">Pricing</Link>
-            <Link href="/workflow" className="hover:text-amber-400 transition-colors">Builder</Link>
-            <a href="/docs" target="_blank" rel="noreferrer" className="hover:text-amber-400 transition-colors">Docs</a>
-          </nav>
-
-          <div className="flex items-center gap-3">
-            <Link href="/auth/login">
-              <Button variant="ghost" size="sm" className="text-stone-300 hover:text-white hover:bg-white/5 text-xs">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/auth/signup">
-              <Button size="sm" className="bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-xs shadow-md shadow-amber-500/20">
-                Get Started Free
-              </Button>
-            </Link>
+            <aside className={pageStyles.priceTerms} aria-label="Plan payment terms">
+              <strong>Clear plan terms</strong>
+              <ul>
+                <li><Check aria-hidden />Configured prices and limits</li>
+                <li><Check aria-hidden />No automatic renewal</li>
+                <li><Check aria-hidden />Provider costs shown separately</li>
+              </ul>
+            </aside>
           </div>
-        </div>
-      </header>
+        </section>
 
-      {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-28 space-y-24">
-        {/* Header Section */}
-        <div className="text-center max-w-3xl mx-auto space-y-4">
-          <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 uppercase tracking-widest text-[11px] font-mono py-1 px-3">
-            Transparent Sovereign Economics
-          </Badge>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white">
-            High Performance Voice AI. <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400">
-              Fraction of the Cloud Cost.
-            </span>
-          </h1>
-          <p className="text-base sm:text-lg text-stone-400 leading-relaxed">
-            No punitive markups. Deploy conversational voice agents on your choice of multi-cloud or self-hosted CPU infrastructure.
-          </p>
-
-          {/* Toggles */}
-          <div className="pt-6 flex flex-wrap items-center justify-center gap-4">
-            {/* Monthly / Annual */}
-            <div className="inline-flex p-1 rounded-xl bg-white/5 border border-white/10 backdrop-blur-md">
-              <button
-                type="button"
-                onClick={() => setBillingCycle("monthly")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  billingCycle === "monthly" ? "bg-amber-500 text-stone-950 shadow-sm font-semibold" : "text-stone-400 hover:text-white"
-                }`}
-              >
-                Monthly
-              </button>
-              <button
-                type="button"
-                onClick={() => setBillingCycle("annual")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
-                  billingCycle === "annual" ? "bg-amber-500 text-stone-950 shadow-sm font-semibold" : "text-stone-400 hover:text-white"
-                }`}
-              >
-                Annual <span className="text-[10px] px-1 py-0.2 rounded bg-amber-400/20 text-amber-950 font-bold">Save 20%</span>
-              </button>
+        <section className={pageStyles.planSection} aria-labelledby="subscription-plans-heading">
+          <div className={pageStyles.pricingSectionHead}>
+            <div>
+              <h2 id="subscription-plans-heading">Workspace plans</h2>
+              <p>Choose a configured plan and review its exact term and enabled features.</p>
             </div>
-
-            {/* Currency Selector */}
-            <div className="inline-flex p-1 rounded-xl bg-white/5 border border-white/10">
-              <button
-                type="button"
-                onClick={() => setCurrency("INR")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  currency === "INR" ? "bg-white/15 text-white font-semibold" : "text-stone-400 hover:text-white"
-                }`}
-              >
-                INR (₹)
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrency("USD")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  currency === "USD" ? "bg-white/15 text-white font-semibold" : "text-stone-400 hover:text-white"
-                }`}
-              >
-                USD ($)
-              </button>
-            </div>
+            {hasCycleChoice && (
+              <div className={pageStyles.billingControl} role="group" aria-label="Billing period">
+                <button type="button" aria-pressed={!annual} onClick={() => setAnnual(false)}>Monthly</button>
+                <button type="button" aria-pressed={annual} onClick={() => setAnnual(true)}>Annual</button>
+              </div>
+            )}
           </div>
-        </div>
-
-        {/* Pricing Cards Grid */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {plansState === "loading" ? (
-            <p className="md:col-span-2 lg:col-span-4 text-center text-sm text-stone-400" role="status">
+          <div
+          className={`${pageStyles.planGrid} grid ${planState === "ready" && plans.length === 1
+            ? "mx-auto max-w-xl"
+            : planState === "ready" && plans.length === 2
+              ? "mx-auto max-w-5xl md:grid-cols-2"
+              : "md:grid-cols-2 xl:grid-cols-3"}`}
+          >
+          {planState === "loading" && (
+            <p
+              role="status"
+              className="py-10 text-center text-muted-foreground md:col-span-2 xl:col-span-3"
+            >
               Loading current plans…
             </p>
-          ) : plansState === "error" ? (
-            <div className="md:col-span-2 lg:col-span-4 flex flex-col items-center gap-3 text-center" role="alert">
-              <p className="text-sm text-red-300">Plans could not be loaded. Prices are hidden until they can be verified.</p>
-              <Button type="button" variant="outline" onClick={() => setReloadKey((key) => key + 1)}>
+          )}
+          {planState === "error" && (
+            <div
+              role="alert"
+              className="rounded-2xl border border-border bg-card p-8 text-center md:col-span-2 xl:col-span-3"
+            >
+              <p className="mb-4 text-muted-foreground">
+                Plans could not be loaded. Prices are hidden until they can be
+                verified.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => setReloadKey((key) => key + 1)}
+              >
                 Retry
               </Button>
             </div>
-          ) : displayPlans.length === 0 ? (
-            <p className="md:col-span-2 lg:col-span-4 text-center text-sm text-stone-400">
-              No active plans are available right now.
-            </p>
-          ) : displayPlans.map((plan, idx) => {
-            const isPopular = plan.code === "pro" || idx === 1;
-            const rawPrice = currency === "INR" ? plan.monthly_price_inr : plan.monthly_price_usd;
-            const price = billingCycle === "annual" ? Math.round(rawPrice * 0.8) : rawPrice;
-            const sym = currency === "INR" ? "₹" : "$";
-
-            return (
-              <Card
-                key={plan.id || plan.code}
-                className={`relative flex flex-col justify-between transition-all duration-300 ${
-                  isPopular
-                    ? "bg-[#141517] border-amber-500/50 shadow-2xl shadow-amber-500/10 ring-1 ring-amber-500/30 scale-105 z-10"
-                    : "bg-[#111214] border-white/10 hover:border-white/20"
-                }`}
+          )}
+          {planState === "ready" && plans.length === 0 && (
+            <div className="rounded-2xl border border-border bg-card p-10 text-center md:col-span-2 xl:col-span-3">
+              <h2 className="text-xl font-medium">Plans are being prepared.</h2>
+              <p className="mt-3 text-sm text-muted-foreground">
+                No active subscription plans are published right now. Existing
+                customers can sign in to review their account.
+              </p>
+              <Link
+                href="/auth/login"
+                className="mt-5 inline-flex text-sm font-semibold text-cta-text"
               >
-                {isPopular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="bg-amber-500 text-stone-950 font-bold uppercase tracking-wider text-[10px] px-3 shadow-md shadow-amber-500/30">
-                      Most Popular
-                    </Badge>
-                  </div>
-                )}
-
-                <CardHeader className="space-y-2 pb-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-xl font-bold text-white">{plan.name}</CardTitle>
-                    <Badge variant="outline" className="border-white/10 text-stone-400 text-[10px] font-mono">
-                      {plan.max_concurrent_calls} Channels
-                    </Badge>
-                  </div>
-                  <CardDescription className="text-xs text-stone-400 min-h-[36px] line-clamp-2">
-                    {plan.description}
-                  </CardDescription>
-
-                  <div className="pt-3">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-extrabold text-white">{sym}{price.toLocaleString()}</span>
-                      <span className="text-xs text-stone-400">/month</span>
-                    </div>
-                    <p className="text-[11px] text-amber-400/90 mt-1 font-mono">
-                      Includes {plan.included_minutes.toLocaleString()} mins ({sym}{plan.overage_rate_per_minute}/extra min)
-                    </p>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="space-y-3 py-4 border-t border-white/5 flex-1">
-                  <div className="text-[11px] font-mono text-stone-400 uppercase tracking-wider">Features Included</div>
-                  <ul className="space-y-2 text-xs text-stone-300">
-                    {(plan.features || []).map((feat, fIdx) => (
-                      <li key={fIdx} className="flex items-start gap-2">
-                        <Check className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-                        <span>{feat}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-
-                <CardFooter className="pt-4 border-t border-white/5">
-                  <Link href={`/auth/signup?plan=${plan.code}`} className="w-full">
-                    <Button
-                      className={`w-full text-xs font-semibold h-10 ${
-                        isPopular
-                          ? "bg-amber-500 hover:bg-amber-400 text-stone-950 shadow-md shadow-amber-500/20"
-                          : "bg-white/10 hover:bg-white/20 text-white"
-                      }`}
-                    >
-                      Choose {plan.name} <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-                    </Button>
-                  </Link>
-                </CardFooter>
-              </Card>
+                Sign in to your account →
+              </Link>
+            </div>
+          )}
+          {plans.map((plan) => {
+            const hasMonthlyOffer = plan.monthly_price_cents > 0;
+            const hasAnnualOffer = plan.annual_price_cents > 0;
+            const billingCycle =
+              hasMonthlyOffer && hasAnnualOffer
+                ? annual
+                  ? "annual"
+                  : "monthly"
+                : hasAnnualOffer
+                  ? "annual"
+                  : hasMonthlyOffer
+                    ? "monthly"
+                    : null;
+            const price = billingCycle === "annual"
+              ? plan.annual_price_cents
+              : plan.monthly_price_cents;
+            const pricingDataAvailable =
+              Number.isSafeInteger(plan.monthly_price_cents) && plan.monthly_price_cents >= 0 &&
+              Number.isSafeInteger(plan.annual_price_cents) && plan.annual_price_cents >= 0 &&
+              typeof plan.currency === "string" && /^[A-Za-z]{3}$/.test(plan.currency);
+            const available = pricingDataAvailable && billingCycle !== null;
+            return (
+              <article
+                key={plan.id}
+                className={`${styles.planCard} flex flex-col rounded-2xl border border-border bg-card p-6 transition-colors hover:border-foreground/20 focus-within:ring-2 focus-within:ring-ring sm:p-7`}
+              >
+                <span className={styles.planIndex}>WORKSPACE PLAN / {String(plans.indexOf(plan) + 1).padStart(2, "0")}</span>
+                <h2 className="text-xl font-semibold tracking-tight">
+                  {plan.name}
+                </h2>
+                <p className="mt-3 min-h-12 text-sm leading-6 text-muted-foreground">
+                  {plan.description ||
+                    "A configured workspace plan for your voice agents."}
+                </p>
+                <div className="my-7 border-y border-border py-5">
+                  <p className="text-4xl font-semibold tracking-tight tabular-nums">
+                    {!pricingDataAvailable
+                      ? "Price unavailable"
+                      : available
+                        ? money(price, plan.currency)
+                        : billingCycle
+                          ? "Price unavailable"
+                          : "Free"}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {!pricingDataAvailable
+                      ? "Payment terms unavailable"
+                      : billingCycle
+                        ? `${plan.currency} · one-time payment for ${billingCycle === "annual" ? "365 days" : "30 days"} of access`
+                        : "No payment required for this plan"}
+                  </p>
+                </div>
+                <ul className="mb-8 space-y-3 text-sm">
+                  <li className="flex gap-3">
+                    <Check className="size-4 shrink-0 text-cta-text" />
+                    {formatCount(plan.included_minutes)} {pricingDataAvailable && billingCycle
+                      ? "minutes credited per payment"
+                      : pricingDataAvailable
+                        ? "one-time trial minutes on activation"
+                        : "included minutes"}
+                  </li>
+                  <li className="flex gap-3">
+                    <Check className="size-4 shrink-0 text-cta-text" />
+                    {formatCount(plan.max_agents)} agents
+                  </li>
+                  <li className="flex gap-3">
+                    <Check className="size-4 shrink-0 text-cta-text" />
+                    {formatCount(plan.max_concurrent_calls)} concurrent
+                    calls
+                  </li>
+                  {plan.features?.map((feature) => (
+                    <li key={feature} className="flex gap-3">
+                      <Check className="size-4 shrink-0 text-cta-text" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href={`/auth/login?plan=${encodeURIComponent(plan.code)}${billingCycle ? `&billing_cycle=${billingCycle}` : ""}`}
+                  className="mt-auto inline-flex items-center justify-between gap-3 rounded-lg border border-border px-4 py-3 text-sm font-semibold transition-colors hover:border-cta/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  Review in your account
+                  <ArrowRight className="size-4" />
+                </Link>
+              </article>
             );
           })}
-        </div>
-
-        {/* Top-up Minutes Packages */}
-        <div className="space-y-6">
-          <div className="text-center max-w-2xl mx-auto space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-bold text-white flex items-center justify-center gap-2">
-              <Zap className="h-6 w-6 text-amber-400" />
-              Prepaid Minute Top-Ups
-            </h2>
-            <p className="text-xs sm:text-sm text-stone-400">
-              Need extra volume without changing tiers? Purchase non-expiring minutes anytime.
-            </p>
           </div>
+        </section>
+        <p className={pageStyles.priceFootnote}>
+          Prices are shown in each offer’s configured currency. No currency
+          conversion or annual discount is estimated here. Taxes and final
+          payment terms are confirmed during purchase.
+        </p>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {packagesState === "loading" ? (
-              <p className="sm:col-span-2 lg:col-span-4 text-center text-sm text-stone-400" role="status">
-                Loading current minute packages…
+        <section className={pageStyles.usageSection} aria-labelledby="credit-bundles-heading">
+          <div className={pageStyles.usageGrid}>
+            <div className={pageStyles.usageIntro}>
+              <p className={pageStyles.eyebrow}>Additional usage</p>
+              <h2 id="credit-bundles-heading">Credit bundles</h2>
+              <p>Review the available top-ups for your account. Provider and carrier charges may apply separately.</p>
+            </div>
+          <div className={pageStyles.bundleGrid}>
+            {packageState === "loading" && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Loading credit bundles…
               </p>
-            ) : packagesState === "error" ? (
-              <div className="sm:col-span-2 lg:col-span-4 flex flex-col items-center gap-3 text-center" role="alert">
-                <p className="text-sm text-red-300">Minute packages could not be loaded. Prices are hidden until they can be verified.</p>
-                <Button type="button" variant="outline" onClick={() => setReloadKey((key) => key + 1)}>
+            )}
+            {packageState === "error" && (
+              <div
+                role="alert"
+                className="rounded-xl border border-border p-6 md:col-span-3"
+              >
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Credit bundles could not be loaded.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => setReloadKey((key) => key + 1)}
+                >
                   Retry
                 </Button>
               </div>
-            ) : displayPackages.length === 0 ? (
-              <p className="sm:col-span-2 lg:col-span-4 text-center text-sm text-stone-400">
-                No active minute packages are available right now.
+            )}
+            {packageState === "ready" && packages.length === 0 && (
+              <p className="text-sm text-muted-foreground md:col-span-3">
+                No credit bundles are published right now.
               </p>
-            ) : displayPackages.map((pkg) => {
-              const price = currency === "INR" ? pkg.price_inr : pkg.price_usd;
-              const sym = currency === "INR" ? "₹" : "$";
-              const totalMins = pkg.minutes + (pkg.bonus_minutes || 0);
-
-              return (
-                <div
-                  key={pkg.id}
-                  className={`p-5 rounded-2xl border transition-all ${
-                    pkg.is_popular
-                      ? "bg-amber-500/10 border-amber-500/40 shadow-lg shadow-amber-500/5"
-                      : "bg-[#111214] border-white/10 hover:border-white/20"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-white">{pkg.name}</span>
-                    {pkg.is_popular && (
-                      <Badge className="bg-amber-500 text-stone-950 text-[9px] font-bold px-2 py-0">BEST VALUE</Badge>
-                    )}
-                  </div>
-                  <div className="flex items-baseline gap-1 my-3">
-                    <span className="text-2xl font-bold text-white">{sym}{price.toLocaleString()}</span>
-                  </div>
-                  <div className="space-y-1 text-xs text-stone-300 pb-4">
-                    <div className="font-semibold text-amber-400">{pkg.minutes.toLocaleString()} standard minutes</div>
-                    {pkg.bonus_minutes > 0 && (
-                      <div className="text-[11px] text-emerald-400 font-mono">+{pkg.bonus_minutes} bonus minutes included</div>
-                    )}
-                    <div className="text-[10px] text-stone-400 pt-1">Never expires • Usable on any agent</div>
-                  </div>
-                  <Link href="/auth/signup">
-                    <Button variant="outline" size="sm" className="w-full text-xs border-white/15 hover:bg-white/10 text-white">
-                      Add to Wallet
-                    </Button>
-                  </Link>
+            )}
+            {packages.map((pkg) => (
+              <article
+                key={pkg.id}
+                className={`${styles.creditCard} ${pageStyles.bundleCard} rounded-2xl border border-border bg-card p-7`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="font-semibold">{pkg.name}</h3>
+                  {pkg.is_popular && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Popular</span>}
                 </div>
-              );
-            })}
+                <p className="mt-5 text-3xl font-medium tracking-tight">
+                  {money(pkg.price_cents, pkg.currency)}
+                </p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {pkg.minutes.toLocaleString()} minutes
+                  {pkg.bonus_minutes > 0
+                    ? ` + ${pkg.bonus_minutes.toLocaleString()} bonus minutes`
+                    : ""}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  One-time payment. Wallet minutes do not expire.
+                </p>
+                <Link
+                  href={`/auth/login?credit_package=${encodeURIComponent(String(pkg.id))}`}
+                  className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-cta-text"
+                >
+                  Continue to wallet
+                  <ArrowRight className="size-4" />
+                </Link>
+              </article>
+            ))}
           </div>
-        </div>
-
-        {/* Deployment cost guidance */}
-        <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-[#141619] to-[#0f1012] border border-amber-500/20 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 blur-3xl rounded-full pointer-events-none" />
-
-          <div className="grid lg:grid-cols-12 gap-8 items-center">
-            <div className="lg:col-span-7 space-y-6">
-              <div className="inline-flex items-center gap-2 text-xs font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full">
-                <Zap className="h-3.5 w-3.5" />
-                CHOOSE YOUR DEPLOYMENT
-              </div>
-
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-                Plan for the full cost of a call
-              </h2>
-              <p className="text-sm text-stone-400 leading-relaxed">
-                The plans and credit bundles above come from the current catalog. Your final cost also depends on telephony, model providers, hosting, and call volume.
-              </p>
-
-              <p className="text-sm text-stone-300">A client-installed edition requires its own installation license and server capacity. Contact Kodewaves for an installation proposal.</p>
-            </div>
-
-            <div className="lg:col-span-5 bg-[#0a0a0c] p-6 rounded-2xl border border-white/10 space-y-6">
-              <h3 className="text-sm font-semibold text-white">Include these in your estimate</h3>
-              <ul className="space-y-3 text-xs text-stone-300 list-disc pl-4">
-                <li>Subscription and any platform credits</li>
-                <li>Inbound and outbound carrier minutes</li>
-                <li>Cloud provider charges or local server capacity</li>
-                <li>Concurrency, storage, and support needs</li>
-              </ul>
-
-              <Link href="/auth/signup" className="block w-full">
-                <Button className="w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs h-10 shadow-lg shadow-amber-500/20">
-                  Explore Kodewaves <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-                </Button>
-              </Link>
-            </div>
           </div>
-        </div>
+        </section>
 
-        {/* FAQ Accordion */}
-        <div className="max-w-3xl mx-auto space-y-8">
-          <div className="text-center space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-bold text-white flex items-center justify-center gap-2">
-              <HelpCircle className="h-6 w-6 text-amber-400" />
-              Frequently Asked Questions
+        <section className={`${styles.installation} ${pageStyles.installPanel} grid gap-8 rounded-2xl border border-border bg-muted/40 p-7 sm:p-10 md:grid-cols-2`}>
+          <div>
+            <Server className="mb-5 size-6 text-cta-text" />
+            <h2 className="text-3xl font-medium tracking-tight">
+              Planning a client installation?
             </h2>
-            <p className="text-xs sm:text-sm text-stone-400">
-              Clear answers regarding sovereign architecture, billing, and telephony setup.
+            <p className="mt-4 text-sm leading-7 text-muted-foreground">
+              A client-installed edition requires its own installation license
+              and server capacity. Discuss the scope with your platform
+              administrator before choosing infrastructure.
             </p>
           </div>
+          <div>
+            <Globe2 className="mb-5 size-6 text-cta-text" />
+            <h3 className="text-lg font-semibold">
+              Budget for the complete deployment.
+            </h3>
+            <ul className="mt-4 space-y-3 text-sm leading-6 text-muted-foreground">
+              {[
+                "Subscription or installation license",
+                "Telephony numbers and carrier usage",
+                "Connected speech and language providers",
+                "Hosting, storage, support and maintenance",
+              ].map((item) => (
+                <li key={item} className="flex gap-3">
+                  <Check className="mt-1 size-4 shrink-0 text-cta-text" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
 
-          <div className="space-y-3">
-            {faqs.map((faq, index) => {
-              const isOpen = openFaq === index;
-              return (
-                <div
-                  key={index}
-                  className="rounded-xl border border-white/10 bg-[#111214] overflow-hidden transition-colors"
+        <section className={`${pageStyles.faqSection} mx-auto max-w-3xl`}>
+          <h2 className="mb-8 text-3xl font-medium tracking-tight">
+            Questions before you start.
+          </h2>
+          <div className="divide-y divide-border border-y border-border">
+            {faqs.map((faq, index) => (
+              <div key={faq.q}>
+                <button
+                  type="button"
+                  aria-expanded={openFaq === index}
+                  aria-controls={`pricing-faq-${index}`}
+                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                  className="flex w-full items-center justify-between gap-5 py-6 text-left text-sm font-semibold"
                 >
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaq(isOpen ? null : index)}
-                    className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4"
+                  {faq.q}
+                  <ChevronDown
+                    className={`size-4 shrink-0 text-muted-foreground transition-transform ${openFaq === index ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {openFaq === index && (
+                  <p
+                    id={`pricing-faq-${index}`}
+                    className="pb-6 text-sm leading-7 text-muted-foreground"
                   >
-                    <span className="text-sm font-semibold text-white">{faq.q}</span>
-                    <ChevronDown
-                      className={`h-4 w-4 text-stone-400 shrink-0 transition-transform duration-200 ${
-                        isOpen ? "rotate-180 text-amber-400" : ""
-                      }`}
-                    />
-                  </button>
-                  {isOpen && (
-                    <div className="px-5 pb-5 text-xs sm:text-sm text-stone-400 leading-relaxed border-t border-white/5 pt-3">
-                      {faq.a}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    {faq.a}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
-        </div>
+        </section>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-white/5 bg-[#090a0b] py-12 text-stone-400 text-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded bg-amber-500 flex items-center justify-center text-stone-950 font-bold text-xs">
-              K
-            </div>
-            <span className="font-semibold text-white">Kodewaves Voice AI Platform</span>
-            <span className="text-stone-400">© 2026. All rights reserved.</span>
-          </div>
-          <div className="flex items-center gap-6">
-            <Link href="/" className="hover:text-amber-400 transition-colors">Platform</Link>
-            <Link href="/pricing" className="hover:text-amber-400 transition-colors">Pricing</Link>
-            <Link href="/auth/login" className="hover:text-amber-400 transition-colors">Login</Link>
-            <Link href="/auth/signup" className="hover:text-amber-400 transition-colors">Sign Up</Link>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   );
 }

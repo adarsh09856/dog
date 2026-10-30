@@ -29,8 +29,10 @@ from api.services.auth.depends import get_user
 from api.services.call_concurrency import (
     CallConcurrencyLimitError,
     WorkflowRunSlotAlreadyBoundError,
+    authorize_call_entitlement,
     call_concurrency,
 )
+from api.services.installation_license import InstallationLicenseError
 from api.services.quota_service import authorize_workflow_run_start
 from api.services.telephony import ws_auth
 from api.services.telephony.call_transfer_manager import get_call_transfer_manager
@@ -273,6 +275,8 @@ async def initiate_call(
             "organization_id": user.selected_organization_id,
         }
 
+        await authorize_call_entitlement("telephony_outbound")
+
         # Initiate call via provider
         result = await provider.initiate_call(
             to_number=phone_number,
@@ -282,6 +286,10 @@ async def initiate_call(
             request=http_request,
             **keywords,
         )
+    except InstallationLicenseError as exc:
+        await mark_workflow_run_failed(workflow_run_id, str(exc))
+        await call_concurrency.release_workflow_run_slot(workflow_run_id)
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as e:
         await mark_workflow_run_failed(workflow_run_id, f"Failed to initiate call: {e}")
         await call_concurrency.release_workflow_run_slot(workflow_run_id)
@@ -646,24 +654,21 @@ async def _handle_telephony_websocket(
 
     ``organization_id`` arrives in the URL the provider dials back, so it is
     caller-supplied: scoping the lookups below by it prevents an accidental
-    cross-org mismatch, not a deliberate one. The capability token checked
-    first (see ``ws_auth``) closes the forgery gap — the id triple is no longer
-    enough on its own — but only once an operator sets a secret.
-
-    TODO(security): the token is stateless and replayable for as long as the
-    run sits in ``initialized``. Making it one-shot means minting it at run
-    creation and redeeming it here through an atomic
-    ``initialized -> running`` compare-and-swap, which would also close the
-    read-then-write race on the state check further down.
+    cross-org mismatch, not a deliberate one. When enforcement is enabled, the
+    capability token closes the forgery gap. An atomic
+    ``initialized -> running`` claim below prevents a second socket from
+    replaying the same run, including simultaneous dials. Token verification
+    remains optional until an operator configures a secret and enables
+    enforcement.
     """
     try:
         # Set the run context
         set_current_run_id(workflow_run_id)
 
         # Capability-token check. The id triple in the URL is otherwise a
-        # guessable bearer capability (see the TODO above and ws_auth.py). This
-        # is a no-op until an operator sets TELEPHONY_WS_TOKEN_SECRET; once set,
-        # invalid tokens are logged, and rejected only when enforcement is on.
+        # guessable bearer capability (see ws_auth.py). This is a no-op until an
+        # operator sets TELEPHONY_WS_TOKEN_SECRET; once set, invalid tokens are
+        # logged, and rejected only when enforcement is on.
         if ws_auth.token_configured():
             # Carriers deliver the token as a path segment (query strings do not
             # survive Twilio and are unpromised elsewhere); ARI delivers it as a
@@ -780,13 +785,27 @@ async def _handle_telephony_websocket(
             await websocket.close(code=4400, reason="Provider mismatch")
             return
 
-        # Set workflow run state to 'running' before starting the pipeline
-        await db_client.update_workflow_run(
-            run_id=workflow_run_id, state=WorkflowRunState.RUNNING.value
+        # Claim the initialized run atomically. The earlier read is useful for
+        # routing checks but cannot stop two simultaneous callbacks from both
+        # starting a media pipeline for the same call.
+        claimed = await db_client.claim_initialized_workflow_run(
+            run_id=workflow_run_id,
+            workflow_id=workflow_id,
+            organization_id=organization_id,
         )
+        if not claimed:
+            logger.warning(
+                f"Workflow run {workflow_run_id} was already claimed by another "
+                "telephony connection"
+            )
+            await websocket.close(
+                code=4409, reason="Workflow run already claimed for connection"
+            )
+            return
 
         logger.info(
-            f"[run {workflow_run_id}] Set workflow run state to 'running' for {provider_type} provider"
+            f"[run {workflow_run_id}] Claimed initialized run for "
+            f"{provider_type} provider"
         )
 
         # Delegate to provider-specific handler

@@ -1,6 +1,5 @@
 import { NodeProps, NodeToolbar, Position } from "@xyflow/react";
-import * as LucideIcons from "lucide-react";
-import { Check, Circle, Copy, Edit, type LucideIcon, Trash2Icon } from "lucide-react";
+import { Check, Circle, Copy, Edit, FileText, Trash2Icon, Wrench } from "lucide-react";
 import Link from "next/link";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -20,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { createUuid } from "@/lib/uuid";
 import { resolveWebhookBaseUrl } from "@/lib/webhookUrl";
 
+import { resolveNodeIcon } from "../nodeIcons";
 import { NodeContent } from "./common/NodeContent";
 import { NodeEditDialog } from "./common/NodeEditDialog";
 import { useNodeHandlers } from "./common/useNodeHandlers";
@@ -70,11 +70,6 @@ const DOC_URL_BY_SPEC: Record<string, string | undefined> = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
-
-function resolveIcon(name: string): LucideIcon {
-    const icons = LucideIcons as unknown as Record<string, LucideIcon>;
-    return icons[name] ?? Circle;
-}
 
 function seedValues(
     data: FlowNodeData,
@@ -160,7 +155,7 @@ function getBadgeForSpec(
         case "start":
             return { label: "Start Node", className: "bg-emerald-500 text-white" };
         case "agent":
-            return { label: "Agent Node", className: "bg-blue-500 text-white" };
+            return { label: "Agent Node", className: "bg-primary text-primary-foreground" };
         case "end":
             return { label: "End Node", className: "bg-rose-500 text-white" };
         case "global":
@@ -294,7 +289,7 @@ function CanvasPreview({
             {hasToolRefs && data.tool_uuids && data.tool_uuids.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border/50">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
-                        <LucideIcons.Wrench className="h-3 w-3" />
+                        <Wrench className="h-3 w-3" />
                         <span>Tools:</span>
                     </div>
                     <ToolBadges
@@ -307,7 +302,7 @@ function CanvasPreview({
             {hasDocRefs && data.document_uuids && data.document_uuids.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-border/50">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
-                        <LucideIcons.FileText className="h-3 w-3" />
+                        <FileText className="h-3 w-3" />
                         <span>Documents:</span>
                     </div>
                     <DocumentBadges
@@ -327,7 +322,7 @@ function StatusDot({ enabled }: { enabled: boolean }) {
                 className={`h-2 w-2 ${
                     enabled
                         ? "fill-green-500 text-green-500"
-                        : "fill-gray-400 text-gray-400"
+                        : "fill-muted-foreground text-muted-foreground"
                 }`}
             />
             <span className="text-xs text-muted-foreground">
@@ -615,7 +610,7 @@ export const GenericNode = memo(({ data, selected, id, type }: GenericNodeProps)
             ? { source: false, target: false }
             : { source: true, target: true });
     const badge = getBadgeForSpec(spec, styleVariant);
-    const Icon = spec ? resolveIcon(spec.icon) : Circle;
+    const Icon = spec ? resolveNodeIcon(spec.icon) : Circle;
     const docUrl = spec?.docs_url ?? DOC_URL_BY_SPEC[type];
     const contentLabel = spec?.properties.some((p) => p.name === "prompt")
         ? "Prompt"

@@ -180,7 +180,7 @@ export function HttpApiToolConfig({
                                 showValidation
                             />
                             {urlHostnameParameters.length > 0 && (
-                                <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 text-sm text-blue-600 flex gap-2 items-start mt-2">
+                                <div className="rounded-lg border border-primary/20 bg-primary/10 p-3 text-sm text-primary flex gap-2 items-start mt-2">
                                     <Info className="h-4 w-4 mt-0.5 shrink-0" />
                                     <span>
                                         Hostname parameters detected: {urlHostnameParameters.join(", ")}. Values resolve from tool call arguments or workflow context at runtime.
@@ -188,7 +188,7 @@ export function HttpApiToolConfig({
                                 </div>
                             )}
                             {urlPathParameters.length > 0 && (
-                                <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3 text-sm text-blue-600 flex gap-2 items-start mt-2">
+                                <div className="rounded-lg border border-primary/20 bg-primary/10 p-3 text-sm text-primary flex gap-2 items-start mt-2">
                                     <Info className="h-4 w-4 mt-0.5 shrink-0" />
                                     <span>
                                         Path parameters detected: {urlPathParameters.join(", ")}. Values resolve from tool call arguments or workflow context at runtime.
@@ -245,7 +245,7 @@ export function HttpApiToolConfig({
                         <div className="grid gap-2 pt-4 border-t">
                             <Label>Preset Parameters</Label>
                             <Label className="text-xs text-muted-foreground">
-                                Add values that Kodewaves should inject at runtime. These are not exposed to the LLM and can use
+                                Add values that the platform should inject at runtime. These are not exposed to the LLM and can use
                                 workflow templates like {`{{initial_context.phone_number}}`} or fixed literals.
                             </Label>
                             <PresetParameterEditor

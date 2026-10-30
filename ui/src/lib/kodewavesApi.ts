@@ -518,14 +518,14 @@ export interface Contact {
   phone: string;
   email?: string;
   company?: string;
-  stage_id?: string | number;
+  stage_id?: string | null;
   notes?: string;
   custom_fields?: Record<string, any>;
   created_at?: string;
 }
 
 export interface LeadStage {
-  id: string | number;
+  id: string;
   name: string;
   order?: number;
   order_index?: number;
@@ -534,6 +534,7 @@ export interface LeadStage {
 
 export interface Appointment {
   id: string | number;
+    contact_id?: string | null;
   title: string;
   customer_name?: string;
   customer_phone?: string;
@@ -700,6 +701,11 @@ export const promptTemplatesApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  updateTemplate: (id: string | number, data: Partial<PromptTemplate>) =>
+    apiFetch<{ message: string; id: string; title: string }>(`/prompt-templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   deleteTemplate: (id: string | number) =>
     apiFetch<{ message: string }>(`/prompt-templates/${id}`, {
       method: 'DELETE',
@@ -790,6 +796,9 @@ export interface CatalogModelOption {
   provider?: string;
   /** Languages advertised by the installed engine, when it reports them. */
   languages?: string[];
+  /** True only when this exact STT model has a supported auto-detect setting. */
+  supports_auto_detect?: boolean;
+  auto_detect_languages?: string[];
 }
 
 export interface AvailableCatalogResponse {
@@ -847,5 +856,4 @@ export interface OverviewStatsResponse {
 export const overviewApi = {
   getStats: () => apiFetch<OverviewStatsResponse>('/organizations/overview/stats'),
 };
-
 

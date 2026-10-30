@@ -1,23 +1,21 @@
 "use client";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import {
-  BookOpen,
   Check,
-  CheckCircle2,
   Copy,
   ExternalLink,
-  Filter,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
   Sparkles,
-  Tag,
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
+import { createWorkflowApiV1WorkflowCreateDefinitionPost } from "@/client/sdk.gen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,17 +29,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { PromptTemplate, promptTemplatesApi } from "@/lib/kodewavesApi";
-import { createWorkflowApiV1WorkflowCreateDefinitionPost } from "@/client/sdk.gen";
 import { detailFromError } from "@/lib/apiError";
+import { useAuth } from "@/lib/auth";
+import { PromptTemplate, promptTemplatesApi } from "@/lib/kodewavesApi";
 import { promptTemplateWorkflow } from "@/lib/promptTemplateWorkflow";
 
 export default function PromptTemplatesPage() {
@@ -54,6 +45,7 @@ export default function PromptTemplatesPage() {
   const [copiedId, setCopiedId] = useState<number | string | null>(null);
   const [creatingAgentId, setCreatingAgentId] = useState<number | string | null>(null);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | number | null>(null);
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -66,7 +58,7 @@ export default function PromptTemplatesPage() {
   });
   const router = useRouter();
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     if (authLoading || !user) return;
     setLoadError(null);
     setLoading(true);
@@ -79,12 +71,12 @@ export default function PromptTemplatesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authLoading, user]);
 
   useEffect(() => {
     if (authLoading || !user) return;
     fetchTemplates();
-  }, [authLoading, user]);
+  }, [authLoading, fetchTemplates, user]);
 
   const handleCopyPrompt = async (t: PromptTemplate) => {
     try {
@@ -123,15 +115,58 @@ export default function PromptTemplatesPage() {
     }
     setSavingTemplate(true);
     try {
-      await promptTemplatesApi.createTemplate(newTemplate);
+      if (editingTemplateId !== null) {
+        await promptTemplatesApi.updateTemplate(editingTemplateId, newTemplate);
+      } else {
+        await promptTemplatesApi.createTemplate(newTemplate);
+      }
       setModalOpen(false);
+      setEditingTemplateId(null);
       await fetchTemplates();
-    } catch (err: any) {
-      alert(err.message || "Failed to create template");
+    } catch (err) {
+      const action = editingTemplateId !== null ? "update" : "create";
+      setLoadError(err instanceof Error ? err.message : `Failed to ${action} template`);
     } finally {
       setSavingTemplate(false);
     }
   };
+
+  const handleEditTemplate = (template: PromptTemplate) => {
+    if (template.is_featured) return;
+    setEditingTemplateId(template.id);
+    setNewTemplate({
+      title: template.title,
+      category: template.category,
+      description: template.description,
+      system_prompt: template.system_prompt,
+      first_message: template.first_message,
+      recommended_tools: template.recommended_tools,
+    });
+    setModalOpen(true);
+  };
+
+  const handleDeleteTemplate = async (template: PromptTemplate) => {
+    if (template.is_featured || !window.confirm(`Delete the “${template.title}” template? This cannot be undone.`)) return;
+    setLoadError(null);
+    try {
+      await promptTemplatesApi.deleteTemplate(template.id);
+      const remainingTemplates = templates.filter((item) => item.id !== template.id);
+      setTemplates(remainingTemplates);
+      if (
+        category !== "all" &&
+        !remainingTemplates.some(
+          (item) => item.category.toLowerCase() === category.toLowerCase()
+        )
+      ) {
+        setCategory("all");
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to delete the template. Please retry.");
+    }
+  };
+
+  const categories = Array.from(new Set(templates.map((template) => template.category).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b));
 
   const filteredTemplates = templates.filter((t) => {
     const matchesCategory = category === "all" || t.category.toLowerCase() === category.toLowerCase();
@@ -146,9 +181,9 @@ export default function PromptTemplatesPage() {
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className={panel.collectionHeader}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Voice Prompt Templates Gallery</h1>
+          <span className={panel.eyebrow}>BUILD / PROMPTS</span><h1>Voice Prompt Templates Gallery</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Reusable prompts and greetings for your workspace’s voice agents.
           </p>
@@ -158,6 +193,7 @@ export default function PromptTemplatesPage() {
             size="sm"
             className="gap-2"
             onClick={() => {
+              setEditingTemplateId(null);
               setNewTemplate({
                 title: "",
                 category: "Custom",
@@ -175,7 +211,13 @@ export default function PromptTemplatesPage() {
             Refresh
           </Button>
         </div>
-      </div>
+      </header>
+
+      <section aria-label="Template library summary" className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
+        <div className="bg-card p-5"><span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Templates</span><p className="mt-2 text-3xl font-semibold tabular-nums">{templates.length}</p><p className="mt-1 text-xs text-muted-foreground">Reusable agent starting points</p></div>
+        <div className="bg-card p-5"><span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Categories</span><p className="mt-2 flex items-center gap-2 text-2xl font-semibold"><Tag className="h-5 w-5 text-primary" />{new Set(templates.map((template) => template.category)).size}</p><p className="mt-1 text-xs text-muted-foreground">Browse by business use case</p></div>
+        <div className="bg-card p-5"><span className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Featured</span><p className="mt-2 text-3xl font-semibold tabular-nums">{templates.filter((template) => template.is_featured).length}</p><p className="mt-1 text-xs text-muted-foreground">Recommended starting points</p></div>
+      </section>
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
@@ -190,7 +232,7 @@ export default function PromptTemplatesPage() {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1">
-          {["all", "Real Estate", "Banking & Finance", "Healthcare", "Logistics"].map((cat) => (
+          {["all", ...categories].map((cat) => (
             <Button
               key={cat}
               variant={category === cat ? "default" : "outline"}
@@ -205,7 +247,19 @@ export default function PromptTemplatesPage() {
       </div>
 
       {/* Templates Grid */}
-      <div className="grid gap-6 md:grid-cols-2">
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-2" role="status" aria-live="polite">
+          <span className="sr-only">Loading prompt templates…</span>
+          {[0, 1, 2, 3].map((item) => <div className="h-64 animate-pulse rounded-2xl border border-border bg-muted/40" key={item} />)}
+        </div>
+      ) : filteredTemplates.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
+          <p className="text-base font-semibold">No matching templates</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">Try another search or category. You can also create a custom template for your team.</p>
+          <Button className="mt-5" onClick={() => { setSearch(""); setCategory("all"); }} variant="outline">Clear filters</Button>
+        </div>
+      ) : (
+      <div className="grid gap-5 md:grid-cols-2">
         {filteredTemplates.map((t) => (
           <Card key={t.id} className="border-border/60 flex flex-col justify-between hover:border-primary/40 transition-colors">
             <CardHeader>
@@ -257,6 +311,28 @@ export default function PromptTemplatesPage() {
                   {copiedId === t.id ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                   {copiedId === t.id ? "Prompt Copied" : "Copy Prompt"}
                 </Button>
+                {!t.is_featured && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs gap-1.5"
+                      aria-label={`Edit ${t.title}`}
+                      onClick={() => handleEditTemplate(t)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs gap-1.5 text-destructive hover:text-destructive"
+                      aria-label={`Delete ${t.title}`}
+                      onClick={() => handleDeleteTemplate(t)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                    </Button>
+                  </div>
+                )}
                 <Button
                   size="sm"
                   className="text-xs gap-1.5"
@@ -270,12 +346,13 @@ export default function PromptTemplatesPage() {
           </Card>
         ))}
       </div>
+      )}
 
       {/* CREATE TEMPLATE MODAL */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Add Custom Voice Template</DialogTitle>
+            <DialogTitle>{editingTemplateId !== null ? "Edit Custom Voice Template" : "Add Custom Voice Template"}</DialogTitle>
             <DialogDescription>
               Save a high-performing voice system prompt for your organization.
             </DialogDescription>
@@ -333,7 +410,7 @@ export default function PromptTemplatesPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateTemplate} disabled={savingTemplate}>{savingTemplate ? "Saving…" : "Save Template"}</Button>
+            <Button onClick={handleCreateTemplate} disabled={savingTemplate}>{savingTemplate ? "Saving…" : editingTemplateId !== null ? "Update Template" : "Save Template"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

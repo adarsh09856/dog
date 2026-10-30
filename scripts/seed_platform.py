@@ -2,11 +2,14 @@
 Kodewaves Sovereign Platform — Initial Seed Data & Bootstrap Script
 Idempotently initializes:
 1. Global Platform Settings (Branding, BYOK policy, Wallet policy, SMTP)
-2. SaaS Subscription Plans (Starter, Professional, Enterprise)
-3. Credit Top-up Packages (500m, 2000m, 5000m, 10000m)
+2. Optional sample SaaS offers (only with KODEWAVES_SEED_DEMO_OFFERS=true)
+3. Optional sample credit packages (same explicit SaaS-only opt-in)
 4. AI Model & Telephony Catalog (OpenAI, Anthropic, Sarvam, Deepgram, ElevenLabs, Cartesia)
 5. Standard Content Moderation Words
-6. Organization Wallets for superadmin and existing tenants
+6. Organization wallets and owner account setup (SaaS only)
+
+Client installations skip sale offers, wallet grants, owner accounts and local
+model downloads. Their first administrator uses the licensed client bootstrap.
 """
 
 import asyncio
@@ -16,6 +19,7 @@ from typing import Any, Dict, List
 from sqlalchemy import select
 
 from api.services.configuration.local_defaults import DEFAULT_LOCAL_LLM_MODEL
+from api.services.deployment_edition import runtime_edition
 from api.db import db_client
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import (
@@ -38,10 +42,11 @@ async def seed_global_settings():
             "category": "branding",
             "value": {
                 "platform_name": "Kodewaves Sovereign Platform",
-                "company_name": "Kodewaves Inc.",
-                "logo_url": "/logo.png",
-                "favicon_url": "/favicon.ico",
-                "primary_color": "#0284c7",
+                "company_name": "Kodewaves",
+                "tagline": "Voice agents for web and phone",
+                "logo_url": "",
+                "favicon_url": "/kodewaves-mark.svg",
+                "primary_color": "#426b57",
                 "support_email": "support@kodewaves.in",
             },
         },
@@ -598,6 +603,8 @@ def seed_local_ai_model():
 
 
 async def seed_superadmin_user():
+    if runtime_edition() == "client":
+        raise ValueError("Client installations must use the licensed client administrator bootstrap, not owner seeding")
     import os
     admin_email = os.getenv("ADMIN_EMAIL", "").strip()
     admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
@@ -624,22 +631,28 @@ async def seed_superadmin_user():
 
 
 async def main():
+    edition = runtime_edition()
     print("=================================================================")
     print("🚀 Starting Kodewaves Sovereign Platform Bootstrap Seeder...")
     print("=================================================================")
     await seed_global_settings()
-    await seed_saas_plans()
-    await seed_credit_packages()
+    if edition == "saas" and os.getenv("KODEWAVES_SEED_DEMO_OFFERS", "").strip().lower() == "true":
+        await seed_saas_plans()
+        await seed_credit_packages()
+    else:
+        print("[INFO] Sample commercial offers skipped; configure sale prices in the owner panel.")
     await seed_ai_model_catalog()
     await seed_banned_words()
     await seed_prompt_templates()
-    await seed_wallets_for_existing_orgs()
-    await seed_superadmin_user()
-    seed_local_ai_model()
+    if edition == "saas":
+        await seed_wallets_for_existing_orgs()
+        await seed_superadmin_user()
+        seed_local_ai_model()
+    else:
+        print("[INFO] Client mode: owner accounts, wallet grants and local model downloads skipped.")
     print("=================================================================")
     print("🎉 Sovereign Platform Bootstrap Completed Successfully!")
-    print("   ✅ Global Settings, Plans, Packages, Models, Templates, Wallets")
-    print("   ✅ Superadmin Privileges, Content Moderation, Prompt Gallery")
+    print(f"   Edition: {edition}; shared settings, model catalog, moderation and templates initialized.")
     print("=================================================================")
 
 

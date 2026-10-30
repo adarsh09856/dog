@@ -577,7 +577,7 @@ function RenderWorkflow({
 
     return (
         <WorkflowProvider value={workflowContextValue}>
-            <div className="flex flex-col h-screen min-w-fit">
+            <div className="flex h-dvh min-h-[520px] min-w-0 flex-col overflow-hidden bg-background">
                 <HireExpertNudge workflowId={workflowId} />
                 {/* New Workflow Editor Header */}
                 <WorkflowEditorHeader
@@ -601,9 +601,9 @@ function RenderWorkflow({
                 />
 
                 {/* Workflow Canvas */}
-                <div className="flex-1 min-h-0">
+                <div className="min-h-0 flex-1">
                     <div className="flex h-full min-w-0">
-                        <div className="relative min-w-0 flex-1">
+                        <div className="relative min-w-0 flex-1 bg-background">
                             <ReactFlow
                                 key={activeVersionId ?? 'current'}
                                 nodes={displayNodes}
@@ -632,23 +632,24 @@ function RenderWorkflow({
                             >
                                 <Background
                                     variant={BackgroundVariant.Dots}
-                                    gap={16}
-                                    size={1}
-                                    color="#94a3b8"
+                                    gap={22}
+                                    size={1.1}
+                                    color="var(--input)"
                                 />
 
                                 {/* Top-right controls - vertical layout (hidden when viewing history) */}
                                 {!isViewingHistoricalVersion && (
                                     <Panel position="top-right">
                                         <TooltipProvider>
-                                            <div className="flex flex-col gap-2">
+                                            <div className="flex flex-col gap-2 rounded-xl border border-border/80 bg-card/90 p-1.5 shadow-lg shadow-foreground/5 backdrop-blur-sm">
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Button
                                                             variant="default"
                                                             size="icon"
                                                             onClick={() => setIsAddNodePanelOpen(true)}
-                                                            className="shadow-md hover:shadow-lg"
+                                                            aria-label="Add workflow node"
+                                                            className="h-10 w-10 rounded-lg shadow-sm hover:shadow-md"
                                                         >
                                                             <Plus className="h-4 w-4" />
                                                         </Button>
@@ -664,7 +665,8 @@ function RenderWorkflow({
                                                             variant="outline"
                                                             size="icon"
                                                             onClick={() => router.push(`/workflow/${workflowId}/settings`)}
-                                                            className="bg-white shadow-sm hover:shadow-md"
+                                                            aria-label="Workflow settings"
+                                                            className="h-10 w-10 rounded-lg bg-card text-card-foreground shadow-sm hover:bg-muted hover:shadow-md"
                                                         >
                                                             <Settings className="h-4 w-4" />
                                                         </Button>
@@ -680,7 +682,7 @@ function RenderWorkflow({
                             </ReactFlow>
 
                             {/* Bottom-left controls - horizontal layout with custom buttons */}
-                            <div className="absolute bottom-12 left-8 z-10 flex gap-2">
+                            <div className="absolute bottom-5 left-5 z-10 flex items-center gap-1 rounded-xl border border-border/80 bg-card/90 p-1.5 shadow-lg shadow-foreground/5 backdrop-blur-sm sm:bottom-6 sm:left-6">
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -688,7 +690,8 @@ function RenderWorkflow({
                                                 variant="outline"
                                                 size="icon"
                                                 onClick={() => rfInstance.current?.zoomIn()}
-                                                className="bg-white shadow-sm hover:shadow-md h-8 w-8"
+                                                aria-label="Zoom in"
+                                                className="h-9 w-9 rounded-lg border-0 bg-transparent text-card-foreground shadow-none hover:bg-muted"
                                             >
                                                 <Plus className="h-4 w-4" />
                                             </Button>
@@ -704,7 +707,8 @@ function RenderWorkflow({
                                                 variant="outline"
                                                 size="icon"
                                                 onClick={() => rfInstance.current?.zoomOut()}
-                                                className="bg-white shadow-sm hover:shadow-md h-8 w-8"
+                                                aria-label="Zoom out"
+                                                className="h-9 w-9 rounded-lg border-0 bg-transparent text-card-foreground shadow-none hover:bg-muted"
                                             >
                                                 <Minus className="h-4 w-4" />
                                             </Button>
@@ -720,7 +724,8 @@ function RenderWorkflow({
                                                 variant="outline"
                                                 size="icon"
                                                 onClick={() => rfInstance.current?.fitView()}
-                                                className="bg-white shadow-sm hover:shadow-md h-8 w-8"
+                                                aria-label="Fit workflow to canvas"
+                                                className="h-9 w-9 rounded-lg border-0 bg-transparent text-card-foreground shadow-none hover:bg-muted"
                                             >
                                                 <Maximize2 className="h-4 w-4" />
                                             </Button>
@@ -740,7 +745,8 @@ function RenderWorkflow({
                                                         setNodes(layoutNodes(nodes, edges, 'TB', rfInstance));
                                                         setIsDirty(true);
                                                     }}
-                                                    className="bg-white shadow-sm hover:shadow-md h-8 w-8"
+                                                    aria-label="Tidy workflow layout"
+                                                    className="h-9 w-9 rounded-lg border-0 bg-transparent text-card-foreground shadow-none hover:bg-muted"
                                                 >
                                                     <BrushCleaning className="h-4 w-4" />
                                                 </Button>
@@ -755,7 +761,7 @@ function RenderWorkflow({
                         </div>
 
                         {isTesterRailOpen && (
-                            <aside className="hidden h-full w-[400px] shrink-0 border-l border-border xl:block">
+                            <aside className="hidden h-full w-[400px] shrink-0 border-l border-border/80 bg-card shadow-[-12px_0_30px_-28px_rgba(15,32,29,0.35)] xl:block">
                                 <WorkflowTesterPanel
                                     workflowId={workflowId}
                                     initialContextVariables={templateContextVariables}

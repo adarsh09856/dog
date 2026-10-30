@@ -12,8 +12,12 @@ from api.db.models import EmbedTokenModel, UserModel
 from api.enums import PostHogEvent
 from api.services.auth.depends import get_user
 from api.services.posthog_client import capture_event
+from api.services.saas_entitlements import require_saas_feature
 
-router = APIRouter(prefix="/workflow")
+router = APIRouter(
+    prefix="/workflow",
+    dependencies=[Depends(require_saas_feature("widgets"))],
+)
 
 
 def generate_embed_script(token: EmbedTokenModel) -> str:

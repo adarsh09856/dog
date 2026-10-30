@@ -569,15 +569,14 @@ def create_stt_service(
             endpoint = endpoint.rstrip("/")
             stt_v1 = endpoint if endpoint.endswith("/v1") else f"{endpoint}/v1"
             stt_language = str(language or "multi").lower().replace("_", "-").split("-", 1)[0]
-            if stt_language in ("multi", "auto", "default", "unknown"):
-                raise ValueError("IndicConformer needs one explicit installed language; automatic detection is not supported.")
+            auto_detect = stt_language in ("multi", "auto", "default", "unknown")
             return SpeachesSTTService(
                 base_url=stt_v1,
                 api_key="local-cpu-token",
                 settings=SpeachesSTTSettings(
                     model=stt_model,
-                    language=stt_language,
-                    prompt=_speaches_transcription_prompt(language, keyterms),
+                    language=None if auto_detect else stt_language,
+                    prompt=None if auto_detect else _speaches_transcription_prompt(language, keyterms),
                     temperature=0.0,
                 ),
                 sample_rate=audio_config.transport_in_sample_rate,
@@ -845,6 +844,23 @@ def create_tts_service(
     # resolved up front and reported on the creation line.
     is_deepgram = user_config.tts.provider == ServiceProviders.DEEPGRAM.value
     deepgram_base_url = _deepgram_base_url(user_config.tts) if is_deepgram else None
+    provider_value = getattr(user_config.tts.provider, "value", user_config.tts.provider)
+    provider_key = str(provider_value or "").casefold()
+    model_value = str(getattr(user_config.tts, "model", None) or "").casefold()
+    has_dynamic_caller_language_adapter = (
+        provider_key == ServiceProviders.SARVAM.value
+        or (
+            provider_key == ServiceProviders.SPEACHES.value
+            and model_value == "indic-vits-rasa-13"
+        )
+    )
+    if not has_dynamic_caller_language_adapter:
+        logger.info(
+            "tts_caller_language_route provider={} model={} dynamic_update=not_applied "
+            "reason=no_provider_specific_adapter configured_settings_preserved=true",
+            provider_key or "unknown",
+            model_value or "default",
+        )
 
     logger.info(
         f"Creating TTS service: provider={user_config.tts.provider}, "
@@ -1061,6 +1077,7 @@ def create_tts_service(
                 api_key="local",
                 base_url=speaches_url.rstrip("/"),
                 sample_rate=24000,
+                speech_language=getattr(user_config.tts, "language", None),
                 settings=SpeachesTTSSettings(
                     model=selected_model,
                     voice=user_config.tts.voice,
@@ -1117,6 +1134,11 @@ def create_tts_service(
             silence_time_s=1.0,
         )
     elif user_config.tts.provider == ServiceProviders.SARVAM.value:
+        from api.services.configuration.language_normalizer import normalize_language_code
+        from api.services.pipecat.caller_language_tts import (
+            caller_language_sarvam_service_class,
+        )
+
         # Map Sarvam language code to pipecat Language enum for TTS
         language_mapping = {
             "bn-IN": Language.BN,
@@ -1126,28 +1148,44 @@ def create_tts_service(
             "kn-IN": Language.KN,
             "ml-IN": Language.ML,
             "mr-IN": Language.MR,
+            "or-IN": Language.OR_IN,
             "od-IN": Language.OR,
             "pa-IN": Language.PA,
             "ta-IN": Language.TA,
             "te-IN": Language.TE,
         }
         language = getattr(user_config.tts, "language", None)
-        pipecat_language = language_mapping.get(language, Language.HI)
+        model = getattr(user_config.tts, "model", None) or "bulbul:v3"
+        configured_language_code = normalize_language_code(
+            str(getattr(language, "value", language) or ""),
+            target_provider="sarvam",
+        )
+        pipecat_language = (
+            language_mapping.get(configured_language_code)
+            or language_mapping.get(language)
+            or Language.HI
+        )
 
         voice = (
             getattr(user_config.tts, "voice", None) or ""
-        ).strip().lower() or "anushka"
+        ).strip().lower() or (
+            "shubh" if model.casefold() in {"bulbul:v3", "bulbul:v3-beta"} else "anushka"
+        )
         speed = getattr(user_config.tts, "speed", None)
         settings_kwargs = {
-            "model": user_config.tts.model,
+            "model": model,
             "voice": voice,
             "language": pipecat_language,
         }
         if speed and speed != 1.0:
             settings_kwargs["pace"] = speed
-        return SarvamTTSService(
+        language_routing_enabled = model.casefold() == "bulbul:v3"
+        service_type = caller_language_sarvam_service_class(SarvamTTSService)
+        return service_type(
             api_key=user_config.tts.api_key,
             settings=SarvamTTSSettings(**settings_kwargs),
+            caller_language_configured=pipecat_language,
+            caller_language_routing_enabled=language_routing_enabled,
             text_filters=[xml_function_tag_filter],
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,

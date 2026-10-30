@@ -27,6 +27,7 @@ from api.constants import (
     SERIALIZE_LOG_OUTPUT,
 )
 from api.enums import Environment
+from api.services.telephony.ws_auth import redact_token
 from api.utils.worker import get_worker_id, is_worker_process
 
 # Track if logging has been initialized
@@ -63,6 +64,10 @@ class InterceptHandler(logging.Handler):
 def enrich_log_record(record):
     """Inject run context and conservatively classify every ERROR record."""
 
+    # This shared patcher also receives Uvicorn access messages and provider
+    # payload logs. Carrier media URLs carry a bearer token in their path.
+    if isinstance(record.get("message"), str):
+        record["message"] = redact_token(record["message"])
     extra = record["extra"]
     extra["run_id"] = run_id_var.get()
 

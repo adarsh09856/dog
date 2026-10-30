@@ -1,147 +1,18 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import Link from "next/link";
-import { useState } from "react";
-import { detailFromError } from "@/lib/apiError";
-import { toast } from "sonner";
+import { getSignupEnabled } from "@/lib/auth/config";
 
-import { signupApiV1AuthSignupPost } from "@/client/sdk.gen";
-import { AuthEnterpriseCTA } from "@/components/auth/AuthEnterpriseCTA";
-import { AuthShell } from "@/components/auth/AuthShell";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { SignupForm } from "./SignupForm";
 
-export default function SignupPage() {
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [orgName, setOrgName] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+export const dynamic = "force-dynamic";
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+export default async function SignupPage() {
+  if (
+    process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client" ||
+    !(await getSignupEnabled())
+  ) {
+    redirect("/auth/login");
+  }
 
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const body = { email, password, name: name || undefined, organization_name: orgName || undefined };
-      const res = await signupApiV1AuthSignupPost({ body });
-
-      if (res.error || !res.data) {
-        toast.error(detailFromError(res.error, "Signup failed"));
-        return;
-      }
-
-      // Set httpOnly cookies via server route
-      const session = await fetch("/api/auth/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: res.data.token, user: res.data.user }),
-      });
-
-      if (!session.ok) {
-        toast.error("Account created, but sign-in failed. Please sign in again.");
-        return;
-      }
-
-      if (typeof window !== "undefined" && res.data.token) {
-        localStorage.setItem("kodewaves_auth_token", res.data.token);
-      }
-
-      window.location.href = "/after-sign-in";
-    } catch {
-      toast.error("An error occurred. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <AuthShell enterpriseSlot={<AuthEnterpriseCTA />}>
-      <div className="space-y-1.5 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Create an account</h1>
-        <p className="text-sm text-muted-foreground">Enter your details to get started</p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Full Name</Label>
-          <Input
-            id="name"
-            type="text"
-            placeholder="John Doe"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="orgName">Organization / Company Name</Label>
-          <Input
-            id="orgName"
-            type="text"
-            placeholder="Acme Corp"
-            value={orgName}
-            onChange={(e) => setOrgName(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input
-            id="email"
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            placeholder="At least 8 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm password</Label>
-          <Input
-            id="confirmPassword"
-            type="password"
-            placeholder="Confirm your password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            minLength={8}
-          />
-        </div>
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? "Creating account..." : "Create account"}
-        </Button>
-      </form>
-
-      <p className="text-center text-sm text-muted-foreground">
-        Already have an account?{" "}
-        <Link href="/auth/login" className="text-primary underline-offset-4 hover:underline">
-          Sign in
-        </Link>
-      </p>
-    </AuthShell>
-  );
+  return <SignupForm />;
 }

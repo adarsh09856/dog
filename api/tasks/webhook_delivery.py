@@ -34,6 +34,7 @@ from api.errors.failure import (
     classify_http_response,
     log_failure,
 )
+from api.services.client_worker_entitlements import require_client_worker_features
 
 DograhFailure = KodewavesFailure
 from api.tasks.function_names import FunctionNames
@@ -283,6 +284,21 @@ async def deliver_webhook(_ctx, delivery_id: int) -> None:
 
     set_current_run_id(str(delivery.workflow_run_id))
     set_current_org_id(delivery.organization_id)
+
+    try:
+        # The delivery may have been queued before a client voice license was
+        # revoked. Recheck before sending any customer data to an external URL.
+        await require_client_worker_features("voice")
+    except Exception as exc:  # noqa: BLE001 - fail closed before external I/O
+        error = f"Blocked by client installation entitlement: {exc}"
+        await db_client.mark_webhook_delivery_dead_letter(
+            delivery.id, delivery.attempt_count, error, None
+        )
+        logger.warning(
+            "Webhook delivery {} was blocked by client entitlement", delivery.id
+        )
+        return
+
     attempt = delivery.attempt_count + 1
     method = (delivery.http_method or "POST").upper()
     timeout = DEFAULT_WEBHOOK_DELIVERY_CONFIG["timeout_seconds"]

@@ -21,7 +21,6 @@ from api.routes.public_embed_chat import router as public_embed_chat_router
 from api.routes.reports import router as reports_router
 from api.routes.s3_signed_url import router as s3_router
 from api.routes.service_keys import router as service_keys_router
-from api.routes.admin import admin_router
 from api.routes.catalog import router as catalog_router
 from api.routes.appointments import router as appointments_router
 from api.routes.billing_sovereign import router as billing_sovereign_router
@@ -30,7 +29,6 @@ from api.routes.forms import router as forms_router
 from api.routes.payments import router as payments_router
 from api.routes.prompt_templates import router as prompt_templates_router
 from api.routes.widgets import router as widgets_router
-from api.routes.superuser import router as superuser_router
 from api.routes.telephony import router as telephony_router
 from api.routes.tool import router as tool_router
 from api.routes.tts_cache import router as tts_cache_router
@@ -41,14 +39,17 @@ from api.routes.workflow import router as workflow_router
 from api.routes.workflow_embed import router as workflow_embed_router
 from api.routes.workflow_recording import router as workflow_recording_router
 from api.routes.workflow_text_chat import router as workflow_text_chat_router
+from api.routes.installation import router as installation_router
 from api.services.integrations import all_routers
+from api.constants import KODEWAVES_EDITION
+from api.services.deployment_edition import mount_owner_control_plane
 
 router = APIRouter(
     tags=["main"],
     responses={404: {"description": "Not found"}},
 )
 
-router.include_router(admin_router)
+mount_owner_control_plane(router, KODEWAVES_EDITION)
 router.include_router(catalog_router)
 router.include_router(crm_router)
 router.include_router(appointments_router)
@@ -58,7 +59,6 @@ router.include_router(prompt_templates_router)
 router.include_router(billing_sovereign_router)
 router.include_router(payments_router)
 router.include_router(telephony_router)
-router.include_router(superuser_router)
 router.include_router(workflow_router)
 router.include_router(workflow_text_chat_router)
 router.include_router(user_router)
@@ -84,6 +84,7 @@ router.include_router(folder_router)
 router.include_router(auth_router)
 router.include_router(node_types_router)
 router.include_router(agent_stream_router)
+router.include_router(installation_router)
 
 for _integration_router in all_routers():
     router.include_router(_integration_router)

@@ -20,13 +20,13 @@ export function ConversationRailFrame({
     return (
         <div
             className={cn(
-                "flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm",
+                "flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-none",
                 className,
             )}
         >
-            {header ? <div className="shrink-0 border-b border-border px-4 py-3">{header}</div> : null}
+            {header ? <div className="shrink-0 border-b border-border bg-card px-5 py-4">{header}</div> : null}
             <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-            {footer ? <div className="shrink-0 border-t border-border px-4 py-3">{footer}</div> : null}
+            {footer ? <div className="shrink-0 border-t border-border bg-card px-5 py-4">{footer}</div> : null}
         </div>
     );
 }

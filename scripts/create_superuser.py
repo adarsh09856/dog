@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from api.db import db_client
 from api.db.models import UserModel
+from api.db.owner_account_lock import lock_owner_account_mutation
 from api.services.organization_bootstrap import ensure_organization_bootstrapped
 from api.utils.auth import hash_password
 
@@ -29,7 +30,8 @@ async def create_or_promote_superuser(
     if user:
         print(f"[INFO] User '{email}' already exists. Ensuring superuser privileges...")
         async with db_client.async_session() as session:
-            stmt = select(UserModel).where(UserModel.id == user.id)
+            await lock_owner_account_mutation(session)
+            stmt = select(UserModel).where(UserModel.id == user.id).with_for_update()
             res = await session.execute(stmt)
             u = res.scalar_one()
             u.is_superuser = True

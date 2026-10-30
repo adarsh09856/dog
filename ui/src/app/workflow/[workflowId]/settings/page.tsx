@@ -1,4 +1,5 @@
 "use client";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { format } from "date-fns";
 import { ArrowLeft, BookA, Brain, CalendarIcon, Clipboard, Download, ExternalLink, FileDown, Fingerprint, Loader2, Mic, Pause, PhoneOff, Play, Plus, Rocket, Settings, Trash2Icon, Upload, Variable, X } from "lucide-react";
@@ -832,7 +833,7 @@ function GeneralSection({
                                     if (!isNaN(value) && value > 0) setMaxUserIdleTimeout(value);
                                 }}
                             />
-                            <p className="text-xs text-muted-foreground">Default: 10 seconds</p>
+                            <p className="text-xs text-muted-foreground">Default: 30 seconds</p>
                         </div>
                     </div>
                 </div>
@@ -1767,22 +1768,47 @@ function WorkflowSettingsInner({
     return (
         <div className="min-h-screen">
             {/* Sticky header */}
-            <header className="sticky top-0 z-10 flex items-center gap-3 border-b bg-background/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <header className="sticky top-0 z-10 flex min-h-14 items-center gap-3 border-b bg-background/95 px-3 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:px-6">
                 <Button
                     variant="ghost"
                     size="icon"
+                    className="shrink-0"
+                    aria-label="Back to workflow editor"
                     onClick={() => confirmNavigate(() => router.push(`/workflow/${workflowId}`))}
                 >
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
-                <div>
+                <div className="min-w-0">
                     <p className="text-xs text-muted-foreground">Workflow Settings</p>
-                    <h1 className="text-sm font-semibold">{workflowName || workflow.name}</h1>
+                    <h1 className={`${chrome.editorTitle} truncate`}>{workflowName || workflow.name}</h1>
                 </div>
             </header>
 
+            <nav className="border-b bg-muted/20 px-3 py-2 lg:hidden" aria-label="Workflow settings sections">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                    {NAV_ITEMS.map((item) => (
+                        <a
+                            key={item.id}
+                            href={`#${item.id}`}
+                            aria-current={activeSection === item.id ? "location" : undefined}
+                            aria-label={dirtySections.has(item.id) ? `${item.label}, unsaved changes` : item.label}
+                            className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                                activeSection === item.id
+                                    ? "border-primary/30 bg-primary/10 text-primary"
+                                    : "border-border bg-background text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            {item.label}
+                            {dirtySections.has(item.id) && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden="true" />
+                            )}
+                        </a>
+                    ))}
+                </div>
+            </nav>
+
             {/* Main + right nav */}
-            <div className="mx-auto flex max-w-5xl gap-8 px-6 py-8">
+            <div className="mx-auto flex max-w-5xl flex-col gap-5 px-3 py-5 sm:gap-8 sm:px-6 sm:py-8 lg:flex-row">
                 {/* Sections */}
                 <div className="min-w-0 flex-1 space-y-8">
                     {resolvedWorkflowConfigurationsForRender && (
@@ -1878,7 +1904,7 @@ function WorkflowSettingsInner({
                 </div>
 
                 {/* ---- Right-side sticky nav ---- */}
-                <nav className="hidden w-44 shrink-0 lg:block">
+                <nav className="hidden w-44 shrink-0 lg:block" aria-label="Workflow settings sections">
                     <div className="sticky top-20 space-y-1">
                         <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
                             On this page
@@ -1887,6 +1913,7 @@ function WorkflowSettingsInner({
                             <a
                                 key={item.id}
                                 href={`#${item.id}`}
+                                aria-current={activeSection === item.id ? "location" : undefined}
                                 className={`flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors hover:text-foreground ${
                                     activeSection === item.id
                                         ? "font-medium text-foreground"

@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { INDIAN_TEMPLATE_LANGUAGES } from "@/constants/languages";
 import { adminApi } from "@/lib/kodewavesApi";
+import { useAuth } from "@/lib/auth";
+
+const TEST_LANGUAGES = [
+  ...INDIAN_TEMPLATE_LANGUAGES,
+  { code: "en", name: "English" },
+];
 
 function audioBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -17,6 +23,7 @@ function audioBase64(file: File): Promise<string> {
 }
 
 export default function IndicSttTest() {
+  const { user, loading: authLoading } = useAuth();
   const input = useRef<HTMLInputElement>(null);
   const [languages, setLanguages] = useState<string[]>([]);
   const [language, setLanguage] = useState("hi");
@@ -27,13 +34,17 @@ export default function IndicSttTest() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading || !user) return;
     let active = true;
     adminApi.getIndicSttModels().then((response) => {
       if (!active) return;
-      const installed = response.languages || [];
+      const installed = [...new Set(response.languages || [])].filter(code =>
+        TEST_LANGUAGES.some(item => item.code === code)
+      );
+      const indianCount = INDIAN_TEMPLATE_LANGUAGES.filter(item => installed.includes(item.code)).length;
       setLanguages(installed);
       setStatus(response.status === "online"
-        ? `${installed.length} of 22 IndicConformer languages installed`
+        ? `${indianCount} of ${INDIAN_TEMPLATE_LANGUAGES.length} Indian languages installed${installed.includes("en") ? ", plus English" : ""}`
         : response.detail || "IndicConformer STT is unavailable");
       setLanguage(current => installed.length && !installed.includes(current) ? installed[0] : current);
     }).catch((reason) => {
@@ -42,7 +53,7 @@ export default function IndicSttTest() {
       setStatus(reason instanceof Error ? reason.message : "Could not load IndicConformer inventory");
     });
     return () => { active = false; };
-  }, []);
+  }, [authLoading, user]);
 
   const run = async () => {
     if (!file || !language || busy) return;
@@ -66,13 +77,13 @@ export default function IndicSttTest() {
       <span className="text-xs text-muted-foreground" role="status">{status}</span>
     </div>
     <p className="text-xs text-muted-foreground">
-      IndicConformer uses the language you select for each test. Automatic language detection is not available in this local model.
+      This test uses the selected recognition language. Live calls can use automatic detection for the supported speech languages configured in Model Configurations.
     </p>
     <div className="space-y-1">
       <Label htmlFor="indic-stt-language">Recognition language</Label>
       <select id="indic-stt-language" className="w-full rounded-md border bg-background p-2 text-sm" disabled={busy || !languages.length} value={language} onChange={event => { setLanguage(event.target.value); setResult(null); }}>
         {!languages.length && <option value="">No installed IndicConformer language</option>}
-        {INDIAN_TEMPLATE_LANGUAGES.filter(item => languages.includes(item.code)).map(item => (
+        {TEST_LANGUAGES.filter(item => languages.includes(item.code)).map(item => (
           <option key={item.code} value={item.code}>{item.name}</option>
         ))}
       </select>
