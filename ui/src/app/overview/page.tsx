@@ -26,7 +26,7 @@ import {
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
@@ -180,8 +180,6 @@ export default function OverviewPage() {
       ],
     },
   ];
-  const toolDirectoryItemRows = Math.max(...sections.map((section) => section.items.length));
-
   return (
     <div className={dashboard.dashboard}>
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
@@ -399,15 +397,7 @@ export default function OverviewPage() {
           </section>
         )}
 
-        <section
-          aria-label="Workspace tools"
-          className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}
-          style={{
-            "--tool-directory-accent": "var(--brand-primary-color, var(--primary))",
-            "--tool-directory-item-rows": toolDirectoryItemRows,
-            "--tool-directory-row-count": toolDirectoryItemRows + 2,
-          } as React.CSSProperties}
-        >
+        <section aria-label="Workspace tools" className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}>
           {sections.map((section, index) => (
             <section key={section.category} className={panel.toolGroup} aria-label={section.category}>
               <div className={panel.groupHeading}><span>0{index + 1}</span><h2>{section.category}</h2></div>
