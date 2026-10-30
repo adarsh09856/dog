@@ -55,4 +55,16 @@ describe('TemplateSelectorModal', () => {
     })));
     expect(mocks.push).toHaveBeenCalledWith('/workflow/42?onboarding=web_call');
   });
+
+  it('uses the workspace green palette for appointment templates', () => {
+    render(<TemplateSelectorModal open onOpenChange={vi.fn()} />);
+
+    const appointment = screen.getByText('Appointment Setter & Scheduling');
+    const card = appointment.closest('[data-slot="card"]');
+    expect(card).toBeTruthy();
+    expect(card?.querySelector('.bg-emerald-500')).toBeTruthy();
+    expect(card?.querySelector('.bg-emerald-50')).toBeTruthy();
+    expect(card?.querySelector('.text-emerald-700')).toBeTruthy();
+    expect(card?.querySelector('.bg-blue-500, .bg-blue-50, .text-blue-700')).toBeNull();
+  });
 });
