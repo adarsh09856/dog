@@ -28,6 +28,7 @@ import {
 import Link from "next/link";
 import React, { useCallback, useEffect, useState } from "react";
 
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +36,7 @@ import { useClientBranding } from "@/context/ClientBrandingContext";
 import { useAuth } from "@/lib/auth";
 import { overviewApi, OverviewStatsResponse } from "@/lib/kodewavesApi";
 
-import panel from "@/components/layout/PanelWorkspace.module.css";
+import dashboard from "./OverviewWorkspace.module.css";
 
 export default function OverviewPage() {
   const branding = useClientBranding();
@@ -181,30 +182,30 @@ export default function OverviewPage() {
   ];
 
   return (
-    <div className={`${panel.workspace} container mx-auto px-4 py-8`}>
+    <div className={dashboard.dashboard}>
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
-      <div className="max-w-6xl mx-auto space-y-8">
-        <header className={panel.workspaceHero}>
-          <div>
-            <p className={panel.eyebrow}>{branding.company_name} / WORKSPACE OVERVIEW</p>
+      <div className={dashboard.inner}>
+        <header className={dashboard.masthead}>
+          <div className={dashboard.mastheadCopy}>
+            <p className={dashboard.mastheadEyebrow}>{branding.company_name} / OPERATIONS DESK</p>
             <h1>{user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}.` : `Welcome to ${branding.company_name}`}</h1>
-            <p className={panel.heroDescription}>Your voice operation, at a glance. Build the next conversation or review what happened in the last one.</p>
-            <span className="mt-3 inline-flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-primary" />Hosted or customer-managed deployment</span>
-            <div className={panel.heroActions}>
+            <p className={dashboard.mastheadDescription}>Your voice operation, at a glance. Build the next conversation or review what happened in the last one.</p>
+            <span className={dashboard.trustLine}><ShieldCheck className="h-3.5 w-3.5 text-primary" />Hosted or customer-managed deployment</span>
+            <div className={dashboard.mastheadActions}>
               <Button asChild><Link href="/workflow/create"><Plus className="h-4 w-4" /> Create Agent</Link></Button>
               <Button asChild variant="outline"><Link href="/usage">Review call activity <ArrowRight className="h-4 w-4" /></Link></Button>
               <Button asChild variant="ghost"><Link href="/billing-sovereign"><Wallet className="h-4 w-4 text-primary" /> Top Up</Link></Button>
             </div>
           </div>
-          <div className={panel.workspaceSummary}>
-            <div><span>YOUR WORKSPACE</span><Button variant="ghost" size="icon" aria-label="Refresh overview" onClick={loadStats} disabled={loading}><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /></Button></div>
+          <div className={dashboard.workspaceCard}>
+            <div className={dashboard.workspaceCardTop}><span>YOUR WORKSPACE</span><Button variant="ghost" size="icon" aria-label="Refresh overview" onClick={loadStats} disabled={loading}><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /></Button></div>
             <strong>Build. Connect. Operate.</strong>
             <p>Agent workflows, speech providers and conversation records in one place.</p>
             <Link href="/model-configurations">Configure your voice stack <ArrowRight size={14} /></Link>
           </div>
         </header>
         {/* Real Dynamic Stat Tiles */}
-        <div className={panel.metricRail}>
+        <div className={`${panel.metricRail} ${dashboard.metrics}`} aria-label="Workspace performance">
           {/* Wallet Minutes */}
           <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
             <div className="flex items-center justify-between">
@@ -346,17 +347,14 @@ export default function OverviewPage() {
 
         {/* Recent Runs Table */}
         {stats && stats.recent_runs && stats.recent_runs.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
-                Recent Calls &amp; Executions
-              </h2>
+          <section className={dashboard.contentBlock} aria-labelledby="recent-calls-heading">
+            <div className={dashboard.blockHeading}>
+              <div><h2 id="recent-calls-heading">Recent calls &amp; executions</h2><p>Review the latest agent activity and open a run for its transcript and execution details.</p></div>
               <Link href="/usage" className="text-xs text-primary hover:underline font-medium flex items-center gap-1">
                 View all runs <ArrowRight className="h-3 w-3" />
               </Link>
             </div>
-            <div className="rounded-xl border border-border/70 bg-card overflow-hidden">
-              <div className="divide-y divide-border/60 text-xs">
+            <div className={`${dashboard.callRows} divide-y divide-border/60 text-xs`}>
                 {stats.recent_runs.map((run) => (
                   <div key={run.id} className="p-3.5 px-5 flex items-center justify-between hover:bg-muted/30 transition-colors">
                     <div className="flex items-center gap-3">
@@ -396,12 +394,11 @@ export default function OverviewPage() {
                     </div>
                   </div>
                 ))}
-              </div>
             </div>
-          </div>
+          </section>
         )}
 
-        <section aria-label="Workspace tools" className={panel.toolDirectory}>
+        <section aria-label="Workspace tools" className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}>
           {sections.map((section, index) => (
             <div key={section.category} className={panel.toolGroup}>
               <div className={panel.groupHeading}><span>0{index + 1}</span><h2>{section.category}</h2></div>
@@ -416,7 +413,7 @@ export default function OverviewPage() {
           ))}
         </section>
         {/* Platform administration is available only to backend superusers. */}
-        {user?.is_superuser === true && <Card className="border border-border/70 bg-muted/20">
+        {user?.is_superuser === true && <Card className={`${dashboard.adminCard} border-border/70 bg-muted/20`}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

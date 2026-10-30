@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getAuthContinuationSearch, getPostAuthDestination } from "@/lib/pricingSelection";
 
+import pageStyles from "../../PublicPages.module.css";
+
 export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,14 +60,13 @@ export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
 
   return (
     <AuthShell enterpriseSlot={<AuthEnterpriseCTA />}>
-      <div className="space-y-1.5 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-        <p className="text-sm text-muted-foreground">
-          Enter your email and password to continue
-        </p>
+      <div className={pageStyles.authFormIntro}>
+        <p className={pageStyles.eyebrow}>Workspace access</p>
+        <h1 className={pageStyles.authHeading}>Sign in</h1>
+        <p>Continue to your agents, channels and conversation history.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className={pageStyles.authFields}>
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
@@ -90,13 +91,13 @@ export function LoginForm({ signupEnabled }: { signupEnabled: boolean }) {
             required
           />
         </div>
-        <Button type="submit" className="w-full" disabled={loading}>
+        <Button type="submit" className={`${pageStyles.authSubmit} w-full`} disabled={loading}>
           {loading ? "Signing in..." : "Sign in"}
         </Button>
       </form>
 
       {signupEnabled && (
-        <p className="text-center text-sm text-muted-foreground">
+        <p className={pageStyles.authFoot}>
           Don&apos;t have an account?{" "}
           <Link href={`/auth/signup${signupContinuation}`} className="text-primary underline-offset-4 hover:underline">
             Sign up

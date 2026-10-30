@@ -1,5 +1,5 @@
+import Link from 'next/link';
 import { Suspense } from 'react';
-import panel from "@/components/layout/PanelWorkspace.module.css";
 
 import { getWorkflowsApiV1WorkflowFetchGet, listFoldersApiV1FolderGet } from '@/client/sdk.gen';
 import type { FolderResponse, WorkflowListResponse } from '@/client/types.gen';
@@ -10,10 +10,11 @@ import { AgentFolderView } from '@/components/workflow/folders/AgentFolderView';
 import { CreateFolderButton } from '@/components/workflow/folders/CreateFolderButton';
 import { FolderSection } from '@/components/workflow/folders/FolderSection';
 import { UploadWorkflowButton } from '@/components/workflow/UploadWorkflowButton';
+import { detailFromError } from '@/lib/apiError';
 import { getServerAccessToken, getServerAuthProvider } from '@/lib/auth/server';
 import logger from '@/lib/logger';
-import { detailFromError } from '@/lib/apiError';
 
+import library from "./AgentLibrary.module.css";
 import WorkflowLayout from "./WorkflowLayout";
 
 export const dynamic = 'force-dynamic';
@@ -81,15 +82,15 @@ async function WorkflowList() {
         return (
             <>
                 {/* Active Workflows Section */}
-                <section className="mb-10" aria-labelledby="active-agents-heading">
-                    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+                <section className={library.activeSection} aria-labelledby="active-agents-heading">
+                    <div className={library.sectionHead}>
                         <div>
                             <h2 id="active-agents-heading" className="text-xl font-semibold tracking-tight">Active agents</h2>
                             <p className="mt-1 text-sm text-muted-foreground">Organize workflows, make edits, and test before publishing.</p>
                         </div>
-                        <div className="flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-full border border-border bg-card px-3 py-1.5 text-muted-foreground"><strong className="mr-1.5 font-semibold tabular-nums text-foreground">{activeWorkflows.length}</strong>active</span>
-                            <span className="rounded-full border border-border bg-card px-3 py-1.5 text-muted-foreground"><strong className="mr-1.5 font-semibold tabular-nums text-foreground">{folders.length}</strong>folders</span>
+                        <div className={library.counts}>
+                            <span><strong>{activeWorkflows.length}</strong>active agents</span>
+                            <span><strong>{folders.length}</strong>folders</span>
                         </div>
                     </div>
                     {activeWorkflows.length > 0 || folders.length > 0 ? (
@@ -101,7 +102,7 @@ async function WorkflowList() {
 
                 {/* Archived Section — collapsible, same design as the folder/Uncategorized sections */}
                 {archivedWorkflows.length > 0 && (
-                    <div className="mb-8">
+                    <div className="mt-6">
                         <FolderSection kind="archived" workflows={archivedWorkflows} />
                     </div>
                 )}
@@ -112,7 +113,7 @@ async function WorkflowList() {
         return (
             <div role="alert" className="text-red-500">
                 <p>{err instanceof Error ? err.message : 'Unable to load agents. Please retry.'}</p>
-                <a className="underline" href="/workflow">Retry loading agents</a>
+                <Link className="underline" href="/workflow">Retry loading agents</Link>
             </div>
         );
     }
@@ -123,17 +124,20 @@ async function PageContent() {
     const workflowList = await WorkflowList();
 
     return (
-        <div className="container mx-auto px-4 py-8">
-            {/* Your Workflows Section */}
-            <div className="mb-6">
-                <div className={panel.collectionHeader}>
-                    <div><span className={panel.eyebrow}>BUILD / AGENT WORKFLOWS</span><h1>Your Agents</h1><p>Design conversations, connect business tools, and validate every workflow before it goes live.</p></div>
-                    <div className="flex max-w-full flex-wrap items-center gap-2 [&>*]:max-w-full">
+        <div className={library.page}>
+            <div className={library.content}>
+                <header className={library.hero}>
+                    <div className={library.heroCopy}>
+                        <span className={library.eyebrow}>BUILD / VOICE OPERATIONS</span>
+                        <h1>Your Agents</h1>
+                        <p>Design conversations, connect business tools, and validate every workflow before it goes live.</p>
+                    </div>
+                    <div className={library.actions} aria-label="Agent library actions">
                         <UploadWorkflowButton />
                         <CreateFolderButton />
                         <CreateWorkflowButton />
                     </div>
-                </div>
+                </header>
                 {workflowList}
             </div>
         </div>
@@ -142,7 +146,7 @@ async function PageContent() {
 
 function WorkflowsLoading() {
     return (
-        <div className="container mx-auto px-4 py-8">
+        <div className={library.loadingPage}>
             {/* Get Started Section Loading */}
             <div className="mb-12">
                 <div className="h-8 w-48 bg-muted rounded mb-6"></div>
