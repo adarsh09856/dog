@@ -4,252 +4,287 @@ import {
   ArrowRight,
   AudioLines,
   Check,
-  Cloud,
-  Database,
   Globe2,
   Headphones,
+  Layers3,
   MessageSquareText,
   Phone,
   Server,
+  ShieldCheck,
   Workflow,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
 
-import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { useClientBranding } from "@/context/ClientBrandingContext";
+import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
 
-import styles from "./PublicPages.module.css";
-
-const operatingStages = [
+const platformAreas = [
   {
     number: "01",
-    label: "DESIGN",
+    label: "Design",
     title: "Shape the work before the call.",
-    summary: "Build the conversation path, define useful questions and connect the actions an agent can take.",
-    points: ["Visual workflow builder", "Prompts, branches and tools"],
-    icon: Workflow,
+    summary: "Build the conversation path and connect it to the systems your team already uses.",
+    capabilities: [
+      { icon: Workflow, title: "Workflow builder", text: "Add questions, branches and actions that follow what the caller says." },
+      { icon: Wrench, title: "Business tools", text: "Look up information, collect details and pass work into business systems." },
+    ],
   },
   {
     number: "02",
-    label: "CONNECT",
+    label: "Connect",
     title: "Choose how people reach you.",
-    summary: "Configure the browser and telephone channels, plus the speech providers enabled for your deployment.",
-    points: ["Browser and telephone", "Provider and language settings"],
-    icon: Phone,
+    summary: "Configure speech providers, languages and the channels enabled for your deployment.",
+    capabilities: [
+      { icon: Phone, title: "Web and telephone", text: "Connect supported carriers for inbound and outbound calls or add a web voice widget." },
+      { icon: Globe2, title: "Language and voice", text: "Select from the languages and voices supported by your chosen speech models; availability varies by model and deployment." },
+    ],
   },
   {
     number: "03",
-    label: "OPERATE",
+    label: "Operate",
     title: "Review what happened.",
-    summary: "Follow completed runs, transcripts and recordings so your team can improve the workflow with evidence.",
-    points: ["Conversation history", "Usage and call review"],
-    icon: Headphones,
+    summary: "Keep conversations and team operations in one workspace as you improve each agent.",
+    capabilities: [
+      { icon: Headphones, title: "Conversation review", text: "Review transcripts, recordings and workflow runs to understand each call." },
+      { icon: Layers3, title: "Team operations", text: "Organize agents, provider connections and usage with workspace access controls." },
+    ],
   },
 ];
-
-const speechStages = [
-  {
-    number: "A",
-    title: "Speech recognition",
-    text: "Select an enabled STT provider and the languages supported by the chosen model.",
-    icon: MessageSquareText,
-  },
-  {
-    number: "B",
-    title: "Reasoning and actions",
-    text: "Connect an LLM to your instructions, knowledge sources, workflow branches and tools.",
-    icon: Workflow,
-  },
-  {
-    number: "C",
-    title: "Voice synthesis",
-    text: "Choose an enabled TTS provider, voice and speaking settings for the agent.",
-    icon: AudioLines,
-  },
-];
-
-const platformAreas = [
-  { title: "Workflow builder", text: "Design questions, branches and actions that follow the caller’s request.", icon: Workflow },
-  { title: "Business tools", text: "Look up information, collect details and pass work into connected systems.", icon: Wrench },
-  { title: "Web and telephone", text: "Configure browser voice and the telephony providers enabled for the workspace.", icon: Globe2 },
-  { title: "Conversation review", text: "Inspect transcripts, recordings and workflow runs after each interaction.", icon: Headphones },
-  { title: "Models and languages", text: "Choose from the STT, LLM and TTS providers available in your deployment.", icon: AudioLines },
-  { title: "Workspace data", text: "Manage knowledge files and review usage with your team’s workspace controls.", icon: Database },
-];
-
 export default function HomePage() {
   const branding = useClientBranding();
-
   return (
     <div className="public-site min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content">
-        <section className={styles.hero}>
-          <div className={`${styles.pageFrame} ${styles.heroGrid}`}>
-            <div className={styles.heroCopy}>
-              <p className={styles.eyebrow}>Voice operations / {branding.company_name}</p>
-              <h1 className={styles.headline}>
-                Every conversation.<br />
-                <span className={styles.headlineAccent}>A clear next step.</span>
-              </h1>
-              <p className={styles.lede}>{branding.tagline}</p>
-              <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">
-                Design how the agent responds, connect it to the systems your team uses, and review the work after each conversation.
+        <section className="public-hero relative overflow-hidden border-b border-border">
+          <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[1fr_0.82fr] lg:gap-20 lg:py-24">
+            <div>
+              <p className="mb-6 inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <span className="h-px w-8 bg-cta" aria-hidden="true" />
+                Voice operations platform
               </p>
-              <div className={styles.actions}>
-                <Link href="/auth/login" className={styles.primaryAction}>
-                  Open your workspace <ArrowRight aria-hidden className="size-4" />
+              <h1 className="max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-6xl">
+                Every conversation.<br /><span className="public-heading-accent">A clear next step.</span>
+              </h1>
+              <p className="mt-7 max-w-xl text-lg leading-8 text-foreground/80">
+                {branding.tagline}
+              </p>
+              <p className="mt-3 max-w-xl text-[15px] leading-7 text-muted-foreground">
+                Design the conversation, validate it before launch, and operate it across browser and telephone channels.
+              </p>
+              <div className="mt-9 flex flex-wrap gap-3">
+                <Link
+                  href="/auth/login"
+                  className="inline-flex items-center gap-3 rounded-md bg-cta px-5 py-3 text-sm font-semibold text-cta-foreground shadow-sm transition-colors hover:bg-cta/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  Sign in to your workspace <ArrowRight className="size-4" />
                 </Link>
-                <Link href="/platform" className={styles.secondaryAction}>
-                  Explore the platform
+                <Link
+                  href="/pricing"
+                  className="rounded-md border border-border bg-background/70 px-5 py-3 text-sm font-medium transition-colors hover:bg-background"
+                >
+                  View plans and deployment
                 </Link>
               </div>
-            </div>
-            <div className={styles.heroVisual}>
-              <VoiceOperationsIllustration />
-              <div className={styles.visualCaption}>
-                <span>Listen / Understand / Respond</span>
-                <span>Workflow preview / not live data</span>
+              <div className="mt-9 flex flex-wrap gap-x-6 gap-y-3 border-t border-border pt-5 text-xs text-muted-foreground">
+                {[
+                  "Workflow editor",
+                  "Browser testing",
+                  "Web and telephony",
+                ].map((item) => (
+                  <span key={item} className="flex items-center gap-2">
+                    <Check className="size-3.5 text-cta-text" />
+                    {item}
+                  </span>
+                ))}
               </div>
             </div>
+            <VoiceOperationsIllustration />
           </div>
         </section>
-
-        <div className={`${styles.pageFrame} ${styles.signalStrip}`} aria-label="Voice operations lifecycle">
-          {[
-            ["01", "Design the conversation"],
-            ["02", "Connect browser and phone"],
-            ["03", "Choose enabled speech models"],
-            ["04", "Review completed work"],
-          ].map(([number, label]) => (
-            <div className={styles.signalItem} key={number}>
-              <span className={styles.signalNumber}>{number}</span>
-              <span className={styles.signalLabel}>{label}</span>
-            </div>
-          ))}
-        </div>
-
-        <section id="platform" className={styles.section}>
-          <div className={styles.pageFrame}>
-            <div className={styles.sectionHead}>
+        <section
+          id="platform"
+          className="scroll-mt-24 px-5 py-20 sm:px-8 sm:py-28"
+        >
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-12 grid gap-6 md:grid-cols-2 md:items-end">
               <div>
-                <p className={styles.eyebrow}>Configure the full call lifecycle</p>
-                <h2>One workspace for agents, channels and call review.</h2>
+                <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
+                Configure the full call lifecycle
+                </p>
+                <h2 className="max-w-xl text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
+                  One workspace for agents, channels and call review.
+                </h2>
               </div>
-              <p>
-                Build the workflow once, connect the supported channels and providers, then keep the conversation history close to the tools that power the work.
+              <p className="max-w-lg leading-7 text-muted-foreground md:justify-self-end">
+                Create agents, configure speech and language providers, connect
+                telephony, and review the resulting conversations from the same workspace.
               </p>
             </div>
-            <div className={styles.stageGrid}>
-              {operatingStages.map(({ number, label, title, summary, points, icon: Icon }) => (
-                <article key={number} className={styles.stage}>
-                  <div className={styles.stageTop}><span>{number} / {label}</span><Icon aria-hidden className="size-4" /></div>
-                  <h3>{title}</h3>
-                  <p>{summary}</p>
-                  <ul className={styles.stageList}>
-                    {points.map((point) => <li key={point}><Check aria-hidden />{point}</li>)}
+            <div className="grid border-y border-border md:grid-cols-3">
+              {platformAreas.map(({ number, label, title, summary, capabilities: areaCapabilities }) => (
+                <article key={number} className={`${number !== "03" ? "border-b border-border md:border-b-0" : ""} ${number !== "01" ? "md:border-l" : ""} py-7 md:px-7 md:py-8 md:first:pl-0 md:last:pr-0`}>
+                  <div className="mb-8 flex items-center gap-3">
+                    <span className="font-mono text-xs tabular-nums text-cta-text">{number}</span>
+                    <span className="h-px w-7 bg-border" aria-hidden="true" />
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</span>
+                  </div>
+                  <h3 className="max-w-xs text-xl font-semibold leading-snug tracking-tight">{title}</h3>
+                  <p className="mt-3 min-h-[4.5rem] max-w-sm text-sm leading-6 text-muted-foreground">{summary}</p>
+                  <ul className="mt-6 divide-y divide-border border-t border-border">
+                    {areaCapabilities.map(({ icon: Icon, title: capabilityTitle, text }) => (
+                      <li key={capabilityTitle} className="flex gap-3 py-4">
+                        <Icon className="mt-0.5 size-4 shrink-0 text-cta-text" aria-hidden="true" />
+                        <div>
+                          <h4 className="text-sm font-semibold">{capabilityTitle}</h4>
+                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{text}</p>
+                        </div>
+                      </li>
+                    ))}
                   </ul>
                 </article>
               ))}
             </div>
           </div>
         </section>
-
-        <section className={styles.sectionMuted}>
-          <div className={`${styles.pageFrame} ${styles.section}`}>
-            <div className={styles.sectionHead}>
-              <div>
-                <p className={styles.eyebrow}>A configurable speech stack</p>
-                <h2>Keep each part of the voice experience in view.</h2>
-              </div>
-              <p>
-                Use a speech-to-speech option or configure recognition, reasoning and synthesis separately. Exact choices depend on enabled providers and deployment.
+        <section className="border-y border-border bg-muted/40 px-5 py-20 sm:px-8 sm:py-24">
+          <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2 lg:gap-24">
+            <div>
+              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
+                Speech configuration
               </p>
+              <h2 className="text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
+                Configure speech for your deployment.
+              </h2>
+              <p className="mt-6 max-w-lg leading-8 text-muted-foreground">
+                Use a speech-to-speech model or configure recognition, reasoning
+                and voice separately. Provider availability depends on your
+                deployment and plan.
+              </p>
+              <Link
+                href="/pricing"
+                className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-cta-text"
+              >
+                See deployment costs <ArrowRight className="size-4" />
+              </Link>
             </div>
-            <div className={styles.stageGrid}>
-              {speechStages.map(({ number, title, text, icon: Icon }) => (
-                <article className={styles.stage} key={number}>
-                  <div className={styles.stageTop}><span>STAGE / {number}</span><Icon aria-hidden className="size-4" /></div>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
+            <div>
+              {[
+                { icon: MessageSquareText, title: "Speech recognition", text: "Choose a supported STT provider and configure the languages your agents need." },
+                { icon: Workflow, title: "Reasoning and actions", text: "Select an LLM and connect workflow branches, tools and business systems." },
+                { icon: AudioLines, title: "Voice synthesis", text: "Choose a supported TTS provider, voice and speaking settings." },
+              ].map(({ icon: Icon, title, text }, index) => (
+                <div key={title}>
+                  <div className="flex items-center gap-5 border-b border-border py-5 first:pt-0 last:border-b-0">
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-cta/10 text-cta-text">
+                      <Icon className="size-5" />
+                    </span>
+                    <div>
+                      <h3 className="text-sm font-semibold">{title}</h3>
+                      <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        {text}
+                      </p>
+                    </div>
+                  </div>
+                  {index < 2 && <div className="sr-only">Next configuration stage</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+        <section
+          id="deployment"
+          className="scroll-mt-24 px-5 py-20 sm:px-8 sm:py-28"
+        >
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-12 max-w-2xl">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
+                Choose how you operate
+              </p>
+              <h2 className="text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
+                A workspace in the cloud.
+                <br />
+                Or an installation of your own.
+              </h2>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2">
+              {[
+                {
+                  icon: Globe2,
+                  title: "Managed platform",
+                  text: "Build and operate agents in a hosted workspace. Your enabled plan determines available features, usage and provider options.",
+                  points: [
+                    "Agents and team workspaces",
+                    "Connected cloud providers",
+                    "Usage and conversation review",
+                  ],
+                },
+                {
+                  icon: Server,
+                  title: "Client installation",
+                  text: "Discuss a licensed installation for your environment. Server capacity, connected providers and ongoing support are part of the deployment scope.",
+                  points: [
+                    "Installation and domain license",
+                    "Local or connected models",
+                    "Capacity sized to your call volume",
+                  ],
+                },
+              ].map(({ icon: Icon, title, text, points }) => (
+                <article
+                  key={title}
+                  className="rounded-2xl border border-border bg-card p-7 sm:p-10"
+                >
+                  <Icon className="mb-6 size-7 text-cta-text" />
+                  <h3 className="text-2xl font-medium tracking-tight">
+                    {title}
+                  </h3>
+                  <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                    {text}
+                  </p>
+                  <ul className="my-7 space-y-3">
+                    {points.map((point) => (
+                      <li
+                        key={point}
+                        className="flex items-center gap-3 text-sm"
+                      >
+                        <ShieldCheck className="size-4 shrink-0 text-cta-text" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/pricing"
+                    className="inline-flex items-center gap-2 text-sm font-semibold"
+                  >
+                    Review plans and costs
+                    <ArrowRight className="size-4" />
+                  </Link>
                 </article>
               ))}
             </div>
           </div>
         </section>
-
-        <section className={styles.section}>
-          <div className={styles.pageFrame}>
-            <div className={styles.sectionHead}>
-              <div>
-                <p className={styles.eyebrow}>Tools around each conversation</p>
-                <h2>Move from a caller’s words to useful work.</h2>
-              </div>
-              <p>
-                Available tools depend on the workspace plan, enabled integrations and deployment configuration.
-              </p>
-            </div>
-            <div className={styles.capabilityGrid}>
-              {platformAreas.map(({ title, text, icon: Icon }) => (
-                <article className={styles.capability} key={title}>
-                  <span className={styles.capabilityIcon}><Icon aria-hidden className="size-5" /></span>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className={`${styles.section} ${styles.sectionMuted}`}>
-          <div className={styles.pageFrame}>
-            <div className={styles.sectionHead}>
-              <div>
-                <p className={styles.eyebrow}>Choose your operating model</p>
-                <h2>A managed workspace or a licensed installation.</h2>
-              </div>
-              <p>Compare the deployment scope before connecting providers or planning capacity.</p>
-            </div>
-            <div className={styles.comparison}>
-              <article className={styles.comparisonItem}>
-                <span className={styles.comparisonLabel}>01 / HOSTED</span>
-                <h3><Cloud aria-hidden className="mr-2 inline size-5 text-primary" />Managed platform</h3>
-                <p>Build and operate agents in a hosted workspace. Your configured plan determines available features and usage.</p>
-                <ul>
-                  <li><Check aria-hidden />Workspace, agents and conversation review</li>
-                  <li><Check aria-hidden />Connect providers enabled for your account</li>
-                  <li><Check aria-hidden />Review plan terms and configured prices</li>
-                </ul>
-              </article>
-              <article className={styles.comparisonItem}>
-                <span className={styles.comparisonLabel}>02 / CUSTOMER ENVIRONMENT</span>
-                <h3><Server aria-hidden className="mr-2 inline size-5 text-primary" />Client installation</h3>
-                <p>Run a licensed installation in an agreed environment, with server capacity and connected providers scoped to the deployment.</p>
-                <ul>
-                  <li><Check aria-hidden />Installation identity and domain license</li>
-                  <li><Check aria-hidden />Local or connected model options</li>
-                  <li><Check aria-hidden />Capacity and support planned for expected use</li>
-                </ul>
-              </article>
-            </div>
-            <div className={`${styles.actions} mt-6`}>
-              <Link href="/deployment" className={styles.secondaryAction}>Compare deployment options <ArrowRight aria-hidden className="size-4" /></Link>
-              <Link href="/pricing" className={styles.secondaryAction}>See configured plans</Link>
-            </div>
-          </div>
-        </section>
-
-        <section className={`${styles.section} pb-12`}>
-          <div className={`${styles.pageFrame} ${styles.closing}`}>
-            <p className={styles.eyebrow}>{branding.company_name} voice agent workspace</p>
-            <h2>Start with the work your callers need done.</h2>
-            <p>Sign in to configure an agent and test its workflow, or compare plans and deployment choices with your team.</p>
-            <div className={styles.actions}>
-              <Link href="/auth/login" className={styles.primaryAction}>Open your workspace <ArrowRight aria-hidden className="size-4" /></Link>
-              <Link href="/pricing" className={styles.secondaryAction}>Plans and pricing</Link>
-            </div>
+        <section className="border-t border-border bg-muted/40 px-5 py-20 text-center sm:px-8 sm:py-24">
+          <div className="mx-auto max-w-3xl">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cta-text">
+              {branding.company_name} voice agent workspace
+            </p>
+            <h2 className="text-4xl font-medium leading-tight tracking-tight sm:text-5xl">
+              Configure your first voice agent.
+            </h2>
+            <p className="mx-auto mt-6 max-w-xl leading-7 text-muted-foreground">
+              Sign in to build and test an agent, or review plans and deployment
+              options before getting started.
+            </p>
+            <Link
+              href="/pricing"
+              className="mt-8 inline-flex items-center gap-3 rounded-lg bg-cta px-6 py-3.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90"
+            >
+              Review plans and deployment
+              <ArrowRight className="size-4" />
+            </Link>
           </div>
         </section>
       </main>
