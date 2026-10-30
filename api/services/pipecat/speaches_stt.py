@@ -140,40 +140,6 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         await self._update_settings(STTSettings(language=code))
         return True
 
-    async def select_caller_language(self, language: str) -> bool:
-        """Honor a caller language choice without disabling automatic STT.
-
-        In auto mode the detector must remain active for every utterance. In a
-        fixed-language configuration, switch to a requested decoder only when
-        that language is actually installed in the local recognizer.
-        """
-        if self._settings.model != "indicconformer-ctc-int8":
-            return False
-        requested = str(language or "").strip().lower().replace("_", "-")
-        if requested in {"", "auto", "multi", "multilingual", "default", "unknown", "none"}:
-            return False
-        current = str(getattr(self._settings, "language", None) or "").strip().lower().replace("_", "-")
-        if current in {"", "auto", "multi", "multilingual", "default", "unknown", "none"}:
-            # Recognition remains per-utterance auto-detected. The caller's
-            # response-language preference is handled independently by the LLM.
-            return True
-        from api.services.configuration.language_normalizer import LANGUAGE_NAME_TO_ISO
-
-        code = LANGUAGE_NAME_TO_ISO.get(requested, requested.split("-", 1)[0])
-        if code not in LANGUAGE_NAME_TO_ISO.values() and len(code) not in (2, 3):
-            return False
-        inventory = await asyncio.wait_for(self._client.models.list(), timeout=2.0)
-        installed = {
-            str(value).lower().replace("_", "-").split("-", 1)[0]
-            for model in inventory.data
-            if model.id == self._settings.model
-            for value in (getattr(model, "languages", None) or [])
-        }
-        if code not in installed:
-            return False
-        await self._update_settings(STTSettings(language=code))
-        return True
-
     @property
     def recognition_pending(self) -> bool:
         """Include queued speech, not only an accepted aggregator turn."""
