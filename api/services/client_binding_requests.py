@@ -12,24 +12,29 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 from fastapi import HTTPException
 
-from api.db.client_installations import (
-    create_client_binding_request,
-    get_client_binding_request,
-    get_client_installation_record,
-    resolve_client_binding_request,
-    unverified_license_domains,
-)
+from api.services.deployment_edition import IMAGE_EDITION
 from api.services.installation_identity import (
     InstallationIdentityError, sign_binding_request, verify_binding_request,
 )
 from api.services.installation_license import (
     InstallationLicenseError, load_license,
 )
-from api.services.owner_license_signer_client import (
-    OwnerLicenseSignerError,
-    OwnerLicenseSignerPolicyError,
-)
 from api.services.owner_trust import OwnerTrustError, trusted_owner_status_url
+
+# These functions are used only by owner routes, which are absent from client
+# images. The client still needs send_binding_request without owner modules.
+if IMAGE_EDITION != "client":
+    from api.db.client_installations import (
+        create_client_binding_request,
+        get_client_binding_request,
+        get_client_installation_record,
+        resolve_client_binding_request,
+        unverified_license_domains,
+    )
+    from api.services.owner_license_signer_client import (
+        OwnerLicenseSignerError,
+        OwnerLicenseSignerPolicyError,
+    )
 
 
 def _owner_binding_request_url() -> str:

@@ -126,7 +126,7 @@ RUN if [ "$KODEWAVES_EDITION" = "client" ]; then \
         "$KODEWAVES_LICENSE_PUBLIC_KEY" "$KODEWAVES_LICENSE_PREVIOUS_PUBLIC_KEYS" "$KODEWAVES_RELEASE_PUBLIC_KEY" "$KODEWAVES_OWNER_STATUS_URL" \
         > ./api/services/owner_public_keys.json; \
       rm -rf ./api/routes/admin ./api/routes/superuser.py ./api/tests \
-        ./api/db/owner_user_management.py ./api/db/saas_plan_catalog.py \
+        ./api/db/owner_user_management.py ./api/db/saas_plan_catalog.py ./api/db/client_installations.py \
         ./api/services/owner_license_signer.py \
         ./api/services/owner_license_signer_client.py \
         ./scripts/create_superuser.py; \
