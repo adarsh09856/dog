@@ -188,6 +188,31 @@ def _phone_rescue_is_better(primary: str, english: str) -> bool:
         and _phone_unknown_token_count(english) < _phone_unknown_token_count(primary)
     )
 
+
+def _phone_rescue_language(
+    primary_language: str,
+    fallback_language: str,
+    *,
+    installed: set[str],
+    resident: set[str],
+) -> str | None:
+    """Choose only an already-resident Hindi/English phone rescue decoder.
+
+    Phone dictation is commonly code-switched and the utterance-level LID can
+    select a regional decoder (for example Punjabi) even though the caller's
+    established conversation language is Hindi. In that case, try that
+    established decoder as a candidate, but never load a model on the call path.
+    """
+    primary = str(primary_language or "").lower().split("-", 1)[0]
+    fallback = str(fallback_language or "").lower().split("-", 1)[0]
+    if primary in {"hi", "en"}:
+        candidate = "en" if primary == "hi" else "hi"
+    elif fallback in {"hi", "en"} and fallback != primary:
+        candidate = fallback
+    else:
+        return None
+    return candidate if candidate in installed and candidate in resident else None
+
 app = FastAPI(title="Kodewaves Indic CPU STT")
 _loaded: OrderedDict[str, sherpa_onnx.OfflineRecognizer] = OrderedDict()
 _inference_lock = asyncio.Lock()
@@ -630,9 +655,15 @@ async def transcribe(
         primary_phone_has_unknown_tokens = (
             phone_capture and _phone_decode_has_unknown_tokens(text)
         )
+        phone_rescue_language = _phone_rescue_language(
+            lang,
+            fallback,
+            installed=set(installed),
+            resident=set(_loaded),
+        ) if phone_capture else None
         if (
             phone_capture
-            and lang in {"hi", "en"}
+            and phone_rescue_language
             # Keep the normal phone-slot path to one decode. Running both
             # recognizers for every phone utterance serializes two CPU-heavy
             # inference passes under _inference_lock and made routine turns
@@ -644,13 +675,12 @@ async def transcribe(
                 or primary_phone_digits > 15
                 or (primary_phone_digits < 15 and primary_phone_has_unknown_tokens)
             )
-            and all(candidate in installed and candidate in _loaded for candidate in {"hi", "en"})
         ):
             # Phone strings are commonly spoken in English inside Hindi calls,
             # and LID can route an English digit utterance to Moonshine. Try
             # the other warm decoder only when the first result cannot be used;
             # reject overlong hallucinations instead of carrying fake digits.
-            other_language = "en" if lang == "hi" else "hi"
+            other_language = phone_rescue_language
             other_text = await asyncio.to_thread(decode, other_language)
             if _phone_rescue_is_better(text, other_text):
                 text = other_text

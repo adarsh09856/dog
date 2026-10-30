@@ -91,6 +91,34 @@ async def test_long_sentence_streams_before_response_ends():
 
 
 @pytest.mark.asyncio
+async def test_followup_phrases_batch_larger_than_the_initial_fast_phrase():
+    aggregator = LocalSpeechAggregator(
+        min_characters=24,
+        first_chunk_characters=12,
+        first_clause_characters=24,
+        first_phrase_characters=16,
+        streaming_phrase_characters=48,
+    )
+    source = (
+        "I can help with that. Please share the appointment date and time "
+        "so I can check the available schedule for you."
+    )
+    emitted = []
+    first = "I can help with that. "
+    emitted.extend([part.text async for part in aggregator.aggregate(first)])
+    for word in source[len(first):].split(" "):
+        emitted.extend([part.text async for part in aggregator.aggregate(word + " ")])
+    tail = await aggregator.flush()
+    if tail:
+        emitted.append(tail.text)
+
+    assert emitted
+    assert len(emitted[0]) <= 24
+    assert all(len(part.strip()) >= 40 for part in emitted[1:-1])
+    assert " ".join(part.strip() for part in emitted) == source
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('clear', ['reset', 'handle_interruption'])
 async def test_interruption_discards_both_pending_sentence_and_partial_tail(clear):
     aggregator = LocalSpeechAggregator()

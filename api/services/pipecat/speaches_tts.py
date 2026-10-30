@@ -61,8 +61,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # Lower the first-phrase threshold to reduce the gap to speech;
                 # word/date guards still prevent unsafe phrase boundaries.
                 first_phrase_characters=16,
-                # Release follow-up phrases sooner to reduce silence between
-                # local CPU synthesis requests while retaining grouping guards.
+                # Keep the early first phrase small for quick onset, then batch
+                # later text more coarsely to reduce serial local-CPU requests.
                 streaming_phrase_characters=24,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
