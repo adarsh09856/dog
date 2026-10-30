@@ -234,7 +234,6 @@ export default function AdminPlansPage() {
                       <div className={styles.limitCell}><strong className={styles.limitValue}>{p.included_minutes.toLocaleString()}</strong><span className={styles.limitLabel}>Minutes / purchase</span></div>
                       <div className={styles.limitCell}><strong className={styles.limitValue}>{p.max_concurrent_calls}</strong><span className={styles.limitLabel}>Concurrent calls</span></div>
                       <div className={styles.limitCell}><strong className={styles.limitValue}>{p.max_agents ?? 0}</strong><span className={styles.limitLabel}>Voice agents</span></div>
-                      <div className={styles.limitCell}><strong className={styles.limitValue}>{p.overage_rate_per_minute == null ? "—" : formatMoney(p.overage_rate_per_minute, p.currency)}</strong><span className={styles.limitLabel}>Overage / minute</span></div>
                     </div>
                     <div>
                       <div className={styles.ruleHeading}><span>Enforced feature access</span><span>{features.filter(([, enabled]) => enabled).length}/{features.length}</span></div>

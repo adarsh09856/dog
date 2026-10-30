@@ -37,7 +37,6 @@ describe("public pricing", () => {
         monthly_price_usd: null,
         included_minutes: 500,
         max_agents: 5,
-        overage_rate_per_minute: 1.2,
         max_concurrent_calls: 2,
         allow_user_byok: true,
         features: ["WebRTC Web Widget"],

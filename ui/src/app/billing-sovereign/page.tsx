@@ -462,10 +462,6 @@ export default function SovereignBillingPage() {
                         <span className="text-muted-foreground">Concurrent Calls:</span>
                         <span className="font-bold text-foreground font-mono">{p.max_concurrent_calls} channels</span>
                       </div>
-                      <div className="flex items-center justify-between py-1 border-b border-border/40">
-                        <span className="text-muted-foreground">Overage Rate:</span>
-                        <span className="font-bold text-foreground font-mono">{p.overage_rate_per_minute == null ? "Not configured" : `${formatMoney(p.overage_rate_per_minute, p.currency)}/min`}</span>
-                      </div>
                       <div className="flex items-center justify-between py-1">
                         <span className="text-muted-foreground">BYOK Key Policy:</span>
                         {p.allow_user_byok ? (
