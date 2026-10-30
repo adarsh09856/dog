@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getUsers: vi.fn(),
   getPlans: vi.fn(),
   updateUser: vi.fn(),
+  impersonateUser: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ useAuth: () => mocks.auth }));
@@ -79,5 +80,27 @@ describe("owner user directory loading", () => {
     fireEvent.change(screen.getByLabelText("Max Voice Agents"), { target: { value: "0" } });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save Changes" })); });
     expect(mocks.updateUser).toHaveBeenCalledWith(9, { max_agents: 0 });
+  });
+
+  it("requires confirmation before starting an impersonation session", async () => {
+    mocks.auth = { loading: false, user: { id: 7, is_superuser: true } };
+    mocks.getUsers.mockResolvedValue([{ id: 12, email: "tenant@example.com", is_active: true, is_superuser: false }]);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<AdminUsersPage />);
+    await passDebounce();
+    await act(async () => {
+      fireEvent.keyDown(screen.getByRole("button", { name: "Manage tenant@example.com" }), { key: "Enter" });
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: /Login As User/ }));
+    expect(confirm).toHaveBeenCalledWith("Log in as tenant@example.com and switch to their workspace?");
+    expect(mocks.impersonateUser).not.toHaveBeenCalled();
+  });
+
+  it("keeps new-account passwords in a masked password field", async () => {
+    mocks.auth = { loading: false, user: { id: 7, is_superuser: true } };
+    render(<AdminUsersPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Create User" }));
+    const password = screen.getByPlaceholderText("Minimum 4 characters");
+    expect(password.getAttribute("type")).toBe("password");
   });
 });

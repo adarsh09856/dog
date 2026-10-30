@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { createWorkflowRunApiV1WorkflowWorkflowIdRunsPost } from "@/client/sdk.gen";
+import chrome from "@/components/layout/WorkspaceChrome.module.css";
 import { OnboardingTooltip } from "@/components/onboarding/OnboardingTooltip";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,13 +16,13 @@ import { WORKFLOW_RUN_MODES } from "@/constants/workflowRunModes";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { useAuth } from "@/lib/auth";
 import { cn, getRandomId } from "@/lib/utils";
-import chrome from "@/components/layout/WorkspaceChrome.module.css";
 
 import { EmbeddedVoiceTester } from "./workflow-tester/EmbeddedVoiceTester";
 import { ManualTextChatPanel } from "./workflow-tester/ManualTextChatPanel";
 import { DisabledNotice, EmptyState } from "./workflow-tester/shared";
 import type { WorkflowRuntimeNodeTransition } from "./workflow-tester/types";
 import { extractSdkErrorMessage, getErrorMessage } from "./workflow-tester/utils";
+import testerStyle from "./WorkflowTesterWorkspace.module.css";
 
 interface WorkflowTesterPanelProps {
     workflowId: number;
@@ -154,16 +155,21 @@ export function WorkflowTesterPanel({
     };
 
     return (
-        <div className={cn(chrome.testerPanel, "flex h-full min-h-0 flex-col bg-card text-card-foreground", className)}>
+        <div className={cn(chrome.testerPanel, testerStyle.panel, "flex h-full min-h-0 flex-col text-card-foreground", className)}>
+            <div className={testerStyle.heading}>
+                <span className={testerStyle.eyebrow}>Build / Agent playground</span>
+                <h2 className={testerStyle.title}>Test your agent</h2>
+                <p className={testerStyle.description}>Check the voice and chat experience before you publish.</p>
+            </div>
             <Tabs
                 value={activeMode}
                 onValueChange={handleModeChange}
                 className="min-h-0 flex-1 gap-0"
             >
-                <div className="border-b border-border/80 bg-card px-4 pb-3 pt-4">
-                    <p className="mb-2 font-mono text-[9px] font-medium uppercase tracking-[.16em] text-muted-foreground">Agent workspace <span className="px-1 text-border">/</span> Live test</p>
+                <div className={testerStyle.tabsHeader}>
+                    <p className="mb-2 font-mono text-[9px] font-medium uppercase tracking-[.16em] text-muted-foreground">Choose a test mode</p>
                     <div className="flex items-center gap-3">
-                        <TabsList className="grid h-10 flex-1 grid-cols-2 rounded-xl border border-border/70 bg-muted/70 p-1 shadow-inner shadow-foreground/[0.03]">
+                        <TabsList className={cn(testerStyle.tabList, "grid h-10 flex-1 grid-cols-2 rounded-xl p-1 shadow-inner shadow-foreground/[0.03]")}>
                             <TabsTrigger value="audio" className="rounded-lg text-sm font-medium data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                                 <Mic className="h-4 w-4" />
                                 Test Audio
@@ -187,8 +193,17 @@ export function WorkflowTesterPanel({
                     </div>
                 </div>
 
-                <TabsContent value="audio" className="min-h-0 flex-1 bg-background/50 px-4 py-4">
+                <TabsContent value="audio" className={cn(testerStyle.audioContent, "min-h-0 flex-1 px-4 py-4")}>
                     <div className="flex h-full min-h-0 flex-col gap-3">
+                        {tokenReady && accessToken && !voiceRunId && !effectiveDisabledReason ? (
+                            <div className={testerStyle.modeIntro}>
+                                <div>
+                                    <strong>Browser voice preview</strong>
+                                    <p>Start a temporary call and speak naturally with this agent.</p>
+                                </div>
+                                <span className={testerStyle.modeTag}>AUDIO</span>
+                            </div>
+                        ) : null}
                         {!tokenReady ? (
                             <div className="space-y-4">
                                 <Skeleton className="h-14 rounded-xl" />
@@ -239,17 +254,20 @@ export function WorkflowTesterPanel({
                     </div>
                 </TabsContent>
 
-                <TabsContent value="text" className="min-h-0 flex-1 bg-background/50 px-4 py-3">
+                <TabsContent value="text" className={cn(testerStyle.textContent, "min-h-0 flex-1 px-4 py-3")}>
                     <div className="flex h-full min-h-0 flex-col gap-3">
-                        <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-medium text-muted-foreground">Manual test</span>
+                        <div className={cn(testerStyle.chatToolbar, "flex items-center justify-between")}>
+                            <div>
+                                <span className={testerStyle.chatToolbarLabel}>Manual chat</span>
+                                <p className="mt-0.5 text-[10px] text-muted-foreground">Send messages to check the agent’s text responses.</p>
+                            </div>
                             {chatActive ? (
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setChatSessionKey((value) => value + 1)}
                                     disabled={testerBlocked}
-                                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    className={cn(testerStyle.resetButton, "h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground")}
                                 >
                                     <RefreshCw className="h-3.5 w-3.5" />
                                     Reset

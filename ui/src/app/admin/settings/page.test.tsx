@@ -50,3 +50,14 @@ it("saves the platform branding and refreshes shared branding", async () => {
   expect(mocks.notifyBrandingChanged).toHaveBeenCalledTimes(1);
   expect((await screen.findByRole("status")).textContent).toContain("Branding updated across the platform.");
 });
+
+it("provides direct navigation to settings areas and keeps secrets masked", async () => {
+  render(<AdminSettingsPage />);
+  const emailNav = await screen.findByRole("link", { name: "Email" });
+  expect(emailNav.getAttribute("href")).toBe("#settings-email");
+  expect(document.getElementById("settings-email")).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Branding" }).getAttribute("href")).toBe("#settings-branding");
+  const secretInputs = document.querySelectorAll('input[type="password"]');
+  expect(secretInputs).toHaveLength(3);
+  expect(Array.from(secretInputs).every((input) => input.getAttribute("type") === "password")).toBe(true);
+});
