@@ -669,7 +669,7 @@ def test_owner_ci_installs_same_pipecat_extras_as_api_image():
     assert ci_extras.group(1) == image_extras.group(1)
 
 
-def test_shared_integration_branch_runs_full_client_release_verification():
+def test_main_pr_and_manual_runs_execute_full_client_release_verification():
     import yaml
 
     root = Path(__file__).resolve().parents[2]
@@ -679,8 +679,10 @@ def test_shared_integration_branch_runs_full_client_release_verification():
         )
     )
     events = workflow.get("on", workflow.get(True, {}))
-    assert "codex/kodewaves-shared-work" in events["push"]["branches"]
-    assert "refs/heads/codex/kodewaves-shared-work" in workflow["jobs"]["verify"]["if"]
+    assert "main" in events["push"]["branches"]
+    assert "main" in events["pull_request"]["branches"]
+    assert "workflow_dispatch" in events
+    assert "if" not in workflow["jobs"]["verify"]
 
 
 def test_client_production_cors_is_bound_to_public_origin():

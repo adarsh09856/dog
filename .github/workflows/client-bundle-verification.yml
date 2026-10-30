@@ -1,11 +1,9 @@
-name: Verify client bundle images
+name: Verify client bundle
 
 on:
   push:
     branches:
-      - codex/client-bundle-verification-*
-      - codex/client-bundle-theme
-      - codex/kodewaves-shared-work
+      - main
   pull_request:
     branches:
       - main
@@ -21,7 +19,7 @@ permissions:
 
 concurrency:
   group: client-bundle-verification-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   owner-postgres:
@@ -172,7 +170,6 @@ jobs:
           src/lib/brandingTheme.test.ts
 
   verify:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.ref == 'refs/heads/codex/client-bundle-theme' || github.ref == 'refs/heads/codex/kodewaves-shared-work'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -193,14 +190,10 @@ jobs:
       - name: Build and verify client images with temporary keys
         env:
           CADDY_IMAGE: ${{ inputs.caddy_image || 'caddy@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f' }}
-        run: >-
-          python deploy/client/ci_verify.py
-          --caddy-image "$CADDY_IMAGE"
-          --report "$RUNNER_TEMP/client-verification.json"
-      - name: Preserve verification evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: client-image-verification-${{ github.sha }}
-          path: ${{ runner.temp }}/client-verification.json
-          if-no-files-found: error
-          retention-days: 14
+        shell: bash
+        run: |
+          report="$RUNNER_TEMP/client-verification-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          trap 'rm -f "$report"' EXIT
+          python deploy/client/ci_verify.py \
+            --caddy-image "$CADDY_IMAGE" \
+            --report "$report"

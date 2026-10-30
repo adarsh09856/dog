@@ -80,7 +80,9 @@ async def test_plan_assignment_and_wallet_credit_commit_together(monkeypatch):
             return self.value
 
     session = SimpleNamespace(
-        execute=AsyncMock(side_effect=[None, Result(wallet), Result(None), Result(assignment)]),
+        # Paid credits now take the advisory lock, atomically create the wallet,
+        # lock/read it, check the payment ledger, then read the current plan.
+        execute=AsyncMock(side_effect=[None, None, Result(wallet), Result(None), Result(assignment)]),
         commit=AsyncMock(),
         refresh=AsyncMock(),
     )
@@ -110,6 +112,7 @@ async def test_plan_assignment_and_wallet_credit_commit_together(monkeypatch):
     assert assignment.value["expires_at"]
     assert assignment.category == "plan"
     assert any(getattr(entry, "reference_id", None) == "payment-1" for entry in added)
+    assert session.execute.await_count == 5
     session.commit.assert_awaited_once()
 
 
@@ -126,7 +129,7 @@ async def test_duplicate_payment_does_not_reassign_or_extend_plan(monkeypatch):
             return self.value
 
     session = SimpleNamespace(
-        execute=AsyncMock(side_effect=[None, Result(wallet), Result(existing_ledger)]),
+        execute=AsyncMock(side_effect=[None, None, Result(wallet), Result(existing_ledger)]),
         add=AsyncMock(), commit=AsyncMock(), refresh=AsyncMock(),
     )
 
@@ -147,7 +150,7 @@ async def test_duplicate_payment_does_not_reassign_or_extend_plan(monkeypatch):
     )
 
     assert result.credit_balance_minutes == 120
-    assert session.execute.await_count == 3
+    assert session.execute.await_count == 4
     session.commit.assert_not_awaited()
 
 
