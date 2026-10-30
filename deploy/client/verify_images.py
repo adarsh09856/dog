@@ -36,6 +36,7 @@ ctypes.CDLL(str(rnnoise))
 subprocess.run(['node', '-e', "require('/app/api/mcp_server/ts_validator/node_modules/typescript')"], check=True)
 for path in ('api/routes/admin', 'api/routes/superuser.py', 'api/tests',
              'api/db/owner_user_management.py', 'api/db/saas_plan_catalog.py',
+             'api/db/client_installations.py',
              'api/services/owner_license_signer.py',
              'api/services/owner_license_signer_client.py',
              'scripts/create_superuser.py'):
