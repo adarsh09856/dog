@@ -409,7 +409,7 @@ export function AppSidebar() {
               className="notranslate flex items-center gap-2 px-1"
               translate="no"
             >
-              <div className={chrome.identity}><BrandLogo className="h-7 max-w-[150px]" /><BrandTagline /></div>
+              <div className={chrome.identity}><BrandLogo inverse className="h-7 max-w-[150px]" /><BrandTagline /></div>
               {versionInfo && (
                 <span
                   className="notranslate text-xs font-normal text-muted-foreground"
