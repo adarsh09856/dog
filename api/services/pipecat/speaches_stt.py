@@ -93,10 +93,8 @@ def _resolve_auto_language(
             "excluded_language_to_previous_supported" if previous in LOCAL_REPLY_TTS_LANGUAGES
             else "excluded_language_to_hindi",
         )
-    if confidence is None:
-        return previous or None, "missing_detector_confidence"
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
-    if confidence < threshold and previous:
+    if confidence is not None and confidence < threshold and previous:
         return previous, "held_previous_low_confidence"
     return code, "detector"
 
@@ -158,6 +156,8 @@ def _trusted_tts_language(
         # Preserve the speech transcript's detector result, but never route the
         # response to a voice that is absent from the configured TTS inventory.
         return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else "hi"
+    if confidence is None:
+        return code
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
     if confidence is not None and confidence >= threshold:
         return code
@@ -326,8 +326,9 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         language_confidence = None
         language_route = "configured"
         self.latest_tts_language = None
+        phone_capture_pending = getattr(self, "phone_capture_pending", None)
         phone_capture = bool(
-            callable(self.phone_capture_pending) and self.phone_capture_pending()
+            callable(phone_capture_pending) and phone_capture_pending()
         )
         local_indic = settings is not None and settings.model == "indicconformer-ctc-int8"
         auto_language = settings is not None and _is_auto_language(settings.language)
@@ -350,8 +351,9 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             if settings.temperature is not None:
                 kwargs["temperature"] = settings.temperature
             extra_body = {}
-            if local_indic and auto_language and self._stable_detected_language:
-                extra_body["fallback_language"] = self._stable_detected_language
+            stable_detected_language = getattr(self, "_stable_detected_language", None)
+            if local_indic and auto_language and stable_detected_language:
+                extra_body["fallback_language"] = stable_detected_language
             if local_indic and phone_capture:
                 extra_body["phone_capture"] = True
             if extra_body:
@@ -378,7 +380,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                     self.latest_detected_language, resolved_route = _resolve_auto_language(
                         detected_language if isinstance(detected_language, str) else None,
                         language_confidence,
-                        self._stable_detected_language,
+                        getattr(self, "_stable_detected_language", None),
                     )
                     # Preserve detector/decode rescue routes unless language
                     # normalization or confidence hysteresis deliberately
@@ -392,7 +394,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 self.latest_detected_language, language_route = _resolve_auto_language(
                     detected_language if isinstance(detected_language, str) else None,
                     language_confidence,
-                    self._stable_detected_language,
+                    getattr(self, "_stable_detected_language", None),
                 )
             self._latest_language_confidence = language_confidence
             if self.latest_detected_language and hasattr(result, "model_copy"):
@@ -412,7 +414,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             script_language, script_route = _resolve_script_language_conflict(
                 self.latest_detected_language,
                 text,
-                self._stable_detected_language,
+                getattr(self, "_stable_detected_language", None),
             )
             if script_language != self.latest_detected_language:
                 self.latest_detected_language = script_language
@@ -461,7 +463,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             self.latest_tts_language = _trusted_tts_language(
                 self.latest_detected_language,
                 self._latest_language_confidence,
-                self._stable_detected_language,
+                getattr(self, "_stable_detected_language", None),
                 language_route,
             )
         elif text:
