@@ -28,7 +28,7 @@ services:
           cpus: "2.0"
           memory: 1024M
     networks:
-      - kodewaves-network
+      - app-network
 
   redis:
     image: redis:7-alpine
@@ -51,7 +51,7 @@ services:
           cpus: "0.5"
           memory: 256M
     networks:
-      - kodewaves-network
+      - app-network
 
   minio:
     build:
@@ -82,7 +82,7 @@ services:
           cpus: "1.0"
           memory: 512M
     networks:
-      - kodewaves-network
+      - app-network
 
   api:
     build:
@@ -193,7 +193,7 @@ services:
           cpus: "4.0"
           memory: 2048M
     networks:
-      - kodewaves-network
+      - app-network
 
   ui:
     build:
@@ -227,7 +227,7 @@ services:
           cpus: "2.0"
           memory: 1024M
     networks:
-      - kodewaves-network
+      - app-network
 
   # WebRTC NAT Traversal (STUN / TURN) for browser audio testing behind symmetric NAT
   coturn:
@@ -260,7 +260,7 @@ services:
           cpus: "0.5"
           memory: 256M
     networks:
-      - kodewaves-network
+      - app-network
 
   # ==============================================================================
   # Ultra-Lightweight Self-Hosted CPU Local AI Engine (Optional / Admin Opt-In)
@@ -296,7 +296,7 @@ services:
         reservations:
           memory: 2048M
     networks:
-      - kodewaves-network
+      - app-network
 
   ollama-warmup:
     image: python:3.13-alpine
@@ -318,7 +318,7 @@ services:
           cpus: "0.1"
           memory: 64M
     networks:
-      - kodewaves-network
+      - app-network
 
   # Faster-Whisper Local STT Server (CTranslate2 CPU inference, OpenAI-compatible /v1/audio/transcriptions)
   indic-stt:
@@ -349,7 +349,7 @@ services:
           cpus: "2.0"
           memory: 2048M
     networks:
-      - kodewaves-network
+      - app-network
 
   # Optional bilingual Inaya backend behind the combined speech endpoint.
   indus-tts:
@@ -380,7 +380,7 @@ services:
           cpus: "${INDUS_CPU_LIMIT:-1.0}"
           memory: 2048M
     networks:
-      - kodewaves-network
+      - app-network
 
   # Small regional CPU voice model: 13 documented languages and 20 speakers.
   indic-vits-tts:
@@ -413,7 +413,7 @@ services:
           cpus: "${INDIC_VITS_CPU_LIMIT:-2.0}"
           memory: "${INDIC_VITS_MEMORY_LIMIT:-1536M}"
     networks:
-      - kodewaves-network
+      - app-network
 
   # Gated local DhVaani checkpoint. Start only after authorized weights and
   # licensed voice references are available; no hosted inference is used.
@@ -445,7 +445,7 @@ services:
           cpus: "${DHVAANI_CPU_LIMIT:-2.0}"
           memory: 3072M
     networks:
-      - kodewaves-network
+      - app-network
 
   # Evaluation profile: provision approved weights and tokenizer before starting.
   indic-parler-tts:
@@ -472,7 +472,7 @@ services:
           cpus: "2.0"
           memory: 4096M
     networks:
-      - kodewaves-network
+      - app-network
 
   # CPU LiteRT Indic-Mio TTS, with Indian-language and English voice support.
   # This model buffers utterances, so keep it distinct from the streaming voice.
@@ -505,7 +505,7 @@ services:
         reservations:
           memory: 1024M
     networks:
-      - kodewaves-network
+      - app-network
 
   whisper:
     image: ghcr.io/speaches-ai/speaches:latest-cpu
@@ -547,7 +547,7 @@ services:
         reservations:
           memory: 1024M
     networks:
-      - kodewaves-network
+      - app-network
 
 volumes:
   kodewaves_postgres_data:
@@ -562,7 +562,7 @@ volumes:
   kodewaves_dhvaani_tts_models:
 
 networks:
-  kodewaves-network:
+  app-network:
     name: ${KODEWAVES_NETWORK_NAME:-kodewaves-network}
     driver: bridge
 
