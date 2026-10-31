@@ -76,7 +76,12 @@ export default function DeploymentPage() {
                 <Link href="/platform" className={styles.secondaryAction}>Explore the platform</Link>
               </div>
             </div>
-            <div className={styles.heroRail} aria-label="Deployment decisions">
+            <div className={`${styles.heroRail} ${styles.productRail}`} aria-label="Deployment planning overview">
+              <div className={styles.railHeading}>
+                <span className={styles.railSignal} aria-hidden="true" />
+                <span>DEPLOYMENT SCOPE</span>
+                <span className={styles.railPreview}>PLANNING</span>
+              </div>
               {[
                 ["A", "Where it runs", "Hosted workspace or customer-managed environment."],
                 ["B", "What it connects", "Speech, LLM, carrier and business systems."],
@@ -86,6 +91,9 @@ export default function DeploymentPage() {
                   <span>{number}</span><div><strong>{title}</strong><p>{description}</p></div>
                 </div>
               ))}
+              <div className={styles.railFooter}>
+                <span>APPLICATION</span><ArrowRight aria-hidden className="size-3" /><span>PROVIDERS</span><ArrowRight aria-hidden className="size-3" /><span>OPERATIONS</span>
+              </div>
             </div>
           </div>
         </section>

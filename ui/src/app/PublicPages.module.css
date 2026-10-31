@@ -126,6 +126,25 @@
 .heroRailItem > span:first-child { color: var(--primary); font-family: var(--font-geist-mono), monospace; font-size: .7rem; }
 .heroRailItem strong { display: block; font-size: .86rem; }
 .heroRailItem p { margin-top: .32rem; color: var(--muted-foreground); font-size: .75rem; line-height: 1.6; }
+.productRail {
+  align-content: stretch;
+  gap: .65rem;
+  padding: 1.05rem;
+  border: 1px solid #ffffff24;
+  border-radius: 1rem;
+  background: linear-gradient(145deg, #ffffff10, #ffffff05);
+  box-shadow: 0 22px 55px -40px #071a18;
+  backdrop-filter: blur(12px);
+}
+.railHeading { display: flex; min-height: 1.7rem; align-items: center; gap: .55rem; color: #d5c17f; font-family: var(--font-geist-mono), monospace; font-size: .6rem; font-weight: 750; letter-spacing: .13em; }
+.railSignal { width: .45rem; height: .45rem; border-radius: 50%; background: #d5c17f; box-shadow: 0 0 0 .25rem #d5c17f1c; }
+.railPreview { margin-left: auto; padding: .25rem .45rem; border: 1px solid #ffffff2e; border-radius: 999px; color: #dce8df; font-size: .52rem; letter-spacing: .08em; }
+.productRail .heroRailItem { grid-template-columns: 2rem minmax(0, 1fr); gap: .7rem; align-items: center; padding: .82rem .8rem; border: 1px solid #ffffff20; border-radius: .7rem; background: #ffffff0a; }
+.productRail .heroRailItem > span:first-child { display: grid; width: 1.8rem; height: 1.8rem; place-items: center; border: 1px solid #d5c17f45; border-radius: .55rem; background: #d5c17f12; color: #e1ce8e; font-size: .61rem; }
+.productRail .heroRailItem strong { color: #f1f4eb; font-size: .79rem; }
+.productRail .heroRailItem p { color: #bfd0c6; font-size: .7rem; }
+.railFooter { display: flex; align-items: center; justify-content: center; gap: .6rem; padding-top: .7rem; border-top: 1px solid #ffffff20; color: #c7d7cd; font-family: var(--font-geist-mono), monospace; font-size: .54rem; letter-spacing: .07em; }
+.railFooter svg { color: #d5c17f; }
 .visualCaption {
   display: flex;
   justify-content: space-between;
@@ -212,7 +231,7 @@
 .priceHero .headlineAccent { color: #c7d9c0; }
 .priceHero .lede { color: #bfd0c6; }
 .priceHeroGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, .48fr); align-items: end; gap: 2.5rem; }
-.priceTerms { border-left: 2px solid #d5c17f; padding: .35rem 0 .35rem 1.2rem; }
+.priceTerms { padding: 1.2rem 1.25rem 1.25rem; border: 1px solid #ffffff24; border-left: 2px solid #d5c17f; border-radius: .2rem .9rem .9rem .2rem; background: linear-gradient(145deg, #ffffff10, #ffffff05); box-shadow: 0 20px 48px -40px #071a18; }
 .priceTerms strong { display: block; font-size: .76rem; }
 .priceTerms ul { display: grid; gap: .65rem; margin: .95rem 0 0; padding: 0; list-style: none; }
 .priceTerms li { display: flex; gap: .55rem; align-items: center; color: #bfd0c6; font-size: .74rem; }
@@ -279,6 +298,8 @@
   .priceHeroGrid { gap: 1.7rem; }
   .bundleGrid { grid-template-columns: minmax(0, 1fr); }
   .usageGrid { grid-template-columns: minmax(0, 1fr); }
+  .productRail { padding: .75rem; }
+  .railFooter { gap: .38rem; font-size: .48rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

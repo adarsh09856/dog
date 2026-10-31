@@ -39,6 +39,17 @@ def _package_values(pkg: CreditPackageItem) -> dict:
     }
 
 
+def _validate_new_package_price(pkg: CreditPackageItem) -> None:
+    """Require an explicit price decision before a new bundle is activated."""
+    explicit_price_fields = {"price_cents"}
+    explicit_price_fields.add("price_inr" if pkg.currency == "INR" else "price_usd")
+    if pkg.is_active and not pkg.model_fields_set.intersection(explicit_price_fields):
+        raise HTTPException(
+            status_code=422,
+            detail="Set a bundle price, including zero for an intentional free bundle, before making it active",
+        )
+
+
 @router.get("", response_model=List[CreditPackageItem])
 async def list_credit_packages(_user=Depends(get_superuser)):
     """List all top-up credit packages."""
@@ -56,6 +67,7 @@ async def list_credit_packages(_user=Depends(get_superuser)):
 @router.post("", response_model=Dict[str, Any])
 async def create_credit_package(pkg: CreditPackageItem, _user=Depends(get_superuser)):
     """Create or upsert a top-up credit package."""
+    _validate_new_package_price(pkg)
     record = await credit_package_catalog.create_package(_package_values(pkg))
     return {"message": f"Successfully created package {pkg.name}", "id": str(record.id)}
 

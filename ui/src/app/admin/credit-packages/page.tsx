@@ -1,7 +1,5 @@
 "use client";
 
-import admin from "../AdminWorkspace.module.css";
-
 import {
   Edit,
   Flame,
@@ -36,6 +34,8 @@ import {
 } from "@/components/ui/table";
 import { adminApi, CreditPackage } from "@/lib/kodewavesApi";
 
+import admin from "../AdminWorkspace.module.css";
+
 function formatMoney(amount: number, currency: string) {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -56,6 +56,7 @@ export default function AdminCreditPackagesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPackage, setEditingPackage] = useState<Partial<CreditPackage> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [freePackageConfirmed, setFreePackageConfirmed] = useState(false);
 
   const fetchPackages = async () => {
     setLoading(true);
@@ -75,6 +76,9 @@ export default function AdminCreditPackagesPage() {
 
   const handleSave = async () => {
     if (!editingPackage || !editingPackage.name) return;
+    if (!editingPackage.id && editingPackage.is_active &&
+        !(Number.isSafeInteger(editingPackage.price_cents) && (editingPackage.price_cents ?? 0) > 0) &&
+        !freePackageConfirmed) return;
     setSaving(true);
     try {
       if (editingPackage.id) {
@@ -118,14 +122,15 @@ export default function AdminCreditPackagesPage() {
             size="sm"
             className="gap-2"
             onClick={() => {
+              setFreePackageConfirmed(false);
               setEditingPackage({
-                name: "1,000 Minutes Pack",
+                name: "New Minutes Pack",
                 minutes: 1000,
                 bonus_minutes: 100,
-                price_cents: 199900,
+                price_cents: 0,
                 currency: "INR",
                 is_popular: false,
-                is_active: true,
+                is_active: false,
               });
               setModalOpen(true);
             }}
@@ -292,16 +297,28 @@ export default function AdminCreditPackagesPage() {
                 </select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Price ({editingPackage?.currency ?? "INR"})</Label>
+                <Label htmlFor="package-price" className="text-xs">Price ({editingPackage?.currency ?? "INR"})</Label>
                 <Input
+                  id="package-price"
                   type="number"
                   min="0"
                   step="0.01"
                   value={((editingPackage?.price_cents ?? 0) / 100).toFixed(2)}
-                  onChange={(e) => setEditingPackage((prev) => prev ? { ...prev, price_cents: Math.max(0, Math.round((Number(e.target.value) || 0) * 100)) } : null)}
+                  onChange={(e) => { setFreePackageConfirmed(false); setEditingPackage((prev) => prev ? { ...prev, price_cents: Math.max(0, Math.round((Number(e.target.value) || 0) * 100)) } : null); }}
                 />
               </div>
             </div>
+            {!editingPackage?.id && editingPackage?.price_cents === 0 && (
+              <Button type="button" variant={freePackageConfirmed ? "secondary" : "outline"} onClick={() => setFreePackageConfirmed(!freePackageConfirmed)}>
+                {freePackageConfirmed ? "Free bundle confirmed" : "Confirm this as a free bundle"}
+              </Button>
+            )}
+            {!editingPackage?.id && editingPackage?.is_active &&
+              !(Number.isSafeInteger(editingPackage.price_cents) && (editingPackage.price_cents ?? 0) > 0) && !freePackageConfirmed && (
+                <p role="alert" className="text-sm text-destructive">
+                  Set a positive price or confirm this is a free bundle before making it visible in the billing store.
+                </p>
+              )}
 
             <div className="flex items-center justify-between pt-1">
               <Label className="text-xs">Highlight with &quot;Popular&quot; Tag</Label>
@@ -312,9 +329,10 @@ export default function AdminCreditPackagesPage() {
             </div>
 
             <div className="flex items-center justify-between">
-              <Label className="text-xs">Visible in Billing Store</Label>
+              <Label htmlFor="package-active" className="text-xs">Visible in Billing Store</Label>
               <Switch
-                checked={editingPackage?.is_active ?? true}
+                id="package-active"
+                checked={editingPackage?.is_active ?? false}
                 onCheckedChange={(checked) => setEditingPackage((prev) => prev ? { ...prev, is_active: checked } : null)}
               />
             </div>
@@ -324,7 +342,7 @@ export default function AdminCreditPackagesPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving || (!editingPackage?.id && Boolean(editingPackage?.is_active) && !(Number.isSafeInteger(editingPackage?.price_cents) && (editingPackage?.price_cents ?? 0) > 0) && !freePackageConfirmed)}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Bundle
             </Button>

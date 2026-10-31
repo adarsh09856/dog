@@ -48,7 +48,12 @@ export default function PlatformPage() {
                 <Link href="/pricing" className={styles.secondaryAction}>View plans</Link>
               </div>
             </div>
-            <div className={styles.heroRail} aria-label="Platform workflow">
+            <div className={`${styles.heroRail} ${styles.productRail}`} aria-label="Illustrative agent workflow">
+              <div className={styles.railHeading}>
+                <span className={styles.railSignal} aria-hidden="true" />
+                <span>AGENT WORKFLOW</span>
+                <span className={styles.railPreview}>PREVIEW</span>
+              </div>
               {[
                 ["01", "A conversation you can shape", "Prompts, branches and business tools in a visual workflow."],
                 ["02", "Channels your team can configure", "Browser voice and supported telephone providers."],
@@ -58,6 +63,9 @@ export default function PlatformPage() {
                   <span>{number}</span><div><strong>{title}</strong><p>{description}</p></div>
                 </div>
               ))}
+              <div className={styles.railFooter}>
+                <span>DESIGN</span><ArrowRight aria-hidden className="size-3" /><span>CONNECT</span><ArrowRight aria-hidden className="size-3" /><span>REVIEW</span>
+              </div>
             </div>
           </div>
         </section>

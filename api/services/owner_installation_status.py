@@ -86,6 +86,10 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
     public_key = _trusted_owner_key()
     license_data = load_license(token, public_key)
     validate_installation_license(license_data)
+    initial_check = not _logged_initial_owner_check
+    integrity_scan_started = time.monotonic()
+    if initial_check:
+        logger.info("Initial owner status poll: release integrity scan started")
     try:
         # Hashing the runtime tree performs blocking filesystem IO. Keep the
         # periodic integrity check off the same event loop as live call audio.
@@ -106,6 +110,13 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
             1, _status_key(license_data.installation_id), field, serialized,
             field.replace("pending_integrity_finding:", "acknowledged_integrity_finding:"),
         )
+    integrity_scan_seconds = time.monotonic() - integrity_scan_started
+    if initial_check or integrity_scan_seconds >= 5:
+        logger.log(
+            "WARNING" if integrity_scan_seconds >= 5 else "INFO",
+            "Owner status release integrity scan finished in {:.2f}s",
+            integrity_scan_seconds,
+        )
     fields = await redis_client.hgetall(_status_key(license_data.installation_id))
     pending_findings = sorted(
         (field, value) for field, value in fields.items()
@@ -116,6 +127,9 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
         integrity_ok = False
         integrity_finding = json.loads(pending)
     nonce = secrets.token_urlsafe(32)
+    owner_request_started = time.monotonic()
+    if initial_check:
+        logger.info("Initial owner status poll: requesting signed status from owner")
     response = await client.post(
         _status_url(),
         json=owner_check_payload(
@@ -135,6 +149,13 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
         license_token=token,
         nonce=nonce,
     )
+    owner_request_seconds = time.monotonic() - owner_request_started
+    if initial_check or owner_request_seconds >= 5:
+        logger.log(
+            "WARNING" if owner_request_seconds >= 5 else "INFO",
+            "Owner signed status response verified in {:.2f}s",
+            owner_request_seconds,
+        )
     if pending:
         acknowledged_field, _ = _finding_field(json.loads(pending))
         acknowledged_field = acknowledged_field.replace(
@@ -232,6 +253,7 @@ async def require_current_owner_status(
 
 
 async def poll_owner_status_forever() -> None:
+    logger.info("Client owner status poller started; interval={}s", POLL_SECONDS)
     redis_client = Redis.from_url(REDIS_URL)
     try:
         async with httpx.AsyncClient() as client:

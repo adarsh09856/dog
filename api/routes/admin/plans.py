@@ -63,6 +63,20 @@ def _plan_values(plan: PlanItem) -> dict:
     }
 
 
+def _validate_new_plan_price(plan: PlanItem) -> None:
+    """Require an explicit pricing decision before activating or publishing."""
+    explicit_price_fields = {"monthly_price_cents", "annual_price_cents"}
+    if plan.currency == "INR":
+        explicit_price_fields.add("monthly_price_inr")
+    else:
+        explicit_price_fields.add("monthly_price_usd")
+    if (plan.is_active or plan.is_public) and not plan.model_fields_set.intersection(explicit_price_fields):
+        raise HTTPException(
+            status_code=422,
+            detail="Set a monthly or annual price, including zero for an intentional free plan, before activating or publishing a plan",
+        )
+
+
 @router.get("", response_model=List[PlanItem])
 async def list_plans(_user=Depends(get_superuser)):
     records = await saas_plan_catalog.list_plans()
@@ -87,6 +101,7 @@ async def list_plans(_user=Depends(get_superuser)):
 
 @router.post("", response_model=Dict[str, Any])
 async def upsert_plan(plan: PlanItem, _user=Depends(get_superuser)):
+    _validate_new_plan_price(plan)
     try:
         record = await saas_plan_catalog.save_plan(_plan_values(plan))
     except ValueError as error:

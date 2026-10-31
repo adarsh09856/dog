@@ -57,6 +57,7 @@ export default function AdminPlansPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Partial<SaaSPlan> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [freePlanConfirmed, setFreePlanConfirmed] = useState(false);
 
   const fetchPlans = useCallback(async () => {
     setLoading(true);
@@ -82,6 +83,10 @@ export default function AdminPlansPage() {
 
   const handleSave = async () => {
     if (!editingPlan || !editingPlan.name || !editingPlan.code) return;
+    if (!editingPlan.id && (editingPlan.is_active || editingPlan.is_public) &&
+        !(Number.isSafeInteger(editingPlan.monthly_price_cents) && (editingPlan.monthly_price_cents ?? 0) > 0) &&
+        !(Number.isSafeInteger(editingPlan.annual_price_cents) && (editingPlan.annual_price_cents ?? 0) > 0) &&
+        !freePlanConfirmed) return;
     setSaving(true);
     try {
       if (editingPlan.id) {
@@ -125,10 +130,11 @@ export default function AdminPlansPage() {
             size="sm"
             className="gap-2"
             onClick={() => {
+              setFreePlanConfirmed(false);
               setEditingPlan({
                 name: "New Tier",
                 code: "new-tier",
-                monthly_price_cents: 499900,
+                monthly_price_cents: 0,
                 annual_price_cents: 0,
                 currency: "INR",
                 included_minutes: 1000,
@@ -140,8 +146,8 @@ export default function AdminPlansPage() {
                 has_widget_access: true,
                 has_campaigns_access: true,
                 allow_user_byok: false,
-                is_active: true,
-                is_public: true,
+                is_active: false,
+                is_public: false,
               });
               setModalOpen(true);
             }}
@@ -189,12 +195,13 @@ export default function AdminPlansPage() {
             <h3>No plans created yet</h3>
             <p>Build the first tier with a plan code, quotas, feature access, and billing terms.</p>
             <Button onClick={() => {
+              setFreePlanConfirmed(false);
               setEditingPlan({
-                name: "New Tier", code: "new-tier", monthly_price_cents: 499900, annual_price_cents: 0,
+                name: "New Tier", code: "new-tier", monthly_price_cents: 0, annual_price_cents: 0,
                 currency: "INR", included_minutes: 1000, max_concurrent_calls: 5, max_agents: 3,
                 has_crm_access: true, has_appointments_access: true, has_forms_access: true,
                 has_widget_access: true, has_campaigns_access: true, allow_user_byok: false,
-                is_active: true, is_public: true,
+                is_active: false, is_public: false,
               });
               setModalOpen(true);
             }}>Create first plan</Button>
@@ -307,26 +314,42 @@ export default function AdminPlansPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Monthly price ({editingPlan?.currency ?? "INR"})</Label>
+              <Label htmlFor="plan-monthly-price" className="text-xs">Monthly price ({editingPlan?.currency ?? "INR"})</Label>
               <Input
+                id="plan-monthly-price"
                 type="number"
                 min="0"
                 step="0.01"
                 value={((editingPlan?.monthly_price_cents ?? 0) / 100).toFixed(2)}
-                onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, monthly_price_cents: Math.max(0, Math.round((Number(e.target.value) || 0) * 100)) } : null)}
+                onChange={(e) => { setFreePlanConfirmed(false); setEditingPlan((prev) => prev ? { ...prev, monthly_price_cents: Math.max(0, Math.round((Number(e.target.value) || 0) * 100)) } : null); }}
               />
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs">Annual price ({editingPlan?.currency ?? "INR"}, optional)</Label>
+              <Label htmlFor="plan-annual-price" className="text-xs">Annual price ({editingPlan?.currency ?? "INR"}, optional)</Label>
               <Input
+                id="plan-annual-price"
                 type="number"
                 min="0"
                 step="0.01"
                 value={((editingPlan?.annual_price_cents ?? 0) / 100).toFixed(2)}
-                onChange={(e) => setEditingPlan((prev) => prev ? { ...prev, annual_price_cents: Math.max(0, Math.round((Number(e.target.value) || 0) * 100)) } : null)}
+                onChange={(e) => { setFreePlanConfirmed(false); setEditingPlan((prev) => prev ? { ...prev, annual_price_cents: Math.max(0, Math.round((Number(e.target.value) || 0) * 100)) } : null); }}
               />
             </div>
+            {!editingPlan?.id && editingPlan?.monthly_price_cents === 0 && editingPlan?.annual_price_cents === 0 && (
+              <div className="sm:col-span-2">
+                <Button type="button" variant={freePlanConfirmed ? "secondary" : "outline"} onClick={() => setFreePlanConfirmed(!freePlanConfirmed)}>
+                  {freePlanConfirmed ? "Free plan confirmed" : "Confirm this as a free plan"}
+                </Button>
+              </div>
+            )}
+            {!editingPlan?.id && (editingPlan?.is_active || editingPlan?.is_public) &&
+              !(Number.isSafeInteger(editingPlan.monthly_price_cents) && (editingPlan.monthly_price_cents ?? 0) > 0) &&
+              !(Number.isSafeInteger(editingPlan.annual_price_cents) && (editingPlan.annual_price_cents ?? 0) > 0) && !freePlanConfirmed && (
+                <p role="alert" className="text-sm text-destructive sm:col-span-2">
+                  Set a positive monthly or annual price, or confirm that this plan is free, before activating or publishing it.
+                </p>
+              )}
 
             <div className="space-y-1">
               <Label htmlFor="plan-included-minutes" className="text-xs">Minutes credited per purchase</Label>
@@ -391,16 +414,17 @@ export default function AdminPlansPage() {
             </div>
 
             <div className="col-span-2 flex items-center justify-between pt-1">
-              <Label className="text-xs">Active (available for purchase and public pricing)</Label>
+              <Label htmlFor="plan-active" className="text-xs">Active (available for purchase and public pricing)</Label>
               <Switch
-                checked={editingPlan?.is_active ?? true}
+                id="plan-active"
+                checked={editingPlan?.is_active ?? false}
                 onCheckedChange={(checked) => setEditingPlan((prev) => prev ? { ...prev, is_active: checked } : null)}
               />
             </div>
             <div className="col-span-2 space-y-1">
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor="plan-public" className="text-xs">Show in public pricing and self-service checkout</Label>
-                <Switch id="plan-public" checked={editingPlan?.is_public ?? true}
+                <Switch id="plan-public" checked={editingPlan?.is_public ?? false}
                   onCheckedChange={(checked) => setEditingPlan((prev) => prev ? { ...prev, is_public: checked } : null)} />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -424,7 +448,7 @@ export default function AdminPlansPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving || (!editingPlan?.id && Boolean(editingPlan?.is_active || editingPlan?.is_public) && !(Number.isSafeInteger(editingPlan?.monthly_price_cents) && (editingPlan?.monthly_price_cents ?? 0) > 0) && !(Number.isSafeInteger(editingPlan?.annual_price_cents) && (editingPlan?.annual_price_cents ?? 0) > 0) && !freePlanConfirmed)}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Plan
             </Button>
