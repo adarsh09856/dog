@@ -265,6 +265,12 @@ def test_disposable_owner_peer_requires_one_time_signed_enrollment_and_returns_b
                 tls_request, timeout=5
             )
         assert tls_error.value.code == 401
+        assert json.loads(owner.diagnostic_summary()) == {
+            "request_counts": {"/api/v1/admin/client-installations/check": 1},
+            "response_statuses": {"401": 1},
+            "rejected_requests": 0,
+            "rejection_types": {},
+        }
 
         install_key = Ed25519PrivateKey.generate()
         public_key = base64.urlsafe_b64encode(

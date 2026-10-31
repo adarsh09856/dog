@@ -74,6 +74,11 @@ class _OwnerAcceptanceServer:
         self.binding_valid = True
         self.used_nonces: set[str] = set()
         self._lock = threading.Lock()
+        self._metrics_lock = threading.Lock()
+        self._request_counts: dict[str, int] = {}
+        self._response_statuses: dict[str, int] = {}
+        self._rejection_count = 0
+        self._rejection_types: dict[str, int] = {}
         self.ca_file = directory / "ci-owner-ca.pem"
         self.server_key_file = directory / "ci-owner-server.key"
         self.server_cert_file = directory / "ci-owner-server.pem"
@@ -83,6 +88,8 @@ class _OwnerAcceptanceServer:
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
+                with owner._metrics_lock:
+                    owner._request_counts[self.path] = owner._request_counts.get(self.path, 0) + 1
                 try:
                     length = int(self.headers.get("Content-Length", "0"))
                     if not 0 < length <= 1_048_576:
@@ -99,10 +106,17 @@ class _OwnerAcceptanceServer:
                         self._reply(404, {"detail": "Not found"})
                         return
                     self._reply(200, result)
-                except Exception:  # noqa: BLE001 - do not expose protocol secrets in test logs
+                except Exception as exc:  # noqa: BLE001 - do not expose protocol secrets in test logs
+                    with owner._metrics_lock:
+                        owner._rejection_count += 1
+                        error_type = type(exc).__name__
+                        owner._rejection_types[error_type] = owner._rejection_types.get(error_type, 0) + 1
                     self._reply(401, {"detail": "Invalid CI owner request"})
 
             def _reply(self, status: int, payload: dict) -> None:
+                with owner._metrics_lock:
+                    key = str(status)
+                    owner._response_statuses[key] = owner._response_statuses.get(key, 0) + 1
                 data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
@@ -208,6 +222,16 @@ class _OwnerAcceptanceServer:
         """Control the signed IP decision in the disposable acceptance peer."""
         with self._lock:
             self.binding_valid = binding_valid
+
+    def diagnostic_summary(self) -> str:
+        """Return bounded, secret-free evidence for owner-poll CI failures."""
+        with self._metrics_lock:
+            return json.dumps({
+                "request_counts": dict(self._request_counts),
+                "response_statuses": dict(self._response_statuses),
+                "rejected_requests": self._rejection_count,
+                "rejection_types": dict(self._rejection_types),
+            }, sort_keys=True)
 
     def close(self) -> None:
         self.httpd.shutdown()
@@ -708,8 +732,9 @@ def _verify_compose_runtime(
                 time.sleep(1)
             if owner_gate_status != 404 or "Not Found" not in owner_gate_body:
                 raise ValueError(
-                    "Enrolled owner status must pass licensing and reach the expected unauthenticated route boundary; "
-                    f"received HTTP {owner_gate_status}: {owner_gate_body[:240]}"
+                    f"Owner peer evidence: {owner.diagnostic_summary()}; "
+                    "enrolled status must reach the expected unauthenticated route boundary; "
+                    f"received HTTP {owner_gate_status}: {owner_gate_body[:120]}"
                 )
             # Exercise the client data-plane gate with a freshly signed owner
             # denial, then prove it recovers only after a fresh signed allow.
