@@ -32,7 +32,7 @@ const workspaceTools = [
 
 export default function PlatformPage() {
   return (
-    <div className="public-site min-h-screen bg-background text-foreground">
+    <div className="public-site public-platform min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content">
         <section className={styles.hero}>

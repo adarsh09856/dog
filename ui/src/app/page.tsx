@@ -85,7 +85,7 @@ export default function HomePage() {
   const branding = useClientBranding();
 
   return (
-    <div className="public-site min-h-screen bg-background text-foreground">
+    <div className="public-site public-home min-h-screen bg-background text-foreground">
       <PublicHeader />
       <main id="main-content">
         <section className={styles.hero}>
