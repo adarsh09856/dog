@@ -17,7 +17,10 @@ def _run(*args: str) -> str:
     return result.stdout.strip()
 
 
-def verify_api(image: str) -> None:
+def verify_api(image: str, *, allow_legacy_owner_persistence: bool = False) -> None:
+    # A prior client release may still contain this unused owner-side DB helper.
+    # Permit that one legacy path only when validating the source being upgraded
+    # from; candidate releases must continue to omit it.
     code = """
 import os
 import ctypes
@@ -26,6 +29,7 @@ from pathlib import Path
 from api.services.deployment_edition import IMAGE_EDITION
 
 root = Path('/app')
+allow_legacy_owner_persistence = __LEGACY_OWNER_PERSISTENCE_ALLOWED__
 assert os.environ.get('KODEWAVES_EDITION') == 'client', 'API image is not client edition'
 assert IMAGE_EDITION == 'client', 'API image edition is not pinned to client'
 assert os.getuid() != 0, 'API image must run as a non-root user'
@@ -40,6 +44,10 @@ for path in ('api/routes/admin', 'api/routes/superuser.py', 'api/tests',
              'api/services/owner_license_signer.py',
              'api/services/owner_license_signer_client.py',
              'scripts/create_superuser.py'):
+    if path == 'api/db/client_installations.py' and allow_legacy_owner_persistence:
+        legacy_path = root / path
+        assert not legacy_path.is_symlink(), 'Legacy installation persistence path must not be a symlink'
+        continue
     assert not (root / path).exists(), f'Owner/test source shipped: {path}'
 for path in ('api/services/installation_license.py', 'api/services/release_integrity.py',
              'api/services/release_schema.py',
@@ -65,7 +73,9 @@ owner = [path for path in paths if path == '/admin' or path.startswith('/admin/'
 assert not owner, f'Owner-only API routes shipped: {owner}'
 assert '/api/v1/installation/license' in paths, 'Client license status route is missing'
 print(f'Client API source and route boundary verified ({len(paths)} routes)')
-"""
+""".replace(
+        "__LEGACY_OWNER_PERSISTENCE_ALLOWED__", repr(allow_legacy_owner_persistence),
+    )
     print(_run(
         "docker", "run", "--rm", "--network", "none",
         "-e", "ENVIRONMENT=test",

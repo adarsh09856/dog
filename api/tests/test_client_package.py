@@ -649,6 +649,10 @@ def test_api_image_verifier_requires_the_signed_runtime_docs_index(monkeypatch):
     code = commands[0][-1]
     assert "docs/docs.json" in code
     assert "api/services/release_schema.py" in code
+    verify_images.verify_api("prior-client-api:test", allow_legacy_owner_persistence=True)
+    legacy_code = commands[1][-1]
+    assert "allow_legacy_owner_persistence = True" in legacy_code
+    assert "Legacy installation persistence path must not be a symlink" in legacy_code
 
 
 def test_release_verifier_checks_caddyfile_with_the_approved_digest(tmp_path, monkeypatch):

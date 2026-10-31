@@ -85,7 +85,10 @@ def test_release_build_sets_failing_image_verification_phase(monkeypatch, tmp_pa
     release_public.write_text("release-key", encoding="ascii")
     phases = []
 
-    def fail_api_verification(_image):
+    legacy_flags = []
+
+    def fail_api_verification(_image, *, allow_legacy_owner_persistence=False):
+        legacy_flags.append(allow_legacy_owner_persistence)
         raise lifecycle_acceptance.subprocess.CalledProcessError(1, ["docker", "run"])
 
     monkeypatch.setattr(lifecycle_acceptance, "_run", lambda *args, **kwargs: "")
@@ -102,6 +105,21 @@ def test_release_build_sets_failing_image_verification_phase(monkeypatch, tmp_pa
         raise AssertionError("simulated API verification failure was accepted")
 
     assert phases[-1] == "verify_prior_api_image"
+    assert legacy_flags == [True]
+
+    phases.clear()
+    try:
+        lifecycle_acceptance._build(
+            tmp_path / "source", "lifecycle-candidate", license_public, release_public,
+            "https://owner.invalid/check", tmp_path / "candidate-inventory", "candidate", phases.append,
+        )
+    except lifecycle_acceptance.subprocess.CalledProcessError:
+        pass
+    else:
+        raise AssertionError("simulated candidate API verification failure was accepted")
+
+    assert phases[-1] == "verify_candidate_api_image"
+    assert legacy_flags == [True, False]
 
 
 def test_failure_diagnostics_keep_phase_and_type_without_exception_text():

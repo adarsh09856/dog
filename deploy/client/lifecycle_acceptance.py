@@ -252,7 +252,10 @@ def _build(source: Path, tag_prefix: str, license_public: Path, release_public: 
         command.extend(["-f", str(source / f"{component}/Dockerfile"), "-t", tags[component], str(source)])
         _run(command, timeout=2400, capture=False)
     set_phase(f"verify_{release_label}_api_image")
-    verify_api(tags["api"])
+    verify_api(
+        tags["api"],
+        allow_legacy_owner_persistence=release_label == "prior",
+    )
     set_phase(f"verify_{release_label}_ui_image")
     verify_ui(tags["ui"])
     inventory_dir.mkdir(parents=True, exist_ok=True)
