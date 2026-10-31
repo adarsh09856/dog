@@ -290,6 +290,19 @@ def _read_inventory_metrics(path: Path) -> dict[str, dict[str, int | float]]:
     return checked
 
 
+def _owner_poll_log_summary(log_text: str) -> str:
+    """Keep only bounded owner-poll errors from disposable API logs."""
+    marker = "Owner installation status check failed:"
+    messages = [
+        line.split(marker, 1)[1].strip()
+        for line in log_text.splitlines()
+        if marker in line
+    ]
+    if not messages:
+        return "no owner-poll warning was logged"
+    return " | ".join(messages[-2:])[:420]
+
+
 def _verify_manifest_evidence(
     path: Path,
     inventory_metrics: dict[str, dict[str, int | float]],
@@ -856,6 +869,7 @@ def _verify_compose_runtime(
     except BaseException as exc:
         failure = exc
         primary_output = ""
+        api_log_text = ""
         if isinstance(exc, subprocess.CalledProcessError):
             primary_output = str(exc.stderr or exc.stdout or "").strip()
         diagnostics: list[str] = []
@@ -893,6 +907,7 @@ def _verify_compose_runtime(
                 capture_output=True, text=True,
             )
             if logs.stdout:
+                api_log_text = logs.stdout
                 diagnostics.append("API startup log: " + logs.stdout.strip()[-360:])
             ui_logs = subprocess.run(
                 [*compose_command, "logs", "--no-color", "--tail", "20", "ui"],
@@ -903,6 +918,9 @@ def _verify_compose_runtime(
                 diagnostics.append("UI startup log: " + ui_logs.stdout.strip()[-300:])
         except Exception:  # noqa: BLE001 - preserve the failing smoke result
             diagnostics.append("Additional Compose diagnostics were unavailable")
+        if owner is not None and "Owner peer evidence:" in str(exc):
+            owner_poll_summary = _owner_poll_log_summary(api_log_text)
+            exc.args = (f"{exc}; API owner-poll log: {owner_poll_summary}",)
         if diagnostics and isinstance(exc, subprocess.CalledProcessError):
             # Keep the original failing command output first, followed by
             # bounded state/log tails. The CI annotation can then retain the

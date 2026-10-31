@@ -42,6 +42,21 @@ def verifier(monkeypatch):
     return ci_verify
 
 
+def test_owner_poll_failure_summary_extracts_bounded_exception_messages(verifier):
+    lines = "\n".join([
+        "INFO startup complete",
+        "WARNING Owner installation status check failed: ConnectError: host unreachable",
+        "WARNING Owner installation status check failed: timeout while connecting",
+    ])
+
+    assert verifier._owner_poll_log_summary(lines) == (
+        "ConnectError: host unreachable | timeout while connecting"
+    )
+    assert verifier._owner_poll_log_summary("no owner poll attempt") == (
+        "no owner-poll warning was logged"
+    )
+
+
 def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, monkeypatch, tmp_path):
     monkeypatch.setenv("CLIENT_API_IMAGE", "unexpected-host-image")
     monkeypatch.setenv("CLIENT_INTERNAL_SUBNET", "10.99.0.0/16")
