@@ -402,6 +402,15 @@ def _record_failure_diagnostics(result: dict[str, Any], phase: str,
     result["status"] = "failed"
     result["failed_phase"] = phase
     result["failure_type"] = type(exc).__name__
+    detail = str(exc).replace("\r", " ").replace("\n", " ")
+    detail = re.sub(
+        r"(?i)\b(password|token|secret|credential|private[_ -]?key)\b([=:]\s*)[^\s,;]+",
+        r"\1\2<redacted>", detail,
+    )
+    detail = re.sub(r"(?<![A-Za-z0-9])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9])", "<redacted>", detail)
+    detail = re.sub(r"(?<!\w)/(?:tmp|home|run|app)/[^\s,;]+", "<path>", detail)
+    if detail:
+        result["failure_detail"] = detail[:240]
     result["completed_phases"] = list(completed_phases)
     result["last_successful_phase"] = completed_phases[-1] if completed_phases else None
 

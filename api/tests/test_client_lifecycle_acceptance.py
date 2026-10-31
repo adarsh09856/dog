@@ -149,10 +149,26 @@ def test_failure_diagnostics_keep_phase_and_type_without_exception_text():
     assert result["failed_phase"] == "upgrade_candidate"
     assert result["failure_type"] == "RuntimeError"
     assert result["last_successful_phase"] == "backup_created"
+    assert result["failure_detail"] == "<redacted>"
     assert result["completed_phases"] == [
         "prior_release_validated", "synthetic_data_seeded", "backup_created",
     ]
     assert secret not in str(result)
+
+
+def test_failure_diagnostics_include_scrubbed_actionable_detail():
+    result = {}
+    lifecycle_acceptance._record_failure_diagnostics(
+        result,
+        "create_signed_backup",
+        ["prior_release_validated", "synthetic_data_seeded"],
+        RuntimeError("Recovery archive rejected: password=temporary-secret " + "a" * 40 + " Docker volume is missing"),
+    )
+
+    assert result["failed_phase"] == "create_signed_backup"
+    assert result["failure_detail"] == "Recovery archive rejected: password=<redacted> <redacted> Docker volume is missing"
+    assert "temporary-secret" not in result["failure_detail"]
+    assert "a" * 40 not in result["failure_detail"]
 
 
 def test_ci_failure_line_reports_phase_without_secret_details(tmp_path):
