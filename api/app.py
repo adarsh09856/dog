@@ -61,7 +61,7 @@ mcp_app = mcp.http_app(path="/", stateless_http=True)
 async def lifespan(app: FastAPI):
     # Keep the protection active even when an operator overrides the image's
     # normal entrypoint and launches Uvicorn directly.
-    verify_release_before_startup()
+    release_manifest = verify_release_before_startup()
     async with mcp_app.lifespan(app):
         # PipelineWorker otherwise imports Pipecat's sentence tokenizer on
         # the first caller turn. This cold import can outlast text chat's
@@ -109,7 +109,9 @@ async def lifespan(app: FastAPI):
         owner_status_task = None
         if KODEWAVES_EDITION == "client":
             from api.services.owner_installation_status import poll_owner_status_forever
-            owner_status_task = asyncio.create_task(poll_owner_status_forever())
+            owner_status_task = asyncio.create_task(
+                poll_owner_status_forever(startup_integrity_verified=release_manifest is not None)
+            )
 
         # Event-loop lag gauge — per-pod saturation signal read off
         # /health/active-calls during autoscaling load tests.

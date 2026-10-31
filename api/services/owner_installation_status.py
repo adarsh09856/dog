@@ -79,7 +79,12 @@ def _trusted_owner_key() -> tuple[str, ...]:
         raise InstallationLicenseError(str(exc)) from exc
 
 
-async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient) -> bool:
+async def poll_owner_status_once(
+    redis_client: Redis,
+    client: httpx.AsyncClient,
+    *,
+    integrity_preverified: bool = False,
+) -> bool:
     """Save only a verified response; never replace last good status on failure."""
     global _logged_initial_owner_check
     token = os.getenv("KODEWAVES_LICENSE_TOKEN", "")
@@ -87,36 +92,46 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
     license_data = load_license(token, public_key)
     validate_installation_license(license_data)
     initial_check = not _logged_initial_owner_check
-    integrity_scan_started = time.monotonic()
-    if initial_check:
-        logger.debug("Initial owner status poll: release integrity scan started")
-    try:
-        # Hashing the runtime tree performs blocking filesystem IO. Keep the
-        # periodic integrity check off the same event loop as live call audio.
-        await asyncio.to_thread(verify_configured_release)
+    if integrity_preverified:
+        # The immutable client image was fully scanned immediately before the
+        # app lifespan started. Re-hashing the same tree here delays the first
+        # owner check (and can exceed the installer's startup acceptance
+        # window) without increasing protection on the read-only image.
         integrity_ok = True
         integrity_finding = None
-    except ReleaseIntegrityError as exc:
-        integrity_ok = False
-        integrity_finding = exc.finding()
-        field, serialized = _finding_field(integrity_finding)
-        await redis_client.hset(
-            _status_key(license_data.installation_id),
-            mapping={"integrity_failed_latched": "1"},
-        )
-        await redis_client.eval(
-            "if redis.call('HEXISTS', KEYS[1], ARGV[3]) == 0 then "
-            "return redis.call('HSET', KEYS[1], ARGV[1], ARGV[2]) end return 0",
-            1, _status_key(license_data.installation_id), field, serialized,
-            field.replace("pending_integrity_finding:", "acknowledged_integrity_finding:"),
-        )
-    integrity_scan_seconds = time.monotonic() - integrity_scan_started
-    if initial_check or integrity_scan_seconds >= 5:
-        logger.log(
-            "WARNING" if integrity_scan_seconds >= 5 else "INFO",
-            "Owner status release integrity scan finished in {:.2f}s",
-            integrity_scan_seconds,
-        )
+        if initial_check:
+            logger.info("Initial owner status poll reuses successful startup integrity verification")
+    else:
+        integrity_scan_started = time.monotonic()
+        if initial_check:
+            logger.debug("Initial owner status poll: release integrity scan started")
+        try:
+            # Hashing the runtime tree performs blocking filesystem IO. Keep the
+            # periodic integrity check off the same event loop as live call audio.
+            await asyncio.to_thread(verify_configured_release)
+            integrity_ok = True
+            integrity_finding = None
+        except ReleaseIntegrityError as exc:
+            integrity_ok = False
+            integrity_finding = exc.finding()
+            field, serialized = _finding_field(integrity_finding)
+            await redis_client.hset(
+                _status_key(license_data.installation_id),
+                mapping={"integrity_failed_latched": "1"},
+            )
+            await redis_client.eval(
+                "if redis.call('HEXISTS', KEYS[1], ARGV[3]) == 0 then "
+                "return redis.call('HSET', KEYS[1], ARGV[1], ARGV[2]) end return 0",
+                1, _status_key(license_data.installation_id), field, serialized,
+                field.replace("pending_integrity_finding:", "acknowledged_integrity_finding:"),
+            )
+        integrity_scan_seconds = time.monotonic() - integrity_scan_started
+        if initial_check or integrity_scan_seconds >= 5:
+            logger.log(
+                "WARNING" if integrity_scan_seconds >= 5 else "INFO",
+                "Owner status release integrity scan finished in {:.2f}s",
+                integrity_scan_seconds,
+            )
     fields = await redis_client.hgetall(_status_key(license_data.installation_id))
     pending_findings = sorted(
         (field, value) for field, value in fields.items()
@@ -252,14 +267,20 @@ async def require_current_owner_status(
             await redis_client.aclose()
 
 
-async def poll_owner_status_forever() -> None:
+async def poll_owner_status_forever(*, startup_integrity_verified: bool = False) -> None:
     logger.info("Client owner status poller started; interval={}s", POLL_SECONDS)
     redis_client = Redis.from_url(REDIS_URL)
+    first_poll = True
     try:
         async with httpx.AsyncClient() as client:
             while True:
                 try:
-                    revoked = await poll_owner_status_once(redis_client, client)
+                    revoked = await poll_owner_status_once(
+                        redis_client,
+                        client,
+                        integrity_preverified=first_poll and startup_integrity_verified,
+                    )
+                    first_poll = False
                     if revoked:
                         logger.warning("Owner revoked this client installation; new calls are denied")
                 except asyncio.CancelledError:
