@@ -978,11 +978,11 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
         accumulated = previous_digits + current_digits
     if 10 <= len(accumulated) <= 15 and not unknown and not trailing_double:
         uncertain_one = state.pop("caller_phone_uncertain_one", False)
-        booking_requested = _booking_was_requested(messages[:latest_index])
-        if uncertain_one or booking_requested:
-            # In booking flows, keep the candidate uncommitted until the caller
-            # confirms a digit-by-digit readback. Non-booking ambiguous captures
-            # retain their existing confirmation behavior.
+        if uncertain_one:
+            booking_requested = _booking_was_requested(messages[:latest_index])
+            # Only ask for a readback when ASR produced an ambiguous one-like
+            # token. A clean 10-15 digit parse can advance immediately, avoiding
+            # a redundant confirmation turn in ordinary booking calls.
             for key in (
                 "caller_phone", "phone_just_completed", "approved_phone",
                 "caller_phone_digits",
