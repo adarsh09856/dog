@@ -174,8 +174,11 @@ class _OwnerAcceptanceServer:
         self.ca_file.write_bytes(ca.public_bytes(Encoding.PEM))
         self.server_key_file.write_bytes(leaf_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()))
         self.server_cert_file.write_bytes(leaf.public_bytes(Encoding.PEM))
-        for path in (self.ca_file, self.server_key_file):
-            path.chmod(0o600)
+        # The CA is public trust material and is bind-mounted into the API
+        # container, which runs as UID 10001. Keep the private server key
+        # private, but let the unprivileged API process read the CA bundle.
+        self.ca_file.chmod(0o644)
+        self.server_key_file.chmod(0o600)
 
     def enroll(self, body: dict) -> dict:
         from api.services.installation_identity import verify_enrollment
