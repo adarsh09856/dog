@@ -7,10 +7,6 @@ on:
         description: Full Git commit SHA of the prior client release source (must be an ancestor)
         required: true
         type: string
-      minio_image:
-        description: Synthetic MinIO image reference pinned by sha256 digest
-        required: true
-        type: string
       coturn_image:
         description: Synthetic Coturn image reference pinned by sha256 digest
         required: true
@@ -55,7 +51,6 @@ jobs:
       - name: Validate immutable inputs and run disposable upgrade/rollback
         env:
           PRIOR_COMMIT: ${{ inputs.prior_commit }}
-          MINIO_IMAGE: ${{ inputs.minio_image }}
           COTURN_IMAGE: ${{ inputs.coturn_image }}
           CADDY_IMAGE: ${{ inputs.caddy_image }}
           CANDIDATE_COMMIT: ${{ github.sha }}
@@ -65,7 +60,6 @@ jobs:
           --prior-commit "$PRIOR_COMMIT"
           --prior-source "$GITHUB_WORKSPACE/prior-source"
           --candidate-commit "$CANDIDATE_COMMIT"
-          --minio-image "$MINIO_IMAGE"
           --coturn-image "$COTURN_IMAGE"
           --caddy-image "$CADDY_IMAGE"
           --report "$LIFECYCLE_REPORT"

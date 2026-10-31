@@ -36,6 +36,7 @@ from ci_verify import _CI_POSTGRES_IMAGE, _CI_REDIS_IMAGE, _temporary_keypair
 from verify_images import verify_api, verify_caddyfile, verify_ui
 
 _IMAGE_REF = re.compile(r"^[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}$")
+_LOCAL_MINIO_TAG = re.compile(r"^kw-lifecycle-[0-9a-f]{12}-minio:acceptance$")
 _REVISION = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 _FLOW_ORDER = (
     "prior_release_validated", "synthetic_data_seeded", "backup_created",
@@ -45,7 +46,7 @@ _FLOW_ORDER = (
 
 def validate_inputs(args: argparse.Namespace) -> None:
     """Reject mutable infrastructure refs and ambiguous source revisions."""
-    for label in ("minio", "coturn", "caddy"):
+    for label in ("coturn", "caddy"):
         value = getattr(args, f"{label}_image")
         if not _IMAGE_REF.fullmatch(value):
             raise ValueError(f"{label} image must be a full immutable image@sha256 reference")
@@ -59,16 +60,30 @@ def validate_flow_order(completed: list[str]) -> None:
         raise ValueError("Lifecycle phases ran out of order or were skipped")
 
 
+def _build_lifecycle_minio(image_tag: str) -> str:
+    """Build the pinned-version MinIO fixture locally and return its immutable image ID."""
+    if not _LOCAL_MINIO_TAG.fullmatch(image_tag):
+        raise ValueError("Lifecycle MinIO tag must be scoped to a generated acceptance project")
+    dockerfile = ROOT / "deploy/minio/Dockerfile"
+    context = ROOT / "deploy/minio"
+    if not dockerfile.is_file() or not context.is_dir():
+        raise ValueError("Repository MinIO fixture source is missing")
+    _run([
+        "docker", "build", "--pull", "--tag", image_tag,
+        "--file", str(dockerfile), str(context),
+    ], timeout=1200)
+    return _image_id(image_tag)
+
+
 def self_test() -> None:
     """Fast, Docker-free regression checks for pins, data assertions, cleanup, and order."""
     args = argparse.Namespace(
         prior_commit="a" * 40,
-        minio_image="registry.example.invalid/minio@sha256:" + "a" * 64,
         coturn_image="registry.example.invalid/coturn@sha256:" + "b" * 64,
         caddy_image="registry.example.invalid/caddy@sha256:" + "c" * 64,
     )
     validate_inputs(args)
-    for name in ("minio_image", "coturn_image", "caddy_image"):
+    for name in ("coturn_image", "caddy_image"):
         original = getattr(args, name)
         setattr(args, name, original.split("@", 1)[0] + ":latest")
         try:
@@ -85,6 +100,24 @@ def self_test() -> None:
         pass
     else:
         raise AssertionError("out-of-order lifecycle phases were accepted")
+    with tempfile.TemporaryDirectory(prefix="lifecycle-minio-build-test-") as root:
+        with patch(__name__ + "._run", return_value="") as run, patch(
+            __name__ + "._image_id", return_value="sha256:" + "d" * 64,
+        ) as image_id:
+            built_id = _build_lifecycle_minio("kw-lifecycle-0123456789ab-minio:acceptance")
+        assert built_id == "sha256:" + "d" * 64
+        command = run.call_args.args[0]
+        assert command[0:3] == ["docker", "build", "--pull"]
+        assert command[command.index("--tag") + 1] == "kw-lifecycle-0123456789ab-minio:acceptance"
+        assert Path(command[-2]).name == "Dockerfile"
+        assert Path(command[-1]).name == "minio"
+        image_id.assert_called_once_with("kw-lifecycle-0123456789ab-minio:acceptance")
+    try:
+        _build_lifecycle_minio("minio:latest")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("unscoped local MinIO tag was accepted")
     with patch(__name__ + "._psql", return_value="1") as psql:
         if not _tenant_workflow_exists(
             Path("compose"), "project", "tenant", "workflow-uuid", "baseline", "case", "baseline",
@@ -397,8 +430,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         shutil.copy2(ROOT / "deploy/client/docker-compose.recovery.yaml", compose_dir)
         shutil.copy2(ROOT / "deploy/client/Caddyfile", compose_dir)
-        _run(["docker", "pull", args.minio_image])
-        minio_image_id = _image_id(args.minio_image)
+        minio_tag = project + "-minio:acceptance"
+        images_to_remove.add(minio_tag)
+        minio_image_id = _build_lifecycle_minio(minio_tag)
         result["dependency_image_ids_sha256"] = {
             "postgres": hashlib.sha256(_CI_POSTGRES_IMAGE.encode()).hexdigest(),
             "redis": hashlib.sha256(_CI_REDIS_IMAGE.encode()).hexdigest(),
@@ -457,7 +491,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         values = {
             "CLIENT_API_IMAGE": prior_ids["api"], "CLIENT_UI_IMAGE": prior_ids["ui"],
             "CLIENT_POSTGRES_IMAGE": _CI_POSTGRES_IMAGE, "CLIENT_REDIS_IMAGE": _CI_REDIS_IMAGE,
-            "CLIENT_MINIO_IMAGE": args.minio_image, "CLIENT_COTURN_IMAGE": args.coturn_image,
+            "CLIENT_MINIO_IMAGE": minio_image_id, "CLIENT_COTURN_IMAGE": args.coturn_image,
             "CLIENT_CADDY_IMAGE": args.caddy_image, "COMPOSE_PROFILES": "",
             "COMPOSE_PROJECT_NAME": project, "KODEWAVES_INSTALLATION_ID": identity_id,
             "KODEWAVES_LICENSE_TOKEN": license_token, "KODEWAVES_OWNER_STATUS_POLL_SECONDS": "3600",
@@ -478,6 +512,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _compose(compose_dir, project, ["up", "--detach", "--wait", "--wait-timeout", "360", "api", "ui"], timeout=480)
         _assert_running_image(compose_dir, project, "api", prior_ids["api"])
         _assert_running_image(compose_dir, project, "ui", prior_ids["ui"])
+        _assert_running_image(compose_dir, project, "minio", minio_image_id)
         _assert_schema_head(compose_dir, project, prior_head, "Prior startup")
         result["prior_alembic_version"] = prior_head
         result["prior_api_health"] = "passed"
@@ -691,7 +726,6 @@ def main() -> int:
     parser.add_argument("--prior-commit")
     parser.add_argument("--prior-source", type=Path)
     parser.add_argument("--candidate-commit")
-    parser.add_argument("--minio-image")
     parser.add_argument("--coturn-image")
     parser.add_argument("--caddy-image")
     parser.add_argument("--report")
@@ -701,7 +735,7 @@ def main() -> int:
             self_test()
             print("Lifecycle helper checks passed")
             return 0
-        required = ("prior_commit", "prior_source", "candidate_commit", "minio_image", "coturn_image", "caddy_image", "report")
+        required = ("prior_commit", "prior_source", "candidate_commit", "coturn_image", "caddy_image", "report")
         missing = [name for name in required if getattr(args, name) is None]
         if missing:
             parser.error("required unless --self-test: " + ", ".join("--" + name.replace("_", "-") for name in missing))

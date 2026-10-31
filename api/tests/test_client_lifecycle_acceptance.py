@@ -45,3 +45,33 @@ def test_prior_checkout_must_match_requested_commit(monkeypatch, tmp_path):
         assert "does not match" in str(error)
     else:
         raise AssertionError("mismatched prior source checkout was accepted")
+
+
+def test_lifecycle_minio_is_built_from_repository_and_pinned_by_local_id(monkeypatch):
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append((command, kwargs))
+        return ""
+
+    tag = "kw-lifecycle-0123456789ab-minio:acceptance"
+    image_id = "sha256:" + "a" * 64
+    monkeypatch.setattr(lifecycle_acceptance, "_run", fake_run)
+    monkeypatch.setattr(lifecycle_acceptance, "_image_id", lambda value: image_id if value == tag else None)
+
+    assert lifecycle_acceptance._build_lifecycle_minio(tag) == image_id
+    command, kwargs = calls[0]
+    assert command[:4] == ["docker", "build", "--pull", "--tag"]
+    assert command[4] == tag
+    assert Path(command[6]).name == "Dockerfile"
+    assert Path(command[7]).name == "minio"
+    assert kwargs["timeout"] == 1200
+
+
+def test_lifecycle_minio_rejects_unscoped_tag():
+    try:
+        lifecycle_acceptance._build_lifecycle_minio("minio:latest")
+    except ValueError as error:
+        assert "generated acceptance project" in str(error)
+    else:
+        raise AssertionError("unscoped MinIO image tag was accepted")
