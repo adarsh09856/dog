@@ -52,10 +52,10 @@ describe("client installation access", () => {
     state.isAuthenticated = true;
     state.backendConfig = null;
   });
-  it("uses the configured tagline in the authenticated workspace header", () => {
+  it("renders the authenticated workspace header", () => {
     state.valid = true;
     render(<AppLayout><p>protected content</p></AppLayout>);
-    expect(screen.getByText("Calls answered in your brand voice")).toBeTruthy();
+    expect(screen.getByText("Voice agents")).toBeTruthy();
   });
 
   it("shows verification failure and retries rather than claiming the feature is excluded", () => {

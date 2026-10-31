@@ -23,13 +23,17 @@ export function AuthShell({ children, enterpriseSlot }: { children: ReactNode; e
           <Link href="/" className={styles.homeLink}>Back to site <ArrowUpRight aria-hidden className="size-4" /></Link>
         </div>
         <div className={styles.formWrap}>
+          <div className={styles.mobileIntro}>
+            <p>{branding.tagline}</p>
+            <p>Build the conversation, connect your channels, and review each call.</p>
+          </div>
           <div className={styles.formIntro}><span className={styles.eyebrow}>YOUR WORKSPACE</span><span aria-hidden className={styles.rule} /></div>
           <div className={styles.formCard}>{children}</div>
           <p className={styles.formFoot}>A secure workspace for building and operating voice agents.</p>
         </div>
         <div className={styles.formBottom}>© {new Date().getFullYear()} {branding.company_name}</div>
       </main>
-      <aside className={styles.storySide} aria-label="Voice operation overview">
+      <aside className={styles.storySide} aria-label="Voice operations overview">
         <div className={styles.storyTop}><span className={styles.storyIndex}>{branding.company_name} / VOICE OPERATIONS</span><Globe2 aria-hidden className="size-5" /></div>
         <div className={styles.storyContent}>
           <span className={styles.eyebrow}>FROM FIRST HELLO TO NEXT ACTION</span>

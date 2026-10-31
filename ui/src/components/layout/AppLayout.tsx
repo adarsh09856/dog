@@ -47,6 +47,8 @@ function BackendStatusBanner() {
     pathname === "/" ||
     pathname?.startsWith("/auth") ||
     pathname?.startsWith("/pricing") ||
+    pathname?.startsWith("/platform") ||
+    pathname?.startsWith("/deployment") ||
     pathname?.startsWith("/embed") ||
     pathname?.startsWith("/admin") ||
     pathname?.startsWith("/superadmin")
@@ -107,6 +109,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({
   const isPublicOrMarketing =
     pathname === "/" ||
     pathname.startsWith("/pricing") ||
+    pathname.startsWith("/platform") ||
+    pathname.startsWith("/deployment") ||
     pathname.startsWith("/auth") ||
     pathname.startsWith("/handler") ||
     pathname.startsWith("/embed");

@@ -4,32 +4,25 @@ Updated 31 October 2026. This is the single execution checklist for the existing
 
 ## Verified checkpoint
 
-- GitHub `main` is `8074fe81335f2b08a8cdc39a6c0d86b8f6527f91`, verified with `git ls-remote`. The other chat reports a source-only fast-forward from `c92462c9` containing 12 runtime/UI files, including the booking-license update and theme corrections. Its focused UI build generated all 52 pages; the live VPS has not been rechecked after this push.
-- The latest GitHub Actions run for `main` (`41064519414`) failed at Release Please because the repository secret `RELEASE_PLEASE_TOKEN` is missing. This is a release-automation configuration issue, not a client-bundle verification result.
-- This worktree is `codex/client-bundle-theme` at `78b39562`, pushed to its existing remote. Relative to fetched `origin/main`, the branches diverge: 45 main-only commits and 212 client-branch-only commits. This is ancestry, not missing-feature count. Preserve newer main security/runtime changes; do not bulk-merge or delete.
-- A read-only UI audit confirms the public home, pricing, platform and deployment pages, shared theme/navigation, multiple workspace panels, and owner-console surfaces in this branch differ materially from `main`. Cohesive candidate UI commits include `fadf1680`, `f15b16b0`, `109c93a8`, and `72a9fa3d`; they still require integration review and acceptance on the release candidate.
-- Current client-branch UI checks: `npx tsc --noEmit` passed; the focused appointment-template regression passed 2 tests after mapping its legacy blue accent to the emerald workspace palette in both template surfaces. The main branch already contains the runtime palette mapping per the other chat; this branch adds the regression test. Full client-branch build and browser visual acceptance remain open.
-- The `c92462c9` UI baseline is now deployed: container `kodewaves_ui` runs `kodewaves-ui:release-c92462c9`, image `sha256:87862f7746d968476412a8df57d3f44a87b61394ef06cd5e4bd26cce31c15eb2`, is healthy, and local `/api/health` returned HTTP 200. This is not the newer client-branch theme/panel UI, so the user's visual redesign acceptance is still open.
-- Last direct VPS verification was on `c92462c9`: UI and API containers were healthy. The currently running source/images after the `8074fe81` push are unverified; the other chat is inspecting production. Do not infer live theme acceptance from the successful source build.
-- The integrated `codex/kodewaves-unified-work` worktree remains separate at `84543305`, with two uncommitted edits (`ui/src/app/page.tsx` and `api/tests/test_billing_invariants.py`) and no upstream. Its 157 API tests, 58 focused UI tests, TypeScript check and production UI build passed there, but that candidate is not the client-branch release and has not been published or deployed.
-- The client branch contains the owner control plane, signed installation/license flow, domain binding, optional IP policy, integrity events, plan enforcement, package tooling and focused tests. Selected source-level tests passed in prior turns, including 12 integrity-queue tests and 37 booking tests (the latter reported by the other chat). These do not prove signed-image build, fresh/upgrade installation, alert delivery, rollback, or live acceptance.
-- Theme and public/app visual acceptance remain open against the deployed image: public routes, all workspace/admin navigation, readable text/icons, saved branding after reload, and responsive layouts must be reviewed after successful image deployment.
-- Hosted client verification run `41083639391` on `1867c37f` completed: owner UI and disposable PostgreSQL/migration jobs passed, while signed-image verification failed because the enrolled owner check never advanced past HTTP 402. Commit `78b39562` adds bounded, secret-free owner-peer request/status/rejection evidence to expose whether the cause is reachability or protocol rejection; run `41166167040` is the hosted rerun. Do not merge until that image verification passes.
-- The client-bundle verification workflow now runs on this existing feature branch, so its isolated PostgreSQL, package/image, licensing, UI, and recovery checks can run in hosted CI without consuming laptop RAM.
-- Shared voice acceptance is still owned by the other chat: browser and inbound/outbound telephone tests across the supported languages, with repeats, cutoffs, overlap, voice/gender behavior, announcement/greeting delay, and speech-end-to-first-audio latency measured.
+- Local integration candidate: `codex/kodewaves-unified-work`. It includes fetched GitHub `main`, the client/theme branch, the full-platform/voice branch, and the three-commit public-site refresh branch. The platform/voice merge is recorded at `e082f555`; the public-site refresh merge is being completed locally. GitHub `main` and the VPS have not yet been advanced to it.
+- The candidate preserves the existing `main` history and is a fast-forward descendant of the current GitHub `main`; no force-push or branch-history rewrite is required. The client/theme tip is `b934d7ea`; the other chat's platform/voice checkpoint is `c65ce972`; the public-site refresh tip is `8fd4aaac`.
+- Combined verification so far: UI TypeScript check passes; eight focused public-page, auth, navigation, pricing, template, recordings, agent-library and branding test files pass 30/30; focused STT/language, caller-follow-up, owner-status and billing API tests pass 93/93 with dummy test database/cache URLs. `git diff --check` is still pending after the latest fixes. These are targeted checks, not a complete production acceptance run.
+- The final merge exposed and fixed one missing `useAuth` import in the widgets page. `ui/next.config.ts` no longer suppresses TypeScript errors; a production build and hosted client-image/recovery workflow are still pending.
+- Client installation/licensing work, public/app theme and business-plan work are included in the local candidate. The hosted signed-image workflow previously failed because the owner check did not reach the expected gate; rerun it on the merged candidate before declaring the client package ready.
+- Live state is separate from local merge state: no GitHub `main` push or VPS deployment of this candidate has occurred yet. The current VPS source SHA and image digests must be checked before deployment and verified afterward.
+- Browser voice and inbound/outbound telephone acceptance remain open: Hindi, English, Hinglish and the other supported languages; repetitions, irrelevant replies, cutoffs, overlap, voice/gender settings, carrier announcement versus bot greeting, and measured speech-end-to-first-audio latency.
 - The CRM/ERP/industry catalog and social/email/WhatsApp/website automation remain roadmap scope, not shipped functionality; no new business module is marked accepted.
 
 ## Execution sequence
 
-1. Keep a single release owner and use GitHub `main` at `8074fe81` as the integration base. Recheck the VPS source/image before deployment; preserve the current running images and confirmed rollback tags.
-2. Integrate the public site, shared theme/navigation, workspace panels and owner console from the client branch as reviewed cohesive changes. Do not replace newer main-based runtime, migration or security behavior.
-3. Integrate the unique client acceptance workflow and tests plus safe runtime additions. Preserve main's `f0a1b2c3d4e5` and `f2a3b4c5d6e7` migration files, `validate_owner_private_key_path`, atomic workflow-run claim, and general conditional campaign update.
-4. Integrate the voice branch's unique fixes on the same reviewed release candidate, resolving overlapping files once and running regression checks over the combined tree.
-5. Reconcile Alembic heads and run disposable PostgreSQL, API, UI, package, signed-image, clean-install, populated-upgrade, rollback and recovery checks on the combined source.
-6. Resolve the UI build resource failure with a measured low-memory build or hosted-runner image artifact. Build immutable API/UI images from the exact reviewed SHA; never point production tags at an unverified candidate.
-7. Deploy those images to the existing VPS release checkout, retaining rollback images. Verify source SHA, image digests, routes, health, saved branding, owner/client separation and browser rendering.
-8. Complete browser audio plus inbound/outbound telephone acceptance with the voice owner. Record language coverage, repeats, cutoffs, overlap, configured voice, announcement/greeting delay and speech-end-to-first-audio latency.
-9. Only after GitHub, VPS, image and acceptance evidence agree, remove branches proven merged and unused by active worktrees, then create the single shared work branch requested by the user.
+1. **Local merge — in progress:** current GitHub `main`, client/theme, full-platform/voice, and public-site refresh tips are integrated into `codex/kodewaves-unified-work`; finish the public-site merge commit while preserving the candidate's accurate voice-product content, billing, licensing, migrations, and speech changes.
+2. **Local focused verification — partial:** after the public-site/pricing merge, UI TypeScript passes, eight focused UI test files pass 30/30, and the targeted API voice/language/owner/billing tests pass 93/93. Run `git diff --check` and record the local merge before advancing remote `main`.
+3. Reconcile Alembic heads and run disposable PostgreSQL, package, signed-image, clean-install, populated-upgrade, rollback and recovery checks on the combined source.
+4. Move local `main` forward to the verified candidate, then push a fast-forward update to GitHub `main`. Stop if the remote has advanced or the push is not fast-forward; never force-reset it.
+5. Recheck the actual VPS checkout and running image digests, then deploy the reviewed immutable build to the existing release path with the confirmed rollback images retained.
+6. Verify deployed source SHA, image digests, public/workspace/admin routes, health, saved branding, owner/client separation and browser rendering.
+7. Complete browser audio plus inbound/outbound telephone acceptance with the voice owner. Record language coverage, repeats, cutoffs, overlap, configured voice, announcement/greeting delay and speech-end-to-first-audio latency.
+8. Only after GitHub, VPS, image and acceptance evidence agree, remove branches proven merged and unused by active worktrees, then create the single shared work branch requested by the user.
 
 ## Problem → correction → proof
 
@@ -44,16 +37,16 @@ Updated 31 October 2026. This is the single execution checklist for the existing
 
 ## 01 — Establish and integrate the current combined baseline
 
-Owner: both chats; integration coordinator maintains the release candidate. Status: in progress.
+Owner: both chats; integration coordinator maintains the release candidate. Status: local code integration in progress; release gates open.
 
 - [x] Record GitHub `main`, VPS source/image state, client branch and current UI verification.
-- [ ] Integrate the exact voice checkpoint `codex/client-voice-integration` at `1ebe61d2`; do not substitute the older platform-completion ref or duplicate voice-file edits.
+- [x] Integrate the exact voice checkpoint `codex/client-voice-integration` at `1ebe61d2` through the full-platform merge; do not duplicate voice-file edits.
 - [x] Confirm the scoped form fix is already in GitHub `main` as `7f12a018`; no duplicate cherry-pick needed.
-- [ ] Import the full client package verification workflow and test support into the local candidate, retaining current main migrations and runtime behavior.
+- [x] Import the client package verification workflow and test support into the local candidate, retaining current main migrations and runtime behavior.
 - [ ] Reconcile the combined Alembic graph on disposable PostgreSQL; verify clean install and upgrade paths.
 - [ ] Review combined diff, source-to-image provenance, rollback images and one deployment owner before release.
 
-Gate: one reproducible candidate preserves newer voice and client behavior. Local tests or health on an old image do not close this step.
+Gate: local branch integration is complete after the public-site merge commit and post-merge checks. One reproducible release candidate still requires Alembic, signed-package, clean-install/upgrade/recovery and live-deployment evidence; local tests or health on an old image do not close those release gates.
 
 
 ## 02 — Complete shared voice and grounded conversation

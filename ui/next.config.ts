@@ -21,9 +21,6 @@ const nextConfig: NextConfig = {
   // recreate pnpm's dependency symlinks in `.next/standalone`, so keep local
   // Windows builds in the default Next.js layout for validation.
   output: process.platform === "win32" ? undefined : "standalone",
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   eslint: {
     ignoreDuringBuilds: true,
   },

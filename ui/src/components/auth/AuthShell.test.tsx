@@ -22,7 +22,7 @@ describe("AuthShell", () => {
       </AuthShell>,
     );
 
-    expect(screen.getByRole("region", { name: "Voice operations overview" })).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Voice operations overview" })).toBeTruthy();
     expect(screen.getAllByText("Conversations that move work forward.")).toHaveLength(2);
     expect(screen.getByText(/Build the conversation, connect your channels/)).toBeTruthy();
     expect(screen.getByRole("main").getAttribute("id")).toBe("main-content");

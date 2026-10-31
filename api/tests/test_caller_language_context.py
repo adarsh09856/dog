@@ -3,7 +3,11 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from api.services.pipecat.caller_language_context import CallerLanguageContext, standalone_language_request
+from api.services.pipecat.caller_language_context import (
+    CallerLanguageContext,
+    standalone_language_request,
+    sync_contact_reply_language,
+)
 
 
 def recognition(code, text):
@@ -166,6 +170,38 @@ def test_explicit_switch_persists_for_a_short_hindi_name_then_resumes_auto_match
     ])
     third = context.apply(history, recognition("ta", history[-1]["content"]))
     assert "Answer in Tamil" in third[-1]["content"]
+
+
+def test_contact_followups_track_detected_hindi_after_explicit_english_switch():
+    context = CallerLanguageContext()
+    state = {"reply_language": "English"}
+    switch_text = "Can you speak in English?"
+    source = NS(
+        latest_detected_language="en",
+        latest_tts_language="en",
+        latest_detected_text=switch_text,
+    )
+    context.apply([{"role": "user", "content": switch_text}], source)
+    state["reply_language"] = "English"
+
+    next_text = "हाँ, ये सही है"
+    source.latest_detected_language = "hi"
+    source.latest_tts_language = "hi"
+    source.latest_detected_text = next_text
+    context.apply([{"role": "user", "content": next_text}], source)
+    sync_contact_reply_language(state, source)
+
+    assert state["reply_language"] == "Hindi"
+
+
+def test_contact_language_uses_confident_regional_route_and_clears_weak_route():
+    state = {"reply_language": "English"}
+    source = NS(reply_language_override=None, latest_tts_language="ta")
+    sync_contact_reply_language(state, source)
+    assert state["reply_language"] == "Tamil"
+    source.latest_tts_language = None
+    sync_contact_reply_language(state, source)
+    assert "reply_language" not in state
 
 
 @pytest.mark.parametrize("text", [
