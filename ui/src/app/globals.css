@@ -49,82 +49,82 @@
 
 :root {
   --radius: 0.875rem;
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.24 0.025 245);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.24 0.025 245);
-  --primary: oklch(0.36 0.07 245);
-  --primary-foreground: oklch(0.99 0.002 90);
-  --secondary: oklch(0.94 0.018 235);
-  --secondary-foreground: oklch(0.28 0.05 245);
-  --muted: oklch(0.955 0.009 235);
-  --muted-foreground: oklch(0.47 0.025 245);
-  --accent: oklch(0.94 0.026 75);
-  --accent-foreground: oklch(0.29 0.045 245);
+  --card: oklch(0.99 0.006 100);
+  --card-foreground: oklch(0.24 0.026 175);
+  --popover: oklch(0.99 0.006 100);
+  --popover-foreground: oklch(0.24 0.026 175);
+  --primary: oklch(0.47 0.075 158);
+  --primary-foreground: oklch(0.99 0.006 100);
+  --secondary: oklch(0.94 0.018 145);
+  --secondary-foreground: oklch(0.28 0.04 170);
+  --muted: oklch(0.955 0.012 125);
+  --muted-foreground: oklch(0.47 0.025 170);
+  --accent: oklch(0.94 0.035 82);
+  --accent-foreground: oklch(0.29 0.04 170);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.89 0.013 235);
-  --input: oklch(0.89 0.013 235);
-  --ring: oklch(0.62 0.1 70);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.975 0.007 235);
-  --sidebar-foreground: oklch(0.24 0.025 245);
-  --sidebar-primary: oklch(0.36 0.07 245);
-  --sidebar-primary-foreground: oklch(0.99 0.002 90);
-  --sidebar-accent: oklch(0.93 0.019 235);
-  --sidebar-accent-foreground: oklch(0.28 0.05 245);
-  --sidebar-border: oklch(0.89 0.013 235);
-  --sidebar-ring: oklch(0.62 0.1 70);
-  --background: oklch(0.985 0.004 90);
-  --foreground: oklch(0.24 0.025 245);
+  --border: oklch(0.89 0.018 145);
+  --input: oklch(0.88 0.02 145);
+  --ring: oklch(0.62 0.1 82);
+  --chart-1: oklch(0.52 0.09 158);
+  --chart-2: oklch(0.66 0.11 88);
+  --chart-3: oklch(0.47 0.06 190);
+  --chart-4: oklch(0.63 0.11 45);
+  --chart-5: oklch(0.55 0.07 125);
+  --sidebar: oklch(0.975 0.009 115);
+  --sidebar-foreground: oklch(0.24 0.026 175);
+  --sidebar-primary: oklch(0.47 0.075 158);
+  --sidebar-primary-foreground: oklch(0.99 0.006 100);
+  --sidebar-accent: oklch(0.93 0.019 145);
+  --sidebar-accent-foreground: oklch(0.28 0.04 170);
+  --sidebar-border: oklch(0.89 0.018 145);
+  --sidebar-ring: oklch(0.62 0.1 82);
+  --background: oklch(0.975 0.009 112);
+  --foreground: oklch(0.23 0.027 175);
   /* Single restrained warm accent — used only on primary CTAs + focus rings. */
-  --cta: oklch(0.72 0.15 65);
-  --cta-text: oklch(0.36 0.07 245);
-  --cta-foreground: oklch(0.16 0.02 60);
+  --cta: oklch(0.72 0.12 82);
+  --cta-text: oklch(0.35 0.045 170);
+  --cta-foreground: oklch(0.2 0.025 175);
   /* Giant faded "kodewaves" wordmark (authentic letterforms traced
      from the brand logo PNG). Theme-switched here; consumed by .app-surface and .auth-imprint. */
   --brand-imprint: none;
 }
 
 .dark {
-  --background: oklch(0.18 0.025 245);
-  --foreground: oklch(0.96 0.005 225);
-  --card: oklch(0.225 0.026 245);
-  --card-foreground: oklch(0.96 0.005 225);
-  --popover: oklch(0.225 0.026 245);
-  --popover-foreground: oklch(0.96 0.005 225);
-  --primary: oklch(0.82 0.09 210);
-  --primary-foreground: oklch(0.18 0.025 245);
-  --secondary: oklch(0.3 0.03 245);
-  --secondary-foreground: oklch(0.96 0.005 225);
-  --muted: oklch(0.3 0.03 245);
-  --muted-foreground: oklch(0.76 0.014 225);
-  --accent: oklch(0.33 0.036 240);
-  --accent-foreground: oklch(0.96 0.005 225);
+  --background: oklch(0.19 0.022 175);
+  --foreground: oklch(0.95 0.01 115);
+  --card: oklch(0.235 0.025 175);
+  --card-foreground: oklch(0.95 0.01 115);
+  --popover: oklch(0.235 0.025 175);
+  --popover-foreground: oklch(0.95 0.01 115);
+  --primary: oklch(0.78 0.09 155);
+  --primary-foreground: oklch(0.19 0.022 175);
+  --secondary: oklch(0.31 0.026 175);
+  --secondary-foreground: oklch(0.95 0.01 115);
+  --muted: oklch(0.31 0.026 175);
+  --muted-foreground: oklch(0.76 0.018 150);
+  --accent: oklch(0.34 0.035 155);
+  --accent-foreground: oklch(0.95 0.01 115);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.67 0.02 235 / 22%);
-  --input: oklch(0.67 0.02 235 / 28%);
-  --ring: oklch(0.78 0.16 67);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0.026 245);
-  --sidebar-foreground: oklch(0.96 0.005 225);
-  --sidebar-primary: oklch(0.82 0.09 210);
-  --sidebar-primary-foreground: oklch(0.18 0.025 245);
-  --sidebar-accent: oklch(0.3 0.03 245);
-  --sidebar-accent-foreground: oklch(0.96 0.005 225);
-  --sidebar-border: oklch(0.67 0.02 235 / 22%);
-  --sidebar-ring: oklch(0.78 0.16 67);
+  --border: oklch(0.7 0.02 165 / 22%);
+  --input: oklch(0.7 0.02 165 / 28%);
+  --ring: oklch(0.78 0.12 84);
+  --chart-1: oklch(0.72 0.12 155);
+  --chart-2: oklch(0.8 0.12 88);
+  --chart-3: oklch(0.74 0.07 190);
+  --chart-4: oklch(0.73 0.11 45);
+  --chart-5: oklch(0.73 0.08 125);
+  --sidebar: oklch(0.21 0.024 175);
+  --sidebar-foreground: oklch(0.95 0.01 115);
+  --sidebar-primary: oklch(0.78 0.09 155);
+  --sidebar-primary-foreground: oklch(0.19 0.022 175);
+  --sidebar-accent: oklch(0.31 0.026 175);
+  --sidebar-accent-foreground: oklch(0.95 0.01 115);
+  --sidebar-border: oklch(0.7 0.02 165 / 22%);
+  --sidebar-ring: oklch(0.78 0.12 84);
   /* Warm accent, slightly brighter against the near-black surfaces. */
-  --cta: oklch(0.78 0.16 67);
-  --cta-text: oklch(0.86 0.08 210);
-  --cta-foreground: oklch(0.16 0.02 60);
+  --cta: oklch(0.78 0.12 84);
+  --cta-text: oklch(0.86 0.06 150);
+  --cta-foreground: oklch(0.19 0.022 175);
   --brand-imprint: none;
 }
 
@@ -153,10 +153,8 @@
 }
 
 /* Attention pulse applied by OnboardingTooltip to the element its arrow points
-   at; removed automatically when the tooltip is dismissed. Blue matches the
-   tooltip body so the ring and the callout read as one unit. Two shadow layers:
-   a constant outline so the target stays highlighted between pulses, plus an
-   expanding wave, with a slight breathing scale on top. */
+   at; removed automatically when the tooltip is dismissed. It uses the active
+   brand accent so onboarding feels native to the selected workspace theme. */
 .onboarding-pulse {
   animation: onboarding-pulse 1.5s ease-out infinite;
 }
@@ -164,8 +162,8 @@
 @keyframes onboarding-pulse {
   0% {
     box-shadow:
-      0 0 0 3px rgba(59, 130, 246, 0.75),
-      0 0 0 3px rgba(59, 130, 246, 0.6);
+      0 0 0 3px color-mix(in srgb, var(--cta) 82%, transparent),
+      0 0 0 3px color-mix(in srgb, var(--cta) 68%, transparent);
     transform: scale(1);
   }
   40% {
@@ -173,21 +171,21 @@
   }
   70% {
     box-shadow:
-      0 0 0 3px rgba(59, 130, 246, 0.75),
-      0 0 0 18px rgba(59, 130, 246, 0);
+      0 0 0 3px color-mix(in srgb, var(--cta) 82%, transparent),
+      0 0 0 18px color-mix(in srgb, var(--cta) 0%, transparent);
     transform: scale(1);
   }
   100% {
     box-shadow:
-      0 0 0 3px rgba(59, 130, 246, 0.75),
-      0 0 0 18px rgba(59, 130, 246, 0);
+      0 0 0 3px color-mix(in srgb, var(--cta) 82%, transparent),
+      0 0 0 18px color-mix(in srgb, var(--cta) 0%, transparent);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .onboarding-pulse {
     animation: none;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--cta) 68%, transparent);
   }
 }
 

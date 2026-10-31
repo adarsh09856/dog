@@ -33,8 +33,9 @@ function mixHex(foreground: string, background: string, foregroundWeight: number
   return `#${channels.join("")}`;
 }
 
-// Text must remain legible on the light/dark surfaces even if the owner picks
-// a near-white or near-black brand color. Keep the configured CTA fill intact.
+// Brand accents must remain legible on the light/dark surfaces even if the
+// owner picks a near-white or near-black color. Preserve its hue while moving
+// it only as far as needed to keep the shared UI readable.
 function readableAccent(color: string, theme: BrandingTheme): string {
   const surface = theme === "light" ? "#f2f4ed" : "#111e20";
   const target = theme === "light" ? "#142b2c" : "#e7eee7";
@@ -62,10 +63,7 @@ export function brandingCssVariables(
   const baseColor = /^#[0-9a-f]{6}$/i.test(branding.primary_color)
     ? branding.primary_color
     : "#426b57";
-  const color =
-    theme === "dark" && foregroundFor(baseColor) === "#ffffff"
-      ? mixHex(baseColor, "#ffffff", 0.6)
-      : baseColor;
+  const color = readableAccent(baseColor, theme);
   const accent = mixHex(color, theme === "dark" ? "#000000" : "#ffffff", theme === "dark" ? 0.3 : 0.14);
   const variables: BrandingCssVariables = {
     "--brand-primary-color": color,
