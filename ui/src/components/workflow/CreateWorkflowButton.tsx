@@ -70,7 +70,7 @@ export function CreateWorkflowButton() {
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button disabled={isCreating} className="gap-1.5 shadow-sm">
+                    <Button disabled={isCreating} className="gap-1.5 shadow-sm" data-hero-action="create">
                         <PlusIcon className="w-4 h-4" />
                         {isCreating ? 'Creating...' : 'Create Agent'}
                         <ChevronDown className="w-3.5 h-3.5 opacity-70" />

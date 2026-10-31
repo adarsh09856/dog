@@ -30,7 +30,7 @@ export function CreateFolderButton() {
 
     return (
         <>
-            <Button variant="outline" onClick={() => setIsOpen(true)}>
+            <Button variant="outline" onClick={() => setIsOpen(true)} data-hero-action="folder">
                 <FolderPlus className="w-4 h-4 mr-2" />
                 New Folder
             </Button>

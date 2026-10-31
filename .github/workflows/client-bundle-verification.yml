@@ -161,6 +161,7 @@ jobs:
           src/app/admin/client-installations/page.test.tsx
           src/app/admin/settings/page.test.tsx
           src/app/settings/page.test.tsx
+          src/app/workflow/AgentLibraryActions.test.tsx
           src/app/page.test.tsx
           src/app/pricing/page.test.tsx
           src/app/widgets/page.test.tsx
