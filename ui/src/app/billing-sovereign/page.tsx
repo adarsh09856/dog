@@ -263,6 +263,21 @@ export default function SovereignBillingPage() {
     const packageId = String(pkg.id);
     if (wallet?.is_frozen) return;
     const totalMinutes = pkg.minutes + pkg.bonus_minutes;
+    if (pkg.price_cents === 0) {
+      if (!confirm(`Redeem ${pkg.name} once for this organization? This adds ${totalMinutes.toLocaleString()} wallet minutes and cannot be redeemed again.`)) return;
+      setPurchasingPackageId(packageId);
+      try {
+        const result = await paymentsApi.redeemFreePackage(packageId);
+        alert(result.message);
+        setSelectedCreditPackage(null);
+        await fetchData();
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : "Free credit redemption failed");
+      } finally {
+        setPurchasingPackageId(null);
+      }
+      return;
+    }
     if (!confirm(`Buy ${pkg.name} for ${formatMinorUnits(pkg.price_cents, pkg.currency)}? This is a one-time payment for ${totalMinutes.toLocaleString()} wallet minutes. Provider and carrier charges may apply separately.`)) return;
     setPurchasingPackageId(packageId);
     try {
@@ -528,7 +543,7 @@ export default function SovereignBillingPage() {
                         <p className="text-xs text-muted-foreground">Adds {totalMinutes.toLocaleString()} wallet minutes. No expiry is applied to the wallet credit.</p>
                         <Button className="w-full" variant={selected ? "default" : "outline"} disabled={Boolean(wallet?.is_frozen) || purchasingPackageId !== null} onClick={() => handleCreditPackagePurchase(pkg)}>
                           {purchasingPackageId === packageId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                          {purchasingPackageId === packageId ? "Opening checkout…" : selected ? "Continue to payment" : "Buy bundle"}
+                          {purchasingPackageId === packageId ? (pkg.price_cents === 0 ? "Redeeming…" : "Opening checkout…") : pkg.price_cents === 0 ? "Redeem free minutes" : selected ? "Continue to payment" : "Buy bundle"}
                         </Button>
                       </CardContent>
                     </Card>

@@ -812,6 +812,14 @@ export interface VerifyPaymentResult {
   plan_code?: string;
 }
 
+export interface FreePackageRedemptionResult {
+  success: boolean;
+  already_redeemed: boolean;
+  message: string;
+  minutes_added: number;
+  new_wallet_balance: number;
+}
+
 export const paymentsApi = {
   getConfig: () => apiFetch<PaymentConfig>('/payments/config'),
   createOrder: (payload: CreateOrderPayload) =>
@@ -823,6 +831,11 @@ export const paymentsApi = {
     apiFetch<VerifyPaymentResult>('/payments/verify', {
       method: 'POST',
       body: JSON.stringify(payload),
+    }),
+  redeemFreePackage: (package_id: string) =>
+    apiFetch<FreePackageRedemptionResult>('/payments/redeem-free-package', {
+      method: 'POST',
+      body: JSON.stringify({ package_id }),
     }),
 };
 

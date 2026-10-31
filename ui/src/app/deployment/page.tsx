@@ -18,8 +18,8 @@ import styles from "../PublicPages.module.css";
 const deploymentOptions = [
   {
     label: "01 / HOSTED",
-    title: "Managed Kodewaves workspace",
-    description: "Kodewaves operates the hosted application and its data services. Your signed-in workspace holds organization-scoped agent and business records; external providers receive the call data needed for the services you connect.",
+    title: "Managed workspace",
+    description: "The platform operator hosts the application and its data services. Your signed-in workspace holds organization-scoped agent and business records; external providers receive the call data needed for the services you connect.",
     icon: Cloud,
     details: [
       "Workspace access and enabled plan features",
@@ -72,7 +72,7 @@ export default function DeploymentPage() {
                   label="Discuss a client installation"
                   className={styles.primaryAction}
                 />
-                <Link href="/pricing" className={styles.primaryAction}>Review plans and costs <ArrowRight aria-hidden className="size-4" /></Link>
+                <Link href="/pricing" className={styles.secondaryAction}>Review plans and costs <ArrowRight aria-hidden className="size-4" /></Link>
                 <Link href="/platform" className={styles.secondaryAction}>Explore the platform</Link>
               </div>
             </div>
@@ -177,7 +177,7 @@ export default function DeploymentPage() {
                 label="Request a deployment consultation"
                 className={styles.primaryAction}
               />
-              <Link href="/pricing" className={styles.primaryAction}>View plans <ArrowRight aria-hidden className="size-4" /></Link>
+              <Link href="/pricing" className={styles.secondaryAction}>View plans <ArrowRight aria-hidden className="size-4" /></Link>
               <Link href="/auth/login" className={styles.secondaryAction}>Sign in</Link>
             </div>
           </div>

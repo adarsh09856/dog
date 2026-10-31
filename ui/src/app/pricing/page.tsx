@@ -321,7 +321,7 @@ export default function PricingPage() {
               </p>
             )}
             {packages.map((pkg) => {
-              const available = Number.isSafeInteger(pkg.price_cents) && pkg.price_cents > 0 &&
+              const available = Number.isSafeInteger(pkg.price_cents) && pkg.price_cents >= 0 &&
                 Number.isSafeInteger(pkg.minutes) && pkg.minutes > 0 &&
                 Number.isSafeInteger(pkg.bonus_minutes) && pkg.bonus_minutes >= 0 &&
                 typeof pkg.currency === "string" && /^[A-Za-z]{3}$/.test(pkg.currency) &&
@@ -336,7 +336,7 @@ export default function PricingPage() {
                   {pkg.is_popular && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Popular</span>}
                 </div>
                 <p className="mt-5 text-3xl font-medium tracking-tight">
-                  {available ? money(pkg.price_cents, pkg.currency) : "Price unavailable"}
+                  {available ? (pkg.price_cents === 0 ? "Free" : money(pkg.price_cents, pkg.currency)) : "Price unavailable"}
                 </p>
                 <p className="mt-3 text-sm text-muted-foreground">
                   {available ? `${pkg.minutes.toLocaleString()} minutes` : "Bundle details unavailable"}
@@ -345,13 +345,13 @@ export default function PricingPage() {
                     : ""}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  One-time payment. Wallet minutes do not expire.
+                  {available && pkg.price_cents === 0 ? "One-time redemption per organization. Wallet minutes do not expire." : "One-time payment. Wallet minutes do not expire."}
                 </p>
                 {available && <Link
                   href={`/auth/login?credit_package=${encodeURIComponent(String(pkg.id))}`}
                   className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-cta-text"
                 >
-                  Continue to wallet
+                  {pkg.price_cents === 0 ? "Redeem free minutes" : "Continue to wallet"}
                   <ArrowRight className="size-4" />
                 </Link>}
               </article>

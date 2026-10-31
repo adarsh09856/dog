@@ -699,6 +699,63 @@ class KodewavesDBClient(BaseDBClient):
             await session.refresh(wallet)
             return wallet
 
+    async def add_minutes_once(
+        self,
+        organization_id: int,
+        minutes: int,
+        *,
+        reason: str,
+        reference_id: str,
+        notes: Optional[str] = None,
+    ) -> tuple[OrganizationWalletModel, bool]:
+        """Grant a one-time wallet credit under the same per-org payment lock."""
+        if minutes <= 0 or not reference_id:
+            raise ValueError("One-time wallet credits require positive minutes and a reference")
+        async with self.get_session() as session:
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(492566, :org_id)"),
+                {"org_id": organization_id},
+            )
+            await session.execute(
+                insert(OrganizationWalletModel).values(
+                    organization_id=organization_id,
+                    credit_balance_minutes=0,
+                    bonus_minutes=0,
+                ).on_conflict_do_nothing(index_elements=["organization_id"])
+            )
+            result = await session.execute(
+                select(OrganizationWalletModel)
+                .where(OrganizationWalletModel.organization_id == organization_id)
+                .with_for_update()
+            )
+            wallet = result.scalar_one()
+            if wallet.is_frozen:
+                raise PermissionError("Organization wallet is frozen")
+            existing = await session.execute(
+                select(WalletLedgerModel.id).where(
+                    WalletLedgerModel.organization_id == organization_id,
+                    WalletLedgerModel.reference_id == reference_id,
+                    WalletLedgerModel.amount_minutes > 0,
+                ).limit(1)
+            )
+            if existing.scalar_one_or_none() is not None:
+                await session.commit()
+                return wallet, False
+
+            wallet.credit_balance_minutes += minutes
+            wallet.updated_at = datetime.now(UTC)
+            session.add(WalletLedgerModel(
+                organization_id=organization_id,
+                amount_minutes=minutes,
+                balance_after=wallet.credit_balance_minutes,
+                reason=reason,
+                reference_id=reference_id,
+                notes=notes,
+            ))
+            await session.commit()
+            await session.refresh(wallet)
+            return wallet, True
+
     # ------------------------------------------------------------------------
     # CRM & Contacts
     # ------------------------------------------------------------------------

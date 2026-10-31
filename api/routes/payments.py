@@ -215,6 +215,10 @@ class CreateOrderRequest(BaseModel):
     billing_cycle: Optional[str] = "monthly" # "monthly" or "annual"
 
 
+class RedeemFreePackageRequest(BaseModel):
+    package_id: str
+
+
 class CreateOrderResponse(BaseModel):
     order_id: str
     amount: int
@@ -242,6 +246,14 @@ class VerifyPaymentResponse(BaseModel):
     new_wallet_balance: int
     plan_code: Optional[str] = None
     plan_expires_at: Optional[str] = None
+
+
+class RedeemFreePackageResponse(BaseModel):
+    success: bool
+    already_redeemed: bool
+    message: str
+    minutes_added: int
+    new_wallet_balance: int
 
 
 async def _grant_paid_order(
@@ -321,6 +333,51 @@ async def get_payment_configuration():
         stripe_enabled=creds["stripe_enabled"],
         stripe_publishable_key=creds["stripe_publishable_key"] or None,
         default_currency="INR",
+    )
+
+
+@router.post("/redeem-free-package", response_model=RedeemFreePackageResponse)
+async def redeem_free_package(
+    req: RedeemFreePackageRequest, user: UserModel = Depends(get_user)
+):
+    """Grant an explicitly free catalog bundle once per organization."""
+    organization_id = user.selected_organization_id
+    if not organization_id:
+        raise HTTPException(status_code=400, detail="User has no selected organization")
+    try:
+        package_id = uuid.UUID(req.package_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Invalid credit package")
+
+    async with kodewaves_db_client.get_session() as session:
+        package = (await session.execute(
+            select(CreditPackageModel).where(CreditPackageModel.id == package_id)
+        )).scalar_one_or_none()
+    if not package or not package.is_active:
+        raise HTTPException(status_code=404, detail="Active credit package not found")
+    if package.price_cents != 0 or package.minutes <= 0 or (package.bonus_minutes or 0) < 0:
+        raise HTTPException(status_code=400, detail="This credit package is not a free offer")
+
+    minutes = package.minutes + (package.bonus_minutes or 0)
+    try:
+        wallet, granted = await kodewaves_db_client.add_minutes_once(
+            organization_id=organization_id,
+            minutes=minutes,
+            reason="free_credit_package_redemption",
+            reference_id=f"free-credit-package:{package.id}",
+            notes=f"One-time redemption of free package {package.name}",
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return RedeemFreePackageResponse(
+        success=True,
+        already_redeemed=not granted,
+        message=(
+            f"{minutes} wallet minutes have been added."
+            if granted else "This free offer was already redeemed for this organization."
+        ),
+        minutes_added=minutes if granted else 0,
+        new_wallet_balance=wallet.credit_balance_minutes,
     )
 
 
