@@ -30,7 +30,12 @@ export function CreateFolderButton() {
 
     return (
         <>
-            <Button variant="outline" onClick={() => setIsOpen(true)} data-hero-action="folder">
+            <Button
+                variant="outline"
+                className="!border-white/40 !bg-white/10 !text-[#edf2e9] hover:!border-white/65 hover:!bg-white/15 hover:!text-white"
+                onClick={() => setIsOpen(true)}
+                data-hero-action="folder"
+            >
                 <FolderPlus className="w-4 h-4 mr-2" />
                 New Folder
             </Button>

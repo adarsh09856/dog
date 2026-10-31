@@ -31,7 +31,11 @@ it('marks each agent-library action explicitly so hero contrast does not depend 
         <CreateWorkflowButton />
     </>);
 
-    expect(screen.getByRole('button', { name: /Upload Agent Definition/ }).getAttribute('data-hero-action')).toBe('upload');
-    expect(screen.getByRole('button', { name: /New Folder/ }).getAttribute('data-hero-action')).toBe('folder');
+    const upload = screen.getByRole('button', { name: /Upload Agent Definition/ });
+    const folder = screen.getByRole('button', { name: /New Folder/ });
+    expect(upload.getAttribute('data-hero-action')).toBe('upload');
+    expect(upload.className).toContain('!text-[#17271f]');
+    expect(folder.getAttribute('data-hero-action')).toBe('folder');
+    expect(folder.className).toContain('!text-[#edf2e9]');
     expect(screen.getByRole('button', { name: /Create Agent/ }).getAttribute('data-hero-action')).toBe('create');
 });
