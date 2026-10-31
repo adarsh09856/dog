@@ -138,10 +138,10 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
         iconBg: 'bg-teal-500 text-white',
     },
     indigo: {
-        bg: 'bg-indigo-50 dark:bg-indigo-950/30',
-        text: 'text-indigo-700 dark:text-indigo-300',
-        border: 'border-indigo-200 dark:border-indigo-800',
-        iconBg: 'bg-indigo-500 text-white',
+        bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+        text: 'text-emerald-700 dark:text-emerald-300',
+        border: 'border-emerald-200 dark:border-emerald-800',
+        iconBg: 'bg-emerald-500 text-white',
     },
 };
 

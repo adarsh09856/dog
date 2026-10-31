@@ -352,10 +352,10 @@
 /* Ghost placeholders: present on every field, but barely-there. */
 .lead-form-underline :is(input, textarea)::placeholder {
   color: var(--muted-foreground);
-  opacity: 0.14;
+  opacity: 0.82;
 }
 .lead-form-underline [data-slot="select-trigger"][data-placeholder] {
-  color: color-mix(in oklab, var(--muted-foreground) 17%, transparent);
+  color: var(--muted-foreground);
 }
 /* Underline-only fields: transparent box, hairline bottom border, amber
    underline on the focused control. Compact heights keep rows tight. */
