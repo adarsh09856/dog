@@ -1285,10 +1285,11 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
                         if messages[i] is users[-1])
     previous = next((m.get("content") for m in reversed(messages[:latest_index])
                      if isinstance(m, dict) and m.get("role") == "assistant"), None)
-    if not isinstance(previous, str) or not re.search(
+    asked_for_time = isinstance(previous, str) and bool(re.search(
         r"किस समय|कौन सा समय|समय\s+क्या|किस तारीख|किस तारीख और समय|what time|what date|date and time",
         previous, re.I,
-    ):
+    ))
+    if not asked_for_time:
         return None
     normalized = latest.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
 
@@ -1325,6 +1326,29 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
             return None
         hour24 = hour % 12 + (12 if english.group(3).lower() == "pm" else 0)
     else:
+        # A recognized date plus a short number/time-like answer is an
+        # incomplete time, not permission for the LLM to supply a default.
+        # Ask for the missing AM/PM or day-period explicitly and keep the
+        # caller-provided date intact for the next turn.
+        time_signal = bool(re.search(
+            r"\b(?:\d{1,2}(?::\d{2})?|am|pm|morning|afternoon|evening|night|"
+            r"o'clock|oclock)\b|सुबह|दोपहर|शाम|रात|बजे",
+            normalized, re.IGNORECASE,
+        ))
+        if not time_signal:
+            words = re.findall(r"[a-z]+", normalized.casefold())
+            time_signal = (
+                1 <= len(words) <= 3
+                and any(word in _DATE_SMALL_NUMBERS for word in words)
+            )
+        if stated_date and time_signal:
+            if date_was_in_latest:
+                state["booking_time_question_date"] = stated_date
+            if state.get("reply_language") == "English" or not re.search(
+                r"[\u0900-\u097f]", latest
+            ):
+                return "Please give the time with AM or PM, for example, 5 PM."
+            return "कृपया समय सुबह, दोपहर या शाम के साथ बताइए।"
         return None
     slot = f"{stated_date}T{hour24:02d}:{minute:02d}"
     if state.get("booking_confirmation_slot") == slot:
@@ -1366,9 +1390,7 @@ def booking_phone_date_question(messages: list, state: dict) -> str | None:
         message.get("content")
         for message in reversed(messages[:latest_user_index])
         if isinstance(message, dict) and message.get("role") == "assistant"
-    ), None)
-    if not isinstance(previous_assistant, str) or not _PHONE_REQUEST.search(previous_assistant):
-        return None
+    ), "")
     if not any(
         isinstance(message, dict) and message.get("role") == "user"
         and isinstance(message.get("content"), str)
