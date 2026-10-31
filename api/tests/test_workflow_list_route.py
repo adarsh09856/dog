@@ -53,6 +53,20 @@ def test_workflow_fetch_list_includes_workflow_uuid():
     ]
 
 
+def test_workflow_fetch_hides_workflow_outside_selected_workspace():
+    """A foreign workspace's workflow ID must look absent to this caller."""
+    app = _make_test_app()
+    client = TestClient(app)
+
+    with patch("api.routes.workflow.db_client") as mock_db:
+        mock_db.get_workflow = AsyncMock(return_value=None)
+
+        response = client.get("/workflow/fetch/52")
+
+    assert response.status_code == 404
+    mock_db.get_workflow.assert_awaited_once_with(52, organization_id=11)
+
+
 def test_workflow_fetch_invalid_status_returns_422_without_db_query():
     """A status outside the workflow_status enum (e.g. 'published') must fail
     as a clean 422 instead of a 500 from the Postgres enum cast."""
