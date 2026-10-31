@@ -15,10 +15,8 @@ import {
   Unlock,
   Zap,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
 import { startConfiguredCheckout } from "@/lib/billing/checkout";
-import { paymentsApi } from "@/lib/kodewavesApi";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -215,8 +213,8 @@ export default function SovereignBillingPage() {
     if (!confirm(`Pay ${formatMinorUnits(price, plan.currency)} once for ${accessDays} days of ${plan.name} access? ${termNotice} It will not renew automatically. Included minutes are credited once and do not replenish monthly.`)) return;
     setSubscribingId(plan.id);
     try {
-      if (plan.monthly_price_inr > 0 || plan.monthly_price_usd > 0) {
-        const result = await startConfiguredCheckout({ plan_id: String(plan.id), billing_cycle: "monthly" });
+      if (price > 0) {
+        const result = await startConfiguredCheckout({ plan_id: String(plan.id), billing_cycle: billingCycle });
         if (result.redirected) return;
         alert(result.receipt.message);
       } else {
@@ -231,25 +229,25 @@ export default function SovereignBillingPage() {
     }
   };
 
-  useEffect(() => {
-    if (authLoading || !user) return;
-    const params = new URLSearchParams(window.location.search);
-    const session = params.get("session_id");
-    if (params.get("payment") !== "success" || !session) return;
-    let cancelled = false;
-    // A return URL is not payment proof: fetch the provider receipt through
-    // the authenticated backend before showing success or updating the wallet.
-    paymentsApi.verifyPayment({ gateway: "stripe", order_id: session, payment_id: session })
-      .then(async (receipt) => {
-        if (cancelled) return;
-        if (!receipt.success) throw new Error("Payment has not been verified.");
-        window.history.replaceState(null, "", window.location.pathname);
-        await fetchData();
-      }).catch((error) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Payment verification failed. Refresh before retrying payment.");
-      });
-    return () => { cancelled = true; };
-  }, [authLoading, user]); // eslint-disable-line react-hooks/exhaustive-deps
+  const handleCreditPackagePurchase = async (pkg: PublicCreditPackage) => {
+    const packageId = String(pkg.id);
+    setSelectedCreditPackage(packageId);
+    if (wallet?.is_frozen) return;
+    const totalMinutes = pkg.minutes + pkg.bonus_minutes;
+    if (!confirm(`Purchase ${totalMinutes.toLocaleString()} wallet minutes for ${formatMinorUnits(pkg.price_cents, pkg.currency)}? This is a one-time payment.`)) return;
+    setPurchasingPackageId(packageId);
+    setLoadError(null);
+    try {
+      const result = await startConfiguredCheckout({ package_id: packageId });
+      if (result.redirected) return;
+      alert(result.receipt.message);
+      await fetchData();
+    } catch (error: unknown) {
+      setLoadError(error instanceof Error ? error.message : "Credit bundle checkout failed. Please retry.");
+    } finally {
+      setPurchasingPackageId(null);
+    }
+  };
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto">

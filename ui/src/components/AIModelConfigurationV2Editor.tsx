@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VoiceSelectorModal } from "@/components/VoiceSelectorModal";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
 import { detailFromError } from "@/lib/apiError";
+import { formatRoundingPolicy } from "@/lib/billingDisplay";
 import { catalogApi, type AvailableCatalogResponse } from "@/lib/kodewavesApi";
 import { useAuth } from "@/lib/auth";
 import {

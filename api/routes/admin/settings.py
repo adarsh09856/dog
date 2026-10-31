@@ -17,7 +17,10 @@ router = APIRouter(prefix="/settings", tags=["admin-settings"])
 
 class PlatformSettingsResponse(BaseModel):
     company_name: str = "Kodewaves"
+    tagline: str = "Voice agents for web and phone"
     logo_url: Optional[str] = "/kodewaves-brand.svg"
+    favicon_url: str = "/kodewaves-mark.svg"
+    font: str = "geist"
     support_email: Optional[str] = "support@kodewaves.in"
     primary_color: Optional[str] = "#4f46e5"
     allow_user_byok: bool = False
@@ -82,7 +85,10 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
 
     return PlatformSettingsResponse(
         company_name=branding.get("company_name", "Kodewaves"),
+        tagline=normalized_branding.tagline,
         logo_url=branding.get("logo_url", "/kodewaves-brand.svg"),
+        favicon_url=normalized_branding.favicon_url,
+        font=normalized_branding.font,
         support_email=branding.get("support_email", "support@kodewaves.in"),
         primary_color=branding.get("primary_color", "#4f46e5"),
         allow_user_byok=byok.get("allow_user_byok", False),
@@ -131,12 +137,15 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
     )
     if structured_fields.intersection(payload):
         # 1. Branding
-        branding = {
-            "company_name": payload.get("company_name", "Kodewaves"),
-            "logo_url": payload.get("logo_url", "/kodewaves-brand.svg"),
-            "support_email": payload.get("support_email", "support@kodewaves.in"),
-            "primary_color": payload.get("primary_color", "#4f46e5"),
+        existing_branding = await kodewaves_db_client.get_setting("branding") or {}
+        branding_updates = {
+            key: payload[key]
+            for key in PlatformBranding.model_fields
+            if key in payload
         }
+        branding = PlatformBranding.model_validate(
+            {**existing_branding, **branding_updates}
+        ).model_dump()
         await kodewaves_db_client.set_setting(key="branding", value=branding, category="branding")
 
         # 2. BYOK Policy

@@ -46,9 +46,10 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
 export interface MasterCredential {
   id?: number;
   provider: string;
-  category: 'llm' | 'stt' | 'tts' | 'sts' | 'telecom';
-  display_name: string;
+  category: string;
+  display_name?: string;
   api_key_masked?: string;
+  has_credentials?: boolean;
   api_key?: string;
   api_secret?: string;
   credentials?: Record<string, string | undefined>;
@@ -97,6 +98,7 @@ export interface AdminUserItem {
   organization_name?: string;
   wallet_balance_minutes?: number;
   plan_name?: string;
+  plan_code?: string;
   total_calls?: number;
   organization?: {
     id: number;
@@ -112,13 +114,23 @@ export interface SaaSPlan {
   name: string;
   code: string;
   description?: string;
-  monthly_price_inr: number;
-  monthly_price_usd: number;
+  monthly_price_inr?: number | null;
+  monthly_price_usd?: number | null;
+  monthly_price_cents: number;
+  annual_price_cents: number;
+  currency: string;
   included_minutes: number;
   overage_rate_per_minute: number;
   max_concurrent_calls: number;
+  max_agents: number;
   allow_user_byok: boolean;
   features?: string[];
+  has_crm_access?: boolean;
+  has_appointments_access?: boolean;
+  has_forms_access?: boolean;
+  has_widget_access?: boolean;
+  has_campaigns_access?: boolean;
+  is_default?: boolean;
   is_active: boolean;
   is_public: boolean;
 }
@@ -127,8 +139,10 @@ export interface CreditPackage {
   id: string | number;
   name: string;
   minutes: number;
-  price_inr: number;
-  price_usd: number;
+  price_inr?: number;
+  price_usd?: number;
+  price_cents: number;
+  currency: string;
   bonus_minutes: number;
   is_popular: boolean;
   is_active: boolean;
@@ -141,23 +155,20 @@ export interface PublicCreditPackage {
   bonus_minutes: number;
   price_cents: number;
   currency: string;
+  is_popular: boolean;
 }
 
-export function normalizePublicCreditPackage(pkg: PublicCreditPackage): CreditPackage {
-  const amount = Number(pkg.price_cents || 0) / 100;
-  const isInr = pkg.currency?.toUpperCase() === 'INR';
-  const isUsd = pkg.currency?.toUpperCase() === 'USD';
-  const priceInr = isInr ? amount : isUsd ? amount * 83 : amount;
-  const priceUsd = isUsd ? amount : isInr ? amount / 83 : amount;
+export interface PublicSaaSPlan extends SaaSPlan {}
 
+export function normalizePublicCreditPackage(pkg: PublicCreditPackage): CreditPackage {
   return {
     id: pkg.id,
     name: pkg.name,
     minutes: Number(pkg.minutes || 0),
     bonus_minutes: Number(pkg.bonus_minutes || 0),
-    price_inr: priceInr,
-    price_usd: priceUsd,
-    is_popular: Number(pkg.bonus_minutes || 0) > 0,
+    price_cents: Number(pkg.price_cents || 0),
+    currency: pkg.currency,
+    is_popular: pkg.is_popular,
     is_active: true,
   };
 }
@@ -229,6 +240,12 @@ export interface PlatformSettings {
   logo_url?: string;
   support_email?: string;
   primary_color?: string;
+  tagline?: string;
+  favicon_url?: string;
+  font?: 'geist' | 'system';
+  s2s_multiplier?: number;
+  default_org_concurrency_limit?: number;
+  max_concurrent_calls?: number;
   allow_user_byok: boolean;
   enforce_wallet_balance: boolean;
   enable_local_ai_engine?: boolean;
@@ -600,11 +617,20 @@ export interface SovereignWallet {
   low_balance_threshold: number;
   plan_name?: string;
   plan_minutes?: number;
+  organization_id?: number;
+  credit_balance_minutes?: number;
+  bonus_minutes?: number;
+  total_available_minutes?: number;
+  is_frozen?: boolean;
+  plan_code?: string;
+  included_minutes?: number;
+  plan_expires_at?: string | null;
 }
 
 export interface WalletLedgerItem {
-  id: number;
+  id: number | string;
   delta_minutes: number;
+  amount_minutes?: number;
   balance_after: number;
   reason: string;
   reference_id?: string;
@@ -724,17 +750,17 @@ export const sovereignBillingApi = {
 };
 
 export const publicApi = {
-  getPublicPlans: () => apiFetch<SaaSPlan[]>('/billing-sovereign/public/plans'),
+  getPublicPlans: () => apiFetch<PublicSaaSPlan[]>('/billing-sovereign/public/plans'),
   getPublicCreditPackages: async () => {
     const packages = await apiFetch<PublicCreditPackage[]>('/billing-sovereign/public/packages');
-    return packages.map(normalizePublicCreditPackage);
+    return packages;
   },
   getPublicCreditOffers: async () => {
     const packages = await apiFetch<PublicCreditPackage[]>(
       '/billing-sovereign/public/packages',
       { signal: AbortSignal.timeout(5000) },
     );
-    return packages.map(normalizePublicCreditPackage);
+    return packages;
   },
 };
 
@@ -768,7 +794,7 @@ export interface CreateOrderResult {
 export interface VerifyPaymentPayload {
   gateway: string;
   order_id: string;
-  payment_id: string;
+  payment_id?: string;
   signature?: string;
   package_id?: string;
   plan_id?: string;
@@ -801,6 +827,7 @@ export interface CatalogModelOption {
   value: string;
   label: string;
   provider?: string;
+  has_master_key?: boolean;
   /** Languages advertised by the installed engine, when it reports them. */
   languages?: string[];
   /** True only when this exact STT model has a supported auto-detect setting. */
