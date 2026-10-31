@@ -9,10 +9,11 @@
 .hero p { max-width:650px;color:#c2d0c7;font-size:13px;line-height:1.8; }
 .actions { display:flex;max-width:520px;flex-wrap:wrap;justify-content:flex-end;gap:9px; }
 .actions > * { min-width:0; }
-.actions > button[data-slot="button"]:first-of-type { color:#17271f;background:#d1b367;border-color:#d1b367; }
-.actions > button[data-slot="button"]:first-of-type:hover { color:#17271f;background:#dec783; }
-.actions > button[data-slot="button"]:nth-of-type(2) { color:#edf2e9;border-color:rgba(223,233,223,.24);background:rgba(255,255,255,.045); }
-.actions > button[data-slot="button"]:nth-of-type(2):hover { color:#fff;border-color:rgba(223,233,223,.5);background:rgba(255,255,255,.1); }
+.actions > :global(button[data-slot="button"]) { min-height:44px; }
+.actions > :global(button[data-hero-action="upload"]) { color:#17271f;background:#d1b367;border-color:#d1b367; }
+.actions > :global(button[data-hero-action="upload"]:hover) { color:#17271f;background:#dec783;border-color:#dec783; }
+.actions > :global(button[data-hero-action="folder"]) { color:#edf2e9;border-color:rgba(223,233,223,.4);background:rgba(255,255,255,.08); }
+.actions > :global(button[data-hero-action="folder"]:hover) { color:#fff;border-color:rgba(223,233,223,.64);background:rgba(255,255,255,.14); }
 .activeSection { padding:24px; border:1px solid var(--border); border-radius:17px; background:color-mix(in srgb,var(--card) 88%,var(--background)); box-shadow:0 16px 40px -38px var(--foreground); }
 .sectionHead { display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding-bottom:18px;margin-bottom:21px;border-bottom:1px solid var(--border); }
 .sectionHead h2 { font-size:19px;font-weight:640;letter-spacing:-.035em; }

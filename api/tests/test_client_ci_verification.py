@@ -42,6 +42,21 @@ def verifier(monkeypatch):
     return ci_verify
 
 
+def test_owner_poll_failure_summary_extracts_bounded_exception_messages(verifier):
+    lines = "\n".join([
+        "INFO startup complete",
+        "WARNING Owner installation status check failed: ConnectError: host unreachable",
+        "WARNING Owner installation status check failed: timeout while connecting",
+    ])
+
+    assert verifier._owner_poll_log_summary(lines) == (
+        "ConnectError: host unreachable | timeout while connecting"
+    )
+    assert verifier._owner_poll_log_summary("no owner poll attempt") == (
+        "no owner-poll warning was logged"
+    )
+
+
 def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, monkeypatch, tmp_path):
     monkeypatch.setenv("CLIENT_API_IMAGE", "unexpected-host-image")
     monkeypatch.setenv("CLIENT_INTERNAL_SUBNET", "10.99.0.0/16")
@@ -110,7 +125,9 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
             if "up" in command:
                 assert "--wait" in command
                 override = Path(command[command.index("-f", command.index("-f") + 1) + 1])
-                assert "internal: true" in override.read_text()
+                override_text = override.read_text()
+                assert "ARQ_WORKERS: \"0\"" in override_text
+                assert "internal: true" not in override_text
                 env_file = Path(command[command.index("--env-file") + 1])
                 env_values = dict(
                     line.split("=", 1)
@@ -263,6 +280,12 @@ def test_disposable_owner_peer_requires_one_time_signed_enrollment_and_returns_b
                 tls_request, timeout=5
             )
         assert tls_error.value.code == 401
+        assert json.loads(owner.diagnostic_summary()) == {
+            "request_counts": {"/api/v1/admin/client-installations/check": 1},
+            "response_statuses": {"401": 1},
+            "rejected_requests": 0,
+            "rejection_types": {},
+        }
 
         install_key = Ed25519PrivateKey.generate()
         public_key = base64.urlsafe_b64encode(
@@ -453,8 +476,10 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
         if command[:2] == ["docker", "build"]:
             return SimpleNamespace(returncode=0)
         if command[:2] == ["docker", "compose"]:
-            if "port" in command:
-                return SimpleNamespace(stdout="127.0.0.1:23456\n")
+            if "exec" in command:
+                url = command[-2]
+                status = 500 if url.endswith("/api/v1/workflow") else 200
+                return SimpleNamespace(stdout=json.dumps({"status": status, "body": "synthetic response"}))
             return SimpleNamespace(returncode=0)
         if command[:3] == ["docker", "image", "inspect"]:
             return SimpleNamespace(stdout="sha256:" + "f" * 64)
@@ -462,22 +487,7 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
             return SimpleNamespace(returncode=0)
         pytest.fail(f"Unexpected command: {command}")
 
-    class Response:
-        status = 200
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-    def open_url(request, timeout):
-        if request.full_url.endswith("/api/v1/workflow"):
-            raise urllib.error.HTTPError(request.full_url, 500, "unexpected response", {}, None)
-        return Response()
-
     monkeypatch.setattr(verifier.subprocess, "run", run)
-    monkeypatch.setattr(verifier.urllib.request, "urlopen", open_url)
     with pytest.raises(ValueError, match="received HTTP 500"):
         verifier._verify_compose_runtime(
             Path(__file__).resolve().parents[2], tmp_path, api_image="kodewaves-api:ci-check",
@@ -487,6 +497,10 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
 
     down = next(command for command in commands if command[:2] == ["docker", "compose"] and "down" in command)
     image_rm = next(command for command in commands if command[:3] == ["docker", "image", "rm"])
+    http_probes = [
+        command for command in commands
+        if command[:2] == ["docker", "compose"] and "exec" in command
+    ]
     compose_up_options = next(
         options for command, options in command_options
         if command[:2] == ["docker", "compose"] and "up" in command
@@ -495,6 +509,12 @@ def test_runtime_smoke_always_removes_project_volumes_and_minio_image_on_http_fa
     assert compose_up_options["text"] is True
     assert "--volumes" in down and "--remove-orphans" in down
     assert image_rm[-1].startswith("kodewaves-ci-minio:kw-ci-")
+    assert http_probes
+    assert all(command[command.index("exec") + 1:command.index("exec") + 4] == ["-T", "api", "python"]
+               for command in http_probes)
+    assert not any(command[:2] == ["docker", "compose"] and "port" in command for command in commands)
+    assert "http://127.0.0.1:8000/api/v1/health" in [command[-2] for command in http_probes]
+    assert "http://ui:3010/" in [command[-2] for command in http_probes]
 
 
 def test_runtime_smoke_preserves_compose_startup_diagnostics(verifier, monkeypatch, tmp_path):
@@ -616,6 +636,14 @@ def test_runtime_smoke_keeps_compose_failure_with_bounded_service_diagnostics(ve
         if command[:2] == ["docker", "build"]:
             return SimpleNamespace(returncode=0)
         if command[:2] == ["docker", "compose"]:
+            if command[-3:] == ["config", "--format", "json"]:
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout=json.dumps({"services": {
+                        "api": {"ports": [{"target": 8000, "published": "23000"}]},
+                        "ui": {"ports": [{"target": 3010, "published": "23001"}]},
+                    }}),
+                )
             if "up" in command:
                 raise subprocess.CalledProcessError(
                     1, command, stderr="dependency failed: container ui is unhealthy"
@@ -653,6 +681,7 @@ def test_runtime_smoke_keeps_compose_failure_with_bounded_service_diagnostics(ve
     assert "dependency failed: container ui is unhealthy" in diagnostic
     assert '"Service":"api","Status":"healthy"' in diagnostic
     assert '"Service":"ui","Status":"unhealthy"' in diagnostic
+    assert '"api": [{"target": 8000, "published": "23000"}]' in diagnostic
     assert "API startup log: api startup diagnostic marker" in diagnostic
     assert "UI startup log: ui startup diagnostic marker" in diagnostic
 
@@ -669,7 +698,7 @@ def test_owner_ci_installs_same_pipecat_extras_as_api_image():
     assert ci_extras.group(1) == image_extras.group(1)
 
 
-def test_shared_integration_branch_runs_full_client_release_verification():
+def test_main_pr_and_manual_runs_execute_full_client_release_verification():
     import yaml
 
     root = Path(__file__).resolve().parents[2]
@@ -679,8 +708,10 @@ def test_shared_integration_branch_runs_full_client_release_verification():
         )
     )
     events = workflow.get("on", workflow.get(True, {}))
-    assert "codex/kodewaves-shared-work" in events["push"]["branches"]
-    assert "refs/heads/codex/kodewaves-shared-work" in workflow["jobs"]["verify"]["if"]
+    assert "main" in events["push"]["branches"]
+    assert "main" in events["pull_request"]["branches"]
+    assert "workflow_dispatch" in events
+    assert "if" not in workflow["jobs"]["verify"]
 
 
 def test_client_production_cors_is_bound_to_public_origin():

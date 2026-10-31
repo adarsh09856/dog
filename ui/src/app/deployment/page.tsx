@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
+import { PublicEnterpriseLeadCTA } from "@/components/lead-forms/PublicEnterpriseLeadCTA";
 
 import styles from "../PublicPages.module.css";
 
@@ -67,6 +68,10 @@ export default function DeploymentPage() {
                 Use a managed workspace or discuss a licensed client installation. The right fit depends on control, providers, capacity and support requirements.
               </p>
               <div className={styles.actions}>
+                <PublicEnterpriseLeadCTA
+                  label="Discuss a client installation"
+                  className={styles.primaryAction}
+                />
                 <Link href="/pricing" className={styles.primaryAction}>Review plans and costs <ArrowRight aria-hidden className="size-4" /></Link>
                 <Link href="/platform" className={styles.secondaryAction}>Explore the platform</Link>
               </div>
@@ -160,6 +165,10 @@ export default function DeploymentPage() {
             <h2>Find the right operating model.</h2>
             <p>Review configured hosted plans or sign in to see the capabilities and provider settings available to your workspace.</p>
             <div className={styles.actions}>
+              <PublicEnterpriseLeadCTA
+                label="Request a deployment consultation"
+                className={styles.primaryAction}
+              />
               <Link href="/pricing" className={styles.primaryAction}>View plans <ArrowRight aria-hidden className="size-4" /></Link>
               <Link href="/auth/login" className={styles.secondaryAction}>Sign in</Link>
             </div>

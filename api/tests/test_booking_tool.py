@@ -81,6 +81,49 @@ async def test_booking_success_requires_persisted_identifier_and_trusted_workspa
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("allowed", [False, True])
+async def test_client_booking_requires_signed_appointments_grant(monkeypatch, allowed):
+    from api.services import client_worker_entitlements as entitlements
+    from api.services.installation_license import InstallationLicense
+
+    monkeypatch.setattr(entitlements, "runtime_edition", lambda: "client")
+    license_data = InstallationLicense(
+        "client-1", "customer-1", "client", ("example.com",), 2**31,
+        frozenset({"voice", "appointments"} if allowed else {"voice"}), {},
+    )
+    monkeypatch.setattr(entitlements, "load_license", lambda: license_data)
+    monkeypatch.setattr(entitlements, "validate_installation_license", lambda _: None)
+    owner_status = AsyncMock()
+    monkeypatch.setattr(entitlements, "require_current_owner_status", owner_status)
+    save = AsyncMock(return_value={"id": "saved-id", "status": "confirmed"})
+    monkeypatch.setattr(booking.appointments, "save_appointment", save)
+
+    result = await booking.execute_booking(arguments(), 7)
+    assert result["booked"] is allowed
+    if allowed:
+        owner_status.assert_awaited_once_with(license_data)
+        save.assert_awaited_once()
+        assert result["appointment_id"] == "saved-id"
+    else:
+        save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_booking_does_not_write_when_client_owner_status_is_denied(monkeypatch):
+    from api.services.installation_license import InstallationLicenseError
+
+    monkeypatch.setattr(
+        booking, "require_client_worker_features",
+        AsyncMock(side_effect=InstallationLicenseError("Installation license was revoked")),
+    )
+    save = AsyncMock()
+    monkeypatch.setattr(booking.appointments, "save_appointment", save)
+    result = await booking.execute_booking(arguments(), 7)
+    assert result["booked"] is False
+    save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("changes", [
     {"confirmed_by_caller": False}, {"start_time": "2035-10-20T10:00:00"},
     {"start_time": "2000-10-20T10:00:00Z"}, {"organization_id": 99},

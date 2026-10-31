@@ -27,6 +27,8 @@ from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 import yaml
 from compose_client import controlled_environment
 from cryptography import x509
@@ -69,8 +71,14 @@ class _OwnerAcceptanceServer:
         self.license_fingerprint = hashlib.sha256(license_token.encode("ascii")).hexdigest()
         self.enrollment_token = secrets.token_urlsafe(40)
         self.public_key: str | None = None
+        self.binding_valid = True
         self.used_nonces: set[str] = set()
         self._lock = threading.Lock()
+        self._metrics_lock = threading.Lock()
+        self._request_counts: dict[str, int] = {}
+        self._response_statuses: dict[str, int] = {}
+        self._rejection_count = 0
+        self._rejection_types: dict[str, int] = {}
         self.ca_file = directory / "ci-owner-ca.pem"
         self.server_key_file = directory / "ci-owner-server.key"
         self.server_cert_file = directory / "ci-owner-server.pem"
@@ -80,6 +88,8 @@ class _OwnerAcceptanceServer:
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
+                with owner._metrics_lock:
+                    owner._request_counts[self.path] = owner._request_counts.get(self.path, 0) + 1
                 try:
                     length = int(self.headers.get("Content-Length", "0"))
                     if not 0 < length <= 1_048_576:
@@ -96,10 +106,17 @@ class _OwnerAcceptanceServer:
                         self._reply(404, {"detail": "Not found"})
                         return
                     self._reply(200, result)
-                except Exception:  # noqa: BLE001 - do not expose protocol secrets in test logs
+                except Exception as exc:  # noqa: BLE001 - do not expose protocol secrets in test logs
+                    with owner._metrics_lock:
+                        owner._rejection_count += 1
+                        error_type = type(exc).__name__
+                        owner._rejection_types[error_type] = owner._rejection_types.get(error_type, 0) + 1
                     self._reply(401, {"detail": "Invalid CI owner request"})
 
             def _reply(self, status: int, payload: dict) -> None:
+                with owner._metrics_lock:
+                    key = str(status)
+                    owner._response_statuses[key] = owner._response_statuses.get(key, 0) + 1
                 data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json")
@@ -191,15 +208,30 @@ class _OwnerAcceptanceServer:
                 integrity_ok=body["integrity_ok"], integrity_finding=body["integrity_finding"],
             )
             self.used_nonces.add(nonce)
+            binding_valid = self.binding_valid
         now = int(time.time())
         status = {
             "kind": "installation_status", "installation_id": self.installation_id,
             "license_sha256": self.license_fingerprint, "nonce": nonce,
-            "revoked": False, "binding_valid": True, "observed_ip": "127.0.0.1",
+            "revoked": False, "binding_valid": binding_valid, "observed_ip": "127.0.0.1",
             "issued_at": now, "expires_at": now + 300,
         }
         return {"signed_status": issue_license_token(status, self.license_private)}
 
+    def set_binding_valid(self, binding_valid: bool) -> None:
+        """Control the signed IP decision in the disposable acceptance peer."""
+        with self._lock:
+            self.binding_valid = binding_valid
+
+    def diagnostic_summary(self) -> str:
+        """Return bounded, secret-free evidence for owner-poll CI failures."""
+        with self._metrics_lock:
+            return json.dumps({
+                "request_counts": dict(self._request_counts),
+                "response_statuses": dict(self._response_statuses),
+                "rejected_requests": self._rejection_count,
+                "rejection_types": dict(self._rejection_types),
+            }, sort_keys=True)
     def close(self) -> None:
         self.httpd.shutdown()
         self.httpd.server_close()
@@ -255,6 +287,19 @@ def _read_inventory_metrics(path: Path) -> dict[str, dict[str, int | float]]:
             raise ValueError(f"Invalid protected inventory metrics for {component}")
         checked[component] = {"file_count": count, "elapsed_ms": elapsed}
     return checked
+
+
+def _owner_poll_log_summary(log_text: str) -> str:
+    """Keep only bounded owner-poll errors from disposable API logs."""
+    marker = "Owner installation status check failed:"
+    messages = [
+        line.split(marker, 1)[1].strip()
+        for line in log_text.splitlines()
+        if marker in line
+    ]
+    if not messages:
+        return "no owner-poll warning was logged"
+    return " | ".join(messages[-2:])[:420]
 
 
 def _verify_manifest_evidence(
@@ -420,43 +465,48 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> N
             raise ValueError(f"Rendered {service_name.upper()} identity key path does not match its mount")
 
 
-def _loopback_port(compose_command: list[str], service: str, container_port: int, *, env: dict[str, str]) -> int:
-    result = subprocess.run(
-        [*compose_command, "port", service, str(container_port)],
-        check=True, capture_output=True, text=True, env=env,
+def _container_http_response(
+    compose_command: list[str],
+    path: str,
+    *,
+    host: str | None = None,
+    target: str = "api",
+    env: dict[str, str],
+) -> tuple[int, str]:
+    """Probe the Compose network from the API container itself.
+
+    Container-local probes avoid relying on host-published ports and test the
+    actual API/UI servers on their service network. The disposable API also
+    needs host-gateway access to reach the temporary HTTPS owner used by CI.
+    """
+    if target not in {"api", "ui"}:
+        raise ValueError(f"Unsupported runtime smoke target: {target}")
+    container_host = "127.0.0.1" if target == "api" else "ui"
+    container_port = 8000 if target == "api" else 3010
+    url = f"http://{container_host}:{container_port}{path}"
+    script = textwrap.dedent("""
+        import json, sys, urllib.error, urllib.request
+        request = urllib.request.Request(sys.argv[1], headers={"Host": sys.argv[2]} if sys.argv[2] else {})
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                result = {"status": response.status, "body": response.read(4096).decode("utf-8", "replace")}
+        except urllib.error.HTTPError as error:
+            result = {"status": error.code, "body": error.read(4096).decode("utf-8", "replace") if error.fp else ""}
+        print(json.dumps(result, separators=(",", ":")))
+    """)
+    response = subprocess.run(
+        [*compose_command, "exec", "-T", "api", "python", "-c", script, url, host or ""],
+        check=True, capture_output=True, text=True, timeout=20, env=env,
     )
-    value = result.stdout.strip().splitlines()[-1]
-    parsed = urllib.parse.urlsplit(f"//{value}")
     try:
-        address = parsed.hostname or ""
-        port = parsed.port
-    except ValueError as exc:
-        raise ValueError(f"Compose returned an invalid {service} port binding: {value!r}") from exc
-    if port is None or not ipaddress.ip_address(address).is_loopback:
-        raise ValueError(f"Compose {service} port must be bound to loopback, got {value!r}")
-    return port
-
-
-def _http_status(url: str, *, host: str | None = None) -> int:
-    headers = {"Host": host} if host else {}
-    request = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            return response.status
-    except urllib.error.HTTPError as exc:
-        return exc.code
-
-
-def _http_response(url: str, *, host: str | None = None) -> tuple[int, str]:
-    """Return bounded response evidence for the runtime smoke assertions."""
-    headers = {"Host": host} if host else {}
-    request = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            return response.status, response.read(4096).decode("utf-8", "replace")
-    except urllib.error.HTTPError as exc:
-        body = exc.read(4096) if exc.fp is not None else b""
-        return exc.code, body.decode("utf-8", "replace")
+        payload = json.loads(response.stdout.strip().splitlines()[-1])
+        status = payload["status"]
+        body = payload["body"]
+    except (IndexError, KeyError, json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("Container HTTP probe returned invalid response evidence") from exc
+    if type(status) is not int or not isinstance(body, str):
+        raise ValueError("Container HTTP probe returned invalid response evidence")
+    return status, body
 
 
 def _runtime_smoke_license(private_key: bytes, public_key: str) -> str:
@@ -552,6 +602,7 @@ def _verify_compose_runtime(
     compose_override = directory / f"{project}-internal-network.yaml"
     owner_trust_override = directory / f"{project}-owner-trust.yaml"
     compose_file = root / "deploy/client/docker-compose.client.yaml"
+    api_port, ui_port, minio_port = secrets.SystemRandom().sample(range(20000, 60000), 3)
     values = {
         "CLIENT_API_IMAGE": api_image,
         "CLIENT_UI_IMAGE": ui_image,
@@ -577,10 +628,11 @@ def _verify_compose_runtime(
         "TELEPHONY_WS_TOKEN_SECRET": secrets.token_urlsafe(32),
         "TURN_SECRET": secrets.token_urlsafe(32),
         "CLIENT_RELEASE_MANIFEST_FILE": str(manifest.resolve()),
-        # Docker selects unused loopback ports for each published service.
-        "API_PORT": "0",
-        "UI_PORT": "0",
-        "MINIO_PORT": "0",
+        # Compose's `port` command needs an explicit published port; port 0
+        # starts containers but yields no binding for the runtime smoke.
+        "API_PORT": str(api_port),
+        "UI_PORT": str(ui_port),
+        "MINIO_PORT": str(minio_port),
     }
     identity_key = None
     identity_gid = None
@@ -603,6 +655,7 @@ def _verify_compose_runtime(
         "      ARQ_WORKERS: \"0\"\n"
         "      ENABLE_ARI_MANAGER: \"false\"\n"
         "      ENABLE_CAMPAIGN_ORCHESTRATOR: \"false\"\n"
+        "      KODEWAVES_OWNER_STATUS_POLL_SECONDS: \"1\"\n"
         "networks:\n"
         "  internal:\n"
         "    internal: true\n",
@@ -645,26 +698,30 @@ def _verify_compose_runtime(
             cwd=root, check=True, env=command_env, timeout=360,
             capture_output=True, text=True,
         )
-        api_port = _loopback_port(compose_command, "api", 8000, env=command_env)
-        ui_port = _loopback_port(compose_command, "ui", 3010, env=command_env)
-        health_status = _http_status(f"http://127.0.0.1:{api_port}/api/v1/health")
+        health_status, _ = _container_http_response(
+            compose_command, "/api/v1/health", env=command_env,
+        )
         if health_status != 200:
             raise ValueError(f"Packaged API health endpoint returned HTTP {health_status}")
-        ui_status = _http_status(f"http://127.0.0.1:{ui_port}/")
+        ui_status, _ = _container_http_response(
+            compose_command, "/", target="ui", env=command_env,
+        )
         if ui_status != 200:
             raise ValueError(f"Packaged UI root returned HTTP {ui_status}")
-        wrong_host_status, wrong_host_body = _http_response(
-            f"http://127.0.0.1:{api_port}/api/v1/workflow",
+        wrong_host_status, wrong_host_body = _container_http_response(
+            compose_command, "/api/v1/workflow",
             host="wrong.customer.example.invalid",
+            env=command_env,
         )
         if wrong_host_status != 402 or "This domain is not licensed" not in wrong_host_body:
             raise ValueError(
                 "A protected request with a mismatched Host must fail the signed domain binding; "
                 f"received HTTP {wrong_host_status}: {wrong_host_body[:240]}"
             )
-        valid_host_status, valid_host_body = _http_response(
-            f"http://127.0.0.1:{api_port}/api/v1/workflow",
+        valid_host_status, valid_host_body = _container_http_response(
+            compose_command, "/api/v1/workflow",
             host="smoke.customer.example.invalid",
+            env=command_env,
         )
         if owner is None and (
             valid_host_status != 402 or "Owner installation check has not succeeded" not in valid_host_body
@@ -678,17 +735,55 @@ def _verify_compose_runtime(
             owner_gate_status, owner_gate_body = valid_host_status, valid_host_body
             deadline = time.monotonic() + 45
             while time.monotonic() < deadline:
-                owner_gate_status, owner_gate_body = _http_response(
-                    f"http://127.0.0.1:{api_port}/api/v1/workflow",
+                owner_gate_status, owner_gate_body = _container_http_response(
+                    compose_command, "/api/v1/workflow",
                     host="smoke.customer.example.invalid",
+                    env=command_env,
                 )
                 if owner_gate_status != 402:
                     break
                 time.sleep(1)
             if owner_gate_status != 404 or "Not Found" not in owner_gate_body:
                 raise ValueError(
-                    "Enrolled owner status must pass licensing and reach the expected unauthenticated route boundary; "
-                    f"received HTTP {owner_gate_status}: {owner_gate_body[:240]}"
+                    f"Owner peer evidence: {owner.diagnostic_summary()}; "
+                    "enrolled status must reach the expected unauthenticated route boundary; "
+                    f"received HTTP {owner_gate_status}: {owner_gate_body[:120]}"
+                )
+            # Exercise the client data-plane gate with a freshly signed owner
+            # denial, then prove it recovers only after a fresh signed allow.
+            owner.set_binding_valid(False)
+            denied_status, denied_body = owner_gate_status, owner_gate_body
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                denied_status, denied_body = _container_http_response(
+                    compose_command, "/api/v1/workflow",
+                    host="smoke.customer.example.invalid",
+                    env=command_env,
+                )
+                if denied_status == 402 and "outside the licensed ranges" in denied_body:
+                    break
+                time.sleep(0.25)
+            if denied_status != 402 or "outside the licensed ranges" not in denied_body:
+                raise ValueError(
+                    "A fresh signed owner IP-binding denial must block protected API requests; "
+                    f"received HTTP {denied_status}: {denied_body[:240]}"
+                )
+            owner.set_binding_valid(True)
+            recovered_status, recovered_body = denied_status, denied_body
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline:
+                recovered_status, recovered_body = _container_http_response(
+                    compose_command, "/api/v1/workflow",
+                    host="smoke.customer.example.invalid",
+                    env=command_env,
+                )
+                if recovered_status == 404 and "Not Found" in recovered_body:
+                    break
+                time.sleep(0.25)
+            if recovered_status != 404 or "Not Found" not in recovered_body:
+                raise ValueError(
+                    "A fresh signed owner IP-binding allow must restore the normal API auth boundary; "
+                    f"received HTTP {recovered_status}: {recovered_body[:240]}"
                 )
             bootstrap_script = (
                 "import asyncio,json,sys; from api.services.bootstrap_client_admin import bootstrap_client_admin; "
@@ -773,11 +868,28 @@ def _verify_compose_runtime(
     except BaseException as exc:
         failure = exc
         primary_output = ""
+        api_log_text = ""
         if isinstance(exc, subprocess.CalledProcessError):
             primary_output = str(exc.stderr or exc.stdout or "").strip()
         diagnostics: list[str] = []
         if primary_output:
             diagnostics.append("Failing Compose output: " + primary_output[-420:])
+        try:
+            rendered = subprocess.run(
+                [*compose_command, "config", "--format", "json"],
+                cwd=root, check=False, env=command_env, timeout=30,
+                capture_output=True, text=True,
+            )
+            if rendered.returncode == 0:
+                config = json.loads(rendered.stdout)
+                rendered_ports = {
+                    name: service.get("ports", [])
+                    for name, service in config.get("services", {}).items()
+                    if name in {"api", "ui"}
+                }
+                diagnostics.append("Rendered Compose service ports: " + json.dumps(rendered_ports))
+        except Exception as diagnostic_error:  # noqa: BLE001 - retain the original smoke failure
+            diagnostics.append(f"Rendered Compose config diagnostic failed: {type(diagnostic_error).__name__}")
         try:
             status = subprocess.run(
                 [*compose_command, "ps", "--all", "--format", "json", "api", "ui"],
@@ -794,6 +906,7 @@ def _verify_compose_runtime(
                 capture_output=True, text=True,
             )
             if logs.stdout:
+                api_log_text = logs.stdout
                 diagnostics.append("API startup log: " + logs.stdout.strip()[-360:])
             ui_logs = subprocess.run(
                 [*compose_command, "logs", "--no-color", "--tail", "20", "ui"],
@@ -804,6 +917,9 @@ def _verify_compose_runtime(
                 diagnostics.append("UI startup log: " + ui_logs.stdout.strip()[-300:])
         except Exception:  # noqa: BLE001 - preserve the failing smoke result
             diagnostics.append("Additional Compose diagnostics were unavailable")
+        if owner is not None and "Owner peer evidence:" in str(exc):
+            owner_poll_summary = _owner_poll_log_summary(api_log_text)
+            exc.args = (f"{exc}; API owner-poll log: {owner_poll_summary}",)
         if diagnostics and isinstance(exc, subprocess.CalledProcessError):
             # Keep the original failing command output first, followed by
             # bounded state/log tails. The CI annotation can then retain the

@@ -67,5 +67,10 @@ describe('TemplateSelectorModal', () => {
     expect(icon?.className).toContain('bg-emerald-500');
     expect(icon?.className).not.toContain('bg-blue-500');
     expect(badge.className).toContain('text-emerald-700');
+    expect(card).toBeTruthy();
+    expect(card?.querySelector('.bg-emerald-500')).toBeTruthy();
+    expect(card?.querySelector('.bg-emerald-50')).toBeTruthy();
+    expect(card?.querySelector('.text-emerald-700')).toBeTruthy();
+    expect(card?.querySelector('.bg-blue-500, .bg-blue-50, .text-blue-700')).toBeNull();
   });
 });

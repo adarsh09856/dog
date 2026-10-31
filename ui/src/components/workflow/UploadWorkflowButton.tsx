@@ -88,6 +88,7 @@ export function UploadWorkflowButton() {
             <Button
                 onClick={() => setIsOpen(true)}
                 variant="outline"
+                data-hero-action="upload"
             >
                 <Upload className="w-4 h-4 mr-2" />
                 Upload Agent Definition
