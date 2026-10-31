@@ -94,8 +94,10 @@ def resolve_plan_limit(plan, overrides: object, limit_name: str) -> int | None:
 
 
 async def is_saas_feature_allowed(organization_id: int | None, feature: str) -> bool:
-    if KODEWAVES_EDITION == "client" or organization_id is None:
+    if KODEWAVES_EDITION == "client":
         return True
+    if organization_id is None:
+        return False
     from api.db.kodewaves_client import kodewaves_db_client
 
     overrides = await kodewaves_db_client.get_setting(
@@ -119,8 +121,13 @@ async def get_org_saas_limit(organization_id: int, limit_name: str) -> int | Non
 
 async def enforce_saas_feature(organization_id: int | None, feature: str) -> None:
     """Reject SaaS API actions when the active plan does not include a feature."""
-    if KODEWAVES_EDITION == "client" or organization_id is None:
+    if KODEWAVES_EDITION == "client":
         return
+    if organization_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Select an organization before using this feature.",
+        )
     if not await is_saas_feature_allowed(organization_id, feature):
         raise HTTPException(
             status_code=403,

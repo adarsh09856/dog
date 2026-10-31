@@ -54,8 +54,13 @@ async def enforce_saas_creation_limit(
     model: type,
 ) -> None:
     """Apply the active SaaS plan's organization-scoped resource cap at insert time."""
-    if KODEWAVES_EDITION == "client" or organization_id is None:
+    if KODEWAVES_EDITION == "client":
         return
+    if organization_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Select an organization before creating an agent.",
+        )
     limit = await get_org_saas_limit(organization_id, limit_name)
     if limit is None:
         return
