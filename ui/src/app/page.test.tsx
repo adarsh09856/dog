@@ -61,4 +61,11 @@ describe("public home branding", () => {
     expect(screen.getByText(/Illustrative flow/)).toBeTruthy();
     expect(screen.queryByRole("group", { name: "Conversation examples" })).toBeNull();
   });
+
+  it("keeps the homepage hero description readable on the dark hero background", () => {
+    render(<HomePage />);
+
+    const description = screen.getByText(/Answer inbound calls, run outbound campaigns/);
+    expect(description.className).toContain("heroDescription");
+  });
 });

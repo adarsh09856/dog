@@ -97,7 +97,7 @@ export default function HomePage() {
                 <span className={styles.headlineAccent}>Workflows that get things done.</span>
               </h1>
               <p className={styles.lede}>{branding.tagline}</p>
-              <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">
+              <p className={`mt-3 max-w-xl text-sm leading-7 text-muted-foreground ${styles.heroDescription}`}>
                 Answer inbound calls, run outbound campaigns, qualify leads and book appointments. Configure browser and phone agents, speech and language models, routing, tools and knowledge in one workspace.
               </p>
               <div className={styles.actions}>

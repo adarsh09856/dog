@@ -62,6 +62,7 @@
 .hero .lede,
 .hero .heroRailItem p,
 .hero .visualCaption { color: #bfd0c6; }
+.hero .heroDescription { color: #bfd0c6; }
 .hero .heroRail { border-color: #ffffff26; }
 .hero .heroRailItem { border-color: #ffffff26; }
 .hero .heroRailItem > span:first-child { color: #dfc87e; }
