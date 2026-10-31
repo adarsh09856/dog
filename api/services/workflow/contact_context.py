@@ -684,8 +684,10 @@ def _phone_confirmation_reply(digits: str, *, hindi: bool) -> str:
 
 
 _PHONE_INTRO = re.compile(
-    r"(?:(?:अः|अह|uh|um)\s+)?(?:मेरा\s+(?:मोबाइल|फोन)?\s*(?:नंबर|नम्बर)\s*(?:है)?|"
+    r"(?:(?:अः|अह|uh|um)\s+)?(?:मेरा\s+(?:मोबाइल|फोन)\s*(?:है|हैं)|"
+    r"मेरा\s+(?:मोबाइल|फोन)?\s*(?:नंबर|नम्बर)\s*(?:है)?|"
     r"(?:फोन\s+)?(?:नंबर|नम्बर)\s+(?:है|हैं)|"
+    r"my\s+(?:mobile|phone)\s+is|"
     r"my\s+(?:mobile|phone)?\s*number\s*(?:is)?|"
     r"(?:phone\s+)?number\s+is)[,:\s]*", re.IGNORECASE
 )
