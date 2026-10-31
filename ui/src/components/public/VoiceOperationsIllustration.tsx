@@ -15,7 +15,11 @@ import {
 /** Product schematic, deliberately labelled rather than presented as live data. */
 export function VoiceOperationsIllustration() {
   return (
-    <div className="voice-console" aria-label="Illustration of inbound, outbound and browser voice calls flowing through speech recognition, an AI agent and speech synthesis">
+    <div
+      className="voice-console"
+      role="img"
+      aria-label="Illustration of inbound, outbound and browser voice calls flowing through speech recognition, an AI agent and speech synthesis"
+    >
       <div className="voice-console-top"><span className="voice-console-mark"><AudioLines size={17} /> KODEWAVES / VOICE AGENT</span><span>CONFIGURED FLOW</span></div>
       <div className="voice-console-body">
         <div className="voice-console-sources" aria-label="Supported call entry points">

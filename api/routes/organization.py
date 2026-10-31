@@ -134,6 +134,24 @@ from api.utils.telephony_address import normalize_telephony_address
 router = APIRouter(prefix="/organizations", tags=["organizations"])
 
 
+_CATALOG_MODEL_KEYS = {
+    "llm": ("llm", "cloud_llm_models", "local_llm_models"),
+    "stt": ("stt", "cloud_stt_models", "local_stt_models"),
+    "tts": ("tts", "cloud_tts_models", "local_tts_models"),
+    "realtime": ("realtime", "cloud_s2s_models", "local_s2s_models"),
+}
+
+
+def _catalog_models_for_layer(catalog: Dict[str, Any], layer: str) -> List[Any]:
+    """Return available entries for a model layer across catalog API shapes."""
+    keys = _CATALOG_MODEL_KEYS.get(layer, (layer,))
+    return [
+        model
+        for key in keys
+        for model in (catalog.get(key) or [])
+    ]
+
+
 def _sensitive_fields(provider_name: str) -> List[str]:
     """Field names that should be masked when displaying stored config.
 
@@ -319,10 +337,14 @@ async def get_organization_overview_stats(user: UserModel = Depends(get_user)):
 
     # 5. Catalog Model Health Banner
     catalog = await catalog_service.get_available_catalog(org_id)
-    has_llm = len(catalog.get("llm", [])) > 0
-    has_stt = len(catalog.get("stt", [])) > 0
-    has_tts = len(catalog.get("tts", [])) > 0
-    has_s2s = len(catalog.get("realtime", [])) > 0
+    available_llm = _catalog_models_for_layer(catalog, "llm")
+    available_stt = _catalog_models_for_layer(catalog, "stt")
+    available_tts = _catalog_models_for_layer(catalog, "tts")
+    available_realtime = _catalog_models_for_layer(catalog, "realtime")
+    has_llm = bool(available_llm)
+    has_stt = bool(available_stt)
+    has_tts = bool(available_tts)
+    has_s2s = bool(available_realtime)
 
     warnings = []
     if not has_llm:
@@ -365,7 +387,7 @@ async def get_organization_overview_stats(user: UserModel = Depends(get_user)):
             "has_stt": has_stt,
             "has_tts": has_tts,
             "has_s2s": has_s2s,
-            "total_models": sum(len(m) for m in catalog.values() if isinstance(m, list)),
+            "total_models": len(available_llm) + len(available_stt) + len(available_tts) + len(available_realtime),
             "warnings": warnings,
         },
     }
