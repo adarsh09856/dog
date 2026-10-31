@@ -4,9 +4,9 @@ Updated 31 October 2026. This is the single execution checklist for the existing
 
 ## Verified checkpoint
 
-- Local integration candidate: `codex/kodewaves-unified-work`. It includes fetched GitHub `main`, the client/theme branch, the full-platform/voice branch, and the three-commit public-site refresh branch. The platform/voice merge is recorded at `e082f555`; the public-site refresh merge is being completed locally. GitHub `main` and the VPS have not yet been advanced to it.
+- Local integration candidate: `codex/kodewaves-unified-work` at `a481efb9`. It includes GitHub `main`, the client/theme branch, the full-platform/voice branch, and the three-commit public-site refresh branch. The public-site merge is recorded locally; local `main` has been fast-forwarded to this candidate. GitHub `main` and the VPS have not yet been advanced to it.
 - The candidate preserves the existing `main` history and is a fast-forward descendant of the current GitHub `main`; no force-push or branch-history rewrite is required. The client/theme tip is `b934d7ea`; the other chat's platform/voice checkpoint is `c65ce972`; the public-site refresh tip is `8fd4aaac`.
-- Combined verification so far: UI TypeScript check passes; eight focused public-page, auth, navigation, pricing, template, recordings, agent-library and branding test files pass 30/30; focused STT/language, caller-follow-up, owner-status and billing API tests pass 93/93 with dummy test database/cache URLs. `git diff --check` is still pending after the latest fixes. These are targeted checks, not a complete production acceptance run.
+- Combined verification so far: UI TypeScript check passes; eight focused public-page, auth, navigation, pricing, template, recordings, agent-library and branding test files pass 30/30; focused STT/language, caller-follow-up, owner-status and billing API tests pass 93/93 with dummy test database/cache URLs. `git diff --check` passes. These are targeted checks, not a complete production acceptance run.
 - The final merge exposed and fixed one missing `useAuth` import in the widgets page. `ui/next.config.ts` no longer suppresses TypeScript errors; a production build and hosted client-image/recovery workflow are still pending.
 - Client installation/licensing work, public/app theme and business-plan work are included in the local candidate. The hosted signed-image workflow previously failed because the owner check did not reach the expected gate; rerun it on the merged candidate before declaring the client package ready.
 - Live state is separate from local merge state: no GitHub `main` push or VPS deployment of this candidate has occurred yet. The current VPS source SHA and image digests must be checked before deployment and verified afterward.
@@ -15,10 +15,10 @@ Updated 31 October 2026. This is the single execution checklist for the existing
 
 ## Execution sequence
 
-1. **Local merge — in progress:** current GitHub `main`, client/theme, full-platform/voice, and public-site refresh tips are integrated into `codex/kodewaves-unified-work`; finish the public-site merge commit while preserving the candidate's accurate voice-product content, billing, licensing, migrations, and speech changes.
-2. **Local focused verification — partial:** after the public-site/pricing merge, UI TypeScript passes, eight focused UI test files pass 30/30, and the targeted API voice/language/owner/billing tests pass 93/93. Run `git diff --check` and record the local merge before advancing remote `main`.
+1. **Local merge — done:** current GitHub `main`, client/theme, full-platform/voice, and public-site refresh tips are integrated into `codex/kodewaves-unified-work`; local `main` is a fast-forward of the combined candidate. Newer voice-product content, billing, licensing, migrations, and speech changes are preserved.
+2. **Local focused verification — done:** after the public-site/pricing merge, UI TypeScript passes, eight focused UI test files pass 30/30, the targeted API voice/language/owner/billing tests pass 93/93, and `git diff --check` is clean. These checks do not substitute for release/package, live UI, or telephone acceptance.
 3. Reconcile Alembic heads and run disposable PostgreSQL, package, signed-image, clean-install, populated-upgrade, rollback and recovery checks on the combined source.
-4. Move local `main` forward to the verified candidate, then push a fast-forward update to GitHub `main`. Stop if the remote has advanced or the push is not fast-forward; never force-reset it.
+4. **Local `main` — done:** fast-forwarded to the verified integration candidate. Fetch and recheck GitHub `main`, then push only if the update remains fast-forward; stop if remote has advanced or push is not fast-forward; never force-reset it.
 5. Recheck the actual VPS checkout and running image digests, then deploy the reviewed immutable build to the existing release path with the confirmed rollback images retained.
 6. Verify deployed source SHA, image digests, public/workspace/admin routes, health, saved branding, owner/client separation and browser rendering.
 7. Complete browser audio plus inbound/outbound telephone acceptance with the voice owner. Record language coverage, repeats, cutoffs, overlap, configured voice, announcement/greeting delay and speech-end-to-first-audio latency.
@@ -37,16 +37,17 @@ Updated 31 October 2026. This is the single execution checklist for the existing
 
 ## 01 — Establish and integrate the current combined baseline
 
-Owner: both chats; integration coordinator maintains the release candidate. Status: local code integration in progress; release gates open.
+Owner: both chats; integration coordinator maintains the release candidate. Status: local code integration done; GitHub/VPS release gates open.
 
 - [x] Record GitHub `main`, VPS source/image state, client branch and current UI verification.
 - [x] Integrate the exact voice checkpoint `codex/client-voice-integration` at `1ebe61d2` through the full-platform merge; do not duplicate voice-file edits.
 - [x] Confirm the scoped form fix is already in GitHub `main` as `7f12a018`; no duplicate cherry-pick needed.
 - [x] Import the client package verification workflow and test support into the local candidate, retaining current main migrations and runtime behavior.
+- [x] Review combined diff and confirm local `main` fast-forwards to the integrated candidate without a reset.
 - [ ] Reconcile the combined Alembic graph on disposable PostgreSQL; verify clean install and upgrade paths.
-- [ ] Review combined diff, source-to-image provenance, rollback images and one deployment owner before release.
+- [ ] Review source-to-image provenance, rollback images and one deployment owner before release.
 
-Gate: local branch integration is complete after the public-site merge commit and post-merge checks. One reproducible release candidate still requires Alembic, signed-package, clean-install/upgrade/recovery and live-deployment evidence; local tests or health on an old image do not close those release gates.
+Gate: local branch integration and focused post-merge checks are complete. One reproducible release candidate still requires Alembic, signed-package, clean-install/upgrade/recovery and live-deployment evidence; local tests or health on an old image do not close those release gates.
 
 
 ## 02 — Complete shared voice and grounded conversation
