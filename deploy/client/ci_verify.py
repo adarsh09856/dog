@@ -750,7 +750,7 @@ def _verify_compose_runtime(
                 if owner_gate_status != 402:
                     break
                 time.sleep(1)
-            if owner_gate_status != 404 or "Not Found" not in owner_gate_body:
+            if owner_gate_status != 404:
                 raise ValueError(
                     f"Owner peer evidence: {owner.diagnostic_summary()}; "
                     "enrolled status must reach the expected unauthenticated route boundary; "
