@@ -20,7 +20,10 @@ import recovery  # noqa: E402
 _RELEASE_SIGNING_KEY = Ed25519PrivateKey.generate()
 
 
-def _signed_release_manifest() -> tuple[dict[str, object], str]:
+def _signed_release_manifest(
+    *, schema_head: str = "head1", rollback_to: list[str] | None = None,
+    api_ref: str | None = None, ui_ref: str | None = None,
+) -> tuple[dict[str, object], str]:
     public_key = base64.urlsafe_b64encode(_RELEASE_SIGNING_KEY.public_key().public_bytes(
         encoding=serialization.Encoding.Raw,
         format=serialization.PublicFormat.Raw,
@@ -30,10 +33,14 @@ def _signed_release_manifest() -> tuple[dict[str, object], str]:
         "files": {"api/app.py": "c" * 64},
         "ui_files": {"ui/index.html": "d" * 64},
         "images": {
-            "api": {"kind": "registry_digest", "reference": "registry.example.com/kodewaves/api@sha256:" + "a" * 64},
-            "ui": {"kind": "registry_digest", "reference": "registry.example.com/kodewaves/ui@sha256:" + "b" * 64},
+            "api": {"kind": "registry_digest", "reference": api_ref or "registry.example.com/kodewaves/api@sha256:" + "a" * 64},
+            "ui": {"kind": "registry_digest", "reference": ui_ref or "registry.example.com/kodewaves/ui@sha256:" + "b" * 64},
         },
-        "schema_compatibility": {"head": "head1", "upgrade_from": ["head1"], "rollback_to": []},
+        "schema_compatibility": {
+            "head": schema_head,
+            "upgrade_from": list(dict.fromkeys([schema_head, *(rollback_to or [])])),
+            "rollback_to": rollback_to or [],
+        },
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     signature = base64.urlsafe_b64encode(_RELEASE_SIGNING_KEY.sign(canonical)).rstrip(b"=").decode("ascii")
@@ -368,6 +375,136 @@ def test_restore_failure_restores_old_selection_and_retains_original_volumes(mon
         assert set(cleanup_events[0][1:]) == set(created)
 
 
+def _advance_active_release(env_file: Path, manifest_path: Path, *, allow_rollback: bool = True) -> tuple[bytes, bytes]:
+    api_ref = "registry.example.com/kodewaves/api@sha256:" + "9" * 64
+    ui_ref = "registry.example.com/kodewaves/ui@sha256:" + "8" * 64
+    signed, _key = _signed_release_manifest(
+        schema_head="head2", rollback_to=["head1"] if allow_rollback else [],
+        api_ref=api_ref, ui_ref=ui_ref,
+    )
+    manifest_path.write_text(json.dumps(signed), encoding="utf-8")
+    values = recovery.parse_env(env_file)
+    lines = [
+        f"{key}={api_ref if key == 'CLIENT_API_IMAGE' else ui_ref if key == 'CLIENT_UI_IMAGE' else value}"
+        for key, value in values.items()
+    ]
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return env_file.read_bytes(), manifest_path.read_bytes()
+
+
+def test_signed_release_rollback_switches_config_and_volumes_and_can_reverse(monkeypatch, tmp_path):
+    compose_dir = tmp_path / "client"
+    compose_dir.mkdir()
+    env_file, manifest, release_key = _installation(compose_dir)
+    for name in ("docker-compose.client.yaml", "docker-compose.identity.yaml", recovery.RECOVERY_OVERRIDE):
+        (compose_dir / name).write_text("{}\n", encoding="utf-8")
+    archive = _make_archive(tmp_path, env_file, manifest, release_key, compose_dir / "inputs/installation.key")
+    archived_manifest = manifest.read_bytes()
+    previous_env, previous_manifest = _advance_active_release(env_file, manifest)
+    running = ["api", "ui", "postgres", "minio", "redis"]
+    events: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(recovery, "_compose_context", lambda *_: (["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)))
+    monkeypatch.setattr(recovery, "_running_services", lambda *_: list(running))
+    monkeypatch.setattr(recovery, "_docker_volume_exists", lambda *_: False)
+    monkeypatch.setattr(recovery, "_create_volume", lambda *_: None)
+    monkeypatch.setattr(recovery, "_volume_tar_command", lambda **_kwargs: None)
+    monkeypatch.setattr(recovery, "_run", lambda command, **_kwargs: events.append((command[-1], "", "")))
+
+    def switch(_directory, switched_env, services, **_kwargs):
+        parsed = recovery.parse_env(switched_env)
+        manifest_path = Path(parsed["CLIENT_RELEASE_MANIFEST_FILE"])
+        if not manifest_path.is_absolute():
+            manifest_path = compose_dir / manifest_path
+        manifest_bytes = manifest_path.read_bytes()
+        selected_volume = _compose_model(compose_dir)["volumes"]["postgres_data"]["name"]
+        events.append(("up", parsed["CLIENT_API_IMAGE"], selected_volume + ":" + hashlib.sha256(manifest_bytes).hexdigest()))
+
+    import hashlib
+    monkeypatch.setattr(recovery, "_switch_compose_up", switch)
+    result = recovery.restore_to_docker_volumes(
+        archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+        release_public_key=release_key, confirm_maintenance=True, allow_release_rollback=True,
+    )
+    target_env = recovery.parse_env(env_file)
+    assert target_env["CLIENT_API_IMAGE"].endswith("a" * 64)
+    assert target_env["CLIENT_UI_IMAGE"].endswith("b" * 64)
+    active_manifest_path = Path(target_env["CLIENT_RELEASE_MANIFEST_FILE"])
+    if not active_manifest_path.is_absolute():
+        active_manifest_path = compose_dir / active_manifest_path
+    assert active_manifest_path.read_bytes() == archived_manifest
+    assert Path(result["restored_manifest_path"]).read_bytes() == archived_manifest
+    assert result["release_rollback"] is True
+    assert [event[0] for event in events] == ["stop", "up"]
+    assert events[1][2].split(":", 1)[0] == result["new_volumes"]["postgres_data"]
+    assert result["new_volumes"]["postgres_data"] != "customer-prod_postgres_data"
+
+    rolled_back = recovery.rollback_docker_restore(
+        compose_dir=compose_dir, env_file=env_file, confirm_maintenance=True,
+        release_public_key=release_key,
+    )
+    assert rolled_back["release_rollback_reversed"] is True
+    assert env_file.read_bytes() == previous_env
+    assert manifest.read_bytes() == previous_manifest
+    assert json.loads((compose_dir / recovery.RECOVERY_OVERRIDE).read_text()) == {}
+    assert [event[0] for event in events] == ["stop", "up", "stop", "up"]
+    assert events[1][1].endswith("a" * 64)
+    assert events[3][1].endswith("9" * 64)
+
+
+def test_release_rollback_requires_active_manifest_schema_authorization(monkeypatch, tmp_path):
+    compose_dir = tmp_path / "client"
+    compose_dir.mkdir()
+    env_file, manifest, release_key = _installation(compose_dir)
+    for name in ("docker-compose.client.yaml", "docker-compose.identity.yaml", recovery.RECOVERY_OVERRIDE):
+        (compose_dir / name).write_text("{}\n", encoding="utf-8")
+    archive = _make_archive(tmp_path, env_file, manifest, release_key, compose_dir / "inputs/installation.key")
+    _advance_active_release(env_file, manifest, allow_rollback=False)
+    monkeypatch.setattr(recovery, "_compose_context", lambda *_: (["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)))
+
+    with pytest.raises(ValueError, match="does not authorize rollback"):
+        recovery.restore_to_docker_volumes(
+            archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+            release_public_key=release_key, confirm_maintenance=True, allow_release_rollback=True,
+        )
+    assert not (compose_dir / recovery.RECOVERY_STATE_DIR).exists()
+
+
+def test_release_rollback_startup_failure_restores_candidate_env_manifest_and_volumes(monkeypatch, tmp_path):
+    compose_dir = tmp_path / "client"
+    compose_dir.mkdir()
+    env_file, manifest, release_key = _installation(compose_dir)
+    for name in ("docker-compose.client.yaml", "docker-compose.identity.yaml", recovery.RECOVERY_OVERRIDE):
+        (compose_dir / name).write_text("{}\n", encoding="utf-8")
+    archive = _make_archive(tmp_path, env_file, manifest, release_key, compose_dir / "inputs/installation.key")
+    previous_env, previous_manifest = _advance_active_release(env_file, manifest)
+    monkeypatch.setattr(recovery, "_compose_context", lambda *_: (["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)))
+    monkeypatch.setattr(recovery, "_running_services", lambda *_: ["api", "ui", "postgres"])
+    monkeypatch.setattr(recovery, "_docker_volume_exists", lambda *_: False)
+    monkeypatch.setattr(recovery, "_create_volume", lambda *_: None)
+    monkeypatch.setattr(recovery, "_volume_tar_command", lambda **_kwargs: None)
+    monkeypatch.setattr(recovery, "_run", lambda *_args, **_kwargs: None)
+    starts = 0
+
+    def switch(_directory, switched_env, _services, **_kwargs):
+        nonlocal starts
+        starts += 1
+        parsed = recovery.parse_env(switched_env)
+        if starts == 1:
+            assert parsed["CLIENT_API_IMAGE"].endswith("a" * 64)
+            raise RuntimeError("injected unhealthy prior release")
+        assert parsed["CLIENT_API_IMAGE"].endswith("9" * 64)
+        assert manifest.read_bytes() == previous_manifest
+
+    monkeypatch.setattr(recovery, "_switch_compose_up", switch)
+    with pytest.raises(RuntimeError, match="Restore failed; original volume selection"):
+        recovery.restore_to_docker_volumes(
+            archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+            release_public_key=release_key, confirm_maintenance=True, allow_release_rollback=True,
+        )
+    assert starts == 2
+    assert env_file.read_bytes() == previous_env
+    assert manifest.read_bytes() == previous_manifest
+    assert json.loads((compose_dir / recovery.RECOVERY_OVERRIDE).read_text()) == {}
 @pytest.mark.parametrize("failure_point", ["partial_stop", "original_up"])
 def test_rollback_failure_reinstates_restored_selection_and_restarts_partial_project(monkeypatch, tmp_path, failure_point):
     compose_dir = tmp_path / "client"
