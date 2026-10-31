@@ -239,11 +239,6 @@ def main() -> int:
     parser.add_argument("--release-env-output", type=Path, help="Write API/UI @sha256 references after verified promotion")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
-    if args.owner_private_key:
-        try:
-            args.owner_private_key = validate_owner_private_key_path(args.owner_private_key, root)
-        except ValueError as exc:
-            parser.error(str(exc))
     if any((args.owner_private_key, args.manifest_output, args.public_key_output)) and not all(
         (args.owner_private_key, args.manifest_output, args.public_key_output)
     ):
@@ -258,14 +253,20 @@ def main() -> int:
         for tag in (args.api_tag, args.ui_tag):
             if "/" not in _repository_name(tag):
                 parser.error(f"Publish tags must include a registry or namespace: {tag}")
-        # Release tags are immutable identifiers. Reject a collision before
-        # spending time on image builds; promotion repeats this check to catch races.
-        for tag in (args.api_tag, args.ui_tag):
-            _assert_final_tag_is_new(tag)
     schema_compatibility = (
         migration_compatibility(root / "api" / "alembic" / "versions", args.approved_upgrade_from)
         if args.owner_private_key else None
     )
+    if args.owner_private_key:
+        try:
+            args.owner_private_key = validate_owner_private_key_path(args.owner_private_key, root)
+        except ValueError as exc:
+            parser.error(str(exc))
+    if args.push:
+        # Release tags are immutable identifiers. Reject a collision before
+        # spending time on image builds; promotion repeats this check to catch races.
+        for tag in (args.api_tag, args.ui_tag):
+            _assert_final_tag_is_new(tag)
     license_public_key = read_public_key(args.license_public_key_file)
     previous_license_keys = list(dict.fromkeys(read_public_key(path) for path in args.legacy_license_public_key_file))
     previous_license_keys = [key for key in previous_license_keys if key != license_public_key]
