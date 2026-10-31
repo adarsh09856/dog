@@ -532,7 +532,7 @@ def test_client_http_and_websocket_requests_are_gated(monkeypatch):
 
     base = {
         "type": "http",
-        "path": "/api/v1/agents",
+        "path": "/api/v1/workflow/21",
         "headers": [(b"host", b"example.com")],
         "client": ("203.0.113.27", 1234),
     }
@@ -547,6 +547,14 @@ def test_client_http_and_websocket_requests_are_gated(monkeypatch):
         "/user/auth/user",
         "/organizations/context",
         "/api/auth/session",
+        "/api/auth/logout",
+        "/api/auth/oss",
+        "/api/config/auth",
+        "/api/config/latest-version",
+        "/api/config/posthog",
+        "/api/config/sentry",
+        "/api/config/version",
+        "/api/health",
     )
     monkeypatch.setenv(
         "KODEWAVES_LICENSE_TOKEN",
@@ -613,6 +621,13 @@ def test_client_http_and_websocket_requests_are_gated(monkeypatch):
     configured_binding["hostname"] = "example.com"
     unlicensed_feature = dict(base, path="/api/v1/campaign/start")
     passed, messages = asyncio.run(run(unlicensed_feature))
+    assert not passed
+    assert messages[0]["status"] == 403
+
+    # New or misspelled data routes must not inherit a valid license without
+    # an explicit feature classification.
+    unclassified_route = dict(base, path="/api/v1/future-admin-export")
+    passed, messages = asyncio.run(run(unclassified_route))
     assert not passed
     assert messages[0]["status"] == 403
 

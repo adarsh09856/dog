@@ -68,6 +68,40 @@ _FEATURE_PATHS = (
     ("/ws", "voice"),
 )
 
+_CORE_OR_CONTROL_PATHS = {
+    "/",
+    "/health/active-calls",
+    "/health/autoscale-metric",
+    "/health/live",
+    "/health/ready",
+    "/metrics",
+    "/openapi.json",
+    "/docs",
+    "/docs/oauth2-redirect",
+    "/redoc",
+    # Next.js internal API routes forwarded by the FastAPI fallback proxy.
+    "/api/auth/session",
+    "/api/auth/logout",
+    "/api/auth/oss",
+    "/api/config/auth",
+    "/api/config/latest-version",
+    "/api/config/posthog",
+    "/api/config/sentry",
+    "/api/config/version",
+    "/api/health",
+    # These identity and tenant-context endpoints are needed by every workspace.
+    "/user/auth/user",
+    "/organizations/context",
+}
+
+
+def is_core_or_control_path(path: str) -> bool:
+    """Allow only explicitly declared platform plumbing without a feature grant."""
+    route_path = path.removeprefix("/api/v1") or "/"
+    return route_path in _CORE_OR_CONTROL_PATHS or route_path.startswith(
+        ("/auth/", "/installation/")
+    )
+
 
 def required_feature_for_path(path: str) -> str | None:
     route_path = path.removeprefix("/api/v1") if path.startswith("/api/v1/") else path
@@ -213,6 +247,10 @@ class ClientLicenseMiddleware:
             feature = required_feature_for_request(path, scope.get("query_string", b""))
             if feature:
                 require_feature(license_data, feature)
+            elif not is_core_or_control_path(path):
+                raise InstallationFeatureError(
+                    "This API route is not classified for the client installation license"
+                )
         except (InstallationLicenseError, ValueError) as exc:
             if scope["type"] == "websocket":
                 await send({"type": "websocket.close", "code": 4403, "reason": str(exc)})
