@@ -49,8 +49,16 @@ describe("public home branding", () => {
     expect(screen.getByRole("heading", { name: "Build the voice agent workflow." })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Connect browser and phone calls." })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Review each call and run." })).toBeTruthy();
-    expect(screen.getByLabelText("Illustration of a voice workflow from caller to action")).toBeTruthy();
-    expect(screen.getByText("Illustrative workflow")).toBeTruthy();
+    expect(screen.getByLabelText(/inbound, outbound and browser voice calls/)).toBeTruthy();
+    expect(screen.getByText("Inbound")).toBeTruthy();
+    expect(screen.getByText("Outbound")).toBeTruthy();
+    expect(screen.getByText("Browser")).toBeTruthy();
+    expect(screen.getByText("01 / STT")).toBeTruthy();
+    expect(screen.getByText("02 / LLM")).toBeTruthy();
+    expect(screen.getByText("03 / TTS")).toBeTruthy();
+    expect(screen.getByText("Context · knowledge · tools")).toBeTruthy();
+    expect(screen.getByText("Run details, transcript and recording")).toBeTruthy();
+    expect(screen.getByText(/Illustrative flow/)).toBeTruthy();
     expect(screen.queryByRole("group", { name: "Conversation examples" })).toBeNull();
   });
 });
