@@ -396,6 +396,12 @@ def _remove_temp_directory(path: Path) -> bool:
     return not path.exists()
 
 
+def _network_is_missing(message: str) -> bool:
+    """Recognize Docker's absent-network responses without masking other errors."""
+    normalized = message.casefold()
+    return "no such network" in normalized or bool(re.search(r"\bnetwork\b.*\bnot found\b", normalized))
+
+
 def _record_failure_diagnostics(result: dict[str, Any], phase: str,
                                 completed_phases: list[str], exc: Exception) -> None:
     """Record safe failure metadata without preserving command output or secrets."""
@@ -495,6 +501,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         compose_dir.mkdir()
         client_compose = compose_dir / "docker-compose.client.yaml"
         shutil.copy2(ROOT / "deploy/client/docker-compose.client.yaml", client_compose)
+        shutil.copy2(ROOT / "deploy/client/docker-compose.identity.yaml", compose_dir / "docker-compose.identity.yaml")
         # Keep synthetic app credentials and data on an egress-isolated Docker
         # bridge for the entire upgrade/backup/rollback lifecycle.
         compose_text = client_compose.read_text(encoding="utf-8")
@@ -775,10 +782,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         except Exception:
             cleanup_errors.append("container_cleanup_error")
         try:
-            network = subprocess.run(["docker", "network", "rm", f"{project}_internal"], cwd=ROOT,
-                                     check=False, capture_output=True, text=True, timeout=30)
-            if network.returncode and "no such network" not in (network.stderr or "").casefold():
+            network_name = f"{project}_internal"
+            inspected = subprocess.run(["docker", "network", "inspect", network_name], cwd=ROOT,
+                                       check=False, capture_output=True, text=True, timeout=30)
+            if inspected.returncode and not _network_is_missing(inspected.stderr or inspected.stdout or ""):
                 cleanup_errors.append("network_cleanup_failed")
+            elif inspected.returncode == 0:
+                network = subprocess.run(["docker", "network", "rm", network_name], cwd=ROOT,
+                                         check=False, capture_output=True, text=True, timeout=30)
+                if network.returncode and not _network_is_missing(network.stderr or network.stdout or ""):
+                    cleanup_errors.append("network_cleanup_failed")
         except Exception:
             cleanup_errors.append("network_cleanup_error")
         if not _remove_temp_directory(temp_root):

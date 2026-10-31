@@ -171,6 +171,13 @@ def test_failure_diagnostics_include_scrubbed_actionable_detail():
     assert "a" * 40 not in result["failure_detail"]
 
 
+def test_network_cleanup_only_ignores_explicitly_missing_network():
+    assert lifecycle_acceptance._network_is_missing("Error response from daemon: network kw-test_internal not found")
+    assert lifecycle_acceptance._network_is_missing("No such network: kw-test_internal")
+    assert not lifecycle_acceptance._network_is_missing("network has active endpoints")
+    assert not lifecycle_acceptance._network_is_missing("docker command not found")
+
+
 def test_ci_failure_line_reports_phase_without_secret_details(tmp_path):
     secret = "synthetic-password-must-not-be-printed"
     report = tmp_path / "lifecycle-report.json"
