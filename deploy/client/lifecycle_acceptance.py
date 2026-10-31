@@ -600,7 +600,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         result["prior_api_health"] = "passed"
         _run(["docker", "exec", _container_id(compose_dir, project, "api"), "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)"])
 
-        active_phase = "seed_synthetic_tenant_data"
+        active_phase = "seed_synthetic_organization_record"
         organization_id = _psql(
             compose_dir, project,
             f"INSERT INTO organizations (provider_id) VALUES ({_sql_literal(tenant_provider_id)}) RETURNING id",
@@ -608,6 +608,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if not re.fullmatch(r"[0-9]+", organization_id):
             raise ValueError("Could not seed the synthetic tenant organization")
         workflow_payload = json.dumps({"acceptance_case": case_id, "milestone": "baseline"}, separators=(",", ":"))
+        active_phase = "seed_synthetic_workflow_record"
         workflow_id = _psql(
             compose_dir, project,
             "INSERT INTO workflows "
@@ -619,6 +620,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if not re.fullmatch(r"[0-9]+", workflow_id):
             raise ValueError("Could not seed the synthetic tenant workflow")
         baseline_object = f"synthetic baseline {case_id}".encode()
+        active_phase = "seed_synthetic_media_object"
         _object(compose_dir, project, object_base, baseline_object)
         result["synthetic_organization_id"] = int(organization_id)
         result["synthetic_workflow_id"] = int(workflow_id)
