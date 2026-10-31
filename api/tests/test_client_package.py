@@ -621,12 +621,14 @@ def test_release_builder_rejects_unknown_upgrade_origin_before_docker(monkeypatc
     import build_and_verify
 
     monkeypatch.setattr(build_and_verify.subprocess, "run", lambda *args, **kwargs: pytest.fail("Docker must not run"))
+    owner_private_key = tmp_path / "release.key"
+    owner_private_key.write_text("test fixture", encoding="ascii")
     monkeypatch.setattr(sys, "argv", [
         "build_and_verify.py", "--caddy-image", "registry.example.com/caddy@sha256:" + "a" * 64,
         "--license-public-key-file", str(tmp_path / "license.pub"),
         "--release-public-key-file", str(tmp_path / "release.pub"),
         "--owner-status-url", "https://owner.example.com/check",
-        "--owner-private-key", str(tmp_path / "release.key"),
+        "--owner-private-key", str(owner_private_key),
         "--manifest-output", str(tmp_path / "manifest.json"),
         "--public-key-output", str(tmp_path / "output.pub"),
         "--approved-upgrade-from", "unknown_revision",

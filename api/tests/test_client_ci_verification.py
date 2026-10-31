@@ -238,7 +238,7 @@ def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, 
     assert "private" not in report.read_text()
 
 
-def test_runtime_smoke_license_is_short_lived_and_bound_to_the_smoke_host(verifier, tmp_path):
+def test_runtime_smoke_license_is_domain_bound_without_optional_ip_policy(verifier, tmp_path):
     private, public = verifier._temporary_keypair(tmp_path, "license")
     token = verifier._runtime_smoke_license(
         private.read_bytes(), public.read_text(encoding="ascii")
@@ -249,7 +249,7 @@ def test_runtime_smoke_license_is_short_lived_and_bound_to_the_smoke_host(verifi
     assert license_data.installation_id == "ci-installation-smoke"
     assert license_data.customer_id == "ci-smoke"
     assert license_data.domains == ("smoke.customer.example.invalid",)
-    assert license_data.ip_ranges == ("192.0.2.0/24",)
+    assert license_data.ip_ranges == ()
     assert license_data.features == frozenset({"voice"})
     assert license_data.limits == {
         "max_concurrent_calls": 1,
