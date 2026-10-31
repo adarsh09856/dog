@@ -165,8 +165,13 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
     if not _logged_initial_owner_check:
         try:
             await require_current_owner_status(license_data, redis_client)
-        except InstallationLicenseError:
-            pass
+        except InstallationLicenseError as exc:
+            # A signed response can still fail the data-plane's final status
+            # check (for example, if the status cache is unavailable or its
+            # claims do not match). Surface that exact reason in bounded logs;
+            # otherwise CI and operators only see protected calls fail closed.
+            if not status["revoked"] and fields.get(b"revoked_latched") != b"1":
+                logger.warning("Owner installation status check failed: {}", exc)
         else:
             logger.info(
                 "Initial owner installation check succeeded for {}",

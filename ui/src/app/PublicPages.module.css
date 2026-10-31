@@ -7,8 +7,13 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  padding-block: clamp(3.75rem, 8vw, 7.5rem);
-  border-bottom: 1px solid var(--border);
+  margin: 1rem 1rem 0;
+  padding-block: clamp(3.5rem, 7vw, 6.6rem);
+  border: 1px solid #34534a;
+  border-radius: 1.45rem;
+  background: linear-gradient(118deg, #112b2b 0%, #173632 54%, #21443a 100%);
+  color: #f1f4eb;
+  box-shadow: 0 22px 55px -44px #102725b8;
 }
 
 .hero::before {
@@ -18,13 +23,29 @@
   right: -12rem;
   width: min(52vw, 48rem);
   aspect-ratio: 1;
-  border: 1px solid color-mix(in srgb, var(--brand-primary-color, var(--primary)) 16%, transparent);
+  border: 1px solid #c2ae6850;
   border-radius: 50%;
-  box-shadow: 0 0 0 3.5rem color-mix(in srgb, var(--brand-primary-color, var(--primary)) 3%, transparent),
-    0 0 0 7rem color-mix(in srgb, var(--brand-primary-color, var(--primary)) 2%, transparent);
+  box-shadow: 0 0 0 3.5rem #d0bd760d, 0 0 0 7rem #d0bd7608;
   content: "";
   pointer-events: none;
 }
+
+.hero > .pageFrame { width: min(100% - 2.5rem, 82rem); }
+.hero .eyebrow { color: #d5c17f; }
+.hero .eyebrow::before { background: #d5c17f; }
+.hero .headlineAccent { color: #c7d9c0; }
+.hero .lede,
+.hero .heroRailItem p,
+.hero .visualCaption { color: #bfd0c6; }
+.hero .heroRail { border-color: #ffffff26; }
+.hero .heroRailItem { border-color: #ffffff26; }
+.hero .heroRailItem > span:first-child { color: #dfc87e; }
+.hero .secondaryAction { border-color: #ffffff3b; background: #ffffff0a; color: #f1f4eb; }
+.hero .secondaryAction:hover { border-color: #ffffff75; background: #ffffff14; }
+.hero .primaryAction { background: #d5c17f; color: #162c2a; }
+.hero .primaryAction:hover { background: #e2d29f; }
+.hero .primaryAction:focus-visible,
+.hero .secondaryAction:focus-visible { outline-color: #e3d28d; }
 
 .heroGrid {
   display: grid;
@@ -154,7 +175,8 @@
 .stageList svg { width: .85rem; height: .85rem; flex: none; color: var(--brand-primary-color, var(--primary)); }
 
 .capabilityGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
-.capability { min-width: 0; padding: clamp(1.25rem, 2.6vw, 2.15rem); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--background) 78%, transparent); }
+.capability { min-width: 0; padding: clamp(1.25rem, 2.6vw, 2.15rem); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--background) 78%, transparent); transition: background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.capability:hover { position: relative; z-index: 1; transform: translateY(-3px); background: var(--background); box-shadow: 0 14px 35px -30px var(--foreground); }
 .quadGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
 .quadItem { min-width: 0; padding: clamp(1rem, 2vw, 1.55rem); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .quadItem > span { color: var(--primary); font-family: var(--font-geist-mono), monospace; font-size: .66rem; }
@@ -183,13 +205,18 @@
 .closing .secondaryAction { border-color: #ffffff35; background: #ffffff0a; color: #f2f5eb; }
 .closing .secondaryAction:hover { background: #ffffff15; }
 
-.priceHero { padding-block: clamp(3rem, 6vw, 5.5rem); }
+.priceHero { position: relative; isolation: isolate; overflow: hidden; margin-top: 1rem; padding: clamp(2rem, 5vw, 4rem); border: 1px solid #34534a; border-radius: 1.4rem; background: linear-gradient(118deg, #112b2b 0%, #173632 56%, #21443a 100%); color: #f1f4eb; box-shadow: 0 22px 55px -44px #102725b8; }
+.priceHero::after { position: absolute; z-index: -1; top: -13rem; right: -8rem; width: 31rem; aspect-ratio: 1; border: 1px solid #c2ae6850; border-radius: 50%; box-shadow: 0 0 0 3.5rem #d0bd760d, 0 0 0 7rem #d0bd7608; content: ""; pointer-events: none; }
+.priceHero .eyebrow { color: #d5c17f; }
+.priceHero .eyebrow::before { background: #d5c17f; }
+.priceHero .headlineAccent { color: #c7d9c0; }
+.priceHero .lede { color: #bfd0c6; }
 .priceHeroGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, .48fr); align-items: end; gap: 2.5rem; }
-.priceTerms { border-left: 2px solid var(--brand-primary-color, var(--primary)); padding: .35rem 0 .35rem 1.2rem; }
+.priceTerms { border-left: 2px solid #d5c17f; padding: .35rem 0 .35rem 1.2rem; }
 .priceTerms strong { display: block; font-size: .76rem; }
 .priceTerms ul { display: grid; gap: .65rem; margin: .95rem 0 0; padding: 0; list-style: none; }
-.priceTerms li { display: flex; gap: .55rem; align-items: center; color: var(--muted-foreground); font-size: .74rem; }
-.priceTerms svg { width: .9rem; height: .9rem; flex: none; color: var(--primary); }
+.priceTerms li { display: flex; gap: .55rem; align-items: center; color: #bfd0c6; font-size: .74rem; }
+.priceTerms svg { width: .9rem; height: .9rem; flex: none; color: #d5c17f; }
 .planSection { padding-block: 1.5rem 3rem; }
 .pricingSectionHead { display: flex; align-items: end; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.2rem; }
 .pricingSectionHead h2 { font-size: clamp(1.45rem, 2.8vw, 2.05rem); font-weight: 680; letter-spacing: -.045em; }
@@ -233,7 +260,8 @@
 
 @media (max-width: 640px) {
   .pageFrame { width: min(100% - 2rem, 88rem); }
-  .hero { padding-block: 3.25rem; }
+  .hero { margin: .6rem .6rem 0; padding-block: 2.8rem; border-radius: 1.05rem; }
+  .hero > .pageFrame { width: min(100% - 1.5rem, 82rem); }
   .headline { font-size: clamp(2.85rem, 13vw, 4.1rem); }
   .signalStrip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .signalItem:nth-child(2) { border-right: 0; }
@@ -247,11 +275,13 @@
   .comparison { grid-template-columns: minmax(0, 1fr); }
   .comparisonItem + .comparisonItem { border-top: 1px solid var(--border); border-left: 0; }
   .pricingSectionHead { align-items: start; flex-direction: column; }
+  .priceHero { margin-top: .6rem; padding: 1.5rem; border-radius: 1.05rem; }
+  .priceHeroGrid { gap: 1.7rem; }
   .bundleGrid { grid-template-columns: minmax(0, 1fr); }
   .usageGrid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .primaryAction, .secondaryAction { transition: none; }
-  .primaryAction:hover { transform: none; }
+  .primaryAction, .secondaryAction, .capability { transition: none; }
+  .primaryAction:hover, .capability:hover { transform: none; }
 }

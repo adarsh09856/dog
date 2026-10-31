@@ -98,7 +98,7 @@ export default function HomePage() {
               </h1>
               <p className={styles.lede}>{branding.tagline}</p>
               <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">
-                Build voice-agent workflows for browser sessions and telephone calls. Configure speech recognition, a language model and a speaking voice, then connect campaigns, CRM, appointments, forms, tools and knowledge where enabled.
+                Answer inbound calls, run outbound campaigns, qualify leads and book appointments. Configure browser and phone agents, speech and language models, routing, tools and knowledge in one workspace.
               </p>
               <div className={styles.actions}>
                 <Link href="/auth/login" className={styles.primaryAction}>

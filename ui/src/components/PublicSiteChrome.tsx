@@ -12,8 +12,8 @@ import { useClientBranding } from "@/context/ClientBrandingContext";
 import styles from "./PublicSiteChrome.module.css";
 
 const links = [
-  { href: "/#platform", label: "Platform" },
-  { href: "/#deployment", label: "Deployment" },
+  { href: "/platform", label: "Platform" },
+  { href: "/deployment", label: "Deployment" },
   { href: "/pricing", label: "Pricing" },
 ];
 
@@ -131,10 +131,10 @@ export function PublicFooter() {
           aria-label="Footer navigation"
           className="flex flex-wrap content-start gap-x-7 gap-y-4 text-sm text-muted-foreground"
         >
-          <Link href="/#platform" className="hover:text-foreground">
+          <Link href="/platform" className="hover:text-foreground">
             Platform
           </Link>
-          <Link href="/#deployment" className="hover:text-foreground">
+          <Link href="/deployment" className="hover:text-foreground">
             Deployment
           </Link>
           <Link href="/pricing" className="hover:text-foreground">

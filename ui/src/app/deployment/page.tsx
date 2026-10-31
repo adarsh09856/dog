@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { PublicEnterpriseLeadCTA } from "@/components/lead-forms/PublicEnterpriseLeadCTA";
+import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 
 import styles from "../PublicPages.module.css";
 
