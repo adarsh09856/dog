@@ -301,24 +301,33 @@ with Kodewaves.
 Back up the database and persistent volumes before an update. Update the API and
 UI image digests and install the matching newly signed release manifest as one
 approved release, then recreate the services. Keep the previous image digests,
-manifest and encrypted backup available for recovery. A rollback is safe only
-when the previous application version supports the current database schema;
-that compatibility has not yet been accepted across releases. For license
-renewal, follow `INSTALL.md` to replace the token and recreate both the API and
-UI before the handover window ends. A Compose restart does not reload changed
-environment variables. Follow the license guide for key rotation, DNS changes
-and owner outage behavior.
+manifest and encrypted backup available for recovery. By default, Docker restore
+requires the active `.env` and manifest to match the archive. To restore an
+older signed API/UI release as well as its data, explicitly pass
+`--allow-release-rollback` and `--release-public-key`; the active signed release
+must authorize the archived schema head in its `rollback_to` list. Only the
+signed image references and manifest path change; installation credentials and
+runtime settings must still match. The tool attempts to reinstate the candidate
+release configuration and volumes if the prior release fails to start. This
+compensating behavior has mocked tests but is not crash-atomic and has not been
+accepted against a Docker daemon. For license renewal, follow `INSTALL.md` to
+replace the token and recreate both the API and UI before the handover window
+ends. A Compose restart does not reload changed environment variables. Follow
+the license guide for key rotation, DNS changes and owner outage behavior.
 
 The bundle's `recovery.py backup-docker` command can stop the project, verify no
 running container still writes the Postgres or MinIO volumes, and create a cold
 archive. `recovery.py restore --docker-volumes` stages data into new labeled
 volumes and keeps the original set available for rollback with
-`recovery.py rollback-docker`. These Docker operations have deterministic
-failure-path tests but have not been exercised against a Docker daemon; they
-are not yet accepted restore evidence. See `INSTALL.md` for the required
-maintenance commands and limitations. Use `compose_client.py` for every
-Compose operation so the project name and active recovery volume mapping remain
-consistent. Owner enrollment is required before starting services.
+`recovery.py rollback-docker`. When using `--allow-release-rollback`, that
+command also restores the candidate image pins and manifest; pass the same
+trusted `--release-public-key` used during restore. These Docker operations
+have deterministic mocked failure-path tests but have not been exercised
+against a Docker daemon; they are not yet accepted restore evidence. See
+`INSTALL.md` for the required maintenance commands and limitations. Use
+`compose_client.py` for every Compose operation so the project name and active
+recovery volume mapping remain consistent. Owner enrollment is required before
+starting services.
 
 Do not expose `.env`, the signed license token, database credentials or the
 release manifest through a public web server. A customer with root control of

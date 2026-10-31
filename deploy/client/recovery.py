@@ -852,6 +852,98 @@ def _staged_config_matches_installation(staged: Path, env_file: Path, compose_di
     return current_env
 
 
+_RELEASE_CONFIG_KEYS = {"CLIENT_API_IMAGE", "CLIENT_UI_IMAGE", "CLIENT_RELEASE_MANIFEST_FILE"}
+
+
+def _release_rollback_config(
+    staged: Path, env_file: Path, compose_dir: Path, release_public_key: Path,
+    target_manifest_path: Path,
+) -> tuple[dict[str, str], bytes, bytes]:
+    """Authorize a signed schema-compatible prior release and derive an env overlay.
+
+    All installation credentials and infrastructure settings must still match the
+    archive. Only the API/UI digest pins and manifest path may differ.
+    """
+    trusted_key = _read_release_public_key(release_public_key)
+    archived_env_path = staged / "config/.env"
+    archived_env = parse_env(archived_env_path)
+    current_env = parse_env(env_file)
+    if archived_env.get("KODEWAVES_INSTALLATION_ID") != current_env.get("KODEWAVES_INSTALLATION_ID"):
+        raise ValueError("Recovery set belongs to a different installation")
+    if {k: v for k, v in archived_env.items() if k not in _RELEASE_CONFIG_KEYS | {"COMPOSE_FILE"}} != {
+        k: v for k, v in current_env.items() if k not in _RELEASE_CONFIG_KEYS | {"COMPOSE_FILE"}
+    }:
+        raise ValueError("Recovery .env changes installation credentials or runtime settings")
+
+    archived_manifest = (staged / "config/client-release-manifest.json").read_bytes()
+    target = _verify_release_manifest(archived_manifest, trusted_key)
+    target_images = target["images"]
+    if (
+        archived_env.get("CLIENT_API_IMAGE") != target_images["api"]["reference"]
+        or archived_env.get("CLIENT_UI_IMAGE") != target_images["ui"]["reference"]
+    ):
+        raise ValueError("Archived release image pins do not match its signed manifest")
+
+    current_manifest_ref = current_env.get("CLIENT_RELEASE_MANIFEST_FILE", "")
+    current_manifest_path = Path(current_manifest_ref)
+    if not current_manifest_path.is_absolute():
+        current_manifest_path = compose_dir / current_manifest_path
+    _check_regular_file(current_manifest_path, "active release manifest")
+    current_manifest_path = current_manifest_path.resolve(strict=True)
+    if not current_manifest_path.is_relative_to(compose_dir):
+        raise ValueError("Active release manifest must be inside the client Compose directory for release rollback")
+    current_manifest_bytes = current_manifest_path.read_bytes()
+    current = _verify_release_manifest(current_manifest_bytes, trusted_key)
+    current_images = current["images"]
+    if (
+        current_env.get("CLIENT_API_IMAGE") != current_images["api"]["reference"]
+        or current_env.get("CLIENT_UI_IMAGE") != current_images["ui"]["reference"]
+    ):
+        raise ValueError("Active release image pins do not match its signed manifest")
+    current_head = current["schema_compatibility"]["head"]
+    target_head = target["schema_compatibility"]["head"]
+    if current_head == target_head or target_head not in current["schema_compatibility"]["rollback_to"]:
+        raise ValueError("Active signed release does not authorize rollback to the archived schema head")
+
+    if current_env.get("CLIENT_IDENTITY_KEY_FILE"):
+        key_path = Path(current_env["CLIENT_IDENTITY_KEY_FILE"])
+        _check_regular_file(key_path, "active installation identity key")
+        if key_path.read_bytes() != (staged / "config/installation.key").read_bytes():
+            raise ValueError("Active installation identity key differs from the recovery set")
+
+    target_manifest_path = target_manifest_path.resolve(strict=False)
+    if not target_manifest_path.parent.is_relative_to(compose_dir):
+        raise ValueError("Recovery release manifest must be stored inside the client Compose directory")
+    manifest_ref = f"./{target_manifest_path.name}"
+    replacements = {
+        "CLIENT_API_IMAGE": target_images["api"]["reference"],
+        "CLIENT_UI_IMAGE": target_images["ui"]["reference"],
+        "CLIENT_RELEASE_MANIFEST_FILE": manifest_ref,
+    }
+    original_env_bytes = env_file.read_bytes()
+    try:
+        lines = original_env_bytes.decode("utf-8").splitlines(keepends=True)
+    except UnicodeDecodeError as exc:
+        raise ValueError("Active .env must be UTF-8") from exc
+    found: set[str] = set()
+    rewritten: list[str] = []
+    for raw in lines:
+        body = raw.rstrip("\r\n")
+        ending = raw[len(body):]
+        match = re.match(r"^(\s*(?:export\s+)?)([A-Z][A-Z0-9_]*)(\s*=\s*)(.*)$", body)
+        if match and match.group(2) in replacements:
+            key = match.group(2)
+            if key in found:
+                raise ValueError(f"Active .env contains duplicate {key}")
+            found.add(key)
+            rewritten.append(f"{match.group(1)}{key}{match.group(3)}{replacements[key]}{ending}")
+        else:
+            rewritten.append(raw)
+    if found != set(replacements):
+        raise ValueError("Active .env is missing one or more release pin settings")
+    return current_env, original_env_bytes, "".join(rewritten).encode("utf-8")
+
+
 def _persisted_recovery_state(compose_dir: Path) -> Path:
     return compose_dir / RECOVERY_STATE_DIR
 
@@ -872,6 +964,7 @@ def _restore_to_docker_volumes_locked(
     *, archive_path: Path, compose_dir: Path, env_file: Path,
     release_public_key: Path | None,
     confirm_maintenance: bool,
+    allow_release_rollback: bool = False,
 ) -> dict[str, object]:
     """Restore into new labeled volumes, atomically switch Compose, retain rollback volumes."""
     if not confirm_maintenance:
@@ -887,14 +980,24 @@ def _restore_to_docker_volumes_locked(
     stage_parent.mkdir(mode=0o700, exist_ok=True)
     stage_dir = stage_parent / f"restore-{uuid.uuid4().hex}"
     summary = restore_to_directory(archive_path, stage_dir, release_public_key=release_public_key)
+    release_rollback_id = uuid.uuid4().hex[:12]
+    rollback_manifest_path = compose_dir / f".client-release-rollback-{release_rollback_id}.json"
     try:
-        current_env = _staged_config_matches_installation(stage_dir, env_file, compose_dir)
+        current_env = (
+            parse_env(env_file) if allow_release_rollback
+            else _staged_config_matches_installation(stage_dir, env_file, compose_dir)
+        )
+        previous_env_bytes = active_env_bytes = b""
+        if allow_release_rollback:
+            current_env, previous_env_bytes, active_env_bytes = _release_rollback_config(
+                stage_dir, env_file, compose_dir, release_public_key, rollback_manifest_path,
+            )
         original_volumes = _compose_volume_names(model)
         services = set(model.get("services", {}))
         running = _running_services(command, compose_dir, services)
         image = _get_volume_image(env)
         metadata = json.loads((stage_dir / "recovery.json").read_text(encoding="utf-8"))
-        recovery_id = uuid.uuid4().hex[:12]
+        recovery_id = release_rollback_id
         project = str(model.get("name") or compose_dir.name.lower())
         new_volumes = {
             "postgres_data": f"{project}_postgres_recovery_{recovery_id}",
@@ -904,6 +1007,14 @@ def _restore_to_docker_volumes_locked(
         override_path = compose_dir / RECOVERY_OVERRIDE
         original_override_exists = override_path.exists()
         original_override = override_path.read_bytes() if original_override_exists else b""
+        previous_manifest_path: Path | None = None
+        previous_manifest_bytes = b""
+        if allow_release_rollback:
+            previous_manifest_path = Path(current_env["CLIENT_RELEASE_MANIFEST_FILE"])
+            if not previous_manifest_path.is_absolute():
+                previous_manifest_path = compose_dir / previous_manifest_path
+            _check_regular_file(previous_manifest_path, "active release manifest")
+            previous_manifest_bytes = previous_manifest_path.read_bytes()
         state_dir.mkdir(mode=0o700)
         try:
             _write_private(state_dir / "previous-recovery-override", original_override)
@@ -911,7 +1022,7 @@ def _restore_to_docker_volumes_locked(
             shutil.rmtree(state_dir, ignore_errors=True)
             raise
         state = {
-            "format": "kodewaves-client-recovery-state-v1",
+            "format": "kodewaves-client-recovery-state-v2" if allow_release_rollback else "kodewaves-client-recovery-state-v1",
             "restore_id": recovery_id,
             "installation_id": metadata["installation_id"],
             "original_volumes": original_volumes,
@@ -922,9 +1033,33 @@ def _restore_to_docker_volumes_locked(
             "created_volumes": [],
             "status": "preparing",
         }
+        if allow_release_rollback:
+            state.update({
+                "release_rollback": True,
+                "previous_env_sha256": hashlib.sha256(previous_env_bytes).hexdigest(),
+                "restored_env_sha256": hashlib.sha256(active_env_bytes).hexdigest(),
+                "restored_manifest_path": str(rollback_manifest_path),
+                "restored_manifest_sha256": hashlib.sha256(
+                    (stage_dir / "config/client-release-manifest.json").read_bytes()
+                ).hexdigest(),
+                "previous_manifest_path": str(previous_manifest_path.resolve(strict=True)),
+                "previous_manifest_sha256": hashlib.sha256(previous_manifest_bytes).hexdigest(),
+                "release_public_key_path": str(release_public_key.resolve(strict=True)),
+                "release_public_key_sha256": _sha256_file(release_public_key),
+            })
         try:
             _write_private(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
+            if allow_release_rollback:
+                _write_private(state_dir / "previous-env", previous_env_bytes)
+                _write_private(state_dir / "restored-env", active_env_bytes)
+                _write_private(state_dir / "previous-manifest", previous_manifest_bytes)
+                _write_private(
+                    rollback_manifest_path,
+                    (stage_dir / "config/client-release-manifest.json").read_bytes(),
+                    mode=0o644,
+                )
         except Exception:
+            rollback_manifest_path.unlink(missing_ok=True)
             shutil.rmtree(state_dir, ignore_errors=True)
             raise
         try:
@@ -944,6 +1079,8 @@ def _restore_to_docker_volumes_locked(
             )
             if running:
                 _run([*command, "stop"], cwd=compose_dir, timeout=MAX_DOCKER_TIMEOUT)
+            if allow_release_rollback:
+                _atomic_write(env_file, active_env_bytes, mode=0o600)
             _atomic_write(override_path, _recovery_override(new_volumes), mode=0o600)
             state["status"] = "switching"
             _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
@@ -961,6 +1098,8 @@ def _restore_to_docker_volumes_locked(
                 _atomic_write(override_path, original_override, mode=0o600)
             else:
                 override_path.unlink(missing_ok=True)
+            if allow_release_rollback:
+                _atomic_write(env_file, previous_env_bytes, mode=0o600)
             try:
                 _switch_compose_up(compose_dir, env_file, running)
             except Exception as rollback_error:
@@ -979,6 +1118,8 @@ def _restore_to_docker_volumes_locked(
             _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
             failed_state_dir = compose_dir / f".client-recovery-failed-{recovery_id}"
             state_dir.rename(failed_state_dir)
+            if allow_release_rollback:
+                rollback_manifest_path.unlink(missing_ok=True)
             raise RuntimeError("Restore failed; original volume selection was automatically restored") from restore_error
         state["status"] = "active"
         _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
@@ -989,6 +1130,12 @@ def _restore_to_docker_volumes_locked(
             "new_volumes": new_volumes,
             "original_volumes_preserved": True,
             "rollback_command": "python3 recovery.py rollback-docker",
+            "release_rollback": allow_release_rollback,
+            "restored_release_images": (
+                {"api": current_env["CLIENT_API_IMAGE"], "ui": current_env["CLIENT_UI_IMAGE"]}
+                if allow_release_rollback else None
+            ),
+            "restored_manifest_path": str(rollback_manifest_path) if allow_release_rollback else None,
             "docker_volumes_modified": True,
         }
     finally:
@@ -1005,16 +1152,21 @@ def restore_to_docker_volumes(
     *, archive_path: Path, compose_dir: Path, env_file: Path,
     release_public_key: Path | None = None,
     confirm_maintenance: bool,
+    allow_release_rollback: bool = False,
 ) -> dict[str, object]:
     with _recovery_operation_lock(compose_dir):
         return _restore_to_docker_volumes_locked(
             archive_path=archive_path, compose_dir=compose_dir, env_file=env_file,
             release_public_key=release_public_key,
             confirm_maintenance=confirm_maintenance,
+            allow_release_rollback=allow_release_rollback,
         )
 
 
-def _rollback_docker_restore_locked(*, compose_dir: Path, env_file: Path, confirm_maintenance: bool) -> dict[str, object]:
+def _rollback_docker_restore_locked(
+    *, compose_dir: Path, env_file: Path, confirm_maintenance: bool,
+    release_public_key: Path | None = None,
+) -> dict[str, object]:
     """Switch Compose back to the original volumes without deleting either set."""
     if not confirm_maintenance:
         raise ValueError("Docker rollback requires --confirm-maintenance because client services will stop")
@@ -1025,7 +1177,8 @@ def _rollback_docker_restore_locked(*, compose_dir: Path, env_file: Path, confir
         raise ValueError("No active Docker recovery state exists")
     state_path = state_dir / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    if state.get("format") != "kodewaves-client-recovery-state-v1" or state.get("status") != "active":
+    state_format = state.get("format")
+    if state_format not in {"kodewaves-client-recovery-state-v1", "kodewaves-client-recovery-state-v2"} or state.get("status") != "active":
         raise ValueError("Recovery state is not in an active rollback-ready state")
     current_override = compose_dir / RECOVERY_OVERRIDE
     current_bytes = current_override.read_bytes()
@@ -1037,6 +1190,46 @@ def _rollback_docker_restore_locked(*, compose_dir: Path, env_file: Path, confir
     original_override = (state_dir / "previous-recovery-override").read_bytes()
     if hashlib.sha256(original_override).hexdigest() != state.get("original_override_sha256"):
         raise ValueError("Saved original Compose override is damaged")
+    release_rollback = state_format == "kodewaves-client-recovery-state-v2" and state.get("release_rollback") is True
+    current_env_bytes = env_file.read_bytes()
+    previous_env_bytes = previous_manifest_bytes = b""
+    previous_manifest_path: Path | None = None
+    if release_rollback:
+        if hashlib.sha256(current_env_bytes).hexdigest() != state.get("restored_env_sha256"):
+            raise ValueError("Active release .env changed after recovery; refusing automatic rollback")
+        active_env_bytes = (state_dir / "restored-env").read_bytes()
+        previous_env_bytes = (state_dir / "previous-env").read_bytes()
+        if active_env_bytes != current_env_bytes or hashlib.sha256(previous_env_bytes).hexdigest() != state.get("previous_env_sha256"):
+            raise ValueError("Saved release rollback environment is damaged")
+        target_manifest_path = Path(state["restored_manifest_path"])
+        if target_manifest_path != (compose_dir / target_manifest_path.name) or not target_manifest_path.is_file():
+            raise ValueError("Saved recovery manifest path is invalid")
+        _check_regular_file(target_manifest_path, "active recovery release manifest")
+        target_manifest_bytes = target_manifest_path.read_bytes()
+        if hashlib.sha256(target_manifest_bytes).hexdigest() != state.get("restored_manifest_sha256"):
+            raise ValueError("Active recovery release manifest changed after restore")
+        release_public_key = release_public_key or Path(state["release_public_key_path"])
+        if str(release_public_key.resolve(strict=True)) != state.get("release_public_key_path") or _sha256_file(release_public_key) != state.get("release_public_key_sha256"):
+            raise ValueError("Trusted release public key changed after restore")
+        trusted_key = _read_release_public_key(release_public_key)
+        target_payload = _verify_release_manifest(target_manifest_bytes, trusted_key)
+        active_env = parse_env(env_file)
+        if (
+            active_env.get("CLIENT_API_IMAGE") != target_payload["images"]["api"]["reference"]
+            or active_env.get("CLIENT_UI_IMAGE") != target_payload["images"]["ui"]["reference"]
+        ):
+            raise ValueError("Active recovery image pins do not match the signed manifest")
+        previous_env = parse_env(state_dir / "previous-env")
+        previous_manifest_path = Path(previous_env["CLIENT_RELEASE_MANIFEST_FILE"])
+        if not previous_manifest_path.is_absolute():
+            previous_manifest_path = compose_dir / previous_manifest_path
+        previous_manifest_path = previous_manifest_path.resolve(strict=False)
+        if str(previous_manifest_path) != state.get("previous_manifest_path"):
+            raise ValueError("Saved prior release manifest path does not match prior .env")
+        previous_manifest_bytes = (state_dir / "previous-manifest").read_bytes()
+        if hashlib.sha256(previous_manifest_bytes).hexdigest() != state.get("previous_manifest_sha256"):
+            raise ValueError("Saved prior release manifest is damaged")
+        _verify_release_manifest(previous_manifest_bytes, trusted_key)
     command, model, _env = _compose_context(compose_dir, env_file)
     running = _running_services(command, compose_dir, set(model.get("services", {})))
     original_running = list(state.get("running_services", []))
@@ -1047,9 +1240,15 @@ def _rollback_docker_restore_locked(*, compose_dir: Path, env_file: Path, confir
             _atomic_write(current_override, original_override, mode=0o600)
         else:
             current_override.unlink(missing_ok=True)
+        if release_rollback:
+            _atomic_write(previous_manifest_path, previous_manifest_bytes, mode=0o644)
+            _atomic_write(env_file, previous_env_bytes, mode=0o600)
         _switch_compose_up(compose_dir, env_file, original_running)
     except Exception as rollback_error:
         _atomic_write(current_override, current_bytes, mode=0o600)
+        if release_rollback:
+            _atomic_write(target_manifest_path, target_manifest_bytes, mode=0o644)
+            _atomic_write(env_file, active_env_bytes, mode=0o600)
         try:
             _switch_compose_up(compose_dir, env_file, running)
         except Exception as restart_error:
@@ -1061,18 +1260,25 @@ def _rollback_docker_restore_locked(*, compose_dir: Path, env_file: Path, confir
     state["status"] = "rolled_back"
     _atomic_write(state_path, (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
     state_dir.rename(rolled_back_dir)
+    if release_rollback:
+        target_manifest_path.unlink(missing_ok=True)
     return {
         "status": "rolled_back",
         "original_volumes_selected": state["original_volumes"],
         "restored_volumes_preserved": state["new_volumes"],
+        "release_rollback_reversed": release_rollback,
         "rollback_state": str(rolled_back_dir),
     }
 
 
-def rollback_docker_restore(*, compose_dir: Path, env_file: Path, confirm_maintenance: bool) -> dict[str, object]:
+def rollback_docker_restore(
+    *, compose_dir: Path, env_file: Path, confirm_maintenance: bool,
+    release_public_key: Path | None = None,
+) -> dict[str, object]:
     with _recovery_operation_lock(compose_dir):
         return _rollback_docker_restore_locked(
             compose_dir=compose_dir, env_file=env_file, confirm_maintenance=confirm_maintenance,
+            release_public_key=release_public_key,
         )
 
 
@@ -1331,6 +1537,10 @@ def main() -> int:
     restore_parser.add_argument("--env-file", type=Path)
     restore_parser.add_argument("--release-public-key", type=Path)
     restore_parser.add_argument("--confirm-maintenance", action="store_true")
+    restore_parser.add_argument(
+        "--allow-release-rollback", action="store_true",
+        help="explicitly allow restoring the archive's signed API/UI release when the active signed schema authorizes it",
+    )
     docker_backup_parser = commands.add_parser("backup-docker", help="stop client services and create a cold backup of Postgres and MinIO volumes")
     docker_backup_parser.add_argument("--compose-dir", type=Path, default=Path(__file__).resolve().parent)
     docker_backup_parser.add_argument("--env-file", type=Path)
@@ -1340,6 +1550,7 @@ def main() -> int:
     rollback_parser = commands.add_parser("rollback-docker", help="switch to preserved original volumes after a Docker restore")
     rollback_parser.add_argument("--compose-dir", type=Path, default=Path(__file__).resolve().parent)
     rollback_parser.add_argument("--env-file", type=Path)
+    rollback_parser.add_argument("--release-public-key", type=Path)
     rollback_parser.add_argument("--confirm-maintenance", action="store_true")
     args = parser.parse_args()
     try:
@@ -1363,6 +1574,7 @@ def main() -> int:
                 archive_path=args.archive, compose_dir=args.compose_dir, env_file=env_file,
                 release_public_key=release_public_key,
                 confirm_maintenance=args.confirm_maintenance,
+                allow_release_rollback=args.allow_release_rollback,
             )
         elif args.command == "backup-docker":
             env_file = args.env_file or args.compose_dir / ".env"
@@ -1376,6 +1588,7 @@ def main() -> int:
             result = rollback_docker_restore(
                 compose_dir=args.compose_dir, env_file=env_file,
                 confirm_maintenance=args.confirm_maintenance,
+                release_public_key=args.release_public_key,
             )
     except (ValueError, OSError, RuntimeError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"Recovery archive rejected: {exc}", file=sys.stderr)
