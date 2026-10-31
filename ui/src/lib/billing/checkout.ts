@@ -54,11 +54,12 @@ export async function startConfiguredCheckout(payload: CreateOrderPayload): Prom
     window.location.assign(target.href);
     return { redirected: true };
   }
-  if (!order.key_id || !window.Razorpay) throw new Error("Checkout is unavailable. Please retry.");
+  const razorpayKeyId = order.key_id || config.razorpay_key_id;
+  if (!razorpayKeyId || !window.Razorpay) throw new Error("Checkout is unavailable. Please retry.");
   return new Promise((resolve, reject) => {
     let verifying = false;
     const checkout = new window.Razorpay!({
-      key: order.key_id!, order_id: order.order_id, amount: order.amount,
+      key: razorpayKeyId, order_id: order.order_id, amount: order.amount,
       currency: order.currency, name: "Kodewaves",
       modal: { ondismiss: () => { if (!verifying) reject(new Error("Checkout was cancelled.")); } },
       handler: (response) => {
@@ -67,6 +68,7 @@ export async function startConfiguredCheckout(payload: CreateOrderPayload): Prom
         // Use the server-created order ID, never an order ID supplied by the browser callback.
         paymentsApi.verifyPayment({ gateway, order_id: order.order_id,
           payment_id: response.razorpay_payment_id, signature: response.razorpay_signature,
+          package_id: payload.package_id, plan_id: payload.plan_id, plan_code: payload.plan_code,
         }).then((receipt) => {
           if (!receipt.success) throw new Error("Payment has not been verified. Refresh your wallet before retrying.");
           resolve({ redirected: false, receipt });

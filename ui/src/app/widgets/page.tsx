@@ -46,7 +46,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useClientBranding } from "@/context/ClientBrandingContext";
 import { detailFromError } from "@/lib/apiError";
-import { useAuth } from "@/lib/auth";
 import { WebsiteWidget, widgetsApi } from "@/lib/kodewavesApi";
 
 export default function WidgetsPage() {
