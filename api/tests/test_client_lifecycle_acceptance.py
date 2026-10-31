@@ -78,6 +78,32 @@ def test_lifecycle_minio_rejects_unscoped_tag():
         raise AssertionError("unscoped MinIO image tag was accepted")
 
 
+def test_release_build_sets_failing_image_verification_phase(monkeypatch, tmp_path):
+    license_public = tmp_path / "license.pub"
+    release_public = tmp_path / "release.pub"
+    license_public.write_text("license-key", encoding="ascii")
+    release_public.write_text("release-key", encoding="ascii")
+    phases = []
+
+    def fail_api_verification(_image):
+        raise lifecycle_acceptance.subprocess.CalledProcessError(1, ["docker", "run"])
+
+    monkeypatch.setattr(lifecycle_acceptance, "_run", lambda *args, **kwargs: "")
+    monkeypatch.setattr(lifecycle_acceptance, "verify_api", fail_api_verification)
+
+    try:
+        lifecycle_acceptance._build(
+            tmp_path / "source", "lifecycle-prior", license_public, release_public,
+            "https://owner.invalid/check", tmp_path / "inventory", "prior", phases.append,
+        )
+    except lifecycle_acceptance.subprocess.CalledProcessError:
+        pass
+    else:
+        raise AssertionError("simulated API verification failure was accepted")
+
+    assert phases[-1] == "verify_prior_api_image"
+
+
 def test_failure_diagnostics_keep_phase_and_type_without_exception_text():
     result = {"status": "started"}
     secret = "synthetic-password-must-not-be-recorded"

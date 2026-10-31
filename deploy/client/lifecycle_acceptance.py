@@ -21,7 +21,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -232,9 +232,11 @@ def _validate_source_checkout(source: Path, expected_commit: str) -> None:
 
 
 def _build(source: Path, tag_prefix: str, license_public: Path, release_public: Path,
-           owner_status_url: str, inventory_dir: Path) -> tuple[dict[str, str], dict[str, str]]:
+           owner_status_url: str, inventory_dir: Path, release_label: str,
+           set_phase: Callable[[str], None]) -> tuple[dict[str, str], dict[str, str]]:
     tags = {"api": f"{tag_prefix}-api:acceptance", "ui": f"{tag_prefix}-ui:acceptance"}
     for component in ("api", "ui"):
+        set_phase(f"build_{release_label}_{component}_image")
         command = ["docker", "build", "--build-arg", "KODEWAVES_EDITION=client"]
         if component == "api":
             command.extend([
@@ -249,14 +251,24 @@ def _build(source: Path, tag_prefix: str, license_public: Path, release_public: 
             ])
         command.extend(["-f", str(source / f"{component}/Dockerfile"), "-t", tags[component], str(source)])
         _run(command, timeout=2400, capture=False)
+    set_phase(f"verify_{release_label}_api_image")
     verify_api(tags["api"])
+    set_phase(f"verify_{release_label}_ui_image")
     verify_ui(tags["ui"])
     inventory_dir.mkdir(parents=True, exist_ok=True)
+    set_phase(f"inventory_{release_label}_api_image")
+    api_inventory = _inventory(tags["api"], "api", inventory_dir / f"{tag_prefix}-api-inventory.json")
+    set_phase(f"inventory_{release_label}_ui_image")
+    ui_inventory = _inventory(tags["ui"], "ui", inventory_dir / f"{tag_prefix}-ui-inventory.json")
     inventories = {
-        "api": _inventory(tags["api"], "api", inventory_dir / f"{tag_prefix}-api-inventory.json"),
-        "ui": _inventory(tags["ui"], "ui", inventory_dir / f"{tag_prefix}-ui-inventory.json"),
+        "api": api_inventory,
+        "ui": ui_inventory,
     }
-    image_ids = {name: _image_id(tag) for name, tag in tags.items()}
+    set_phase(f"inspect_{release_label}_api_image")
+    api_image_id = _image_id(tags["api"])
+    set_phase(f"inspect_{release_label}_ui_image")
+    ui_image_id = _image_id(tags["ui"])
+    image_ids = {"api": api_image_id, "ui": ui_image_id}
     return image_ids, {**tags, **{f"{name}_inventory": str(inventory_dir / f"{tag_prefix}-{name}-inventory.json") for name in tags}}
 
 
@@ -500,8 +512,21 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         images_to_remove.update({f"{prior_tag_prefix}-api:acceptance", f"{prior_tag_prefix}-ui:acceptance"})
         images_to_remove.update({f"{candidate_tag_prefix}-api:acceptance", f"{candidate_tag_prefix}-ui:acceptance"})
         active_phase = "build_and_verify_release_images"
-        prior_ids, prior_artifacts = _build(args.prior_source, prior_tag_prefix, license_public, release_public, owner_status_url, temp_root / "prior-inventory")
-        candidate_ids, candidate_artifacts = _build(ROOT, candidate_tag_prefix, license_public, release_public, owner_status_url, temp_root / "candidate-inventory")
+
+        def set_release_phase(phase: str) -> None:
+            nonlocal active_phase
+            if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", phase):
+                raise ValueError("Invalid lifecycle release phase")
+            active_phase = phase
+
+        prior_ids, prior_artifacts = _build(
+            args.prior_source, prior_tag_prefix, license_public, release_public,
+            owner_status_url, temp_root / "prior-inventory", "prior", set_release_phase,
+        )
+        candidate_ids, candidate_artifacts = _build(
+            ROOT, candidate_tag_prefix, license_public, release_public,
+            owner_status_url, temp_root / "candidate-inventory", "candidate", set_release_phase,
+        )
         images_to_remove.update(prior_artifacts[name] for name in ("api", "ui"))
         images_to_remove.update(candidate_artifacts[name] for name in ("api", "ui"))
         if prior_ids == candidate_ids:
