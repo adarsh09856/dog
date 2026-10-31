@@ -512,7 +512,9 @@ def _container_http_response(
     return status, body
 
 
-def _runtime_smoke_license(private_key: bytes, public_key: str) -> str:
+def _runtime_smoke_license(
+    private_key: bytes, public_key: str, *, ip_ranges: list[str] | None = None
+) -> str:
     """Mint and locally verify a short-lived, domain-bound CI-only license."""
     from api.services.installation_license import issue_license_token, load_license
 
@@ -524,7 +526,7 @@ def _runtime_smoke_license(private_key: bytes, public_key: str) -> str:
         "customer_id": "ci-smoke",
         "edition": "client",
         "domains": ["smoke.customer.example.invalid"],
-        "ip_ranges": [],
+        "ip_ranges": ip_ranges or [],
         "features": ["voice"],
         "limits": {"max_concurrent_calls": 1, "max_seats": 1, "max_workspaces": 1},
     }
@@ -980,7 +982,8 @@ def verify(caddy_image: str, report: Path) -> None:
         inventory_metrics_file = directory / "protected-inventory-metrics.json"
         api_image, ui_image = "kodewaves-client-api:ci-check", "kodewaves-client-ui:ci-check"
         license_token = _runtime_smoke_license(
-            license_private.read_bytes(), license_public.read_text(encoding="ascii")
+            license_private.read_bytes(), license_public.read_text(encoding="ascii"),
+            ip_ranges=["127.0.0.1/32"],
         )
         with _OwnerAcceptanceServer(
             directory, license_token, license_private.read_bytes(), license_public.read_text(encoding="ascii")
