@@ -375,6 +375,30 @@ def _remove_temp_directory(path: Path) -> bool:
     return not path.exists()
 
 
+def _record_failure_diagnostics(result: dict[str, Any], phase: str,
+                                completed_phases: list[str], exc: Exception) -> None:
+    """Record safe failure metadata without preserving command output or secrets."""
+    result["status"] = "failed"
+    result["failed_phase"] = phase
+    result["failure_type"] = type(exc).__name__
+    result["completed_phases"] = list(completed_phases)
+    result["last_successful_phase"] = completed_phases[-1] if completed_phases else None
+
+
+def _format_failure_message(report_path: str | Path | None, exc: Exception) -> str:
+    """Return an actionable but secret-free CI failure line."""
+    phase = "unknown"
+    try:
+        if report_path is not None:
+            result = json.loads(Path(report_path).read_text(encoding="utf-8"))
+            reported_phase = result.get("failed_phase")
+            if isinstance(reported_phase, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reported_phase):
+                phase = reported_phase
+    except (OSError, ValueError, TypeError):
+        pass
+    return f"Lifecycle acceptance failed: phase={phase}, error_type={type(exc).__name__}"
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     validate_inputs(args)
     head = _run(["git", "rev-parse", "HEAD"])
@@ -411,6 +435,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     images_to_remove: set[str] = set()
     original_volume_names: list[str] = []
     cleanup_errors: list[str] = []
+    active_phase = "prepare_disposable_compose"
     report_path = Path(args.report).resolve()
     try:
         if report_path == temp_root or temp_root in report_path.parents:
@@ -432,6 +457,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         shutil.copy2(ROOT / "deploy/client/Caddyfile", compose_dir)
         minio_tag = project + "-minio:acceptance"
         images_to_remove.add(minio_tag)
+        active_phase = "build_local_minio_fixture"
         minio_image_id = _build_lifecycle_minio(minio_tag)
         result["dependency_image_ids_sha256"] = {
             "postgres": hashlib.sha256(_CI_POSTGRES_IMAGE.encode()).hexdigest(),
@@ -448,6 +474,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         candidate_tag_prefix = project + "-candidate"
         images_to_remove.update({f"{prior_tag_prefix}-api:acceptance", f"{prior_tag_prefix}-ui:acceptance"})
         images_to_remove.update({f"{candidate_tag_prefix}-api:acceptance", f"{candidate_tag_prefix}-ui:acceptance"})
+        active_phase = "build_and_verify_release_images"
         prior_ids, prior_artifacts = _build(args.prior_source, prior_tag_prefix, license_public, release_public, owner_status_url, temp_root / "prior-inventory")
         candidate_ids, candidate_artifacts = _build(ROOT, candidate_tag_prefix, license_public, release_public, owner_status_url, temp_root / "candidate-inventory")
         images_to_remove.update(prior_artifacts[name] for name in ("api", "ui"))
@@ -474,6 +501,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         result["prior_image_ids_sha256"] = {key: hashlib.sha256(value.encode()).hexdigest() for key, value in prior_ids.items()}
         result["candidate_image_ids_sha256"] = {key: hashlib.sha256(value.encode()).hexdigest() for key, value in candidate_ids.items()}
         completed_phases.append("prior_release_validated")
+        result["completed_phases"] = list(completed_phases)
 
         # Runtime-only license data uses a disposable key and a reserved synthetic domain.
         from api.services.installation_license import issue_license_token
@@ -509,6 +537,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if any(project_model.get("services", {}).get(name, {}).get("image") != prior_ids[name] for name in ("api", "ui")):
             raise ValueError("Compose cannot resolve the prior signed image IDs")
         original_volume_names = [item["name"] for item in project_model["volumes"].values() if isinstance(item, dict) and item.get("name")]
+        active_phase = "start_prior_release"
         _compose(compose_dir, project, ["up", "--detach", "--wait", "--wait-timeout", "360", "api", "ui"], timeout=480)
         _assert_running_image(compose_dir, project, "api", prior_ids["api"])
         _assert_running_image(compose_dir, project, "ui", prior_ids["ui"])
@@ -518,6 +547,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         result["prior_api_health"] = "passed"
         _run(["docker", "exec", _container_id(compose_dir, project, "api"), "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)"])
 
+        active_phase = "seed_synthetic_tenant_data"
         organization_id = _psql(
             compose_dir, project,
             f"INSERT INTO organizations (provider_id) VALUES ({_sql_literal(tenant_provider_id)}) RETURNING id",
@@ -541,7 +571,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         result["synthetic_workflow_id"] = int(workflow_id)
         result["seeded_synthetic_tenant_workflow"] = True
         completed_phases.append("synthetic_data_seeded")
+        result["completed_phases"] = list(completed_phases)
 
+        active_phase = "create_signed_backup"
         archive = temp_root / "prior-release-backup.tar.gz"
         _run([sys.executable, str(ROOT / "deploy/client/recovery.py"), "backup-docker",
               "--compose-dir", str(compose_dir), "--env-file", str(env_file),
@@ -554,6 +586,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         values["CLIENT_RELEASE_MANIFEST_FILE"] = "./client-release-candidate.json"
         _write_env(compose_dir, values)
         _assert_compose_refs(compose_dir, project, {"api": candidate_ids["api"], "ui": candidate_ids["ui"]})
+        active_phase = "upgrade_candidate"
         _compose(compose_dir, project, ["up", "--detach", "--wait", "--wait-timeout", "480", "api", "ui"], timeout=600)
         if _run(["docker", "inspect", "--format", "{{.Image}}", _container_id(compose_dir, project, "api")]) != candidate_ids["api"]:
             raise ValueError("Candidate API image did not start")
@@ -584,6 +617,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         result["candidate_data_checks"] = "passed"
         completed_phases.append("candidate_upgraded_and_data_verified")
 
+        active_phase = "rollback_candidate_and_verify_data"
         rollback_result = _run([sys.executable, str(ROOT / "deploy/client/recovery.py"), "restore", str(archive),
                                 "--docker-volumes", "--allow-release-rollback", "--compose-dir", str(compose_dir),
                                 "--env-file", str(env_file), "--release-public-key", str(release_public),
@@ -619,8 +653,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         result["rollback_data_selection"] = "passed"
         completed_phases.append("rollback_release_and_data_verified")
         validate_flow_order(completed_phases)
+        result["completed_phases"] = list(completed_phases)
+        result["last_successful_phase"] = completed_phases[-1]
         result["status"] = "passed"
         return result
+    except Exception as exc:
+        _record_failure_diagnostics(result, active_phase, completed_phases, exc)
+        raise
     finally:
         # A unique project name scopes Compose-created resources. Remove its
         # active recovery mapping first, then only the known initial volume set.
@@ -679,10 +718,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             cleanup_errors.append("temporary_secrets_directory_cleanup_failed")
         # Write the report only after checking that temporary private keys,
         # license data, backup and .env have actually been removed.
+        result.setdefault("completed_phases", list(completed_phases))
+        result.setdefault("last_successful_phase", completed_phases[-1] if completed_phases else None)
         result["cleanup"] = "passed" if not cleanup_errors else "failed"
         if cleanup_errors:
             result["status"] = "failed"
             result["cleanup_error_types"] = sorted(set(cleanup_errors))
+            result.setdefault("failed_phase", "cleanup")
+            result.setdefault("failure_type", "CleanupError")
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -748,7 +791,7 @@ def main() -> int:
         # Exception text can contain synthetic credentials, URLs, SQL values,
         # or service output. Keep CI logs free of those values by emitting only
         # the exception class; the evidence artifact is already redacted too.
-        print(f"Lifecycle acceptance failed: {type(exc).__name__}", file=sys.stderr)
+        print(_format_failure_message(args.report, exc), file=sys.stderr)
         return 1
 
 

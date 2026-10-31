@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from deploy.client import lifecycle_acceptance
@@ -75,3 +76,34 @@ def test_lifecycle_minio_rejects_unscoped_tag():
         assert "generated acceptance project" in str(error)
     else:
         raise AssertionError("unscoped MinIO image tag was accepted")
+
+
+def test_failure_diagnostics_keep_phase_and_type_without_exception_text():
+    result = {"status": "started"}
+    secret = "synthetic-password-must-not-be-recorded"
+    lifecycle_acceptance._record_failure_diagnostics(
+        result,
+        "upgrade_candidate",
+        ["prior_release_validated", "synthetic_data_seeded", "backup_created"],
+        RuntimeError(secret),
+    )
+
+    assert result["status"] == "failed"
+    assert result["failed_phase"] == "upgrade_candidate"
+    assert result["failure_type"] == "RuntimeError"
+    assert result["last_successful_phase"] == "backup_created"
+    assert result["completed_phases"] == [
+        "prior_release_validated", "synthetic_data_seeded", "backup_created",
+    ]
+    assert secret not in str(result)
+
+
+def test_ci_failure_line_reports_phase_without_secret_details(tmp_path):
+    secret = "synthetic-password-must-not-be-printed"
+    report = tmp_path / "lifecycle-report.json"
+    report.write_text(json.dumps({"failed_phase": "upgrade_candidate"}), encoding="utf-8")
+
+    message = lifecycle_acceptance._format_failure_message(report, RuntimeError(secret))
+
+    assert message == "Lifecycle acceptance failed: phase=upgrade_candidate, error_type=RuntimeError"
+    assert secret not in message

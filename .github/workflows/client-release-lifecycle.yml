@@ -63,3 +63,11 @@ jobs:
           --coturn-image "$COTURN_IMAGE"
           --caddy-image "$CADDY_IMAGE"
           --report "$LIFECYCLE_REPORT"
+      - name: Upload sanitized lifecycle acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-release-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/client-release-lifecycle.json
+          if-no-files-found: warn
+          retention-days: 7
