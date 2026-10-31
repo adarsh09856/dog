@@ -107,3 +107,38 @@ def test_ci_failure_line_reports_phase_without_secret_details(tmp_path):
 
     assert message == "Lifecycle acceptance failed: phase=upgrade_candidate, error_type=RuntimeError"
     assert secret not in message
+
+
+def test_lifecycle_accepts_approved_digest_for_official_docker_hub_image():
+    args = lifecycle_acceptance.argparse.Namespace(
+        prior_commit="a" * 40,
+        coturn_image="docker.io/coturn/coturn@sha256:" + "b" * 64,
+        caddy_image="caddy@sha256:" + "c" * 64,
+    )
+
+    lifecycle_acceptance.validate_inputs(args)
+
+
+def test_lifecycle_preflight_failure_writes_phase_report_without_exception_text(tmp_path):
+    report = tmp_path / "lifecycle-report.json"
+    args = lifecycle_acceptance.argparse.Namespace(
+        prior_commit="a" * 40,
+        prior_source=tmp_path / "prior",
+        candidate_commit="b" * 40,
+        coturn_image="docker.io/coturn/coturn@sha256:" + "c" * 64,
+        caddy_image="caddy:latest",
+        report=report,
+    )
+
+    try:
+        lifecycle_acceptance.run(args)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("mutable preflight image was accepted")
+
+    result = json.loads(report.read_text(encoding="utf-8"))
+    assert result["failed_phase"] == "validate_inputs"
+    assert result["failure_type"] == "ValueError"
+    assert result["last_successful_phase"] is None
+    assert "latest" not in report.read_text(encoding="utf-8")

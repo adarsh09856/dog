@@ -35,7 +35,10 @@ import recovery
 from ci_verify import _CI_POSTGRES_IMAGE, _CI_REDIS_IMAGE, _temporary_keypair
 from verify_images import verify_api, verify_caddyfile, verify_ui
 
-_IMAGE_REF = re.compile(r"^[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}$")
+_IMAGE_PATH = r"[a-z0-9]+(?:[._-][a-z0-9]+)*"
+_IMAGE_REF = re.compile(
+    rf"^(?:[a-z0-9][a-z0-9.-]*(?::[0-9]{{1,5}})?/)?{_IMAGE_PATH}(?:/{_IMAGE_PATH})*@sha256:[0-9a-f]{{64}}$"
+)
 _LOCAL_MINIO_TAG = re.compile(r"^kw-lifecycle-[0-9a-f]{12}-minio:acceptance$")
 _REVISION = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 _FLOW_ORDER = (
@@ -400,20 +403,42 @@ def _format_failure_message(report_path: str | Path | None, exc: Exception) -> s
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    validate_inputs(args)
-    head = _run(["git", "rev-parse", "HEAD"])
-    if args.candidate_commit and head != args.candidate_commit:
-        raise ValueError("Checked-out candidate commit does not match requested candidate commit")
-    _validate_source_checkout(args.prior_source, args.prior_commit)
-    ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", args.prior_commit, head], cwd=ROOT, check=False)
-    if ancestor.returncode:
-        raise ValueError("The prior release commit must be an ancestor of the checked-out candidate")
-    prior_head = _migration_head(args.prior_source)
-    candidate_head = _migration_head(ROOT)
-    if prior_head == candidate_head:
-        raise ValueError("Prior and candidate releases must have distinct Alembic heads")
-    if prior_head not in _ancestor_revisions(ROOT):
-        raise ValueError("Candidate migration history does not descend from the selected prior schema")
+    preflight_phase = "validate_inputs"
+    try:
+        validate_inputs(args)
+        preflight_phase = "validate_candidate_checkout"
+        head = _run(["git", "rev-parse", "HEAD"])
+        if args.candidate_commit and head != args.candidate_commit:
+            raise ValueError("Checked-out candidate commit does not match requested candidate commit")
+        preflight_phase = "validate_prior_checkout"
+        _validate_source_checkout(args.prior_source, args.prior_commit)
+        preflight_phase = "validate_commit_ancestry"
+        ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", args.prior_commit, head],
+            cwd=ROOT, check=False,
+        )
+        if ancestor.returncode:
+            raise ValueError("The prior release commit must be an ancestor of the checked-out candidate")
+        preflight_phase = "validate_migration_compatibility"
+        prior_head = _migration_head(args.prior_source)
+        candidate_head = _migration_head(ROOT)
+        if prior_head == candidate_head:
+            raise ValueError("Prior and candidate releases must have distinct Alembic heads")
+        if prior_head not in _ancestor_revisions(ROOT):
+            raise ValueError("Candidate migration history does not descend from the selected prior schema")
+    except Exception as exc:
+        # Preflight runs before the disposable workspace exists. Still emit a
+        # sanitized report so CI uploads the precise phase for early failures.
+        result = {
+            "status": "failed",
+            "candidate_commit": getattr(args, "candidate_commit", None),
+            "prior_commit": getattr(args, "prior_commit", None),
+        }
+        _record_failure_diagnostics(result, preflight_phase, [], exc)
+        report_path = Path(args.report).resolve()
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        raise
 
     project = "kw-lifecycle-" + uuid.uuid4().hex[:12]
     case_id = "synthetic-" + uuid.uuid4().hex
