@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import { client } from '@/client/client.gen';
 import { resolveBrowserBackendUrl } from '@/lib/apiClient';
@@ -47,6 +47,8 @@ const defaultConfig: AppConfig = {
     backendMessage: 'Unable to verify backend health. Ensure backend service is running.',
 };
 
+const UNREACHABLE_BACKEND_RETRY_MS = 30_000;
+
 const AppConfigContext = createContext<AppConfigContextType>({
     config: null,
     loading: true,
@@ -56,9 +58,12 @@ const AppConfigContext = createContext<AppConfigContextType>({
 export function AppConfigProvider({ children }: { children: ReactNode }) {
     const [config, setConfig] = useState<AppConfig | null>(null);
     const [loading, setLoading] = useState(true);
+    const refreshInFlight = useRef(false);
 
-    const loadConfig = useCallback(async () => {
-        setLoading(true);
+    const loadConfig = useCallback(async (background = false) => {
+        if (refreshInFlight.current) return;
+        refreshInFlight.current = true;
+        if (!background) setLoading(true);
         try {
             const response = await fetch('/api/config/version', { cache: 'no-store' });
             const data = await response.json();
@@ -103,13 +108,26 @@ export function AppConfigProvider({ children }: { children: ReactNode }) {
         } catch {
             setConfig(defaultConfig);
         } finally {
-            setLoading(false);
+            if (!background) setLoading(false);
+            refreshInFlight.current = false;
         }
     }, []);
 
     useEffect(() => {
         loadConfig();
     }, [loadConfig]);
+
+    useEffect(() => {
+        if (config?.backendStatus !== 'unreachable') return;
+
+        const retryTimer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                void loadConfig(true);
+            }
+        }, UNREACHABLE_BACKEND_RETRY_MS);
+
+        return () => window.clearInterval(retryTimer);
+    }, [config?.backendStatus, loadConfig]);
 
     return (
         <AppConfigContext.Provider value={{ config, loading, refresh: loadConfig }}>
