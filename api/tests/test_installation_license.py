@@ -465,6 +465,53 @@ def test_installation_id_and_domain_match_and_server_ip_is_not_trusted(monkeypat
         raise AssertionError("an unlicensed feature was accepted")
 
 
+def test_client_middleware_rejects_license_copied_to_another_installation(monkeypatch):
+    """Exercise installation ID binding at the protected-request boundary."""
+    from api.services import client_license_middleware as middleware
+    from api.services import installation_license
+
+    private_key, public_key = _key_material()
+    monkeypatch.setattr(middleware, "KODEWAVES_EDITION", "client")
+    monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", issue_license_token(_claims(ip_ranges=[]), private_key))
+    monkeypatch.setenv("KODEWAVES_LICENSE_PUBLIC_KEY", public_key)
+    monkeypatch.setenv("KODEWAVES_INSTALLATION_ID", "different-installation")
+    monkeypatch.setattr(installation_license, "get_installation_binding", lambda: "example.com")
+
+    async def owner_status_ok(_license):
+        return None
+
+    monkeypatch.setattr(middleware, "require_current_owner_status", owner_status_ok)
+
+    async def run():
+        called = False
+        messages = []
+
+        async def app(_scope, _receive, _send):
+            nonlocal called
+            called = True
+
+        async def send(message):
+            messages.append(message)
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        await middleware.ClientLicenseMiddleware(app)(
+            {
+                "type": "http", "method": "GET", "path": "/api/v1/workflow/21",
+                "headers": [(b"host", b"example.com")], "client": ("203.0.113.27", 1234),
+            },
+            receive,
+            send,
+        )
+        return called, messages
+
+    called, messages = asyncio.run(run())
+    assert not called
+    assert messages[0]["status"] == 402
+    assert "different installation" in json.loads(messages[-1]["body"])["detail"]
+
+
 def test_call_admission_reads_signed_features_and_limit(monkeypatch):
     from api.services import installation_license
     from api.services.call_concurrency import service as concurrency_service

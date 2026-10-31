@@ -73,4 +73,15 @@ describe('TemplateSelectorModal', () => {
     expect(card?.querySelector('.text-emerald-700')).toBeTruthy();
     expect(card?.querySelector('.bg-blue-500, .bg-blue-50, .text-blue-700')).toBeNull();
   });
+
+  it('keeps e-commerce template accents within the workspace green palette', () => {
+    render(<TemplateSelectorModal open onOpenChange={vi.fn()} />);
+
+    const orderSupport = screen.getByText('E-Commerce Order & Delivery Support');
+    const card = orderSupport.closest('[data-slot="card"]');
+
+    expect(card).toBeTruthy();
+    expect(card?.querySelector('.bg-emerald-500')).toBeTruthy();
+    expect(card?.querySelector('.bg-indigo-500, .bg-indigo-50, .text-indigo-700')).toBeNull();
+  });
 });

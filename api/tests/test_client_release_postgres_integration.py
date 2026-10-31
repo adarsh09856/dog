@@ -15,6 +15,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -28,12 +29,10 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from api.db.client_installations import (
-    acknowledge_client_integrity_alert,
     create_client_installation_record,
     get_client_binding_request,
     get_client_installation_record,
     issue_installation_enrollment,
-    list_client_integrity_alerts,
     record_client_installation_check,
     resolve_client_binding_request,
     renew_client_installation_record,
@@ -55,6 +54,7 @@ from api.services import client_creation_limits
 from api.services import installation_license
 from api.services.client_binding_requests import accept_binding_request, approve_binding_request
 from api.routes.admin import client_installation_check
+from api.routes.admin import client_installations as admin_client_installations
 from api.services.installation_identity import sign_binding_request, sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status_claims
 from api.tests.owner_signer_test_utils import mock_owner_signer
@@ -220,6 +220,10 @@ async def test_enrolled_identity_replay_and_integrity_alert_persist(monkeypatch)
         }
         app = FastAPI()
         app.include_router(client_installation_check.router)
+        app.include_router(admin_client_installations.router, prefix="/admin")
+        app.dependency_overrides[admin_client_installations.get_superuser] = (
+            lambda: SimpleNamespace(id=1, is_superuser=True)
+        )
         headers = {"Authorization": f"Bearer {token}"}
         bad_transport = httpx.ASGITransport(app=app, client=("198.51.100.7", 1234))
         async with httpx.AsyncClient(transport=bad_transport, base_url="http://owner") as http:
@@ -272,15 +276,22 @@ async def test_enrolled_identity_replay_and_integrity_alert_persist(monkeypatch)
             finding = {"reason": "modified_file", "component": ".next/server/app.js"}
             _, tampered_status = await check(False, finding)
             assert tampered_status["revoked"] is True
-            alerts = await list_client_integrity_alerts()
+            alerts_response = await http.get("/admin/client-installations/alerts")
+            assert alerts_response.status_code == 200, alerts_response.text
+            alerts = alerts_response.json()
             assert len(alerts) == 1
             assert alerts[0]["installation_id"] == installation_id
             assert alerts[0]["reason"] == "modified_file" and alerts[0]["component"] == finding["component"]
-            assert await acknowledge_client_integrity_alert(alerts[0]["id"], 1)
-            assert await list_client_integrity_alerts() == []
+            acknowledged = await http.post(
+                f"/admin/client-installations/alerts/{alerts[0]['id']}/acknowledge"
+            )
+            assert acknowledged.status_code == 200 and acknowledged.json() == {"acknowledged": True}
+            assert (await http.get("/admin/client-installations/alerts")).json() == []
             _, repeated_tamper_status = await check(False, finding)
             assert repeated_tamper_status["revoked"] is True
-            active_alerts = await list_client_integrity_alerts()
+            active_alerts_response = await http.get("/admin/client-installations/alerts")
+            assert active_alerts_response.status_code == 200, active_alerts_response.text
+            active_alerts = active_alerts_response.json()
             assert len(active_alerts) == 1
             assert active_alerts[0]["occurrence_count"] == 2
             assert active_alerts[0]["acknowledged_at"] is None

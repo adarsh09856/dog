@@ -49,26 +49,30 @@ async def test_first_phrase_releases_at_16_chars_on_a_safe_word_boundary():
 
 
 @pytest.mark.asyncio
-async def test_followup_phrase_releases_before_48_chars_to_reduce_audio_gaps():
+async def test_followup_phrase_waits_for_coherent_48_chars_to_reduce_audio_gaps():
     service = SpeachesLiveTTSService(
         api_key='test', base_url='http://localhost:8000/v1',
         settings=SpeachesTTSSettings(model='indic-vits-rasa-13', voice='HIN_F'),
     )
     aggregator = service._text_aggregator
     try:
-        assert aggregator._streaming_phrase_characters == 24
+        assert aggregator._streaming_phrase_characters == 48
         first = [part async for part in aggregator.aggregate("I can help you today, ")]
         assert [part.text for part in first] == ["I can help you today, "]
 
         followup = [
             part async for part in aggregator.aggregate("please tell me your name and number ")
         ]
+        assert followup == []
 
+        followup = [
+            part async for part in aggregator.aggregate("so I can find the right appointment for you ")
+        ]
         assert len(followup) == 1
-        assert followup[0].text == "please tell me your name "
+        assert followup[0].text == "please tell me your name and number so I can find "
         tail = await aggregator.flush()
         assert tail is not None
-        assert tail.text == "and number"
+        assert tail.text == "the right appointment for you"
     finally:
         await service._client.close()
 

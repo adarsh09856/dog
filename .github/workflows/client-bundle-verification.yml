@@ -93,7 +93,7 @@ jobs:
         run: |
           sudo setpriv --reuid 0 --regid 1234 --clear-groups "$(command -v python)" -m pytest --noconftest -p no:cacheprovider api/tests/test_client_recovery_archive.py api/tests/test_client_recovery_docker.py -q
       - name: Verify owner-route authorization
-        run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_deployment_edition.py -q
+        run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_deployment_edition.py api/tests/test_admin_client_installation_alert_routes.py -q
       - name: Verify storage metadata tenant isolation
         run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_s3_signed_url.py -q
       - name: Verify client startup failure handling

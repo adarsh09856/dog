@@ -47,6 +47,47 @@ describe("owner integrity alert refresh", () => {
     expect(mocks.apiFetch).toHaveBeenCalledTimes(6);
   });
 
+  it("acknowledges an integrity alert, hides it after refresh, and shows a reopened occurrence", async () => {
+    let alertState: "open" | "acknowledged" | "reopened" = "open";
+    const alert = (occurrence_count: number) => ({
+      id: 41, installation_id: "installation-alert-41", reason: "modified_file",
+      component: "api/app.py", expected_sha256: "a".repeat(64),
+      observed_sha256: "b".repeat(64), first_seen_at: "2026-10-26T00:00:00Z",
+      last_seen_at: "2026-10-26T00:00:00Z", occurrence_count,
+    });
+    mocks.apiFetch.mockImplementation((endpoint: string, options?: { method?: string }) => {
+      if (endpoint.endsWith("/alerts/41/acknowledge") && options?.method === "POST") {
+        alertState = "acknowledged";
+        return Promise.resolve({ acknowledged: true });
+      }
+      if (endpoint.endsWith("/alerts")) {
+        if (alertState === "open") return Promise.resolve([alert(1)]);
+        if (alertState === "reopened") return Promise.resolve([alert(2)]);
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<ClientInstallationsPage />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText(/1 check/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(mocks.apiFetch).toHaveBeenCalledWith(
+      "/admin/client-installations/alerts/41/acknowledge", { method: "POST" },
+    );
+    expect(screen.queryByText(/installation-alert-41/)).toBeNull();
+
+    alertState = "reopened";
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(screen.getByText(/installation-alert-41/)).toBeTruthy();
+    expect(screen.getByText(/2 checks/)).toBeTruthy();
+  });
+
   it("verifies requested domains before owner approval and displays the replacement token once", async () => {
     mocks.apiFetch.mockImplementation((endpoint: string, options?: { method?: string }) => {
       if (endpoint.includes("/binding-requests") && !options?.method) {
