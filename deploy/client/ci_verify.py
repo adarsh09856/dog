@@ -612,6 +612,10 @@ def _verify_compose_runtime(
         "CLIENT_POSTGRES_IMAGE": _CI_POSTGRES_IMAGE,
         "CLIENT_REDIS_IMAGE": _CI_REDIS_IMAGE,
         "CLIENT_MINIO_IMAGE": minio_image,
+        # Use a dedicated subnet so the owner peer can be reached through this
+        # internal bridge's host interface without exposing the smoke network
+        # to the runner's default Docker bridge.
+        "CLIENT_INTERNAL_SUBNET": "172.31.40.0/24",
         # This service is not started by the selected api/ui dependency graph.
         "CLIENT_COTURN_IMAGE": "registry.invalid/kodewaves/coturn-ci@sha256:" + "0" * 64,
         "CLIENT_CADDY_IMAGE": "registry.invalid/kodewaves/caddy-ci@sha256:" + "0" * 64,
@@ -671,7 +675,7 @@ def _verify_compose_runtime(
             "    environment:\n"
             "      SSL_CERT_FILE: /run/kodewaves-ci-owner/ca.pem\n"
             "    extra_hosts:\n"
-            "      - host.docker.internal:host-gateway\n"
+            "      - host.docker.internal:172.31.40.1\n"
             "    volumes:\n"
             f"      - type: bind\n        source: {owner.ca_file.resolve()}\n"
             "        target: /run/kodewaves-ci-owner/ca.pem\n        read_only: true\n"
