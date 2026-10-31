@@ -26,4 +26,7 @@ REGIONAL_SPOKEN_DIGITS = {
     "ਪੰਜ": "5", "ਛੇ": "6", "ਸੱਤ": "7", "ਅੱਠ": "8", "ਨੌਂ": "9",
     # Marathi forms that differ from the Hindi entries already in the parser.
     "दोन": "2", "पाच": "5", "सहा": "6", "नऊ": "9",
+    # Nepali standalone forms from Unicode CLDR's spellout-numbering rules.
+    # These differ enough from common Hindi spellings to merit explicit aliases.
+    "शुन्य": "0", "दुई": "2", "तिन": "3", "पाँच": "5", "छ": "6",
 }
