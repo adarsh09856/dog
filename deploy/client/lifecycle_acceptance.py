@@ -318,7 +318,10 @@ def _assert_compose_refs(compose_dir: Path, project: str, expected: dict[str, st
 
 
 def _psql(compose_dir: Path, project: str, sql: str) -> str:
-    return _compose(compose_dir, project, ["exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "postgres", "-At", "-c", sql])
+    return _compose(compose_dir, project, [
+        "exec", "-T", "postgres", "psql", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1",
+        "-U", "postgres", "-d", "postgres", "-c", sql,
+    ])
 
 
 def _assert_schema_head(compose_dir: Path, project: str, expected: str, phase: str) -> None:

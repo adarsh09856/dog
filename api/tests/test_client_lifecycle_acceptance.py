@@ -23,6 +23,19 @@ def test_tenant_workflow_check_requires_org_scoped_app_record(monkeypatch):
     assert "organizations" in calls[0] and "workflow_definition" in calls[0]
 
 
+def test_psql_seed_queries_suppress_non_result_output(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        lifecycle_acceptance, "_compose",
+        lambda compose_dir, project, args: calls.append(args) or "42",
+    )
+
+    result = lifecycle_acceptance._psql(Path("compose"), "project", "INSERT ... RETURNING id")
+
+    assert result == "42"
+    assert calls[0][3:7] == ["psql", "-q", "-A", "-t"]
+
+
 def test_temp_directory_cleanup_reports_residual_secrets(monkeypatch, tmp_path):
     target = tmp_path / "ephemeral-release-secrets"
     target.mkdir()
