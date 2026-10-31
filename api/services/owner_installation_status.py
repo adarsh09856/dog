@@ -89,7 +89,7 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
     initial_check = not _logged_initial_owner_check
     integrity_scan_started = time.monotonic()
     if initial_check:
-        logger.info("Initial owner status poll: release integrity scan started")
+        logger.debug("Initial owner status poll: release integrity scan started")
     try:
         # Hashing the runtime tree performs blocking filesystem IO. Keep the
         # periodic integrity check off the same event loop as live call audio.
@@ -129,7 +129,7 @@ async def poll_owner_status_once(redis_client: Redis, client: httpx.AsyncClient)
     nonce = secrets.token_urlsafe(32)
     owner_request_started = time.monotonic()
     if initial_check:
-        logger.info("Initial owner status poll: requesting signed status from owner")
+        logger.debug("Initial owner status poll: requesting signed status from owner")
     response = await client.post(
         _status_url(),
         json=owner_check_payload(
