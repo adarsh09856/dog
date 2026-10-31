@@ -1147,6 +1147,9 @@ def booking_contact_question(messages: list, contact: dict, state: dict) -> str 
         if isinstance(message, dict) and message.get("role") == "user"
         and isinstance(message.get("content"), str)
     ), "")
+    recalled_slot = pending_booking_slot_recall_reply(messages, state)
+    if recalled_slot:
+        return recalled_slot
     # A direct intake question only answers one intent. Keep multi-part caller
     # requests on the ordinary workflow path so the additional question or
     # action is not silently lost. Plain date/time conjunctions stay eligible.
@@ -1166,6 +1169,75 @@ def booking_contact_question(messages: list, contact: dict, state: dict) -> str 
         or booking_phone_date_question(messages, state)
         or booking_time_confirmation_question(messages, state)
         or booking_date_time_question(messages, state, contact)
+    )
+
+
+def pending_booking_slot_recall_reply(messages: list, state: dict) -> str | None:
+    """Recall the exact staged booking slot without asking the LLM or booking it."""
+    if not isinstance(messages, list) or not isinstance(state, dict):
+        return None
+    slot = state.get("booking_confirmation_slot")
+    if not isinstance(slot, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", slot
+    ):
+        return None
+
+    latest_index = next((
+        index for index in range(len(messages) - 1, -1, -1)
+        if isinstance(messages[index], dict) and messages[index].get("role") == "user"
+    ), None)
+    if latest_index is None:
+        return None
+    latest = messages[latest_index].get("content")
+    if not isinstance(latest, str) or not re.search(
+        r"\b(?:what|which)\s+(?:date|day|time)(?:\s+and\s+(?:date|day|time))?\s+did\s+(?:i|we)\s+(?:ask|say|give|tell|choose)\b"
+        r"|\b(?:what|which)\s+(?:date|day|time)(?:\s+and\s+(?:date|day|time))?\b.{0,55}\b(?:i|we)\s+(?:ask(?:ed)?|say|said|give|gave|tell|told|choose|chose|want(?:ed)?)\b"
+        r"|\b(?:when|what\s+time)\s+did\s+i\s+(?:ask|say|give|tell|choose)\b"
+        r"|(?:कौन\s+सी\s+तारीख|किस\s+तारीख|कौन\s+सा\s+समय|किस\s+समय).{0,45}(?:मैंने|मैं\s+ने).{0,20}(?:बताया|कहा|माँगा|मांगा|चुना)"
+        r"|(?:मैंने|मैं\s+ने).{0,30}(?:कौन\s+सी\s+तारीख|किस\s+तारीख|कौन\s+सा\s+समय|किस\s+समय).{0,20}(?:बताया|कहा|माँगा|मांगा|चुना)",
+        latest,
+        re.IGNORECASE,
+    ):
+        return None
+
+    previous_assistant = next((
+        message.get("content") for message in reversed(messages[:latest_index])
+        if isinstance(message, dict) and message.get("role") == "assistant"
+    ), None)
+    if not isinstance(previous_assistant, str) or not re.search(
+        r"(?:Should I book the appointment|बुकिंग कर दूँ|क्या बुक कर दूँ)",
+        previous_assistant,
+        re.IGNORECASE,
+    ):
+        return None
+
+    try:
+        parsed = datetime.strptime(slot, "%Y-%m-%dT%H:%M")
+    except ValueError:
+        return None
+    if parsed.strftime("%Y-%m-%d") != state.get("booking_time_question_date"):
+        return None
+
+    hour24 = parsed.hour
+    hour12 = hour24 % 12 or 12
+    minute = parsed.minute
+    hindi = state.get("reply_language") == "Hindi" or bool(
+        re.search(r"[\u0900-\u097f]", latest)
+    )
+    if hindi:
+        month = (
+            "जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून",
+            "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर",
+        )[parsed.month - 1]
+        period = "सुबह" if hour24 < 12 else "दोपहर" if hour24 < 17 else "शाम"
+        return (
+            f"आपने {parsed.day} {month} {parsed.year} को "
+            f"{period} {hour12}:{minute:02d} बजे (IST) कहा था। अभी बुकिंग नहीं की है।"
+        )
+    return (
+        f"You asked for {parsed.day} {parsed.strftime('%B')} {parsed.year} at "
+        f"{hour12}:{minute:02d} {'PM' if hour24 >= 12 else 'AM'} IST. "
+        "I haven't booked it."
     )
 
 
