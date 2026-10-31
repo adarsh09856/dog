@@ -35,14 +35,48 @@ describe("owner plan configuration", () => {
     fireEvent.click(screen.getByRole("switch", { name: "CRM access" }));
     fireEvent.click(screen.getByRole("switch", { name: "Widget access" }));
     fireEvent.click(screen.getByRole("switch", { name: "Campaigns access" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Show in public pricing and self-service checkout" }));
+    fireEvent.change(screen.getByLabelText("Monthly price (INR)"), { target: { value: "10" } });
+    fireEvent.click(screen.getByRole("switch", { name: "Active (available for purchase and public pricing)" }));
     fireEvent.click(screen.getByRole("switch", { name: "Default fallback plan" }));
     fireEvent.click(screen.getByRole("button", { name: "Save Plan" }));
     await waitFor(() => expect(mocks.createPlan).toHaveBeenCalledWith(expect.objectContaining({
       included_minutes: 0, max_agents: 0, max_concurrent_calls: 0,
       has_crm_access: false, has_widget_access: false, is_default: true,
-      has_campaigns_access: false,
+      has_campaigns_access: false, monthly_price_cents: 1000, is_active: true,
       is_public: false,
+    })));
+  });
+
+  it("keeps a new plan inactive and private until a positive price is configured", async () => {
+    render(<AdminPlansPage />);
+    await screen.findByText(/No plans created yet/);
+    fireEvent.click(screen.getByRole("button", { name: "Create Plan" }));
+
+    expect(screen.getByRole("switch", { name: "Active (available for purchase and public pricing)" }).getAttribute("data-state")).toBe("unchecked");
+    expect(screen.getByRole("switch", { name: "Show in public pricing and self-service checkout" }).getAttribute("data-state")).toBe("unchecked");
+    expect(screen.getByLabelText("Monthly price (INR)")).toHaveProperty("value", "0.00");
+
+    fireEvent.click(screen.getByRole("switch", { name: "Active (available for purchase and public pricing)" }));
+    expect(screen.getByRole("alert").textContent).toMatch(/positive monthly or annual price/);
+    expect(screen.getByRole("button", { name: "Save Plan" })).toHaveProperty("disabled", true);
+
+    fireEvent.change(screen.getByLabelText("Monthly price (INR)"), { target: { value: "10" } });
+    expect(screen.getByRole("button", { name: "Save Plan" })).toHaveProperty("disabled", false);
+  });
+
+  it("lets the owner explicitly confirm a free plan", async () => {
+    render(<AdminPlansPage />);
+    await screen.findByText(/No plans created yet/);
+    fireEvent.click(screen.getByRole("button", { name: "Create Plan" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Show in public pricing and self-service checkout" }));
+    expect(screen.getByRole("button", { name: "Save Plan" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm this as a free plan" }));
+    expect(screen.getByRole("button", { name: "Save Plan" })).toHaveProperty("disabled", false);
+    fireEvent.click(screen.getByRole("button", { name: "Save Plan" }));
+
+    await waitFor(() => expect(mocks.createPlan).toHaveBeenCalledWith(expect.objectContaining({
+      monthly_price_cents: 0, annual_price_cents: 0, is_active: false, is_public: true,
     })));
   });
 
@@ -58,8 +92,7 @@ describe("owner plan configuration", () => {
 
     render(<AdminPlansPage />);
 
-    expect(await screen.findByRole("heading", { name: "Plan governance" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Growth Pro" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Growth Pro" })).toBeTruthy();
     expect(screen.getByText("Monthly · 30 days").parentElement?.textContent).toMatch(/₹4,999/);
     expect(screen.getByText("Annual · 365 days").parentElement?.textContent).toMatch(/₹49,900/);
     expect(screen.queryByText("Overage / minute")).toBeNull();

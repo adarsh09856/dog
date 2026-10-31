@@ -1,0 +1,79 @@
+name: Client release lifecycle acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      prior_commit:
+        description: Full Git commit SHA of the prior client release source (must be an ancestor)
+        required: true
+        type: string
+      minio_image:
+        description: Synthetic MinIO image reference pinned by sha256 digest
+        required: true
+        type: string
+      coturn_image:
+        description: Synthetic Coturn image reference pinned by sha256 digest
+        required: true
+        type: string
+      caddy_image:
+        description: Caddy image reference pinned by sha256 digest (syntax check only)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-release-lifecycle-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  lifecycle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.prior_commit }}
+          fetch-depth: 0
+          path: prior-source
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install isolated lifecycle tooling
+        run: python -m pip install cryptography 'sqlalchemy==2.0.43' 'PyYAML==6.0.2'
+      - name: Check immutable-reference and lifecycle-order guards
+        run: python deploy/client/lifecycle_acceptance.py --self-test
+      - name: Validate immutable inputs and run disposable upgrade/rollback
+        env:
+          PRIOR_COMMIT: ${{ inputs.prior_commit }}
+          MINIO_IMAGE: ${{ inputs.minio_image }}
+          COTURN_IMAGE: ${{ inputs.coturn_image }}
+          CADDY_IMAGE: ${{ inputs.caddy_image }}
+          CANDIDATE_COMMIT: ${{ github.sha }}
+          LIFECYCLE_REPORT: ${{ runner.temp }}/client-release-lifecycle.json
+        run: >-
+          python deploy/client/lifecycle_acceptance.py
+          --prior-commit "$PRIOR_COMMIT"
+          --prior-source "$GITHUB_WORKSPACE/prior-source"
+          --candidate-commit "$CANDIDATE_COMMIT"
+          --minio-image "$MINIO_IMAGE"
+          --coturn-image "$COTURN_IMAGE"
+          --caddy-image "$CADDY_IMAGE"
+          --report "$LIFECYCLE_REPORT"
+      - name: Upload redacted lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-release-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/client-release-lifecycle.json
+          if-no-files-found: warn
+          retention-days: 7

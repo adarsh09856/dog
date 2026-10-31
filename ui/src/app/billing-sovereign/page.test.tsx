@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   createOrder: vi.fn(),
   getConfig: vi.fn(),
   verifyPayment: vi.fn(),
+  redeemFreePackage: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -29,6 +30,7 @@ vi.mock("@/lib/kodewavesApi", () => ({
     createOrder: mocks.createOrder,
     getConfig: mocks.getConfig,
     verifyPayment: mocks.verifyPayment,
+    redeemFreePackage: mocks.redeemFreePackage,
   },
 }));
 
@@ -39,6 +41,7 @@ describe("manual plan renewal", () => {
     mocks.getPublicCreditOffers.mockResolvedValue([]);
     mocks.getConfig.mockResolvedValue({ razorpay_enabled: false, stripe_enabled: false, default_currency: "INR" });
     mocks.verifyPayment.mockResolvedValue({ message: "Payment verified" });
+    mocks.redeemFreePackage.mockResolvedValue({ message: "Minutes added", minutes_added: 20, new_wallet_balance: 20, success: true, already_redeemed: false });
   });
 
   afterEach(() => {
@@ -161,6 +164,7 @@ describe("manual plan renewal", () => {
     mocks.verifyPayment.mockResolvedValue({ message: "500 minutes credited" });
     window.history.replaceState({}, "", "/billing-sovereign?credit_package=bundle-500");
     vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.spyOn(window, "alert").mockImplementation(() => undefined);
     let checkoutHandler: ((result: {
       razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string;
     }) => Promise<void>) | undefined;
@@ -191,5 +195,31 @@ describe("manual plan renewal", () => {
       gateway: "razorpay", order_id: "order-123", payment_id: "payment-456",
       signature: "signed-callback", package_id: "bundle-500",
     });
+  });
+
+  it("redeems a free credit package without opening payment checkout", async () => {
+    mocks.getConfig.mockClear();
+    mocks.createOrder.mockClear();
+    mocks.redeemFreePackage.mockClear();
+    mocks.getWallet.mockResolvedValue({
+      plan_code: "starter", plan_name: "Starter", included_minutes: 100,
+      credit_balance_minutes: 100, bonus_minutes: 0, total_available_minutes: 100,
+      is_frozen: false,
+    });
+    mocks.getLedger.mockResolvedValue([]);
+    mocks.getPlans.mockResolvedValue([]);
+    mocks.getPublicCreditOffers.mockResolvedValue([{
+      id: "free-20", name: "Welcome minutes", minutes: 20,
+      bonus_minutes: 5, price_cents: 0, currency: "INR",
+    }]);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.spyOn(window, "alert").mockImplementation(() => undefined);
+
+    render(<SovereignBillingPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Redeem free minutes" }));
+    await waitFor(() => expect(mocks.redeemFreePackage).toHaveBeenCalledWith("free-20"));
+    expect(mocks.getConfig).not.toHaveBeenCalled();
+    expect(mocks.createOrder).not.toHaveBeenCalled();
   });
 });

@@ -241,6 +241,73 @@ async def test_private_paid_plan_cannot_create_a_self_service_checkout(monkeypat
     assert error.value.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_free_credit_package_redemption_is_one_time_and_org_scoped(monkeypatch):
+    package_id = __import__("uuid").uuid4()
+    package = SimpleNamespace(
+        id=package_id, name="Trial minutes", is_active=True, price_cents=0,
+        minutes=25, bonus_minutes=5,
+    )
+
+    class Result:
+        def scalar_one_or_none(self):
+            return package
+
+    class Session:
+        async def execute(self, _statement):
+            return Result()
+
+    @asynccontextmanager
+    async def get_session():
+        yield Session()
+
+    credit = AsyncMock(side_effect=[
+        (SimpleNamespace(credit_balance_minutes=30), True),
+        (SimpleNamespace(credit_balance_minutes=30), False),
+    ])
+    monkeypatch.setattr(payments.kodewaves_db_client, "get_session", get_session)
+    monkeypatch.setattr(payments.kodewaves_db_client, "add_minutes_once", credit)
+    user = SimpleNamespace(selected_organization_id=42)
+    request = payments.RedeemFreePackageRequest(package_id=str(package_id))
+
+    first = await payments.redeem_free_package(request, user)
+    replay = await payments.redeem_free_package(request, user)
+
+    assert first.minutes_added == 30
+    assert first.already_redeemed is False
+    assert replay.minutes_added == 0
+    assert replay.already_redeemed is True
+    assert all(call.kwargs["organization_id"] == 42 for call in credit.await_args_list)
+    assert credit.await_args_list[0].kwargs["reference_id"] == f"free-credit-package:{package_id}"
+
+
+@pytest.mark.asyncio
+async def test_free_credit_package_redemption_rejects_paid_package(monkeypatch):
+    package = SimpleNamespace(
+        id=__import__("uuid").uuid4(), name="Paid minutes", is_active=True,
+        price_cents=100, minutes=25, bonus_minutes=0,
+    )
+
+    class Session:
+        async def execute(self, _statement):
+            return SimpleNamespace(scalar_one_or_none=lambda: package)
+
+    @asynccontextmanager
+    async def get_session():
+        yield Session()
+
+    credit = AsyncMock()
+    monkeypatch.setattr(payments.kodewaves_db_client, "get_session", get_session)
+    monkeypatch.setattr(payments.kodewaves_db_client, "add_minutes_once", credit)
+    with pytest.raises(HTTPException) as error:
+        await payments.redeem_free_package(
+            payments.RedeemFreePackageRequest(package_id=str(package.id)),
+            SimpleNamespace(selected_organization_id=42),
+        )
+    assert error.value.status_code == 400
+    credit.assert_not_awaited()
+
+
 def test_payment_webhooks_reject_missing_signing_secrets(monkeypatch):
     monkeypatch.setattr(
         payments,

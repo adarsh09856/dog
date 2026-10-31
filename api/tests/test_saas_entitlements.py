@@ -273,6 +273,58 @@ async def test_client_edition_uses_license_middleware_instead_of_saas_plan(monke
 
 
 @pytest.mark.asyncio
+async def test_saas_feature_check_denies_missing_selected_organization(monkeypatch):
+    from api.db.kodewaves_client import kodewaves_db_client
+    from api.services import saas_entitlements as entitlements
+
+    monkeypatch.setattr(entitlements, "KODEWAVES_EDITION", "saas")
+    get_setting = AsyncMock()
+    plan_lookup = AsyncMock()
+    monkeypatch.setattr(kodewaves_db_client, "get_setting", get_setting)
+    monkeypatch.setattr(entitlements, "get_org_saas_plan", plan_lookup)
+
+    assert await entitlements.is_saas_feature_allowed(None, "crm") is False
+    with pytest.raises(HTTPException) as error:
+        await entitlements.enforce_saas_feature(None, "crm")
+
+    assert error.value.status_code == 403
+    assert "organization" in error.value.detail.lower()
+    get_setting.assert_not_awaited()
+    plan_lookup.assert_not_awaited()
+
+
+def test_saas_http_feature_guard_rejects_user_without_selected_organization(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from api.routes import crm
+    from api.services import saas_entitlements as entitlements
+    from api.services.auth.depends import get_user
+
+    monkeypatch.setattr(entitlements, "KODEWAVES_EDITION", "saas")
+    app = FastAPI()
+    app.include_router(crm.router)
+    app.dependency_overrides[get_user] = lambda: SimpleNamespace(
+        id=7, selected_organization_id=None
+    )
+
+    response = TestClient(app).get("/crm/contacts")
+
+    assert response.status_code == 403
+    assert "organization" in response.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_client_edition_allows_license_middleware_to_authorize_missing_org(monkeypatch):
+    from api.services import saas_entitlements as entitlements
+
+    monkeypatch.setattr(entitlements, "KODEWAVES_EDITION", "client")
+
+    assert await entitlements.is_saas_feature_allowed(None, "crm") is True
+    await entitlements.enforce_saas_feature(None, "crm")
+
+
+@pytest.mark.asyncio
 async def test_org_call_limit_is_capped_by_active_plan(monkeypatch):
     from api.services.call_concurrency import service as service_module
     from api.db.kodewaves_client import kodewaves_db_client
@@ -343,3 +395,27 @@ async def test_agent_creation_is_denied_at_organization_plan_limit(monkeypatch):
     assert exc_info.value.status_code == 403
     assert "max_agents" in exc_info.value.detail
     assert session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_saas_agent_creation_without_organization_fails_closed(monkeypatch):
+    from api.db.models import WorkflowModel
+    from api.services import client_creation_limits as limits_module
+
+    monkeypatch.setattr(limits_module, "KODEWAVES_EDITION", "saas")
+    plan_lookup = AsyncMock()
+    monkeypatch.setattr(limits_module, "get_org_saas_limit", plan_lookup)
+    session = SimpleNamespace(execute=AsyncMock())
+
+    with pytest.raises(HTTPException) as error:
+        await limits_module.enforce_saas_creation_limit(
+            session,
+            organization_id=None,
+            limit_name="max_agents",
+            model=WorkflowModel,
+        )
+
+    assert error.value.status_code == 403
+    assert "organization" in error.value.detail.lower()
+    session.execute.assert_not_awaited()
+    plan_lookup.assert_not_awaited()

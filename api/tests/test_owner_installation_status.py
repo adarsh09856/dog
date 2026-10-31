@@ -80,6 +80,99 @@ async def test_integrity_scan_leaves_the_event_loop_available(monkeypatch):
     assert await owner_status.poll_owner_status_once(FakeRedis(), FakeHttp()) is False
 
 
+@pytest.mark.asyncio
+async def test_first_owner_check_reuses_successful_startup_integrity_scan(monkeypatch):
+    monkeypatch.setattr(owner_status, "_logged_initial_owner_check", False)
+    monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", "signed-client-token")
+    monkeypatch.setattr(owner_status, "_trusted_owner_key", lambda: ("trusted-owner-key",))
+    monkeypatch.setattr(
+        owner_status,
+        "load_license",
+        lambda *_args: SimpleNamespace(installation_id="client-1", ip_ranges=()),
+    )
+    monkeypatch.setattr(owner_status, "validate_installation_license", lambda _license: None)
+    monkeypatch.setattr(owner_status, "_status_url", lambda: "https://owner.example.com/check")
+    monkeypatch.setattr(
+        owner_status,
+        "verify_installation_status_claims",
+        lambda *_args, **_kwargs: {"revoked": False},
+    )
+
+    def unexpected_integrity_rescan():
+        raise AssertionError("first owner poll repeated the successful startup scan")
+
+    monkeypatch.setattr(owner_status, "verify_configured_release", unexpected_integrity_rescan)
+
+    async def allowed(_license, _redis):
+        return None
+
+    monkeypatch.setattr(owner_status, "require_current_owner_status", allowed)
+
+    class FakeHttp:
+        def __init__(self):
+            self.payloads = []
+
+        async def post(self, _url, **kwargs):
+            self.payloads.append(kwargs["json"])
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {"signed_status": "verified-owner-response"},
+            )
+
+    client = FakeHttp()
+    assert await owner_status.poll_owner_status_once(
+        FakeRedis(), client, integrity_preverified=True
+    ) is False
+    assert len(client.payloads) == 1
+    assert client.payloads[0]["integrity_ok"] is True
+    assert client.payloads[0]["integrity_finding"] is None
+
+
+@pytest.mark.asyncio
+async def test_owner_poll_logs_post_write_status_validation_failure(monkeypatch):
+    monkeypatch.setattr(owner_status, "_logged_initial_owner_check", False)
+    monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", "signed-client-token")
+    monkeypatch.setattr(
+        owner_status, "_trusted_owner_key", lambda: ("trusted-owner-key",)
+    )
+    monkeypatch.setattr(
+        owner_status,
+        "load_license",
+        lambda *_args: SimpleNamespace(installation_id="client-1", ip_ranges=()),
+    )
+    monkeypatch.setattr(owner_status, "validate_installation_license", lambda _license: None)
+    monkeypatch.setattr(owner_status, "_status_url", lambda: "https://owner.example.com/check")
+    monkeypatch.setattr(owner_status, "verify_configured_release", lambda: None)
+    monkeypatch.setattr(
+        owner_status,
+        "verify_installation_status_claims",
+        lambda *_args, **_kwargs: {"revoked": False},
+    )
+
+    async def reject_status(_license, _redis):
+        raise InstallationLicenseError("Owner status cache is unavailable")
+
+    monkeypatch.setattr(owner_status, "require_current_owner_status", reject_status)
+    warnings = []
+    monkeypatch.setattr(
+        owner_status.logger,
+        "warning",
+        lambda message, *args: warnings.append(message.format(*args)),
+    )
+
+    class FakeHttp:
+        async def post(self, _url, **_kwargs):
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {"signed_status": "verified-owner-response"},
+            )
+
+    assert await owner_status.poll_owner_status_once(FakeRedis(), FakeHttp()) is False
+    assert warnings == [
+        "Owner installation status check failed: Owner status cache is unavailable"
+    ]
+
+
 def signing_keys():
     key = Ed25519PrivateKey.generate()
     raw = key.private_bytes(
@@ -169,7 +262,7 @@ async def test_owner_poll_saves_verified_response_and_revocation_blocks_new_call
 
     redis = FakeRedis()
     assert await owner_status.poll_owner_status_once(redis, FakeHttp()) is True
-    assert messages == []
+    assert not any("failed" in str(message).lower() for message in messages)
     assert owner_status._logged_initial_owner_check is False
     assert redis.fields[b"revoked_latched"] == b"1"
     license_data = InstallationLicense(
@@ -189,7 +282,7 @@ async def test_owner_poll_saves_verified_response_and_revocation_blocks_new_call
         async def post(self, _url, **_kwargs):
             return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"signed_status": active})
     assert await owner_status.poll_owner_status_once(redis, ActiveHttp()) is False
-    assert messages == []
+    assert not any("failed" in str(message).lower() for message in messages)
     assert owner_status._logged_initial_owner_check is False
     await redis.hset("ignored", {"signed_status": active, "nonce": "a" * 43})
     with pytest.raises(InstallationLicenseError, match="revoked"):

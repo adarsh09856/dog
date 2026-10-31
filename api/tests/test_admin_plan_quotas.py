@@ -26,7 +26,7 @@ async def test_plan_write_preserves_zero_minutes_and_resource_quotas(monkeypatch
         yield session
 
     monkeypatch.setattr(saas_plan_catalog.kodewaves_db_client, "get_session", get_session)
-    payload = plans.PlanItem(name="Restricted", code="restricted", included_minutes=0,
+    payload = plans.PlanItem(name="Restricted", code="restricted", monthly_price_cents=100, included_minutes=0,
                              max_agents=0, max_concurrent_calls=0, is_public=False,
                              has_campaigns_access=False)
     if operation == "create":
@@ -90,6 +90,54 @@ async def test_inactive_default_is_rejected_before_database_changes(monkeypatch)
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as rejected:
-        await plans.upsert_plan(plans.PlanItem(name="Inactive", code="inactive", is_active=False, is_default=True))
+        await plans.upsert_plan(plans.PlanItem(name="Inactive", code="inactive", is_active=False, is_public=False, is_default=True))
     assert rejected.value.status_code == 422
     get_session.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_new_plan_cannot_be_activated_or_published_without_an_explicit_price(monkeypatch):
+    get_session = AsyncMock(side_effect=AssertionError("Invalid plan opened a transaction"))
+    monkeypatch.setattr(saas_plan_catalog.kodewaves_db_client, "get_session", get_session)
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as rejected:
+        await plans.upsert_plan(plans.PlanItem(
+            name="Unpriced", code="unpriced", is_active=False, is_public=True,
+        ))
+    assert rejected.value.status_code == 422
+    get_session.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_new_explicitly_free_plan_can_be_published(monkeypatch):
+    record = SimpleNamespace(id="free-plan", name="Free")
+    save_plan = AsyncMock(return_value=record)
+    monkeypatch.setattr(saas_plan_catalog, "save_plan", save_plan)
+
+    await plans.upsert_plan(plans.PlanItem(
+        name="Free", code="free", monthly_price_cents=0,
+        annual_price_cents=0, is_active=True, is_public=True,
+    ))
+
+    assert save_plan.await_args.args[0]["monthly_price_cents"] == 0
+
+
+@pytest.mark.asyncio
+async def test_plan_edit_keeps_existing_zero_price_behavior(monkeypatch):
+    record = SimpleNamespace(id="00000000-0000-0000-0000-000000000007")
+    session = SimpleNamespace(
+        execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: record)),
+        commit=AsyncMock(), refresh=AsyncMock(),
+    )
+
+    @asynccontextmanager
+    async def get_session():
+        yield session
+
+    monkeypatch.setattr(saas_plan_catalog.kodewaves_db_client, "get_session", get_session)
+    await plans.update_plan(record.id, plans.PlanItem(
+        name="Existing Free", code="existing-free", monthly_price_cents=0,
+        annual_price_cents=0, is_active=True, is_public=True,
+    ), _user=SimpleNamespace(id=1))
+    session.commit.assert_awaited_once()

@@ -121,6 +121,22 @@ describe("public pricing", () => {
     expect(screen.queryByText("$1,23,456.78")).toBeNull();
   });
 
+  it("shows a configured free credit package as redeemable", async () => {
+    mocks.getPublicPlans.mockResolvedValue([]);
+    mocks.getPublicCreditOffers.mockResolvedValue([{
+      id: "welcome-20", name: "Welcome minutes", minutes: 20,
+      bonus_minutes: 0, price_cents: 0, currency: "INR", is_popular: false,
+    }]);
+
+    render(<PricingPage />);
+
+    expect(await screen.findByText("Welcome minutes")).toBeTruthy();
+    expect(screen.getByText("Free")).toBeTruthy();
+    expect(screen.getByText(/One-time redemption per organization/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Redeem free minutes/ }).getAttribute("href"))
+      .toBe("/auth/login?credit_package=welcome-20");
+  });
+
   it("shows an annual-only offer as annual and preserves that cycle into sign-in", async () => {
     mocks.getPublicPlans.mockResolvedValue([{
       id: "annual",

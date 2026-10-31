@@ -135,6 +135,18 @@ jobs:
           PY
           fi
           exit "$test_status"
+      - name: Verify SaaS plans, quotas, pricing and model catalog health
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test
+          REDIS_URL: redis://127.0.0.1:1/15
+        run: >-
+          python -m pytest
+          api/tests/test_saas_entitlements.py
+          api/tests/test_admin_plan_quotas.py
+          api/tests/test_public_pricing_normalization.py
+          api/tests/test_admin_credit_package_activation_price.py
+          api/tests/test_overview_model_catalog_health.py -q
       - name: Verify signed owner status and worker entitlements
         run: ENVIRONMENT=test DATABASE_URL=postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test REDIS_URL=redis://127.0.0.1:1/15 python -m pytest --noconftest api/tests/test_owner_installation_status.py api/tests/test_client_worker_entitlements.py -q
 
@@ -159,12 +171,20 @@ jobs:
           npm test -- --config vitest.panel-check.mts --run
           'src/app/handler/[...stack]/stack-theme.test.ts'
           src/app/admin/client-installations/page.test.tsx
+          src/app/admin/plans/page.test.tsx
+          src/app/admin/credit-packages/page.test.tsx
           src/app/admin/settings/page.test.tsx
           src/app/settings/page.test.tsx
           src/app/workflow/AgentLibraryActions.test.tsx
           src/app/page.test.tsx
+          src/app/platform/page.test.tsx
+          src/app/deployment/page.test.tsx
           src/app/pricing/page.test.tsx
+          src/app/billing-sovereign/page.test.tsx
+          src/app/prompt-templates/page.test.tsx
+          src/app/campaigns/page.test.tsx
           src/app/widgets/page.test.tsx
+          src/components/BrandLogo.test.tsx
           src/components/BrandTagline.test.tsx
           src/components/telephony/SipConnectivityCard.test.tsx
           src/components/layout/AppLayout.test.tsx
