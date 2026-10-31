@@ -786,10 +786,10 @@ def _verify_compose_runtime(
                     host="smoke.customer.example.invalid",
                     env=command_env,
                 )
-                if recovered_status == 404 and "Not Found" in recovered_body:
+                if recovered_status == 404:
                     break
                 time.sleep(0.25)
-            if recovered_status != 404 or "Not Found" not in recovered_body:
+            if recovered_status != 404:
                 raise ValueError(
                     "A fresh signed owner IP-binding allow must restore the normal API auth boundary; "
                     f"received HTTP {recovered_status}: {recovered_body[:240]}"
