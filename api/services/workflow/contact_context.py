@@ -781,6 +781,10 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
                 and new_booking_requested(message["content"])
                 for message in messages[:latest_index]
             )
+            # The reply below already advances the booking to its next detail.
+            # Clear this one-shot marker so the next caller turn is parsed as
+            # their date instead of triggering another generic date question.
+            state.pop("phone_just_completed", None)
             if booking_requested:
                 if reply_in_english:
                     return "Thanks. What date and time would you prefer for the booking?"
