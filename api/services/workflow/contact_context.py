@@ -1205,7 +1205,8 @@ def pending_booking_slot_recall_reply(messages: list, state: dict) -> str | None
         if isinstance(message, dict) and message.get("role") == "assistant"
     ), None)
     if not isinstance(previous_assistant, str) or not re.search(
-        r"(?:Should I book the appointment|बुकिंग कर दूँ|क्या बुक कर दूँ)",
+        r"(?:Should I book the appointment|बुकिंग कर दूँ|क्या बुक कर दूँ|"
+        r"I haven't booked it|अभी बुकिंग नहीं की है)",
         previous_assistant,
         re.IGNORECASE,
     ):
@@ -1221,8 +1222,15 @@ def pending_booking_slot_recall_reply(messages: list, state: dict) -> str | None
     hour24 = parsed.hour
     hour12 = hour24 % 12 or 12
     minute = parsed.minute
-    hindi = state.get("reply_language") == "Hindi" or bool(
-        re.search(r"[\u0900-\u097f]", latest)
+    explicit_english_switch = bool(re.search(
+        r"\b(?:switch|speak|reply|respond|answer|continue|talk)\s+"
+        r"(?:back\s+)?(?:to|in)\s+English\b|\bEnglish\s+please\b",
+        latest,
+        re.IGNORECASE,
+    ))
+    hindi = not explicit_english_switch and (
+        state.get("reply_language") == "Hindi"
+        or bool(re.search(r"[\u0900-\u097f]", latest))
     )
     if hindi:
         month = (

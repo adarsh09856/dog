@@ -128,20 +128,26 @@ def _validate_nested_tar(stream, outer_name: str) -> None:
                 raise ValueError(f"Nested volume archive links/devices are unsupported: {name!r}")
 
 
-def _apply_archive_owner_mode(path: Path, member: tarfile.TarInfo) -> None:
+def _apply_archive_owner_mode(
+    path: Path, member: tarfile.TarInfo, *, preserve_ownership: bool = True,
+) -> None:
     if os.name == "nt":
         path.chmod(member.mode & 0o777)
         return
-    if os.geteuid() == 0:
+    if preserve_ownership and os.geteuid() == 0:
         os.chown(path, member.uid, member.gid)
-    elif member.uid != os.getuid() or member.gid not in {*os.getgroups(), os.getgid()}:
+    elif preserve_ownership and (
+        member.uid != os.getuid() or member.gid not in {*os.getgroups(), os.getgid()}
+    ):
         raise ValueError(
             "Staged volume ownership requires root privileges; rerun restore with an operator account allowed to preserve UID/GID"
         )
     path.chmod(member.mode & 0o777)
 
 
-def _extract_nested_volume(stream, target_root: Path, outer_name: str) -> None:
+def _extract_nested_volume(
+    stream, target_root: Path, outer_name: str, *, preserve_ownership: bool = True,
+) -> None:
     directories: list[tuple[Path, tarfile.TarInfo]] = []
     seen: set[str] = set()
     try:
@@ -171,9 +177,9 @@ def _extract_nested_volume(stream, target_root: Path, outer_name: str) -> None:
                     raise ValueError(f"Unable to read nested volume file: {name}")
                 with target.open("xb") as destination:
                     shutil.copyfileobj(source, destination, length=HASH_CHUNK_SIZE)
-                _apply_archive_owner_mode(target, member)
+                _apply_archive_owner_mode(target, member, preserve_ownership=preserve_ownership)
         for directory, member in reversed(directories):
-            _apply_archive_owner_mode(directory, member)
+            _apply_archive_owner_mode(directory, member, preserve_ownership=preserve_ownership)
     except (OSError, tarfile.TarError) as exc:
         raise ValueError(f"Unable to stage nested {outer_name} data") from exc
 
@@ -979,7 +985,14 @@ def _restore_to_docker_volumes_locked(
     stage_parent = compose_dir / ".client-recovery-stage"
     stage_parent.mkdir(mode=0o700, exist_ok=True)
     stage_dir = stage_parent / f"restore-{uuid.uuid4().hex}"
-    summary = restore_to_directory(archive_path, stage_dir, release_public_key=release_public_key)
+    # The staged tree is only an inspection/source mount. The authoritative
+    # UID/GID metadata remains inside each nested tar and Docker extracts those
+    # archives as root into the destination volumes with --numeric-owner.
+    # Avoid requiring host-root merely to stage these intermediate files.
+    summary = restore_to_directory(
+        archive_path, stage_dir, release_public_key=release_public_key,
+        preserve_volume_ownership=False,
+    )
     release_rollback_id = uuid.uuid4().hex[:12]
     rollback_manifest_path = compose_dir / f".client-release-rollback-{release_rollback_id}.json"
     try:
@@ -1425,6 +1438,7 @@ def validate_archive(path: Path, *, release_public_key: Path) -> dict[str, objec
 
 def restore_to_directory(
     archive_path: Path, destination: Path, *, release_public_key: Path,
+    preserve_volume_ownership: bool = True,
 ) -> dict[str, object]:
     """Stage a validated recovery set to a new directory; never touch live volumes."""
     if destination.exists():
@@ -1496,7 +1510,10 @@ def restore_to_directory(
                         data_directory = target.parent / ("postgres-data" if name.endswith("postgres.tar") else "minio-data")
                         data_directory.mkdir(mode=0o700)
                         with target.open("rb") as nested_stream:
-                            _extract_nested_volume(nested_stream, data_directory, name)
+                            _extract_nested_volume(
+                                nested_stream, data_directory, name,
+                                preserve_ownership=preserve_volume_ownership,
+                            )
                     else:
                         target.chmod(0o644)
             if seen != set(expected) | {"SHA256SUMS"}:
