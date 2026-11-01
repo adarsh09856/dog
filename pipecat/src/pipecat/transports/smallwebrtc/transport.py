@@ -35,6 +35,7 @@ from pipecat.frames.frames import (
     OutputTransportMessageUrgentFrame,
     SpriteFrame,
     StartFrame,
+    TTSStoppedFrame,
     UserImageRawFrame,
     UserImageRequestFrame,
 )
