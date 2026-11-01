@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from loguru import logger
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, desc, func, select, update
 from sqlalchemy.orm import selectinload
 
 from api.db.base_client import BaseDBClient
@@ -161,6 +161,7 @@ class KnowledgeBaseClient(BaseDBClient):
         processing_status: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
+        search: Optional[str] = None,
     ) -> List[KnowledgeBaseDocumentModel]:
         """Get all documents for an organization.
 
@@ -183,15 +184,45 @@ class KnowledgeBaseClient(BaseDBClient):
                 query = query.where(
                     KnowledgeBaseDocumentModel.processing_status == processing_status
                 )
+            normalized_search = (search or "").strip()
+            if normalized_search:
+                query = query.where(
+                    KnowledgeBaseDocumentModel.filename.ilike(f"%{normalized_search}%")
+                )
 
             query = (
-                query.order_by(KnowledgeBaseDocumentModel.created_at.desc())
+                query.order_by(
+                    desc(KnowledgeBaseDocumentModel.created_at),
+                    desc(KnowledgeBaseDocumentModel.id),
+                )
                 .limit(limit)
                 .offset(offset)
             )
 
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    async def count_documents_for_organization(
+        self,
+        organization_id: int,
+        processing_status: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> int:
+        """Count active organization documents using the list's filters."""
+        filters = [
+            KnowledgeBaseDocumentModel.organization_id == organization_id,
+            KnowledgeBaseDocumentModel.is_active == True,
+        ]
+        if processing_status:
+            filters.append(KnowledgeBaseDocumentModel.processing_status == processing_status)
+        normalized_search = (search or "").strip()
+        if normalized_search:
+            filters.append(KnowledgeBaseDocumentModel.filename.ilike(f"%{normalized_search}%"))
+        async with self.async_session() as session:
+            count = await session.scalar(
+                select(func.count(KnowledgeBaseDocumentModel.id)).where(*filters)
+            )
+            return int(count or 0)
 
     async def update_document_metadata(
         self,

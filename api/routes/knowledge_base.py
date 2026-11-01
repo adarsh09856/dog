@@ -268,6 +268,7 @@ async def list_documents(
     ] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
+    search: Annotated[Optional[str], Query(max_length=200)] = None,
     user=Depends(get_user),
 ):
     """List all documents for the user's organization.
@@ -282,13 +283,19 @@ async def list_documents(
             processing_status=status,
             limit=limit,
             offset=offset,
+            search=search,
+        )
+        total = await db_client.count_documents_for_organization(
+            organization_id=user.selected_organization_id,
+            processing_status=status,
+            search=search,
         )
 
         document_list = [_to_document_response(doc) for doc in documents]
 
         return DocumentListResponseSchema(
             documents=document_list,
-            total=len(document_list),
+            total=total,
             limit=limit,
             offset=offset,
         )
