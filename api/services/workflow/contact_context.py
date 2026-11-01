@@ -755,7 +755,9 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
             r"[\u0900-\u097f]", text + str(assistant_text)
         )
         affirmative = re.fullmatch(
-            r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|haan|han|ji|हाँ|हां|जी|ठीक है|"
+            r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|"
+            r"(?:yes|yeah|yep|okay|ok|sure)[,\s]+(?:(?:that|it|this)(?:\s+is|'s)?\s+)?(?:correct|right|true)|"
+            r"haan|han|ji|हाँ|हां|जी|ठीक है|"
             r"(?:हाँ|हां|जी)[,\s]+(?:(?:ये|यह)[,\s]+)?सही\s+है|"
             r"(?:haan|han|ha|haanji|hanji)[,\s]+(?:(?:ye|yeh|yah)[,\s]+)?"
             r"(?:sahi\s+(?:hai|he)|theek\s+(?:hai|he)|correct|right))[.!?।\s]*",
