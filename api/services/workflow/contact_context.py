@@ -755,7 +755,9 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
             r"[\u0900-\u097f]", text + str(assistant_text)
         )
         affirmative = re.fullmatch(
-            r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|haan|han|ji|हाँ|हां|जी|ठीक है|"
+            r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|"
+            r"(?:yes|yeah|yep|okay|ok|sure)[,\s]+(?:(?:that|it|this)(?:\s+is|'s)?\s+)?(?:correct|right|true)|"
+            r"haan|han|ji|हाँ|हां|जी|ठीक है|"
             r"(?:हाँ|हां|जी)[,\s]+(?:(?:ये|यह)[,\s]+)?सही\s+है|"
             r"(?:haan|han|ha|haanji|hanji)[,\s]+(?:(?:ye|yeh|yah)[,\s]+)?"
             r"(?:sahi\s+(?:hai|he)|theek\s+(?:hai|he)|correct|right))[.!?।\s]*",
@@ -866,6 +868,14 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
             "caller_phone_confirmation_pending", "caller_phone_uncertain_one",
         ):
             state.pop(key, None)
+
+    if intro:
+        # An explicit re-introduction starts a replacement attempt. Clear any
+        # confirmed number before parsing it, so garbled corrections cannot
+        # leave the old value eligible for a later booking.
+        forget_uncertain_phone()
+        state.pop("caller_phone_digits", None)
+        state["replace_phone_digits_on_next_turn"] = True
 
     # These words can be a misrecognition of "one", but also have normal
     # meanings. In a phone-dictation sequence, retain the candidate and ask

@@ -157,7 +157,9 @@ def _trusted_tts_language(
         # response to a voice that is absent from the configured TTS inventory.
         return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else "hi"
     if confidence is None:
-        return code
+        # A best-effort transcript label may still help the LLM, but it is not
+        # sufficient evidence to cold-switch the caller's voice mid-call.
+        return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
     if confidence is not None and confidence >= threshold:
         return code
