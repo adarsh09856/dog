@@ -390,7 +390,7 @@ def _parse_explicit_date_statement(
 def _explicit_caller_booking_date(
     statements: list[str], *, reference_date: date | None = None
 ) -> str | None:
-    """Parse a stated date; join at most three consecutive speech fragments."""
+    """Parse a stated date; join only the latest eight speech fragments."""
     usable = [item.strip() for item in statements if isinstance(item, str) and item.strip()]
     for end in range(len(usable) - 1, -1, -1):
         latest_tokens = _date_fragment_tokens(usable[end])
@@ -402,7 +402,7 @@ def _explicit_caller_booking_date(
         )
         if not date_like:
             continue
-        for start in range(end, max(-1, end - 3), -1):
+        for start in range(end, max(-1, end - 8), -1):
             parsed = _parse_explicit_date_statement(
                 " ".join(usable[start:end + 1]), reference_date=reference_date
             )
@@ -512,7 +512,7 @@ def booking_date_time_question(
         stated_date = today.isoformat()
     else:
         recent_user_statements = [
-            message["content"] for message in users[-3:]
+            message["content"] for message in users[-8:]
         ]
         stated_date = _explicit_caller_booking_date(
             recent_user_statements, reference_date=today
@@ -1368,7 +1368,7 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         stated_date = state.get("booking_time_question_date")
     if not isinstance(stated_date, str):
         stated_date = _explicit_caller_booking_date(
-            [message["content"] for message in users[-3:]], reference_date=today
+            [message["content"] for message in users[-8:]], reference_date=today
         )
     if not isinstance(stated_date, str):
         return None
