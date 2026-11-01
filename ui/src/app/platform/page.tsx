@@ -8,11 +8,18 @@ import {
   Phone,
   Workflow,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 
 import styles from "../PublicPages.module.css";
+
+export const metadata: Metadata = {
+  title: "Platform",
+  description:
+    "Build voice-agent workflows, connect supported calling channels and business tools, and review conversations in Kodewaves.",
+};
 
 const lifecycle = [
   ["01", "Design", "Build an agent workflow with prompts, questions, branches and a defined handoff or finish point."],
