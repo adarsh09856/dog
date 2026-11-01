@@ -61,6 +61,40 @@ def test_prior_checkout_must_match_requested_commit(monkeypatch, tmp_path):
         raise AssertionError("mismatched prior source checkout was accepted")
 
 
+def _write_migration(source: Path, revision: str, down_revision: str | None) -> None:
+    versions = source / "api/alembic/versions"
+    versions.mkdir(parents=True, exist_ok=True)
+    (versions / f"{revision}.py").write_text(
+        f"revision = {revision!r}\ndown_revision = {down_revision!r}\n",
+        encoding="utf-8",
+    )
+
+
+def test_lifecycle_accepts_application_upgrade_with_unchanged_schema(tmp_path):
+    prior = tmp_path / "prior"
+    candidate = tmp_path / "candidate"
+    _write_migration(prior, "prior_schema_01", None)
+    _write_migration(candidate, "prior_schema_01", None)
+
+    assert lifecycle_acceptance.validate_migration_compatibility(prior, candidate) == (
+        "prior_schema_01", "prior_schema_01",
+    )
+
+
+def test_lifecycle_rejects_candidate_schema_that_does_not_include_prior(tmp_path):
+    prior = tmp_path / "prior"
+    candidate = tmp_path / "candidate"
+    _write_migration(prior, "prior_schema_01", None)
+    _write_migration(candidate, "unrelated_schema_01", None)
+
+    try:
+        lifecycle_acceptance.validate_migration_compatibility(prior, candidate)
+    except ValueError as error:
+        assert "does not descend" in str(error)
+    else:
+        raise AssertionError("unrelated candidate migration history was accepted")
+
+
 def test_lifecycle_minio_is_built_from_repository_and_pinned_by_local_id(monkeypatch):
     calls = []
 

@@ -63,6 +63,19 @@ def validate_flow_order(completed: list[str]) -> None:
         raise ValueError("Lifecycle phases ran out of order or were skipped")
 
 
+def validate_migration_compatibility(prior_source: Path, candidate_source: Path) -> tuple[str, str]:
+    """Require candidate schema history to include the prior release schema.
+
+    Equal heads are valid for application-only releases: the upgrade still
+    exercises the new images against populated data, while Alembic is a no-op.
+    """
+    prior_head = _migration_head(prior_source)
+    candidate_head = _migration_head(candidate_source)
+    if prior_head not in _ancestor_revisions(candidate_source):
+        raise ValueError("Candidate migration history does not descend from the selected prior schema")
+    return prior_head, candidate_head
+
+
 def _build_lifecycle_minio(image_tag: str) -> str:
     """Build the pinned-version MinIO fixture locally and return its immutable image ID."""
     if not _LOCAL_MINIO_TAG.fullmatch(image_tag):
@@ -453,12 +466,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if ancestor.returncode:
             raise ValueError("The prior release commit must be an ancestor of the checked-out candidate")
         preflight_phase = "validate_migration_compatibility"
-        prior_head = _migration_head(args.prior_source)
-        candidate_head = _migration_head(ROOT)
-        if prior_head == candidate_head:
-            raise ValueError("Prior and candidate releases must have distinct Alembic heads")
-        if prior_head not in _ancestor_revisions(ROOT):
-            raise ValueError("Candidate migration history does not descend from the selected prior schema")
+        prior_head, candidate_head = validate_migration_compatibility(args.prior_source, ROOT)
     except Exception as exc:
         # Preflight runs before the disposable workspace exists. Still emit a
         # sanitized report so CI uploads the precise phase for early failures.
