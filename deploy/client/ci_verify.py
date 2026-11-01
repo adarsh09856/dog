@@ -67,12 +67,16 @@ class _OwnerAcceptanceServer:
         self.license_private = license_private
         self.license_public = license_public
         license_data = load_license(license_token, license_public)
+        self.licensed_ip_ranges = tuple(license_data.ip_ranges)
+        self.ip_ranges = self.licensed_ip_ranges
         self.installation_id = license_data.installation_id
         self.license_fingerprint = hashlib.sha256(license_token.encode("ascii")).hexdigest()
         self.enrollment_token = secrets.token_urlsafe(40)
         self.public_key: str | None = None
-        self.binding_valid = True
         self.used_nonces: set[str] = set()
+        self.observed_ips: set[str] = set()
+        self.revoked = False
+        self.integrity_findings: list[dict] = []
         self._lock = threading.Lock()
         self._metrics_lock = threading.Lock()
         self._request_counts: dict[str, int] = {}
@@ -101,7 +105,9 @@ class _OwnerAcceptanceServer:
                     if self.path.endswith("/enroll"):
                         result = owner.enroll(body)
                     elif self.path.endswith("/check"):
-                        result = owner.check(body)
+                        # This is the owner endpoint's direct peer address. The
+                        # disposable protocol peer is not behind a trusted proxy.
+                        result = owner.check(body, observed_ip=self.client_address[0])
                     else:
                         self._reply(404, {"detail": "Not found"})
                         return
@@ -194,9 +200,12 @@ class _OwnerAcceptanceServer:
             self.public_key = body["public_key"]
         return {"enrolled": True}
 
-    def check(self, body: dict) -> dict:
+    def check(self, body: dict, *, observed_ip: str) -> dict:
         from api.services.installation_identity import verify_owner_check
         from api.services.installation_license import issue_license_token
+        from api.routes.admin.client_installation_check import (
+            _license_ip_binding_valid,
+        )
 
         with self._lock:
             if self.public_key is None:
@@ -211,20 +220,28 @@ class _OwnerAcceptanceServer:
                 integrity_ok=body["integrity_ok"], integrity_finding=body["integrity_finding"],
             )
             self.used_nonces.add(nonce)
-            binding_valid = self.binding_valid
+            ip_ranges = self.ip_ranges
+        binding_valid = _license_ip_binding_valid(ip_ranges, observed_ip)
+        with self._metrics_lock:
+            self.observed_ips.add(observed_ip)
+            if not body["integrity_ok"]:
+                self.revoked = True
+                if body["integrity_finding"] is not None:
+                    self.integrity_findings.append(body["integrity_finding"])
+            revoked = self.revoked
         now = int(time.time())
         status = {
             "kind": "installation_status", "installation_id": self.installation_id,
             "license_sha256": self.license_fingerprint, "nonce": nonce,
-            "revoked": False, "binding_valid": binding_valid, "observed_ip": "127.0.0.1",
+            "revoked": revoked, "binding_valid": binding_valid, "observed_ip": observed_ip,
             "issued_at": now, "expires_at": now + 300,
         }
         return {"signed_status": issue_license_token(status, self.license_private)}
 
-    def set_binding_valid(self, binding_valid: bool) -> None:
-        """Control the signed IP decision in the disposable acceptance peer."""
+    def set_ip_ranges(self, ip_ranges: list[str] | tuple[str, ...]) -> None:
+        """Update the disposable owner's current binding policy, as an admin change would."""
         with self._lock:
-            self.binding_valid = binding_valid
+            self.ip_ranges = tuple(ip_ranges)
 
     def diagnostic_summary(self) -> str:
         """Return bounded, secret-free evidence for owner-poll CI failures."""
@@ -234,6 +251,9 @@ class _OwnerAcceptanceServer:
                 "response_statuses": dict(self._response_statuses),
                 "rejected_requests": self._rejection_count,
                 "rejection_types": dict(self._rejection_types),
+                "observed_ips": sorted(self.observed_ips),
+                "revoked": self.revoked,
+                "integrity_findings": list(self.integrity_findings),
             }, sort_keys=True)
     def close(self) -> None:
         self.httpd.shutdown()
@@ -606,6 +626,7 @@ def _verify_compose_runtime(
     env_file = directory / f"{project}.env"
     compose_override = directory / f"{project}-internal-network.yaml"
     owner_trust_override = directory / f"{project}-owner-trust.yaml"
+    tamper_file = directory / f"{project}-api-app.py"
     compose_file = root / "deploy/client/docker-compose.client.yaml"
     api_port, ui_port, minio_port = secrets.SystemRandom().sample(range(20000, 60000), 3)
     values = {
@@ -657,19 +678,43 @@ def _verify_compose_runtime(
             CLIENT_IDENTITY_GID=str(identity_gid),
         )
     env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8")
-    compose_override.write_text(
-        "services:\n"
-        "  api:\n"
-        "    environment:\n"
-        "      ARQ_WORKERS: \"0\"\n"
-        "      ENABLE_ARI_MANAGER: \"false\"\n"
-        "      ENABLE_CAMPAIGN_ORCHESTRATOR: \"false\"\n"
-        "      KODEWAVES_OWNER_STATUS_POLL_SECONDS: \"1\"\n"
-        "networks:\n"
-        "  internal:\n"
-        "    internal: true\n",
-        encoding="utf-8",
-    )
+    if owner is None:
+        compose_override.write_text(
+            "services:\n"
+            "  api:\n"
+            "    environment:\n"
+            "      ARQ_WORKERS: \"0\"\n"
+            "      ENABLE_ARI_MANAGER: \"false\"\n"
+            "      ENABLE_CAMPAIGN_ORCHESTRATOR: \"false\"\n"
+            "      KODEWAVES_OWNER_STATUS_POLL_SECONDS: \"1\"\n"
+            "networks:\n"
+            "  internal:\n"
+            "    internal: true\n",
+            encoding="utf-8",
+        )
+    else:
+        # Override one protected file with a host-backed read-only bind mount.
+        # CI can then tamper with the host copy without changing container state
+        # through an exec shell or weakening the client's read-only filesystem.
+        compose_override_data = {
+            "services": {
+                "api": {
+                    "environment": {
+                        "ARQ_WORKERS": "0",
+                        "ENABLE_ARI_MANAGER": "false",
+                        "ENABLE_CAMPAIGN_ORCHESTRATOR": "false",
+                        "KODEWAVES_OWNER_STATUS_POLL_SECONDS": "1",
+                    },
+                    "volumes": [{
+                        "type": "bind", "source": str(tamper_file.resolve()),
+                        "target": "/app/api/app.py", "read_only": True,
+                        "bind": {"create_host_path": False},
+                    }],
+                },
+            },
+            "networks": {"internal": {"internal": True}},
+        }
+        compose_override.write_text(yaml.safe_dump(compose_override_data, sort_keys=False), encoding="utf-8")
     if owner is not None:
         owner_trust_override.write_text(
             "services:\n"
@@ -700,6 +745,15 @@ def _verify_compose_runtime(
              str(root / "deploy/minio/Dockerfile"), str(root / "deploy/minio")],
             cwd=root, check=True, env=command_env,
         )
+        if owner is not None:
+            protected_file = subprocess.run(
+                ["docker", "run", "--rm", "--entrypoint", "cat", api_image, "/app/api/app.py"],
+                cwd=root, check=True, env=command_env, timeout=30,
+                capture_output=True,
+            ).stdout
+            if not protected_file:
+                raise ValueError("Could not seed the protected API file for tamper acceptance")
+            tamper_file.write_bytes(protected_file)
         subprocess.run(
             [*compose_command, "up", "--detach", "--wait", "--wait-timeout", "300", "api", "ui"],
             # Capture Compose's startup diagnostics so a failed health wait can
@@ -758,9 +812,18 @@ def _verify_compose_runtime(
                     "enrolled status must reach the expected unauthenticated route boundary; "
                     f"received HTTP {owner_gate_status}: {owner_gate_body[:120]}"
                 )
+            observed_ips = set(json.loads(owner.diagnostic_summary())["observed_ips"])
+            if not observed_ips or not all(
+                ipaddress.ip_address(value) in ipaddress.ip_network("172.31.40.0/24")
+                for value in observed_ips
+            ):
+                raise ValueError(
+                    "The owner must evaluate the actual API container peer IP on the isolated CI network; "
+                    f"observed {sorted(observed_ips)}"
+                )
             # Exercise the client data-plane gate with a freshly signed owner
             # denial, then prove it recovers only after a fresh signed allow.
-            owner.set_binding_valid(False)
+            owner.set_ip_ranges(("192.0.2.0/24",))
             denied_status, denied_body = owner_gate_status, owner_gate_body
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
@@ -777,7 +840,7 @@ def _verify_compose_runtime(
                     "A fresh signed owner IP-binding denial must block protected API requests; "
                     f"received HTTP {denied_status}: {denied_body[:240]}"
                 )
-            owner.set_binding_valid(True)
+            owner.set_ip_ranges(owner.licensed_ip_ranges)
             recovered_status, recovered_body = denied_status, denied_body
             deadline = time.monotonic() + 20
             while time.monotonic() < deadline:
@@ -851,6 +914,45 @@ def _verify_compose_runtime(
                 repeat_bootstrap.stdout + repeat_bootstrap.stderr
             ):
                 raise ValueError("First-admin bootstrap must reject attempts after the first account exists")
+
+            with tamper_file.open("ab") as protected_source:
+                protected_source.write(b"\n# disposable CI integrity tamper marker\n")
+            tampered_status, tampered_body = owner_gate_status, owner_gate_body
+            deadline = time.monotonic() + 30
+            expected_finding = {
+                "reason": "modified_file", "component": "api/app.py",
+            }
+            while time.monotonic() < deadline:
+                tampered_status, tampered_body = _container_http_response(
+                    compose_command, "/api/v1/workflow",
+                    host="smoke.customer.example.invalid",
+                    env=command_env,
+                )
+                peer_state = json.loads(owner.diagnostic_summary())
+                has_tamper_finding = any(
+                    finding.get("reason") == expected_finding["reason"]
+                    and finding.get("component") == expected_finding["component"]
+                    for finding in peer_state["integrity_findings"]
+                )
+                if has_tamper_finding and tampered_status == 402:
+                    break
+                time.sleep(0.5)
+            peer_state = json.loads(owner.diagnostic_summary())
+            has_tamper_finding = any(
+                finding.get("reason") == expected_finding["reason"]
+                and finding.get("component") == expected_finding["component"]
+                for finding in peer_state["integrity_findings"]
+            )
+            if not has_tamper_finding or not peer_state["revoked"]:
+                raise ValueError(
+                    "A protected-file mutation must reach the signed owner peer as a tamper finding; "
+                    f"peer evidence: {owner.diagnostic_summary()}"
+                )
+            if tampered_status != 402 or "modified" not in tampered_body.lower():
+                raise ValueError(
+                    "The packaged API must deny protected requests after owner-confirmed tampering; "
+                    f"received HTTP {tampered_status}: {tampered_body[:240]}"
+                )
             valid_host_status = owner_gate_status
         image_inspect = subprocess.run(
             ["docker", "image", "inspect", "--format", "{{.Id}}", minio_image],
@@ -874,6 +976,7 @@ def _verify_compose_runtime(
             result["owner_enrollment"] = "passed_signed_one_time_enrollment_and_status"
             result["first_admin_bootstrap"] = "passed_active_superuser_with_workspace"
             result["first_admin_replay"] = "rejected_after_initial_account"
+            result["runtime_tamper_alert_and_protected_route_denial"] = "passed_signed_finding_and_revocation"
     except BaseException as exc:
         failure = exc
         primary_output = ""
@@ -983,7 +1086,7 @@ def verify(caddy_image: str, report: Path) -> None:
         api_image, ui_image = "kodewaves-client-api:ci-check", "kodewaves-client-ui:ci-check"
         license_token = _runtime_smoke_license(
             license_private.read_bytes(), license_public.read_text(encoding="ascii"),
-            ip_ranges=["127.0.0.1/32"],
+            ip_ranges=["172.31.40.0/24"],
         )
         with _OwnerAcceptanceServer(
             directory, license_token, license_private.read_bytes(), license_public.read_text(encoding="ascii")
@@ -1019,7 +1122,7 @@ def verify(caddy_image: str, report: Path) -> None:
             )
         evidence = {
             "status": "passed", "production_release": False,
-            "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation, HTTPS owner enrollment, signed status, first-admin bootstrap, and disposable API/UI Compose runtime smoke",
+            "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation, HTTPS owner enrollment, signed status, first-admin bootstrap, and disposable API/UI Compose runtime smoke including IP binding and live tamper rejection",
             "installer_preflight": "passed", "compose_config": "passed",
             "installer_manifest_scope": "Unsigned configuration fixture; signed build inventories and image IDs verified separately",
             "custom_network_proxy_config": "passed",
@@ -1028,7 +1131,8 @@ def verify(caddy_image: str, report: Path) -> None:
             "runtime_compose_smoke": runtime_smoke,
             "protected_inventory": inventory_metrics,
             "not_verified": [
-                "upgrade/rollback", "live owner alerts", "browser audio", "telephone",
+                "upgrade/rollback", "production owner dashboard visibility from the runtime tamper event",
+                "browser audio", "telephone",
             ],
             "image_ids": image_ids, "caddy_image": caddy_image,
             "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),

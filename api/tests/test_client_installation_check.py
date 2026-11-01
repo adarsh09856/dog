@@ -63,6 +63,7 @@ def test_owner_ip_ignores_untrusted_forwarded_header_and_honors_trusted_proxy(mo
     [
         ("203.0.113.7", ["198.51.100.0/24"], False),
         ("198.51.100.7", ["198.51.100.0/24"], True),
+        ("203.0.113.7", ["2001:db8::/32"], False),
         ("203.0.113.7", [], True),
     ],
 )
