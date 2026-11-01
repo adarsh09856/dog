@@ -375,11 +375,14 @@ def test_restore_failure_restores_old_selection_and_retains_original_volumes(mon
         assert set(cleanup_events[0][1:]) == set(created)
 
 
-def _advance_active_release(env_file: Path, manifest_path: Path, *, allow_rollback: bool = True) -> tuple[bytes, bytes]:
+def _advance_active_release(
+    env_file: Path, manifest_path: Path, *, allow_rollback: bool = True,
+    schema_head: str = "head2",
+) -> tuple[bytes, bytes]:
     api_ref = "registry.example.com/kodewaves/api@sha256:" + "9" * 64
     ui_ref = "registry.example.com/kodewaves/ui@sha256:" + "8" * 64
     signed, _key = _signed_release_manifest(
-        schema_head="head2", rollback_to=["head1"] if allow_rollback else [],
+        schema_head=schema_head, rollback_to=["head1"] if allow_rollback else [],
         api_ref=api_ref, ui_ref=ui_ref,
     )
     manifest_path.write_text(json.dumps(signed), encoding="utf-8")
@@ -392,7 +395,10 @@ def _advance_active_release(env_file: Path, manifest_path: Path, *, allow_rollba
     return env_file.read_bytes(), manifest_path.read_bytes()
 
 
-def test_signed_release_rollback_switches_config_and_volumes_and_can_reverse(monkeypatch, tmp_path):
+@pytest.mark.parametrize("candidate_schema_head", ["head2", "head1"])
+def test_signed_release_rollback_switches_config_and_volumes_and_can_reverse(
+    monkeypatch, tmp_path, candidate_schema_head,
+):
     compose_dir = tmp_path / "client"
     compose_dir.mkdir()
     env_file, manifest, release_key = _installation(compose_dir)
@@ -400,7 +406,9 @@ def test_signed_release_rollback_switches_config_and_volumes_and_can_reverse(mon
         (compose_dir / name).write_text("{}\n", encoding="utf-8")
     archive = _make_archive(tmp_path, env_file, manifest, release_key, compose_dir / "inputs/installation.key")
     archived_manifest = manifest.read_bytes()
-    previous_env, previous_manifest = _advance_active_release(env_file, manifest)
+    previous_env, previous_manifest = _advance_active_release(
+        env_file, manifest, schema_head=candidate_schema_head,
+    )
     running = ["api", "ui", "postgres", "minio", "redis"]
     events: list[tuple[str, str, str]] = []
     monkeypatch.setattr(recovery, "_compose_context", lambda *_: (["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)))
