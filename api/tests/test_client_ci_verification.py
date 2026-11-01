@@ -258,7 +258,11 @@ def test_runtime_smoke_license_is_domain_bound_without_optional_ip_policy(verifi
     }
 
 
-def test_disposable_owner_peer_requires_one_time_signed_enrollment_and_returns_bound_status(verifier, tmp_path):
+def test_disposable_owner_peer_requires_one_time_signed_enrollment_and_returns_bound_status(
+    verifier, monkeypatch, tmp_path,
+):
+    import builtins
+
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -315,6 +319,18 @@ def test_disposable_owner_peer_requires_one_time_signed_enrollment_and_returns_b
         assert owner.enroll(enrollment) == {"enrolled": True}
         with pytest.raises(ValueError, match="one-time"):
             owner.enroll(enrollment)
+
+        # The Docker verification job intentionally installs only the release
+        # verifier's small dependency set. The owner protocol simulator must
+        # not import a FastAPI route just to share its pure IP-binding rule.
+        original_import = builtins.__import__
+
+        def reject_api_route_import(name, *args, **kwargs):
+            if name == "api.routes.admin.client_installation_check":
+                raise ModuleNotFoundError("API route modules are not installed in the CI verifier")
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", reject_api_route_import)
 
         def signed_owner_status(
             observed_ip="203.0.113.7", *, integrity_ok=True, finding=None, via_http=False,

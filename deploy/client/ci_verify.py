@@ -203,9 +203,7 @@ class _OwnerAcceptanceServer:
     def check(self, body: dict, *, observed_ip: str) -> dict:
         from api.services.installation_identity import verify_owner_check
         from api.services.installation_license import issue_license_token
-        from api.routes.admin.client_installation_check import (
-            _license_ip_binding_valid,
-        )
+        from api.services.installation_binding import license_ip_binding_valid
 
         with self._lock:
             if self.public_key is None:
@@ -221,7 +219,7 @@ class _OwnerAcceptanceServer:
             )
             self.used_nonces.add(nonce)
             ip_ranges = self.ip_ranges
-        binding_valid = _license_ip_binding_valid(ip_ranges, observed_ip)
+        binding_valid = license_ip_binding_valid(ip_ranges, observed_ip)
         with self._metrics_lock:
             self.observed_ips.add(observed_ip)
             if not body["integrity_ok"]:
