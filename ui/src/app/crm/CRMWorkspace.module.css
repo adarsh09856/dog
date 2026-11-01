@@ -96,6 +96,10 @@
 .emptyState p { max-width: 390px; color: var(--muted-foreground); font-size: 10px; line-height: 1.7; }
 .emptyState button { margin-top: 3px; }
 .emptyState button svg { width: 14px; height: 14px; margin-right: 6px; }
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 18px; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: 10px; }
+.pagination > div { display: flex; align-items: center; gap: 10px; }
+.pagination button { height: 32px; gap: 5px; border-radius: 8px; font-size: 10px; }
+.pagination button svg { width: 13px; height: 13px; }
 
 @media(max-width: 900px) {
   .hero { grid-template-columns: minmax(0, 1.3fr) minmax(190px, .7fr); gap: 24px; }
@@ -122,6 +126,8 @@
   .stageRail { margin-inline: -13px; padding: 3px 13px 11px; }
   .stageButton,.stageActive { min-width: 137px; flex-basis: 137px; }
   .recordsHeader { gap: 15px; padding: 17px 15px; }
+  .pagination { align-items: flex-start; flex-direction: column; padding-inline: 14px; }
+  .pagination > div { width: 100%; justify-content: space-between; }
   .filters { flex-direction: column; align-items: stretch; }
   .searchBox,.stageSelect { width: 100%; flex: auto; }
   .desktopTable { display: none; }

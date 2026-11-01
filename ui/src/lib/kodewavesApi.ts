@@ -563,6 +563,17 @@ export interface LeadStage {
   color?: string;
 }
 
+export interface ContactDirectoryPage {
+  contacts: Contact[];
+  total_count: number;
+  filtered_count: number;
+  email_count: number;
+  stage_counts: Record<string, number>;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
 export interface Appointment {
   id: string | number;
     contact_id?: string | null;
@@ -593,6 +604,14 @@ export interface DynamicForm {
   is_active: boolean;
   submission_count: number;
   created_at: string;
+}
+
+export interface FormSubmissionPage {
+  submissions: Array<{ id: number | string; data: Record<string, unknown>; created_at: string }>;
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
 }
 
 export interface WebsiteWidget {
@@ -648,6 +667,12 @@ export interface WalletLedgerItem {
 
 export const crmApi = {
   getContacts: () => apiFetch<Contact[]>('/crm/contacts'),
+  getContactsPage: (params: { page: number; limit: number; search?: string; stageId?: string }) => {
+    const query = new URLSearchParams({ page: String(params.page), limit: String(params.limit) });
+    if (params.search?.trim()) query.set('search', params.search.trim());
+    if (params.stageId) query.set('stage_id', params.stageId);
+    return apiFetch<ContactDirectoryPage>(`/crm/contacts/directory?${query.toString()}`);
+  },
   createContact: (data: Partial<Contact>) =>
     apiFetch<Contact>('/crm/contacts', {
       method: 'POST',
@@ -707,6 +732,8 @@ export const formsApi = {
     }),
   getSubmissions: (formId: string | number) =>
     apiFetch<Array<{ id: number | string; data: Record<string, unknown>; created_at: string }>>(`/forms/${formId}/submissions`),
+  getSubmissionsPage: (formId: string | number, offset = 0, limit = 50) =>
+    apiFetch<FormSubmissionPage>(`/forms/${formId}/submissions/page?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`),
 };
 
 export const widgetsApi = {

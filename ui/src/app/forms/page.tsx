@@ -1,9 +1,6 @@
 "use client";
-import panel from "@/components/layout/PanelWorkspace.module.css";
-
 import {
   CheckCircle2,
-  Code,
   Edit,
   Eye,
   FileSpreadsheet,
@@ -14,9 +11,9 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { useAuth } from "@/lib/auth";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,6 +43,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/lib/auth";
 import { DynamicForm, formsApi } from "@/lib/kodewavesApi";
 
 export default function FormsPage() {
@@ -62,13 +60,17 @@ export default function FormsPage() {
   // Submissions Modal
   const [submissionsOpen, setSubmissionsOpen] = useState(false);
   const [selectedFormTitle, setSelectedFormTitle] = useState("");
-  const [submissions, setSubmissions] = useState<Array<{ id: number | string; data: Record<string, any>; created_at: string }>>([]);
+  const [selectedFormId, setSelectedFormId] = useState<string | number | null>(null);
+  const [submissions, setSubmissions] = useState<Array<{ id: number | string; data: Record<string, unknown>; created_at: string }>>([]);
+  const [submissionsTotal, setSubmissionsTotal] = useState(0);
   const [loadingSubs, setLoadingSubs] = useState(false);
+  const [loadingMoreSubs, setLoadingMoreSubs] = useState(false);
   const [submissionsError, setSubmissionsError] = useState<string | null>(null);
+  const [loadMoreSubsError, setLoadMoreSubsError] = useState<string | null>(null);
   const formsRequest = useRef(0);
   const submissionsRequest = useRef(0);
 
-  const fetchForms = async () => {
+  const fetchForms = useCallback(async () => {
     if (authLoading || !user) return;
     const request = ++formsRequest.current;
     setLoadError(null);
@@ -82,7 +84,7 @@ export default function FormsPage() {
     } finally {
       if (request === formsRequest.current) setLoading(false);
     }
-  };
+  }, [authLoading, user]);
 
   useEffect(() => {
     setForms([]);
@@ -95,7 +97,7 @@ export default function FormsPage() {
       formsRequest.current += 1;
       submissionsRequest.current += 1;
     };
-  }, [authLoading, user]);
+  }, [authLoading, user, fetchForms]);
 
   const handleSaveForm = async () => {
     if (!editingForm || !editingForm.title || !editingForm.slug) {
@@ -112,8 +114,8 @@ export default function FormsPage() {
       setModalOpen(false);
       setEditingForm(null);
       await fetchForms();
-    } catch (err: any) {
-      alert(err.message || "Failed to save form");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save form");
     } finally {
       setSaving(false);
     }
@@ -124,26 +126,52 @@ export default function FormsPage() {
     try {
       await formsApi.deleteForm(id);
       await fetchForms();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete form");
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete form");
     }
   };
 
   const handleViewSubmissions = async (form: DynamicForm) => {
     const request = ++submissionsRequest.current;
     setSelectedFormTitle(form.title);
+    setSelectedFormId(form.id);
     setSubmissionsOpen(true);
     setLoadingSubs(true);
     setSubmissionsError(null);
+    setLoadMoreSubsError(null);
     setSubmissions([]);
+    setSubmissionsTotal(0);
     try {
-      const data = await formsApi.getSubmissions(form.id);
-      if (request === submissionsRequest.current) setSubmissions(data);
+      const data = await formsApi.getSubmissionsPage(form.id, 0, 50);
+      if (request === submissionsRequest.current) {
+        setSubmissions(data.submissions);
+        setSubmissionsTotal(data.total);
+      }
     } catch (err) {
       console.error("Failed to load submissions:", err);
       if (request === submissionsRequest.current) setSubmissionsError(err instanceof Error ? err.message : "Unable to load form submissions.");
     } finally {
       if (request === submissionsRequest.current) setLoadingSubs(false);
+    }
+  };
+
+  const handleLoadMoreSubmissions = async () => {
+    if (selectedFormId === null || loadingMoreSubs || submissions.length >= submissionsTotal) return;
+    const request = submissionsRequest.current;
+    setLoadingMoreSubs(true);
+    setLoadMoreSubsError(null);
+    try {
+      const page = await formsApi.getSubmissionsPage(selectedFormId, submissions.length, 50);
+      if (request === submissionsRequest.current) {
+        setSubmissions((current) => [...current, ...page.submissions]);
+        setSubmissionsTotal(page.total);
+      }
+    } catch (err) {
+      if (request === submissionsRequest.current) {
+        setLoadMoreSubsError(err instanceof Error ? err.message : "Unable to load older submissions.");
+      }
+    } finally {
+      if (request === submissionsRequest.current) setLoadingMoreSubs(false);
     }
   };
 
@@ -405,7 +433,7 @@ export default function FormsPage() {
                     <div className="col-span-3">
                       <Select
                         value={field.type}
-                        onValueChange={(val: any) => {
+                        onValueChange={(val: string) => {
                           const fields = [...(editingForm?.fields || [])];
                           fields[idx].type = val;
                           setEditingForm((prev) => prev ? { ...prev, fields } : null);
@@ -475,13 +503,15 @@ export default function FormsPage() {
         if (!open) {
           submissionsRequest.current += 1;
           setSubmissions([]);
+          setSubmissionsTotal(0);
+          setSelectedFormId(null);
         }
       }}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Submissions: {selectedFormTitle}</DialogTitle>
             <DialogDescription>
-              Structured data captured during voice calls.
+              Structured data captured during voice calls. Showing {submissions.length} of {submissionsTotal} responses.
             </DialogDescription>
           </DialogHeader>
 
@@ -506,6 +536,15 @@ export default function FormsPage() {
                     </pre>
                   </div>
                 ))}
+                {submissions.length < submissionsTotal && (
+                  <div className="flex justify-center pt-2">
+                    <Button variant="outline" size="sm" onClick={() => void handleLoadMoreSubmissions()} disabled={loadingMoreSubs}>
+                      {loadingMoreSubs ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                      {loadingMoreSubs ? "Loading older responses…" : "Load older responses"}
+                    </Button>
+                  </div>
+                )}
+                {loadMoreSubsError && <div role="alert" className="text-center text-xs text-destructive">{loadMoreSubsError}</div>}
               </div>
             )}
           </div>

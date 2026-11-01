@@ -3,7 +3,7 @@ import io
 import uuid
 from typing import Any, Dict, List, Optional
 from datetime import UTC, datetime
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 
@@ -45,6 +45,17 @@ class ContactItem(BaseModel):
     notes: Optional[str] = None
     custom_fields: Dict[str, Any] = Field(default_factory=dict)
     created_at: str
+
+
+class ContactDirectoryPage(BaseModel):
+    contacts: List[ContactItem]
+    total_count: int
+    filtered_count: int
+    email_count: int
+    stage_counts: Dict[str, int]
+    page: int
+    limit: int
+    total_pages: int
 
 
 class LeadStageItem(BaseModel):
@@ -157,6 +168,66 @@ async def list_contacts(user: UserModel = Depends(get_user)):
             )
             for c in contacts
         ]
+
+
+@router.get("/contacts/directory", response_model=ContactDirectoryPage)
+async def get_contacts_directory(
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    search: Optional[str] = Query(None, max_length=200),
+    stage_id: Optional[str] = Query(None),
+    user: UserModel = Depends(get_user),
+):
+    """List the selected organization's CRM contacts with server-side filters."""
+    org_id = user.selected_organization_id
+    if not org_id:
+        return ContactDirectoryPage(
+            contacts=[], total_count=0, filtered_count=0, email_count=0,
+            stage_counts={}, page=page, limit=limit, total_pages=0,
+        )
+
+    parsed_stage_id = None
+    if stage_id:
+        try:
+            parsed_stage_id = uuid.UUID(stage_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid stage ID")
+
+    result = await kodewaves_db_client.get_contacts_directory_page(
+        org_id,
+        limit=limit,
+        offset=(page - 1) * limit,
+        search=search,
+        stage_id=parsed_stage_id,
+    )
+    contacts = [
+        ContactItem(
+            id=str(c.id),
+            first_name=c.first_name,
+            last_name=c.last_name,
+            phone=c.phone,
+            email=c.email,
+            company=c.company,
+            stage_id=str(c.stage_id) if c.stage_id else None,
+            tags=c.tags or [],
+            total_calls=c.total_calls,
+            notes=(c.custom_fields or {}).get("notes"),
+            custom_fields=c.custom_fields or {},
+            created_at=c.created_at.isoformat() if c.created_at else "",
+        )
+        for c in result["contacts"]
+    ]
+    filtered_count = result["filtered_count"]
+    return ContactDirectoryPage(
+        contacts=contacts,
+        total_count=result["total_count"],
+        filtered_count=filtered_count,
+        email_count=result["email_count"],
+        stage_counts=result["stage_counts"],
+        page=page,
+        limit=limit,
+        total_pages=(filtered_count + limit - 1) // limit,
+    )
 
 
 class StageCreateRequest(BaseModel):

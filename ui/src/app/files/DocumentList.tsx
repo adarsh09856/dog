@@ -6,7 +6,6 @@ import { toast } from 'sonner';
 
 import {
   deleteDocumentApiV1KnowledgeBaseDocumentsDocumentUuidDelete,
-  listDocumentsApiV1KnowledgeBaseDocumentsGet,
 } from '@/client/sdk.gen';
 import type { DocumentResponseSchema } from '@/client/types.gen';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useOrganizationTimezone } from '@/hooks/useOrganizationTimezone';
 import { detailFromError } from '@/lib/apiError';
 import { formatDateTime } from '@/lib/dateTime';
+import { apiFetch } from '@/lib/kodewavesApi';
 import logger from '@/lib/logger';
 
 import DocumentEditor, { isEditableDocument } from './DocumentEditor';
@@ -28,48 +28,92 @@ interface DocumentListProps {
 export default function DocumentList({ refreshTrigger }: DocumentListProps) {
   const organizationTimezone = useOrganizationTimezone();
   const [documents, setDocuments] = useState<DocumentResponseSchema[]>([]);
+  const [totalDocuments, setTotalDocuments] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [editingDoc, setEditingDoc] = useState<DocumentResponseSchema | null>(null);
   const activeRequest = useRef<AbortController | null>(null);
 
-  const fetchDocuments = useCallback(async () => {
+  const fetchDocuments = useCallback(async (offset = 0, append = false) => {
     activeRequest.current?.abort();
     const controller = new AbortController();
     activeRequest.current = controller;
     try {
-      setIsLoading(true);
+      if (append) setIsLoadingMore(true);
+      else {
+        setIsLoading(true);
+        setIsLoadingMore(false);
+      }
       setError(null);
+      setLoadMoreError(null);
 
-      const response = await listDocumentsApiV1KnowledgeBaseDocumentsGet({
+      const query = new URLSearchParams({ limit: '100', offset: String(offset) });
+      if (searchQuery.trim()) query.set('search', searchQuery.trim());
+      const response = await apiFetch<{
+        documents: DocumentResponseSchema[];
+        total: number;
+        limit: number;
+        offset: number;
+      }>(`/knowledge-base/documents?${query.toString()}`, {
         signal: controller.signal,
-        query: {
-          limit: 100,
-          offset: 0,
-        },
       });
 
       if (controller.signal.aborted) return;
-      if (response.error || !response.data) {
-        throw new Error(detailFromError(response.error, 'Failed to fetch documents'));
-      }
-
-      setDocuments(response.data.documents);
+      setDocuments((current) => append ? [...current, ...response.documents] : response.documents);
+      setTotalDocuments(response.total);
     } catch (err) {
       if (controller.signal.aborted) return;
-      setError(err instanceof Error ? err.message : 'Failed to fetch documents');
+      const message = err instanceof Error ? err.message : 'Failed to fetch documents';
+      if (append) setLoadMoreError(message);
+      else setError(message);
       logger.error('Error fetching documents:', err);
     } finally {
-      if (!controller.signal.aborted) setIsLoading(false);
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      }
     }
-  }, []);
+  }, [searchQuery]);
+
+  const refreshLoadedDocuments = useCallback(async () => {
+    if (isLoading || isLoadingMore) return;
+    const offsets = Array.from(
+      { length: Math.max(1, Math.ceil(documents.length / 100)) },
+      (_unused, index) => index * 100,
+    );
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    try {
+      const pages = await Promise.all(offsets.map(async (offset) => {
+        const query = new URLSearchParams({ limit: '100', offset: String(offset) });
+        if (searchQuery.trim()) query.set('search', searchQuery.trim());
+        return apiFetch<{
+          documents: DocumentResponseSchema[];
+          total: number;
+          limit: number;
+          offset: number;
+        }>(`/knowledge-base/documents?${query.toString()}`, { signal: controller.signal });
+      }));
+      if (controller.signal.aborted) return;
+      setDocuments(pages.flatMap((page) => page.documents));
+      setTotalDocuments(pages[0]?.total || 0);
+    } catch (err) {
+      if (!controller.signal.aborted) logger.error('Error refreshing documents:', err);
+    }
+  }, [documents.length, isLoading, isLoadingMore, searchQuery]);
 
   // Fetch documents on mount and when refreshTrigger changes
   useEffect(() => {
-    fetchDocuments();
-    return () => activeRequest.current?.abort();
-  }, [fetchDocuments, refreshTrigger]);
+    const timer = window.setTimeout(() => void fetchDocuments(), searchQuery.trim() ? 250 : 0);
+    return () => {
+      window.clearTimeout(timer);
+      activeRequest.current?.abort();
+    };
+  }, [fetchDocuments, refreshTrigger, searchQuery]);
 
   // Poll for documents that are processing
   useEffect(() => {
@@ -81,11 +125,11 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
 
     const pollInterval = setInterval(() => {
       logger.info(`Polling for ${processingDocs.length} processing documents...`);
-      fetchDocuments();
+      void refreshLoadedDocuments();
     }, 5000); // Poll every 5 seconds
 
     return () => clearInterval(pollInterval);
-  }, [documents, fetchDocuments]);
+  }, [documents, refreshLoadedDocuments]);
 
   const handleDelete = async (documentUuid: string, filename: string) => {
     if (!confirm(`Are you sure you want to delete "${filename}"?`)) return;
@@ -155,7 +199,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
   };
 
   const filteredDocuments = documents.filter((doc) =>
-    doc.filename.toLowerCase().includes(searchQuery.toLowerCase())
+    doc.filename.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   if (isLoading && documents.length === 0) {
@@ -178,7 +222,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
     return (
       <div role="alert" className={styles.error}>
         {error}
-        <Button variant="outline" className="ml-3" onClick={fetchDocuments}>Retry</Button>
+        <Button variant="outline" className="ml-3" onClick={() => void fetchDocuments()}>Retry</Button>
       </div>
     );
   }
@@ -200,7 +244,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
         <Button
           variant="outline"
           size="icon"
-          onClick={fetchDocuments}
+          onClick={() => void fetchDocuments()}
           disabled={isLoading}
         >
           <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -311,6 +355,26 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
           ))}
         </div>
       )}
+
+      {totalDocuments > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <span className="text-xs text-muted-foreground">
+            Showing {documents.length.toLocaleString()} of {totalDocuments.toLocaleString()} documents
+          </span>
+          {documents.length < totalDocuments && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void fetchDocuments(documents.length, true)}
+              disabled={isLoading || isLoadingMore}
+            >
+              {isLoadingMore ? <RefreshCw className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+              {isLoadingMore ? 'Loading older documents…' : 'Load older documents'}
+            </Button>
+          )}
+        </div>
+      )}
+      {loadMoreError && <div role="alert" className={styles.error}>{loadMoreError}</div>}
 
       <DocumentEditor
         doc={editingDoc}

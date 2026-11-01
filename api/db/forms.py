@@ -1,8 +1,7 @@
 """Workspace-scoped persistence for captured form answers."""
 
 import uuid
-
-from sqlalchemy import select
+from sqlalchemy import desc, func, select
 
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import ContactModel, FormModel, FormSubmissionModel
@@ -106,3 +105,23 @@ async def create_submission(
         await session.commit()
         await session.refresh(submission)
         return submission
+
+
+async def list_submissions(organization_id, form_id, *, limit=50, offset=0):
+    """Return one form-submission page and a count, scoped to its workspace."""
+    async with kodewaves_db_client.get_session() as session:
+        filters = (
+            FormSubmissionModel.organization_id == organization_id,
+            FormSubmissionModel.form_id == form_id,
+        )
+        result = await session.execute(
+            select(FormSubmissionModel)
+            .where(*filters)
+            .order_by(desc(FormSubmissionModel.created_at), desc(FormSubmissionModel.id))
+            .limit(limit)
+            .offset(offset)
+        )
+        total = await session.scalar(
+            select(func.count(FormSubmissionModel.id)).where(*filters)
+        )
+        return list(result.scalars().all()), int(total or 0)
