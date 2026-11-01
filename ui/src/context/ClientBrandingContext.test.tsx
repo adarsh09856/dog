@@ -51,6 +51,19 @@ describe("shared platform branding", () => {
     await waitFor(() => expect(document.title).toBe("Superadmin | Acme Voice"));
   });
 
+  it.each([
+    ["/platform", "Platform"],
+    ["/deployment", "Deployment"],
+  ])("uses the %s public page title instead of the workspace fallback", async (pathname, section) => {
+    mocks.pathname = pathname;
+    const branding = { ...DEFAULT_BRANDING, company_name: "Acme Voice" };
+    mocks.apiFetch.mockReturnValue(new Promise(() => {}));
+
+    render(<ClientBrandingProvider initialBranding={branding}><BrandLogo /></ClientBrandingProvider>);
+
+    await waitFor(() => expect(document.title).toBe(`${section} | Acme Voice`));
+  });
+
   it("retains the last brand when a refresh fails", async () => {
     const branding = { ...DEFAULT_BRANDING, company_name: "Acme Voice" };
     mocks.apiFetch.mockRejectedValue(new Error("Branding is temporarily unavailable"));
