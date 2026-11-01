@@ -563,6 +563,17 @@ export interface LeadStage {
   color?: string;
 }
 
+export interface ContactDirectoryPage {
+  contacts: Contact[];
+  total_count: number;
+  filtered_count: number;
+  email_count: number;
+  stage_counts: Record<string, number>;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
 export interface Appointment {
   id: string | number;
     contact_id?: string | null;
@@ -648,6 +659,12 @@ export interface WalletLedgerItem {
 
 export const crmApi = {
   getContacts: () => apiFetch<Contact[]>('/crm/contacts'),
+  getContactsPage: (params: { page: number; limit: number; search?: string; stageId?: string }) => {
+    const query = new URLSearchParams({ page: String(params.page), limit: String(params.limit) });
+    if (params.search?.trim()) query.set('search', params.search.trim());
+    if (params.stageId) query.set('stage_id', params.stageId);
+    return apiFetch<ContactDirectoryPage>(`/crm/contacts/directory?${query.toString()}`);
+  },
   createContact: (data: Partial<Contact>) =>
     apiFetch<Contact>('/crm/contacts', {
       method: 'POST',

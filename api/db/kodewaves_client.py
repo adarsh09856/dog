@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
-from sqlalchemy import delete, desc, or_, select, text, update
+from sqlalchemy import delete, desc, func, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 
@@ -856,6 +856,69 @@ class KodewavesDBClient(BaseDBClient):
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def get_contacts_directory_page(
+        self,
+        organization_id: int,
+        *,
+        limit: int,
+        offset: int,
+        search: Optional[str] = None,
+        stage_id: Optional[uuid.UUID] = None,
+    ) -> Dict[str, Any]:
+        """Return a tenant-scoped CRM page and organization-wide directory counts."""
+        async with self.get_session() as session:
+            base_filters = [ContactModel.organization_id == organization_id]
+            page_filters = list(base_filters)
+            if stage_id is not None:
+                page_filters.append(ContactModel.stage_id == stage_id)
+            normalized_search = (search or "").strip()
+            if normalized_search:
+                pattern = f"%{normalized_search}%"
+                page_filters.append(or_(
+                    ContactModel.first_name.ilike(pattern),
+                    ContactModel.last_name.ilike(pattern),
+                    ContactModel.phone.ilike(pattern),
+                    ContactModel.email.ilike(pattern),
+                    ContactModel.company.ilike(pattern),
+                ))
+
+            contacts_result = await session.execute(
+                select(ContactModel)
+                .where(*page_filters)
+                .order_by(desc(ContactModel.created_at), desc(ContactModel.id))
+                .limit(limit)
+                .offset(offset)
+            )
+            filtered_count = await session.scalar(
+                select(func.count(ContactModel.id)).where(*page_filters)
+            )
+            total_count = await session.scalar(
+                select(func.count(ContactModel.id)).where(*base_filters)
+            )
+            email_count = await session.scalar(
+                select(func.count(ContactModel.id)).where(
+                    *base_filters,
+                    ContactModel.email.is_not(None),
+                    ContactModel.email != "",
+                )
+            )
+            stage_rows = await session.execute(
+                select(ContactModel.stage_id, func.count(ContactModel.id))
+                .where(*base_filters)
+                .group_by(ContactModel.stage_id)
+            )
+            stage_counts = {
+                str(stage_id) if stage_id else "unassigned": count
+                for stage_id, count in stage_rows.all()
+            }
+            return {
+                "contacts": list(contacts_result.scalars().all()),
+                "filtered_count": int(filtered_count or 0),
+                "total_count": int(total_count or 0),
+                "email_count": int(email_count or 0),
+                "stage_counts": stage_counts,
+            }
 
     # ------------------------------------------------------------------------
     # Platform Settings
