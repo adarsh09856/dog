@@ -22,6 +22,7 @@ from api.services.installation_license import (
     load_license,
 )
 from api.services.client_binding_requests import accept_binding_request
+from api.services.installation_binding import license_ip_binding_valid as _license_ip_binding_valid
 from api.services.owner_license_signer_client import (
     OwnerLicenseSignerError,
     owner_license_public_keys,
@@ -62,17 +63,6 @@ def _observed_client_ip(request: Request) -> str | None:
     while len(chain) > 1 and any(chain[-1] in network for network in trusted):
         chain.pop()
     return str(chain[-1])
-
-
-def _license_ip_binding_valid(ip_ranges: tuple[str, ...], observed_ip: str | None) -> bool:
-    """Match the owner's observed peer address against an optional license allowlist."""
-    if not ip_ranges:
-        return True
-    try:
-        address = ipaddress.ip_address(observed_ip or "")
-        return any(address in ipaddress.ip_network(value) for value in ip_ranges)
-    except ValueError:
-        return False
 
 
 class IntegrityFinding(BaseModel):

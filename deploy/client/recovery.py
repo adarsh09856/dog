@@ -908,7 +908,7 @@ def _release_rollback_config(
         raise ValueError("Active release image pins do not match its signed manifest")
     current_head = current["schema_compatibility"]["head"]
     target_head = target["schema_compatibility"]["head"]
-    if current_head == target_head or target_head not in current["schema_compatibility"]["rollback_to"]:
+    if target_head not in current["schema_compatibility"]["rollback_to"]:
         raise ValueError("Active signed release does not authorize rollback to the archived schema head")
 
     if current_env.get("CLIENT_IDENTITY_KEY_FILE"):
