@@ -606,6 +606,14 @@ export interface DynamicForm {
   created_at: string;
 }
 
+export interface FormSubmissionPage {
+  submissions: Array<{ id: number | string; data: Record<string, unknown>; created_at: string }>;
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
 export interface WebsiteWidget {
   id: string | number;
   name: string;
@@ -724,6 +732,8 @@ export const formsApi = {
     }),
   getSubmissions: (formId: string | number) =>
     apiFetch<Array<{ id: number | string; data: Record<string, unknown>; created_at: string }>>(`/forms/${formId}/submissions`),
+  getSubmissionsPage: (formId: string | number, offset = 0, limit = 50) =>
+    apiFetch<FormSubmissionPage>(`/forms/${formId}/submissions/page?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`),
 };
 
 export const widgetsApi = {

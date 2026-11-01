@@ -2,13 +2,14 @@ import uuid
 import re
 import unicodedata
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import desc, func, select
 from sqlalchemy.exc import IntegrityError
 
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import FormModel, FormSubmissionModel
+from api.db import forms as forms_db
 from api.db.models import UserModel
 from api.services.auth.depends import get_user
 from api.services.saas_entitlements import require_saas_feature
@@ -79,6 +80,14 @@ class SubmissionItem(BaseModel):
     data: Dict[str, Any] = {}
     submitted_data: Dict[str, Any] = {}
     created_at: str
+
+
+class SubmissionPage(BaseModel):
+    submissions: List[SubmissionItem]
+    total: int
+    limit: int
+    offset: int
+    has_more: bool
 
 
 class SubmitFormRequest(BaseModel):
@@ -346,6 +355,45 @@ async def list_submissions(form_id: str, user: UserModel = Depends(get_user)):
             )
             for s in subs
         ]
+
+
+@router.get("/{form_id}/submissions/page", response_model=SubmissionPage)
+async def list_submissions_page(
+    form_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user: UserModel = Depends(get_user),
+):
+    """List all submissions through bounded, organization-scoped pages."""
+    org_id = user.selected_organization_id
+    if not org_id:
+        return SubmissionPage(submissions=[], total=0, limit=limit, offset=offset, has_more=False)
+
+    async with kodewaves_db_client.get_session() as session:
+        form = await _find_form(session, org_id, form_id)
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found")
+
+    submissions, total = await forms_db.list_submissions(
+        org_id, form.id, limit=limit, offset=offset
+    )
+    items = [
+        SubmissionItem(
+            id=str(submission.id),
+            form_id=str(submission.form_id),
+            data=submission.submitted_data or {},
+            submitted_data=submission.submitted_data or {},
+            created_at=submission.created_at.isoformat() if submission.created_at else "",
+        )
+        for submission in submissions
+    ]
+    return SubmissionPage(
+        submissions=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+        has_more=offset + len(items) < total,
+    )
 
 
 @router.post("/{form_id}/submit", response_model=Dict[str, Any])
