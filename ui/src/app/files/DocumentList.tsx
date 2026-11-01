@@ -222,7 +222,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
     return (
       <div role="alert" className={styles.error}>
         {error}
-        <Button variant="outline" className="ml-3" onClick={fetchDocuments}>Retry</Button>
+        <Button variant="outline" className="ml-3" onClick={() => void fetchDocuments()}>Retry</Button>
       </div>
     );
   }
@@ -244,7 +244,7 @@ export default function DocumentList({ refreshTrigger }: DocumentListProps) {
         <Button
           variant="outline"
           size="icon"
-          onClick={fetchDocuments}
+          onClick={() => void fetchDocuments()}
           disabled={isLoading}
         >
           <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
