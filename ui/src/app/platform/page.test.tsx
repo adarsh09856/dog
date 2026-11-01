@@ -6,9 +6,14 @@ vi.mock("@/components/PublicSiteChrome", () => ({
   PublicFooter: () => <footer>Public footer</footer>,
 }));
 
-import PlatformPage from "./page";
+import PlatformPage, { metadata } from "./page";
 
 describe("public platform page", () => {
+  it("sets a page-specific browser title and search description", () => {
+    expect(metadata.title).toBe("Platform");
+    expect(metadata.description).toContain("voice-agent workflows");
+  });
+
   it("explains the end-to-end voice operations workflow and links into the product", () => {
     render(<PlatformPage />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("first prompt");

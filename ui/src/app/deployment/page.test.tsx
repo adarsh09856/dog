@@ -9,9 +9,14 @@ vi.mock("@/components/lead-forms/PublicEnterpriseLeadCTA", () => ({
   PublicEnterpriseLeadCTA: ({ label }: { label: string }) => <button type="button">{label}</button>,
 }));
 
-import DeploymentPage from "./page";
+import DeploymentPage, { metadata } from "./page";
 
 describe("public deployment page", () => {
+  it("sets a page-specific browser title and search description", () => {
+    expect(metadata.title).toBe("Deployment");
+    expect(metadata.description).toContain("licensed client installations");
+  });
+
   it("describes managed and client installation options without promising fixed latency", () => {
     render(<DeploymentPage />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("where your voice operations run");

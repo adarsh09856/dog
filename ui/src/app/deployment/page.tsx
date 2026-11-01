@@ -8,12 +8,19 @@ import {
   LockKeyhole,
   Server,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { PublicEnterpriseLeadCTA } from "@/components/lead-forms/PublicEnterpriseLeadCTA";
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 
 import styles from "../PublicPages.module.css";
+
+export const metadata: Metadata = {
+  title: "Deployment",
+  description:
+    "Compare hosted Kodewaves workspaces and licensed client installations, including model capacity, domains, data and operating responsibilities.",
+};
 
 const deploymentOptions = [
   {
