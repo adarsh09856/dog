@@ -867,6 +867,14 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
         ):
             state.pop(key, None)
 
+    if intro:
+        # An explicit re-introduction starts a replacement attempt. Clear any
+        # confirmed number before parsing it, so garbled corrections cannot
+        # leave the old value eligible for a later booking.
+        forget_uncertain_phone()
+        state.pop("caller_phone_digits", None)
+        state["replace_phone_digits_on_next_turn"] = True
+
     # These words can be a misrecognition of "one", but also have normal
     # meanings. In a phone-dictation sequence, retain the candidate and ask
     # the caller to confirm its last four digits before using it.
