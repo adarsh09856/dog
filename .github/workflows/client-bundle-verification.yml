@@ -88,6 +88,10 @@ jobs:
           python -m alembic -c api/alembic.ini upgrade head
           python -m alembic -c api/alembic.ini current
       - name: Verify installer and image-verification orchestration
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test
+          REDIS_URL: redis://127.0.0.1:1/15
         run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_installer_archive.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py -q
       - name: Verify client backup and recovery failure handling
         run: |

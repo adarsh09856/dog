@@ -342,9 +342,15 @@ def test_disposable_owner_peer_requires_one_time_signed_enrollment_and_returns_b
                         "Authorization": f"Bearer {token}",
                     },
                 )
-                response = verifier.urllib.request.build_opener(
-                    verifier.urllib.request.HTTPSHandler(context=trusted_context)
-                ).open(request, timeout=5)
+                try:
+                    response = verifier.urllib.request.build_opener(
+                        verifier.urllib.request.HTTPSHandler(context=trusted_context)
+                    ).open(request, timeout=5)
+                except urllib.error.HTTPError as exc:
+                    pytest.fail(
+                        f"Owner HTTPS status failed ({exc.code}): {owner.diagnostic_summary()}",
+                        pytrace=False,
+                    )
                 signed_status = json.loads(response.read())["signed_status"]
             else:
                 signed_status = owner.check(check, observed_ip=observed_ip)["signed_status"]
