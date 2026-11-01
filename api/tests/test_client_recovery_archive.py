@@ -301,6 +301,28 @@ def test_create_and_stage_offline_recovery_archive(tmp_path):
     assert (destination / "config/installation.key").read_bytes() == b"k" * 32
 
 
+@pytest.mark.skipif(os.name == "nt", reason="UID/GID ownership is a POSIX recovery behavior")
+def test_docker_restore_staging_does_not_require_host_root_for_volume_ownership(monkeypatch, tmp_path):
+    target = tmp_path / "staged-volume-file"
+    target.write_bytes(b"staged")
+    member = tarfile.TarInfo("data/example")
+    member.uid = 1234
+    member.gid = 5678
+    member.mode = 0o640
+
+    monkeypatch.setattr(recovery.os, "name", "posix")
+    monkeypatch.setattr(recovery.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(recovery.os, "getuid", lambda: 1000)
+    monkeypatch.setattr(recovery.os, "getgroups", lambda: [1000])
+    monkeypatch.setattr(recovery.os, "chown", lambda *_args: pytest.fail("staging must leave ownership to Docker"))
+
+    recovery._apply_archive_owner_mode(target, member, preserve_ownership=False)
+
+    assert target.stat().st_mode & 0o777 == 0o640
+    with pytest.raises(ValueError, match="root privileges"):
+        recovery._apply_archive_owner_mode(target, member, preserve_ownership=True)
+
+
 def test_create_refuses_invalid_signed_release_manifest(tmp_path):
     inputs = _create_archive_inputs(tmp_path)
     manifest = json.loads(inputs["manifest"].read_bytes())
