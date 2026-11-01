@@ -1463,7 +1463,7 @@ export function AIModelConfigurationV2Editor({
                                         <div className="space-y-1 rounded-md border p-3">
                                             <p className="text-sm font-medium">TTS language: Automatic</p>
                                             <p className="text-xs text-muted-foreground">
-                                                Replies use a matching installed voice when the reply script identifies it. The preferred voice sets the demo and speaker gender; it does not lock the reply language. Shared scripts use call language context. This model supports 13 language groups; unsupported languages and unavailable matching voices cannot be synthesized.
+                                                Replies use a matching installed voice when the reply script identifies it. The preferred voice sets the demo and speaker gender; it does not lock the reply language. Shared scripts use call language context. This installed model reports {effectiveTtsModels.find((model) => model.value === kodewaves.tts_model)?.languages?.length ?? 0} languages; unsupported languages and unavailable matching voices cannot be synthesized.
                                             </p>
                                         </div>
                                     )}
