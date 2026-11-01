@@ -426,7 +426,11 @@ def _load_language_identifier() -> None:
                 whisper=sherpa_onnx.SpokenLanguageIdentificationWhisperConfig(
                     encoder=str(encoder), decoder=str(decoder),
                 ),
-                num_threads=1,
+                # Use the same bounded CPU budget as the primary LID
+                # session. The English rescue runs after the primary
+                # detector, so a second thread can reduce auto-detection
+                # wall time without running two inference models at once.
+                num_threads=LID_THREADS,
                 provider="cpu",
             )
         )

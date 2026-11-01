@@ -60,7 +60,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # every character and keeps later phrases at the larger size.
                 # Lower the first-phrase threshold to reduce the gap to speech;
                 # word/date guards still prevent unsafe phrase boundaries.
-                first_phrase_characters=16,
+                first_phrase_characters=10,
                 # Do not turn each short word group into a separate TTS request.
                 # The local CPU synthesizer is single-worker; tiny sequential
                 # requests can drain the playback queue between phrases. Keep

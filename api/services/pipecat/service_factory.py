@@ -1383,7 +1383,9 @@ def _voice_completion_settings(model: str, temperature: float | None = None) -> 
     """Apply the same CPU voice budget through every OpenAI-compatible alias."""
     values = {"model": model, "temperature": 0.1 if temperature is None else temperature}
     if model.casefold().startswith(("qwen2.5:", "qwen3:", "qwen3.5:")):
-        values["max_tokens"] = 192
+        # Voice turns should stay concise so CPU synthesis and telephony do not
+        # spend several extra seconds rendering an unexpectedly long answer.
+        values["max_tokens"] = 80
     if model.casefold().startswith(("qwen3:", "qwen3.5:")):
         # Keep local voice responses grounded and predictable; calibrated
         # temperature and penalty avoid repetition collapse on Indic vocabularies.

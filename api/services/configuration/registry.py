@@ -2154,8 +2154,10 @@ class SpeechmaticsSTTConfiguration(BaseSTTConfiguration):
 
 SPEACHES_STT_MODELS = ["indicconformer-ctc-int8"]
 SPEACHES_STT_LANGUAGES = [
-    "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai", "ml",
-    "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
+    # Match the installed local IndicConformer runtime. Other LID labels do
+    # not mean that a decoder/voice is installed for those languages.
+    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
+    "ne", "pa", "sa", "ta", "te",
 ]
 
 

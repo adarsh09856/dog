@@ -178,18 +178,28 @@ class LocalSpeechAggregator(BaseTextAggregator):
             buffered = self._sentences.text.text
             if text and text[-1].isspace():
                 buffered += " "
+            # A short completed sentence can already be waiting in _pending
+            # while the next sentence is still arriving. Include it when
+            # testing for a safe first phrase, or an available word boundary
+            # can be held until the next sentence completes.
+            prefix = self._pending.strip()
+            # Keep the trailing lookahead whitespace on buffered: the split
+            # includes its boundary in the spoken phrase, so dropping this
+            # trailing separator here would concatenate the tail with the next
+            # LLM token when that token does not carry a leading space.
+            combined = f"{prefix} {buffered}" if prefix and buffered else prefix or buffered
             minimum = self._first_phrase_characters
             # Release as soon as the *first* suitable space arrives. Waiting
             # for the entire lookahead window added avoidable generation time.
-            if len(buffered) > minimum and not buffered.rstrip().endswith((".", "?", "!", "।", "॥")):
-                boundary = _phrase_boundary(buffered, minimum)
+            if len(combined) > minimum and not combined.rstrip().endswith((".", "?", "!", "।", "॥")):
+                boundary = _phrase_boundary(combined, minimum)
                 if boundary:
                     split_at, split_end = boundary
                     # Keep the separating whitespace on the emitted phrase.
                     # The next synthesis request passes through the sentence
                     # aggregator, which trims leading whitespace.
-                    first = self._join(self._pending, buffered[:split_at]) + buffered[split_at:split_end]
-                    tail = buffered[split_end:]
+                    first = combined[:split_end]
+                    tail = combined[split_end:]
                     await self._sentences.reset()
                     self._pending = ""
                     self._emitted = True
