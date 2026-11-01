@@ -128,6 +128,17 @@ export default function DeploymentPage() {
                 </article>
               ))}
             </div>
+            <aside
+              aria-labelledby="client-installation-data-heading"
+              className="mt-5 rounded-xl border border-border bg-card/70 p-5"
+            >
+              <h3 id="client-installation-data-heading" className="text-base font-semibold">
+                Client installation data and license checks
+              </h3>
+              <p className="mt-2 max-w-5xl text-sm leading-7 text-muted-foreground">
+                During periodic license checks, the Kodewaves owner service receives the installation identity, the requester&apos;s observed IP address, and the integrity-check result or finding, then returns signed license status. The check payload sent to the owner service does not include call audio or conversation transcripts. The location of the database and recordings depends on the services and storage provisioned for the customer&apos;s installation. Connected telephony, speech, model and business providers may process call data to provide their configured services; review each provider&apos;s data handling terms.
+              </p>
+            </aside>
           </div>
         </section>
 
