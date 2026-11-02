@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import hashlib
 import ipaddress
 import json
@@ -12,6 +13,8 @@ import math
 import os
 import re
 import secrets
+import shutil
+import socket
 import ssl
 import subprocess
 import sys
@@ -19,6 +22,7 @@ import tempfile
 import textwrap
 import threading
 import time
+import tarfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -43,6 +47,16 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from validate_install import PINNED_IMAGE
 from validate_install import validate as validate_client_install
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "owner-tools"))
+from package_client_installer import package_installer
+
+# Test-only OCI distribution server used to exercise the exact customer archive
+# with immutable registry references. It is never included in client packages.
+_CI_REGISTRY_IMAGE = (
+    "docker.io/library/registry@sha256:"
+    "a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373"
+)
+
 # Immutable upstream multi-arch manifests for pgvector/pgvector:pg17 and
 # library/redis:7, used only by the disposable CI runtime smoke. The MinIO
 # service image is built from this repository's version-pinned Dockerfile and
@@ -60,7 +74,10 @@ _CI_REDIS_IMAGE = (
 class _OwnerAcceptanceServer:
     """Disposable HTTPS owner protocol peer for the packaged-client acceptance smoke."""
 
-    def __init__(self, directory: Path, license_token: str, license_private: bytes, license_public: str):
+    def __init__(
+        self, directory: Path, license_token: str, license_private: bytes,
+        license_public: str, *, gateway_url: bool = False,
+    ):
         from api.services.installation_license import load_license
 
         self.license_token = license_token
@@ -140,7 +157,12 @@ class _OwnerAcceptanceServer:
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self.thread.start()
         self.port = self.httpd.server_address[1]
-        self.url = f"https://host.docker.internal:{self.port}/api/v1/admin/client-installations/check"
+        # The archive-based acceptance project uses a dedicated Docker bridge
+        # whose host gateway is reachable both from the installer host and the
+        # API container. In that mode, using its IP lets the shipped enrollment
+        # CLI and Compose file exercise HTTPS without test-only host mappings.
+        owner_host = "172.31.40.1" if gateway_url else "host.docker.internal"
+        self.url = f"https://{owner_host}:{self.port}/api/v1/admin/client-installations/check"
 
     def _make_certificates(self) -> None:
         now = datetime.now(UTC)
@@ -170,6 +192,7 @@ class _OwnerAcceptanceServer:
             .add_extension(x509.SubjectAlternativeName([
                 x509.DNSName("host.docker.internal"), x509.DNSName("localhost"),
                 x509.IPAddress(ipaddress.ip_address("127.0.0.1")),
+                x509.IPAddress(ipaddress.ip_address("172.31.40.1")),
             ]), critical=False)
             .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
             .add_extension(
@@ -240,6 +263,17 @@ class _OwnerAcceptanceServer:
         """Update the disposable owner's current binding policy, as an admin change would."""
         with self._lock:
             self.ip_ranges = tuple(ip_ranges)
+
+    def reset_for_fresh_install(self) -> None:
+        """Reset disposable owner state before the archive-based clean install."""
+        with self._lock:
+            self.public_key = None
+            self.used_nonces.clear()
+            self.observed_ips.clear()
+            self.revoked = False
+            self.integrity_findings.clear()
+            self.ip_ranges = self.licensed_ip_ranges
+            self.enrollment_token = secrets.token_urlsafe(40)
 
     def diagnostic_summary(self) -> str:
         """Return bounded, secret-free evidence for owner-poll CI failures."""
@@ -486,6 +520,455 @@ def _verify_installer_config(root: Path, directory: Path, caddy_image: str) -> N
             raise ValueError(f"Rendered {service_name.upper()} identity key path does not match its mount")
 
 
+def _free_loopback_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
+@contextlib.contextmanager
+def _local_registry(name: str):
+    """Run a pinned, disposable registry for digest-pinned package verification."""
+    port = _free_loopback_port()
+    subprocess.run(
+        ["docker", "run", "--detach", "--rm", "--name", name,
+         "--publish", f"127.0.0.1:{port}:5000", _CI_REGISTRY_IMAGE],
+        check=True, capture_output=True, text=True, timeout=90,
+    )
+    endpoint = f"localhost:{port}"
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(f"http://{endpoint}/v2/", timeout=2) as response:
+                    if response.status == 200:
+                        break
+            except (OSError, urllib.error.URLError):
+                time.sleep(0.25)
+        else:
+            raise TimeoutError("Disposable local image registry did not become healthy")
+        yield endpoint
+    finally:
+        subprocess.run(
+            ["docker", "rm", "--force", name], check=False,
+            capture_output=True, text=True, timeout=30,
+        )
+
+
+def _docker_image_id(image: str) -> str:
+    result = subprocess.run(
+        ["docker", "image", "inspect", "--format", "{{.Id}}", image],
+        check=True, capture_output=True, text=True, timeout=30,
+    )
+    image_id = result.stdout.strip()
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+        raise ValueError(f"Docker returned an invalid image ID for {image}")
+    return image_id
+
+
+def _push_verified_image(registry: str, image: str, repository: str) -> str:
+    """Push an accepted image and prove the immutable digest pulls the same image ID."""
+    image_id = _docker_image_id(image)
+    tag = f"{registry}/kodewaves-ci/{repository}:acceptance"
+    subprocess.run(["docker", "tag", image, tag], check=True, capture_output=True, text=True)
+    subprocess.run(["docker", "push", tag], check=True, capture_output=True, text=True, timeout=180)
+    inspected = subprocess.run(
+        ["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", tag],
+        check=True, capture_output=True, text=True, timeout=30,
+    )
+    digests = json.loads(inspected.stdout.strip())
+    prefix = tag.rsplit(":", 1)[0] + "@sha256:"
+    references = [
+        value for value in digests
+        if isinstance(value, str) and value.startswith(prefix)
+        and re.fullmatch(re.escape(prefix) + r"[0-9a-f]{64}", value)
+    ] if isinstance(digests, list) else []
+    if len(references) != 1:
+        raise ValueError(f"Local registry did not return one immutable digest for {tag}")
+    reference = references[0]
+    subprocess.run(["docker", "pull", reference], check=True, capture_output=True, text=True, timeout=180)
+    if _docker_image_id(reference) != image_id:
+        raise ValueError(f"Pulling {reference} did not reproduce accepted image {image_id}")
+    return reference
+
+
+def _derive_api_with_ci_owner_ca(image: str, ca_file: Path, directory: Path) -> str:
+    """Create a verifier-only image trusting the disposable HTTPS owner peer."""
+    context = directory / "api-owner-ca-context"
+    context.mkdir()
+    shutil.copyfile(ca_file, context / "ci-owner-ca.crt")
+    dockerfile = context / "Dockerfile"
+    dockerfile.write_text(
+        f"FROM {image}\n"
+        "USER root\n"
+        "COPY ci-owner-ca.crt /usr/local/share/ca-certificates/kodewaves-ci-owner.crt\n"
+        "RUN update-ca-certificates\n"
+        "USER kodewaves\n",
+        encoding="utf-8",
+    )
+    derived = f"kodewaves-client-api:ci-installer-{uuid.uuid4().hex[:12]}"
+    subprocess.run(
+        ["docker", "build", "--pull=false", "--network=none", "--tag", derived,
+         "--file", str(dockerfile), str(context)],
+        check=True, capture_output=True, text=True, timeout=120,
+    )
+    return derived
+
+
+def _container_inventory(image: str, component: str) -> dict[str, str]:
+    if component == "api":
+        command = [
+            "docker", "run", "--rm", "--network", "none", "--entrypoint", "python", image,
+            "-c", "import json; from pathlib import Path; from api.services.release_integrity import protected_files; print(json.dumps(protected_files(Path('/app'))))",
+        ]
+    elif component == "ui":
+        command = [
+            "docker", "run", "--rm", "--network", "none", "--entrypoint", "node", image,
+            "/app/verify-client-release.mjs", "--inventory",
+        ]
+    else:
+        raise ValueError(f"Unsupported release inventory component: {component}")
+    result = subprocess.run(command, check=True, capture_output=True, text=True, timeout=90)
+    inventory = json.loads(result.stdout)
+    if not isinstance(inventory, dict) or not inventory:
+        raise ValueError(f"Built {component.upper()} image has an empty protected-file inventory")
+    return inventory
+
+
+def _write_registry_manifest(
+    root: Path,
+    source_manifest: Path,
+    output_manifest: Path,
+    api_image: str,
+    ui_image: str,
+    release_private_key: Path,
+    registry_images: dict[str, str],
+) -> None:
+    """Resign the accepted inventories with the pushed immutable image digests."""
+    source = json.loads(source_manifest.read_text(encoding="utf-8"))
+    payload = source.get("payload") if isinstance(source, dict) else None
+    if not isinstance(payload, dict) or payload.get("edition") != "client":
+        raise ValueError("Built client image manifest is missing its client payload")
+    actual_api = _container_inventory(api_image, "api")
+    actual_ui = _container_inventory(ui_image, "ui")
+    if actual_api != payload.get("files") or actual_ui != payload.get("ui_files"):
+        raise ValueError("Customer image inventories differ from the accepted built images")
+    if set(registry_images) != {"api", "ui"}:
+        raise ValueError("Customer release must include exactly API and UI registry digests")
+    images_file = output_manifest.parent / "registry-images.json"
+    files_file = output_manifest.parent / "api-inventory.json"
+    ui_files_file = output_manifest.parent / "ui-inventory.json"
+    schema_file = output_manifest.parent / "schema-compatibility.json"
+    files_file.write_text(json.dumps(actual_api), encoding="utf-8")
+    ui_files_file.write_text(json.dumps(actual_ui), encoding="utf-8")
+    images_file.write_text(json.dumps({
+        name: {"kind": "registry_digest", "reference": reference}
+        for name, reference in registry_images.items()
+    }), encoding="utf-8")
+    schema = payload.get("schema_compatibility")
+    if not isinstance(schema, dict):
+        raise ValueError("Built client release is missing schema compatibility metadata")
+    schema_file.write_text(json.dumps(schema), encoding="utf-8")
+    subprocess.run(
+        [sys.executable, str(root / "owner-tools" / "sign_client_release.py"),
+         "--files-json", str(files_file), "--ui-files-json", str(ui_files_file),
+         "--images-json", str(images_file), "--schema-compatibility-json", str(schema_file),
+         "--private-key", str(release_private_key), "--output", str(output_manifest)],
+        cwd=root, check=True, capture_output=True, text=True, timeout=60,
+    )
+
+
+def _package_customer_archive(
+    root: Path,
+    directory: Path,
+    *,
+    caddy_image: str,
+    minio_image: str,
+    api_image: str,
+    ui_image: str,
+    source_manifest: Path,
+    release_private_key: Path,
+    release_public_key_file: Path,
+    registry_images: dict[str, str],
+) -> Path:
+    package_images = {**registry_images, "minio": minio_image}
+    images = {
+        "CLIENT_API_IMAGE": package_images["api"],
+        "CLIENT_UI_IMAGE": package_images["ui"],
+        "CLIENT_POSTGRES_IMAGE": _CI_POSTGRES_IMAGE,
+        "CLIENT_REDIS_IMAGE": _CI_REDIS_IMAGE,
+        "CLIENT_MINIO_IMAGE": package_images["minio"],
+        "CLIENT_COTURN_IMAGE": "registry.invalid/kodewaves-ci/coturn@sha256:" + "0" * 64,
+        "CLIENT_CADDY_IMAGE": caddy_image,
+    }
+    images_env = directory / "customer-images.env"
+    images_env.write_text("".join(f"{key}={value}\n" for key, value in images.items()), encoding="utf-8")
+    customer_manifest = directory / "client-release-manifest-registry.json"
+    _write_registry_manifest(
+        root, source_manifest, customer_manifest, api_image, ui_image,
+        release_private_key, {"api": package_images["api"], "ui": package_images["ui"]},
+    )
+    installer = directory / "customer-installer.tar.gz"
+    package_installer(images_env, customer_manifest, release_public_key_file, installer, root=root)
+    from verify_images import verify_api, verify_startup_rejection, verify_ui
+    verify_api(api_image)
+    verify_ui(ui_image)
+    verify_startup_rejection(api_image, ui_image, customer_manifest)
+    return installer
+
+
+def _extract_customer_archive(archive: Path, destination: Path) -> Path:
+    """Extract only regular top-level package files and verify every checksum."""
+    destination.mkdir(parents=True, exist_ok=False)
+    with tarfile.open(archive, "r:gz") as bundle:
+        members = bundle.getmembers()
+        names = [member.name for member in members]
+        if not names or len(names) != len(set(names)):
+            raise ValueError("Customer installer archive has duplicate or missing entries")
+        for member in members:
+            if not member.isfile() or member.name != Path(member.name).name or member.name in {"", ".", ".."}:
+                raise ValueError("Customer installer archive contains an unsafe entry")
+        bundle.extractall(destination, filter="data")
+    checksums = destination / "SHA256SUMS"
+    if not checksums.is_file():
+        raise ValueError("Customer installer archive is missing SHA256SUMS")
+    expected: set[str] = set()
+    for line in checksums.read_text(encoding="ascii").splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9._-]+)", line)
+        if not match:
+            raise ValueError("Customer installer archive contains malformed checksums")
+        digest, name = match.groups()
+        expected.add(name)
+        if hashlib.sha256((destination / name).read_bytes()).hexdigest() != digest:
+            raise ValueError(f"Customer installer archive checksum failed: {name}")
+    if expected != set(names) - {"SHA256SUMS"}:
+        raise ValueError("Customer installer checksums do not cover its full file set")
+    return destination
+
+
+def _configure_customer_install(
+    install_dir: Path,
+    *,
+    license_token: str,
+    key_file: Path,
+    api_image: str,
+    ui_image: str,
+    minio_image: str,
+    caddy_image: str,
+    project: str,
+) -> Path:
+    """Write unique disposable values into an extracted customer installation."""
+    template = (install_dir / ".env.example").read_text(encoding="utf-8").splitlines()
+    ports = secrets.SystemRandom().sample(range(20000, 60000), 3)
+    values = {
+        "CLIENT_API_IMAGE": api_image,
+        "CLIENT_UI_IMAGE": ui_image,
+        "CLIENT_POSTGRES_IMAGE": _CI_POSTGRES_IMAGE,
+        "CLIENT_REDIS_IMAGE": _CI_REDIS_IMAGE,
+        "CLIENT_MINIO_IMAGE": minio_image,
+        "CLIENT_COTURN_IMAGE": "registry.invalid/kodewaves-ci/coturn@sha256:" + "0" * 64,
+        "CLIENT_CADDY_IMAGE": caddy_image,
+        "COMPOSE_PROFILES": "",
+        "CLIENT_INTERNAL_SUBNET": "172.31.40.0/24",
+        "CLIENT_CADDY_IPV4": "172.31.40.2",
+        "FORWARDED_ALLOW_IPS": "172.31.40.2",
+        "CLIENT_RELEASE_MANIFEST_FILE": str((install_dir / "client-release-manifest.json").resolve()),
+        "KODEWAVES_INSTALLATION_ID": "ci-installation-smoke",
+        "KODEWAVES_LICENSE_TOKEN": license_token,
+        "KODEWAVES_OWNER_STATUS_POLL_SECONDS": "1",
+        "PUBLIC_HOST": "smoke.customer.example.invalid",
+        "CLIENT_IDENTITY_KEY_FILE": str(key_file.resolve()),
+        "CLIENT_IDENTITY_GID": str(max(1, getattr(os, "getegid", lambda: 12345)())),
+        "TURN_HOST": "8.8.8.8",
+        "POSTGRES_PASSWORD": secrets.token_urlsafe(32),
+        "REDIS_PASSWORD": secrets.token_urlsafe(32),
+        "MINIO_ROOT_USER": "kodewaves-ci-storage",
+        "MINIO_ROOT_PASSWORD": secrets.token_urlsafe(32),
+        "OSS_JWT_SECRET": secrets.token_urlsafe(32),
+        "MASTER_CREDENTIAL_ENCRYPTION_KEY": base64.urlsafe_b64encode(
+            secrets.token_bytes(32)
+        ).rstrip(b"=").decode("ascii"),
+        "TELEPHONY_WS_TOKEN_SECRET": secrets.token_urlsafe(32),
+        "TURN_SECRET": secrets.token_urlsafe(32),
+        "API_PORT": str(ports[0]),
+        "UI_PORT": str(ports[1]),
+        "MINIO_PORT": str(ports[2]),
+        "COMPOSE_PROJECT_NAME": project,
+    }
+    seen: set[str] = set()
+    rendered: list[str] = []
+    for line in template:
+        match = re.match(r"^([A-Z][A-Z0-9_]*)=", line)
+        key = match.group(1) if match else None
+        if key in values:
+            if key in seen:
+                raise ValueError(f"Customer .env.example defines {key} more than once")
+            rendered.append(f"{key}={values[key]}")
+            seen.add(key)
+        else:
+            rendered.append(line)
+    # COMPOSE_PROJECT_NAME is optional in the customer template; pin it in the
+    # disposable smoke so a manually-created bridge has a deterministic name.
+    if "COMPOSE_PROJECT_NAME" not in seen:
+        rendered.append(f"COMPOSE_PROJECT_NAME={project}")
+        seen.add("COMPOSE_PROJECT_NAME")
+    if seen != set(values):
+        raise ValueError(f"Customer .env.example is missing settings: {sorted(set(values) - seen)}")
+    path = install_dir / ".env"
+    path.write_text("\n".join(rendered) + "\n", encoding="utf-8")
+    if os.name != "nt":
+        path.chmod(0o600)
+    return path
+
+
+def _create_customer_compose_network(project: str) -> None:
+    """Create the customer's declared bridge before its first API image enrollment."""
+    subprocess.run(
+        ["docker", "network", "create", "--driver", "bridge", "--subnet", "172.31.40.0/24",
+         "--gateway", "172.31.40.1", "--label", f"com.docker.compose.project={project}",
+         "--label", "com.docker.compose.network=internal", f"{project}_internal"],
+        check=True, capture_output=True, text=True, timeout=30,
+    )
+
+
+def _verify_customer_archive_install(
+    install_dir: Path,
+    *,
+    owner: _OwnerAcceptanceServer,
+    key_file: Path,
+) -> dict[str, str]:
+    """Run the shipped installer CLI/wrapper through identity, first boot and bootstrap."""
+    from validate_install import parse_env
+
+    project = parse_env(install_dir / ".env")["COMPOSE_PROJECT_NAME"]
+    compose = [sys.executable, str(install_dir / "compose_client.py")]
+    env = {
+        **os.environ,
+        "SSL_CERT_FILE": str(owner.ca_file),
+        "NO_PROXY": "", "no_proxy": "",
+        "COMPOSE_PROFILES": "",
+    }
+    _create_customer_compose_network(project)
+    try:
+        subprocess.run([*compose, "pull", "api"], cwd=install_dir, check=True,
+                       env=env, capture_output=True, text=True, timeout=240)
+        enrollment = subprocess.run(
+            [sys.executable, str(install_dir / "enroll_identity.py")], cwd=install_dir,
+            input=owner.enrollment_token + "\n", capture_output=True, text=True,
+            env=env, check=True, timeout=120,
+        )
+        if "Owner confirmed the enrolled installation identity." not in enrollment.stdout:
+            raise ValueError("Packaged enrollment CLI did not confirm the owner identity")
+        findings = validate_client_install(install_dir / ".env", install_dir / "docker-compose.client.yaml")
+        failures = [finding for finding in findings if not finding.startswith("preflight passed;")]
+        if failures:
+            raise ValueError("Extracted customer installation preflight failed: " + "; ".join(failures))
+        subprocess.run([*compose, "config", "--quiet"], cwd=install_dir, check=True,
+                       env=env, capture_output=True, text=True, timeout=60)
+        subprocess.run([*compose, "up", "--detach", "--wait", "--wait-timeout", "300", "api"],
+                       cwd=install_dir, check=True, env=env, capture_output=True, text=True, timeout=360)
+        status, _ = _container_http_response(compose, "/api/v1/health", env=env)
+        if status != 200:
+            raise ValueError(f"Archive-installed API health endpoint returned HTTP {status}")
+        deadline = time.monotonic() + 45
+        owner_confirmed = False
+        while time.monotonic() < deadline:
+            logs = subprocess.run([*compose, "logs", "--no-color", "--tail", "100", "api"],
+                                  cwd=install_dir, check=True, env=env,
+                                  capture_output=True, text=True, timeout=30)
+            if "Initial owner installation check succeeded" in (logs.stdout + logs.stderr):
+                owner_confirmed = True
+                break
+            time.sleep(0.5)
+        if not owner_confirmed:
+            raise ValueError("Archive-installed API did not complete the signed owner installation check")
+        password = secrets.token_urlsafe(32) + "Aa1!"
+        bootstrap_output = _run_interactive(
+            [*compose, "run", "--rm", "--no-deps", "api", "python", "-m",
+             "api.services.bootstrap_client_admin", "--email", "ci-owner@example.invalid"],
+            cwd=install_dir, env=env, password=password, timeout=90,
+        )
+        if "Client administrator created" not in bootstrap_output:
+            raise ValueError("Shipped first-administrator bootstrap did not report success")
+        subprocess.run([*compose, "up", "--detach", "--wait", "--wait-timeout", "120", "api", "ui"],
+                       cwd=install_dir, check=True, env=env, capture_output=True, text=True, timeout=180)
+        ui_status, _ = _container_http_response(compose, "/", target="ui", env=env)
+        if ui_status != 200:
+            raise ValueError(f"Archive-installed UI root returned HTTP {ui_status}")
+        return {
+            "archive_extracted_and_checksums_verified": "passed",
+            "installer_preflight": "passed",
+            "shipped_compose_wrapper_pull_and_start": "passed",
+            "shipped_identity_enrollment": "passed",
+            "initial_owner_status": "passed_signed_owner_check",
+            "first_administrator_bootstrap": "passed",
+            "ui_root": "passed",
+            "runtime_scope": "fresh API/UI install with disposable Postgres, Redis and MinIO; coturn/browser/telephone excluded",
+        }
+    finally:
+        subprocess.run([*compose, "down", "--volumes", "--remove-orphans", "--timeout", "20"],
+                       cwd=install_dir, check=False, env=env, capture_output=True, text=True, timeout=90)
+        subprocess.run(["docker", "network", "rm", f"{project}_internal"], check=False,
+                       capture_output=True, text=True, timeout=30)
+
+
+def _run_interactive(
+    command: list[str], *, cwd: Path, env: dict[str, str], password: str, timeout: int
+) -> str:
+    """Drive the shipped interactive bootstrap through a real pseudo-terminal."""
+    import pty
+    import select
+    import termios
+
+    master_fd, slave_fd = pty.openpty()
+    attributes = termios.tcgetattr(slave_fd)
+    attributes[3] &= ~termios.ECHO
+    termios.tcsetattr(slave_fd, termios.TCSANOW, attributes)
+    process = subprocess.Popen(
+        command, cwd=cwd, env=env, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
+        close_fds=True,
+    )
+    os.close(slave_fd)
+    output = bytearray()
+    sent_password = 0
+    deadline = time.monotonic() + timeout
+    try:
+        while process.poll() is None:
+            if time.monotonic() >= deadline:
+                process.kill()
+                raise TimeoutError("Interactive client administrator bootstrap timed out")
+            readable, _, _ = select.select([master_fd], [], [], 0.2)
+            if not readable:
+                continue
+            try:
+                chunk = os.read(master_fd, 4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            output.extend(chunk)
+            text = output.decode("utf-8", "replace")
+            if "Administrator password:" in text and sent_password == 0:
+                os.write(master_fd, password.encode("utf-8") + b"\n")
+                sent_password = 1
+            if "Confirm password:" in text and sent_password == 1:
+                os.write(master_fd, password.encode("utf-8") + b"\n")
+                sent_password = 2
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+        result = output.decode("utf-8", "replace")
+        if sent_password != 2:
+            raise ValueError("Bootstrap did not prompt twice for the administrator password")
+        if process.returncode != 0:
+            raise RuntimeError(f"Shipped bootstrap command failed: {result[-2000:]}")
+        return result
+    finally:
+        os.close(master_fd)
+
+
 def _container_http_response(
     compose_command: list[str],
     path: str,
@@ -665,7 +1148,11 @@ def _verify_compose_runtime(
     identity_key = None
     identity_gid = None
     if owner is not None:
+        _create_customer_compose_network(project)
         identity_key = _prepare_ci_installation_key(api_image, owner, license_token)
+        # The preflight enrollment check is host-originated; the following
+        # observation assertion is specifically about API-container traffic.
+        owner.observed_ips.clear()
         identity_gid = getattr(os, "getegid", lambda: 12345)()
         if not 1 <= identity_gid <= 2**31 - 1:
             identity_gid = 12345
@@ -1068,7 +1555,7 @@ def _verify_compose_runtime(
     return result
 
 
-def verify(caddy_image: str, report: Path) -> None:
+def verify(caddy_image: str, report: Path, *, customer_archive: bool = False) -> None:
     caddy_image = normalize_caddy_image(caddy_image)
     if report.exists():
         raise ValueError("Report already exists; use a new path for fresh verification")
@@ -1087,7 +1574,8 @@ def verify(caddy_image: str, report: Path) -> None:
             ip_ranges=["172.31.40.0/24"],
         )
         with _OwnerAcceptanceServer(
-            directory, license_token, license_private.read_bytes(), license_public.read_text(encoding="ascii")
+            directory, license_token, license_private.read_bytes(),
+            license_public.read_text(encoding="ascii"), gateway_url=True,
         ) as owner:
             subprocess.run([
                 sys.executable, str(root / "deploy/client/build_and_verify.py"),
@@ -1118,11 +1606,65 @@ def verify(caddy_image: str, report: Path) -> None:
                 root, directory, api_image=api_image, ui_image=ui_image, manifest=manifest,
                 license_token=license_token, owner=owner,
             )
+            archive_install = "not run by direct verify() invocation"
+            install_dir: Path | None = None
+            if customer_archive:
+                # Exercise the source-free customer bundle itself after the direct
+                # image boundary smoke. The derived API image adds only this
+                # disposable verifier CA; its protected application inventory must
+                # remain byte-for-byte identical before it can be signed/packaged.
+                owner.reset_for_fresh_install()
+                packaged_api_image = _derive_api_with_ci_owner_ca(api_image, owner.ca_file, directory)
+                from verify_images import verify_api
+                verify_api(packaged_api_image)
+                package_minio_image = f"kodewaves-ci-minio-installer:{uuid.uuid4().hex[:12]}"
+                subprocess.run(
+                    ["docker", "build", "--tag", package_minio_image, "--file",
+                     str(root / "deploy/minio/Dockerfile"), str(root / "deploy/minio")],
+                    cwd=root, check=True, capture_output=True, text=True, timeout=180,
+                )
+                registry_name = f"kodewaves-ci-registry-{uuid.uuid4().hex[:12]}"
+                try:
+                    with _local_registry(registry_name) as registry:
+                        registry_images = {
+                            "api": _push_verified_image(registry, packaged_api_image, "client-api"),
+                            "ui": _push_verified_image(registry, ui_image, "client-ui"),
+                        }
+                        package_minio = _push_verified_image(registry, package_minio_image, "minio")
+                        archive = _package_customer_archive(
+                            root, directory, caddy_image=caddy_image, minio_image=package_minio,
+                            api_image=packaged_api_image, ui_image=ui_image, source_manifest=manifest,
+                            release_private_key=release_private, release_public_key_file=release_public,
+                            registry_images=registry_images,
+                        )
+                        install_dir = _extract_customer_archive(archive, directory / "customer-install")
+                        package_manifest = json.loads(
+                            (install_dir / "client-release-manifest.json").read_text(encoding="utf-8")
+                        )
+                        package_payload = package_manifest["payload"]
+                        package_api_reference = package_payload["images"]["api"]["reference"]
+                        package_ui_reference = package_payload["images"]["ui"]["reference"]
+                        key_file = directory / "customer-installation.key"
+                        _configure_customer_install(
+                            install_dir, license_token=license_token, key_file=key_file,
+                            api_image=package_api_reference, ui_image=package_ui_reference,
+                            minio_image=package_minio, caddy_image=caddy_image,
+                            project=f"kw-install-{uuid.uuid4().hex[:10]}",
+                        )
+                        archive_install = _verify_customer_archive_install(
+                            install_dir, owner=owner, key_file=key_file,
+                        )
+                finally:
+                    subprocess.run(["docker", "image", "rm", "--force", package_minio_image],
+                                   check=False, capture_output=True, text=True, timeout=60)
+                    subprocess.run(["docker", "image", "rm", "--force", packaged_api_image],
+                                   check=False, capture_output=True, text=True, timeout=60)
         evidence = {
             "status": "passed", "production_release": False,
             "scope": "Client image boundaries, Caddy syntax, signed API/UI inventories, installer preflight, Compose interpolation, HTTPS owner enrollment, signed status, first-admin bootstrap, and disposable API/UI Compose runtime smoke including IP binding and live tamper rejection",
             "installer_preflight": "passed", "compose_config": "passed",
-            "installer_manifest_scope": "Unsigned configuration fixture; signed build inventories and image IDs verified separately",
+            "installer_manifest_scope": "Unsigned configuration fixture used only for Compose interpolation; customer archive separately uses a signed registry-digest manifest from exact verified images",
+            "customer_archive_install": archive_install,
             "custom_network_proxy_config": "passed",
             "identity_overlay_config": "passed",
             "startup_tamper_rejection": "passed",
@@ -1133,6 +1675,10 @@ def verify(caddy_image: str, report: Path) -> None:
                 "browser audio", "telephone",
             ],
             "image_ids": image_ids, "caddy_image": caddy_image,
+            "customer_manifest_sha256": (
+                hashlib.sha256((install_dir / "client-release-manifest.json").read_bytes()).hexdigest()
+                if install_dir is not None else None
+            ),
             "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
         }
         report.parent.mkdir(parents=True, exist_ok=True)
@@ -1143,9 +1689,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--caddy-image", required=True)
     parser.add_argument("--report", required=True, type=Path)
+    parser.add_argument("--customer-archive", action="store_true")
     args = parser.parse_args()
     try:
-        verify(args.caddy_image, args.report)
+        if args.customer_archive:
+            verify(args.caddy_image, args.report, customer_archive=True)
+        else:
+            verify(args.caddy_image, args.report)
     except Exception as exc:
         if os.getenv("GITHUB_ACTIONS", "").lower() == "true":
             # Surface a bounded summary when private action logs aren't visible;
