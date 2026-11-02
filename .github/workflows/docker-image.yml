@@ -71,6 +71,9 @@ jobs:
           - name: kodewaves-ui
             dockerfile: ui/Dockerfile
             context: .
+          - name: kodewaves-indic-stt
+            dockerfile: api/local_models/indic_stt/Dockerfile
+            context: api/local_models/indic_stt
         platform:
           - name: linux/amd64
             runner: ubuntu-24.04
@@ -172,6 +175,13 @@ jobs:
           merge-multiple: true
           path: /tmp/digests/kodewaves-ui
 
+      - name: Download Indic STT digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-kodewaves-indic-stt-*
+          merge-multiple: true
+          path: /tmp/digests/kodewaves-indic-stt
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -241,6 +251,7 @@ jobs:
 
           publish_service kodewaves-api
           publish_service kodewaves-ui
+          publish_service kodewaves-indic-stt
 
   notify:
     needs:
