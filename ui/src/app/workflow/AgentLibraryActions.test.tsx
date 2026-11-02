@@ -35,7 +35,11 @@ it('marks each agent-library action explicitly so hero contrast does not depend 
     const folder = screen.getByRole('button', { name: /New Folder/ });
     expect(upload.getAttribute('data-hero-action')).toBe('upload');
     expect(upload.className).toContain('!text-[#17271f]');
+    expect(upload.querySelector('[data-hero-label]')?.textContent).toBe('Upload Agent Definition');
     expect(folder.getAttribute('data-hero-action')).toBe('folder');
     expect(folder.className).toContain('!text-[#edf2e9]');
-    expect(screen.getByRole('button', { name: /Create Agent/ }).getAttribute('data-hero-action')).toBe('create');
+    expect(folder.querySelector('[data-hero-label]')?.textContent).toBe('New Folder');
+    const create = screen.getByRole('button', { name: /Create Agent/ });
+    expect(create.getAttribute('data-hero-action')).toBe('create');
+    expect(create.querySelector('[data-hero-label]')?.textContent).toBe('Create Agent');
 });

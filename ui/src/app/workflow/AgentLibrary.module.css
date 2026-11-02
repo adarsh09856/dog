@@ -10,6 +10,10 @@
 .actions { display:flex;max-width:520px;flex-wrap:wrap;justify-content:flex-end;gap:9px; }
 .actions > * { min-width:0; }
 .actions > :global(button[data-slot="button"]) { min-height:44px; }
+.actions [data-hero-label] { display:inline-block!important;visibility:visible!important;opacity:1!important;font-size:13px!important;line-height:1.2!important; }
+.actions [data-hero-action="upload"] [data-hero-label] { color:#17271f!important;-webkit-text-fill-color:#17271f!important; }
+.actions [data-hero-action="folder"] [data-hero-label] { color:#edf2e9!important;-webkit-text-fill-color:#edf2e9!important; }
+.actions [data-hero-action="create"] [data-hero-label] { color:#f2f4eb!important;-webkit-text-fill-color:#f2f4eb!important; }
 .actions > :global(button[data-hero-action="upload"]) { color:#17271f;background:#d1b367;border-color:#d1b367; }
 .actions > :global(button[data-hero-action="upload"]:hover) { color:#17271f;background:#dec783;border-color:#dec783; }
 .actions > :global(button[data-hero-action="folder"]) { color:#edf2e9;border-color:rgba(223,233,223,.4);background:rgba(255,255,255,.08); }
