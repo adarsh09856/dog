@@ -331,6 +331,14 @@ against a Docker daemon; they are not yet accepted restore evidence. See
 recovery volume mapping remain consistent. Owner enrollment is required before
 starting services.
 
+Do not roll back only the API/UI image pins after a release has saved model
+provider credentials in the `fernet:v1` encrypted format. Earlier API images do
+not decrypt that format. Use the cold pre-upgrade backup with
+`recovery.py restore --docker-volumes --allow-release-rollback` to restore the
+matching database volumes and signed prior images together. This returns data
+to the backup point, so changes made after that backup are not retained. Treat
+image-only rollback as unsupported.
+
 Do not expose `.env`, the signed license token, database credentials or the
 release manifest through a public web server. A customer with root control of
 the host can alter local software and disable local monitoring; the signed

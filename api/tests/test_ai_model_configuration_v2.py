@@ -16,6 +16,7 @@ from api.services.configuration.ai_model_configuration import (
     check_for_masked_keys_in_ai_model_configuration_v2,
     convert_legacy_ai_model_configuration_to_v2,
     get_resolved_ai_model_configuration,
+    _decrypt_model_configuration_secrets,
     mask_ai_model_configuration_v2,
     merge_ai_model_configuration_v2_secrets,
     migrate_workflow_configuration_model_override_to_v2,
@@ -51,14 +52,14 @@ def test_dograh_v2_compiles_to_effective_managed_pipeline_with_embeddings():
     effective = compile_ai_model_configuration_v2(config)
 
     assert effective.is_realtime is False
-    assert effective.llm.provider == "dograh"
+    assert effective.llm.provider == "kodewaves"
     assert effective.llm.model == "default"
-    assert effective.tts.provider == "dograh"
+    assert effective.tts.provider == "kodewaves"
     assert effective.tts.speed == 1.2
-    assert effective.stt.provider == "dograh"
+    assert effective.stt.provider == "kodewaves"
     assert effective.stt.language == "multi"
-    assert effective.embeddings.provider == "dograh"
-    assert effective.embeddings.model == "dograh_embedding_v1"
+    assert effective.embeddings.provider == "kodewaves"
+    assert effective.embeddings.model == "kodewaves_embedding_v1"
     assert effective.managed_service_version == 2
 
 
@@ -173,11 +174,36 @@ async def test_resolved_org_v2_uses_last_validated_at_as_validation_cache(
         "get_configuration",
         AsyncMock(return_value=row),
     )
+    persist_encrypted = AsyncMock(
+        side_effect=lambda organization_id, key, value, last_validated_at=None: SimpleNamespace(
+            value=value,
+            last_validated_at=last_validated_at,
+        )
+    )
+    monkeypatch.setattr(
+        ai_model_configuration.db_client,
+        "upsert_configuration",
+        persist_encrypted,
+    )
+    from api.services.configuration import kodewaves_resolver
+
+    async def passthrough_resolution(effective, _organization_id):
+        return effective
+
+    monkeypatch.setattr(
+        kodewaves_resolver,
+        "apply_kodewaves_sovereign_resolution",
+        passthrough_resolution,
+    )
 
     resolved = await get_resolved_ai_model_configuration(organization_id=42)
 
     assert resolved.source == "organization_v2"
     assert resolved.effective.last_validated_at == last_validated_at
+    persist_encrypted.assert_awaited_once()
+    stored_value = persist_encrypted.await_args.args[2]
+    assert stored_value["kodewaves"]["api_key"].startswith("fernet:v1:")
+    assert persist_encrypted.await_args.kwargs["last_validated_at"] == last_validated_at
 
 
 @pytest.mark.asyncio
@@ -201,12 +227,68 @@ async def test_upsert_org_v2_marks_configuration_validated(monkeypatch):
     upsert.assert_awaited_once()
     args = upsert.await_args.args
     kwargs = upsert.await_args.kwargs
-    assert args == (
-        42,
-        "MODEL_CONFIGURATION_V2",
-        config.model_dump(mode="json", exclude_none=True),
+    assert args[:2] == (42, "MODEL_CONFIGURATION_V2")
+    assert args[2] != config.model_dump(mode="json", exclude_none=True)
+    assert _decrypt_model_configuration_secrets(args[2]) == config.model_dump(
+        mode="json", exclude_none=True
     )
     assert kwargs["last_validated_at"].tzinfo is not None
+
+
+@pytest.mark.asyncio
+async def test_byok_credentials_are_encrypted_scoped_and_masked_after_reload(monkeypatch):
+    from api.services.configuration import ai_model_configuration
+
+    config = OrganizationAIModelConfigurationV2.model_validate(
+        {
+            "mode": "byok",
+            "byok": {
+                "mode": "pipeline",
+                "pipeline": {
+                    "llm": {"provider": "openai", "api_key": "llm-secret-1234", "model": "gpt-4.1"},
+                    "tts": {"provider": "elevenlabs", "api_key": "tts-secret-5678", "model": "eleven_flash_v2_5", "voice": "Rachel"},
+                    "stt": {"provider": "deepgram", "api_key": "stt-secret-9012", "model": "nova-3-general"},
+                },
+            },
+        }
+    )
+    rows = {}
+    stored_org_ids = []
+
+    async def save(org_id, key, value, last_validated_at=None):
+        stored_org_ids.append(org_id)
+        rows[(org_id, key)] = SimpleNamespace(value=value, last_validated_at=last_validated_at)
+
+    async def load(org_id, key):
+        stored_org_ids.append(org_id)
+        return rows.get((org_id, key))
+
+    monkeypatch.setattr(ai_model_configuration.db_client, "upsert_configuration", save)
+    monkeypatch.setattr(ai_model_configuration.db_client, "get_configuration", load)
+
+    await upsert_organization_ai_model_configuration_v2(42, config)
+    encrypted = rows[(42, "MODEL_CONFIGURATION_V2")].value
+    raw = str(encrypted)
+    assert "llm-secret-1234" not in raw
+    assert "tts-secret-5678" not in raw
+    assert "stt-secret-9012" not in raw
+    assert encrypted["byok"]["pipeline"]["llm"]["api_key"].startswith("fernet:v1:")
+
+    reloaded = await ai_model_configuration.get_organization_ai_model_configuration_v2(42)
+    assert reloaded.byok.pipeline.llm.api_key == "llm-secret-1234"
+    assert reloaded.byok.pipeline.tts.api_key == "tts-secret-5678"
+    assert reloaded.byok.pipeline.stt.api_key == "stt-secret-9012"
+    masked = mask_ai_model_configuration_v2(reloaded)
+    assert masked["byok"]["pipeline"]["llm"]["api_key"].endswith("1234")
+    assert "llm-secret-1234" not in str(masked)
+    from_response = OrganizationAIModelConfigurationV2.model_validate(masked)
+    preserved = merge_ai_model_configuration_v2_secrets(from_response, reloaded)
+    await upsert_organization_ai_model_configuration_v2(42, preserved)
+    assert _decrypt_model_configuration_secrets(rows[(42, "MODEL_CONFIGURATION_V2")].value) == config.model_dump(
+        mode="json", exclude_none=True
+    )
+    assert await ai_model_configuration.get_organization_ai_model_configuration_v2(99) is None
+    assert stored_org_ids == [42, 42, 42, 99]
 
 
 def test_org_config_validation_timestamp_update_does_not_touch_updated_at():
@@ -328,8 +410,8 @@ def test_legacy_all_dograh_pipeline_converts_to_dograh_v2():
 
     config = convert_legacy_ai_model_configuration_to_v2(legacy)
 
-    assert config.mode == "dograh"
-    assert config.dograh.api_key == "mps-secret"
+    assert config.mode == "kodewaves"
+    assert config.kodewaves.api_key == "mps-secret"
 
 
 def test_legacy_dograh_pipeline_conversion_preserves_numeric_speed():
@@ -355,8 +437,8 @@ def test_legacy_dograh_pipeline_conversion_preserves_numeric_speed():
 
     config = convert_legacy_ai_model_configuration_to_v2(legacy)
 
-    assert config.mode == "dograh"
-    assert config.dograh.speed == 1.5
+    assert config.mode == "kodewaves"
+    assert config.kodewaves.speed == 1.5
 
 
 def test_legacy_mixed_dograh_pipeline_converts_to_dograh_v2():
@@ -386,9 +468,9 @@ def test_legacy_mixed_dograh_pipeline_converts_to_dograh_v2():
 
     config = convert_legacy_ai_model_configuration_to_v2(legacy)
 
-    assert config.mode == "dograh"
-    assert config.dograh.api_key == "mps-tts"
-    assert config.dograh.voice == "default"
+    assert config.mode == "kodewaves"
+    assert config.kodewaves.api_key == "mps-tts"
+    assert config.kodewaves.voice == "default"
 
 
 def test_legacy_byok_pipeline_converts_to_byok_v2():
@@ -464,8 +546,8 @@ def test_workflow_model_override_migration_removes_v1_override_and_sets_v2():
     assert "model_overrides" not in migrated
     assert migrated["ambient_noise_configuration"] == {"enabled": False}
     v2_override = migrated[WORKFLOW_MODEL_CONFIGURATION_V2_OVERRIDE_KEY]
-    assert v2_override["mode"] == "dograh"
-    assert v2_override["dograh"]["api_key"] == "mps-workflow"
+    assert v2_override["mode"] == "kodewaves"
+    assert v2_override["kodewaves"]["api_key"] == "mps-workflow"
 
 
 def test_workflow_model_override_migration_removes_invalid_v1_override_marker():

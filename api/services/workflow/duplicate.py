@@ -8,6 +8,9 @@ from loguru import logger
 
 from api.db import db_client
 from api.enums import StorageBackend
+from api.services.configuration.model_configuration_secrets import (
+    encrypt_workflow_model_configuration_secrets,
+)
 from api.services.storage import get_storage_for_backend, storage_fs
 
 
@@ -90,6 +93,7 @@ async def duplicate_workflow(
         if source_def.workflow_configurations
         else None
     )
+    source_wc = encrypt_workflow_model_configuration_secrets(source_wc)
 
     # 5a. Copy custom ambient noise file if present
     if source_wc:

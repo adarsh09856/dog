@@ -177,7 +177,13 @@ def mask_workflow_configurations(config: Optional[Dict]) -> Optional[Dict]:
     if not config:
         return config
 
-    masked = copy.deepcopy(config)
+    from api.services.configuration.model_configuration_secrets import (
+        decrypt_workflow_model_configuration_secrets,
+    )
+
+    masked = decrypt_workflow_model_configuration_secrets(config)
+    if masked is None:
+        return masked
     model_overrides = masked.get("model_overrides")
     if isinstance(model_overrides, dict):
         for section in MODEL_OVERRIDE_FIELDS:

@@ -38,6 +38,12 @@ from api.services.configuration.masking import (
 )
 from api.services.configuration.registry import ServiceProviders
 from api.services.configuration.resolve import resolve_effective_config
+from api.services.configuration.model_configuration_secrets import (
+    decrypt_model_configuration_secrets as _decrypt_model_configuration_secrets,
+    decrypt_workflow_model_configuration_secrets,
+    encrypt_model_configuration_secrets as _encrypt_model_configuration_secrets,
+    encrypt_workflow_model_configuration_secrets,
+)
 
 AIModelConfigurationSource = Literal["organization_v2", "legacy_user_v1", "empty"]
 WORKFLOW_MODEL_CONFIGURATION_V2_OVERRIDE_KEY = "model_configuration_v2_override"
@@ -104,9 +110,14 @@ async def get_effective_ai_model_configuration_for_workflow(
     )
     if v2_override:
         effective = compile_ai_model_configuration_v2(
-            OrganizationAIModelConfigurationV2.model_validate(v2_override)
+            OrganizationAIModelConfigurationV2.model_validate(
+                _decrypt_model_configuration_secrets(v2_override)
+            )
         )
     else:
+        workflow_configurations = decrypt_workflow_model_configuration_secrets(
+            workflow_configurations
+        )
         configuration = await get_organization_ai_model_configuration_v2(organization_id)
         effective = resolve_effective_config(
             # Resolve credentials once, after overrides. Reusing a configuration
@@ -142,10 +153,25 @@ async def _get_organization_ai_model_configuration_v2_row(
 ) -> OrganizationConfigurationModel | None:
     if organization_id is None:
         return None
-    return await db_client.get_configuration(
+    row = await db_client.get_configuration(
         organization_id,
         OrganizationConfigurationKey.MODEL_CONFIGURATION_V2.value,
     )
+    if row is None or not isinstance(row.value, dict):
+        return row
+
+    # Upgrade existing plaintext BYOK rows the first time they are read. Valid
+    # ciphertext is returned unchanged by the encryptor, so this write only
+    # occurs for legacy plaintext credentials.
+    encrypted_value = _encrypt_model_configuration_secrets(row.value)
+    if encrypted_value != row.value:
+        row = await db_client.upsert_configuration(
+            organization_id,
+            OrganizationConfigurationKey.MODEL_CONFIGURATION_V2.value,
+            encrypted_value,
+            last_validated_at=row.last_validated_at,
+        )
+    return row
 
 
 def _parse_organization_ai_model_configuration_v2(
@@ -155,7 +181,9 @@ def _parse_organization_ai_model_configuration_v2(
     if row is None or not row.value:
         return None
     try:
-        return OrganizationAIModelConfigurationV2.model_validate(row.value)
+        return OrganizationAIModelConfigurationV2.model_validate(
+            _decrypt_model_configuration_secrets(row.value)
+        )
     except Exception as exc:
         logger.warning(
             "Invalid org AI model configuration v2 for organization "
@@ -171,7 +199,9 @@ async def upsert_organization_ai_model_configuration_v2(
     await db_client.upsert_configuration(
         organization_id,
         OrganizationConfigurationKey.MODEL_CONFIGURATION_V2.value,
-        configuration.model_dump(mode="json", exclude_none=True),
+        _encrypt_model_configuration_secrets(
+            configuration.model_dump(mode="json", exclude_none=True)
+        ),
         last_validated_at=datetime.now(UTC),
     )
     return configuration
@@ -198,7 +228,17 @@ async def migrate_workflow_model_configurations_to_v2(
                 base_config,
             )
         )
+        if not workflow_changed:
+            # Also encrypt credentials in already-v2 and legacy rows that do
+            # not need structural conversion.
+            workflow_configs = encrypt_workflow_model_configuration_secrets(
+                workflow.workflow_configurations
+            )
+            workflow_changed = workflow_configs != workflow.workflow_configurations
         if workflow_changed:
+            workflow_configs = encrypt_workflow_model_configuration_secrets(
+                workflow_configs
+            )
             workflow_updates.append((workflow.id, workflow_configs))
             migrated_workflow_ids.add(workflow.id)
 
@@ -209,7 +249,17 @@ async def migrate_workflow_model_configurations_to_v2(
                     base_config,
                 )
             )
+            if not definition_changed:
+                definition_configs = encrypt_workflow_model_configuration_secrets(
+                    definition.workflow_configurations
+                )
+                definition_changed = (
+                    definition_configs != definition.workflow_configurations
+                )
             if definition_changed:
+                definition_configs = encrypt_workflow_model_configuration_secrets(
+                    definition_configs
+                )
                 definition_updates.append((definition.id, definition_configs))
                 migrated_workflow_ids.add(workflow.id)
 
@@ -234,6 +284,9 @@ def migrate_workflow_configuration_model_override_to_v2(
     if not isinstance(workflow_configurations, dict):
         return {}, False
 
+    workflow_configurations = decrypt_workflow_model_configuration_secrets(
+        workflow_configurations
+    )
     migrated = copy.deepcopy(workflow_configurations)
     model_overrides = migrated.get("model_overrides")
     existing_v2_override = migrated.get(WORKFLOW_MODEL_CONFIGURATION_V2_OVERRIDE_KEY)

@@ -41,6 +41,10 @@ from api.services.configuration.masking import (
     mask_workflow_definition,
     merge_workflow_api_keys,
 )
+from api.services.configuration.model_configuration_secrets import (
+    decrypt_workflow_model_configuration_secrets,
+    encrypt_workflow_model_configuration_secrets,
+)
 from api.services.configuration.merge import merge_workflow_configuration_secrets
 from api.services.configuration.resolve import (
     enrich_overrides_with_api_keys,
@@ -1336,6 +1340,9 @@ async def update_workflow(
                 if existing_draft
                 else existing_workflow.released_definition.workflow_configurations
             )
+            existing_configs = decrypt_workflow_model_configuration_secrets(
+                existing_configs
+            )
             existing_v2_override = (existing_configs or {}).get(
                 WORKFLOW_MODEL_CONFIGURATION_V2_OVERRIDE_KEY
             )
@@ -1396,6 +1403,9 @@ async def update_workflow(
                 existing_draft.workflow_configurations
                 if existing_draft
                 else existing_workflow.released_definition.workflow_configurations
+            )
+            existing_configs = decrypt_workflow_model_configuration_secrets(
+                existing_configs
             )
             workflow_configurations = merge_workflow_configuration_secrets(
                 workflow_configurations,
@@ -1464,7 +1474,9 @@ async def update_workflow(
             name=request.name,
             workflow_definition=workflow_definition,
             template_context_variables=request.template_context_variables,
-            workflow_configurations=workflow_configurations,
+            workflow_configurations=encrypt_workflow_model_configuration_secrets(
+                workflow_configurations
+            ),
             organization_id=user.selected_organization_id,
         )
 
