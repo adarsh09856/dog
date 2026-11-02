@@ -286,6 +286,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                     carry = following
                     break
                 audio = combined
+            recognition_failed = False
             try:
                 self._recognizing_segment = True
                 async for frame in self.run_stt(audio):
@@ -296,22 +297,30 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                         latest = frame
                     else:
                         if isinstance(frame, ErrorFrame):
+                            recognition_failed = True
                             # A later segment can fail after earlier recognized
                             # text was already shown as interim. Keep that
-                            # accepted text so the caller's words still reach
-                            # conversation history and the UI gets a final.
+                            # visible, but do not finalize it as a complete
+                            # caller utterance.
                             await self.push_error_frame(frame)
                         else:
                             await self.push_frame(frame)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                # Do not discard successful earlier segments from this
-                # utterance when a subsequent HTTP recognition request fails.
-                # The queue drain below will finalize that partial transcript.
+                recognition_failed = True
                 await self.push_error(f"{self}: transcription failed: {exc}", exception=exc)
             finally:
                 self._recognizing_segment = False
+
+            if recognition_failed:
+                # Do not turn an earlier partial segment into a final caller
+                # turn when a later request in the same backlog fails; that
+                # partial final would trigger an LLM reply before the caller's
+                # utterance was fully recognized.
+                pending_text.clear()
+                latest = None
+                continue
 
             if latest is None:
                 continue
