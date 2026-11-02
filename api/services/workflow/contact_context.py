@@ -732,6 +732,22 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
         "NFC", unicodedata.normalize("NFD", text).replace("\u093c", "")
     )
     intro = _PHONE_INTRO.search(phone_text)
+    if not intro:
+        # A fresh booking request can arrive while the previous assistant turn
+        # was still asking for a phone number. Do not let Hindi words such as
+        # "एक" (one) turn that request into a phone fragment or an unclear-digit
+        # retry. Keep any already-confirmed caller number, but discard only the
+        # incomplete capture and let the booking flow handle this turn.
+        from api.services.workflow.confirmed_booking import new_booking_requested
+
+        if new_booking_requested(text):
+            for key in (
+                "awaiting_phone", "caller_phone_digits",
+                "caller_phone_uncertain_one", "caller_phone_pending_double",
+                "caller_phone_confirmation_pending", "replace_phone_digits_on_next_turn",
+            ):
+                state.pop(key, None)
+            return None
     previous_assistant = next((
         message for message in reversed(messages[:latest_index])
         if isinstance(message, dict) and message.get("role") == "assistant"
