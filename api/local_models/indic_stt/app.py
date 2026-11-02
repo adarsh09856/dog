@@ -147,6 +147,39 @@ def _phone_decode_has_unknown_tokens(text: str) -> bool:
     return _phone_unknown_token_count(text) > 0
 
 
+_PHONE_CONTEXT_RE = re.compile(
+    r"\b(?:my\s+)?(?:phone|mobile|number)\b|"
+    r"(?:मेरा|मेरे)?\s*(?:फोन|मोबाइल|नंबर|नम्बर)",
+    re.IGNORECASE,
+)
+_NON_PHONE_CONTEXT_RE = re.compile(
+    r"\b(?:appointment|booking|book|schedule|date|time|today|tomorrow|"
+    r"yesterday|morning|afternoon|evening|help|later|after)\b|"
+    r"अपॉइंटमेंट|अप्पॉइंटमेंट|बुकिंग|बुक|तारीख|समय|कल|आज|सुबह|दोपहर|शाम|बजे|मदद|सहायता|बाद",
+    re.IGNORECASE,
+)
+
+
+def _should_try_phone_rescue(text: str) -> bool:
+    """Rescue only plausible phone utterances, not arbitrary speech in a phone slot.
+
+    While phone collection is pending, a caller can still correct intent or
+    answer another question. A single number word (for example Hindi "एक")
+    inside an appointment sentence must not make an alternate decoder reinterpret
+    the whole sentence as a phone number.
+    """
+    digits = _phone_digit_count(text)
+    if digits > 15:
+        return True
+    if not _phone_decode_has_unknown_tokens(text):
+        return False
+    if _NON_PHONE_CONTEXT_RE.search(text):
+        return False
+    if _PHONE_CONTEXT_RE.search(text):
+        return True
+    return digits >= 3
+
+
 def _phone_unknown_token_count(text: str) -> int:
     """Count non-number tokens in a phone decode, excluding common preambles."""
     ignored = {
@@ -655,10 +688,6 @@ async def transcribe(
         lid_ms = round((time.monotonic() - lid_started) * 1000) if auto_detect else 0
         decode_started = time.monotonic()
         text = await asyncio.to_thread(decode, lang)
-        primary_phone_digits = _phone_digit_count(text) if phone_capture else 0
-        primary_phone_has_unknown_tokens = (
-            phone_capture and _phone_decode_has_unknown_tokens(text)
-        )
         phone_rescue_language = _phone_rescue_language(
             lang,
             fallback,
@@ -672,13 +701,11 @@ async def transcribe(
             # recognizers for every phone utterance serializes two CPU-heavy
             # inference passes under _inference_lock and made routine turns
             # needlessly slow. The alternate decoder is a rescue only when
-            # the primary produced no digits, an implausible runaway, or a
-            # partial (<15 digit) decode containing unknown words.
-            and (
-                primary_phone_digits == 0
-                or primary_phone_digits > 15
-                or (primary_phone_digits < 15 and primary_phone_has_unknown_tokens)
-            )
+            # the primary contains an explicit phone preamble, a plausible
+            # multi-digit fragment with unknown words, or an implausible
+            # runaway. Do not reinterpret arbitrary speech as a number just
+            # because the previous turn requested a phone number.
+            and _should_try_phone_rescue(text)
         ):
             # Phone strings are commonly spoken in English inside Hindi calls,
             # and LID can route an English digit utterance to Moonshine. Try
