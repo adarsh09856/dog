@@ -26,4 +26,13 @@ describe("public deployment page", () => {
     expect(screen.getByRole("button", { name: "Discuss a client installation" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Review plans and costs" }).getAttribute("href")).toBe("/pricing");
   });
+
+  it("discloses client license-check metadata and customer/provider data boundaries", () => {
+    render(<DeploymentPage />);
+    expect(screen.getByRole("heading", { name: "Client installation data and license checks" })).toBeTruthy();
+    expect(screen.getByText(/owner service receives the installation identity, the requester.s observed IP address, and the integrity-check result or finding, then returns signed license status/)).toBeTruthy();
+    expect(screen.getByText(/The check payload sent to the owner service does not include call audio or conversation transcripts/)).toBeTruthy();
+    expect(screen.getByText(/location of the database and recordings depends on the services and storage provisioned for the customer.s installation/)).toBeTruthy();
+    expect(screen.getByText(/Connected telephony, speech, model and business providers may process call data/)).toBeTruthy();
+  });
 });

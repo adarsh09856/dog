@@ -286,9 +286,13 @@ image-cache mount, and API-derived audio is held in the `api_audio_cache`
 Docker volume at `/app/kodewaves_pcm_cache` (owned by API UID/GID 10001). The
 derived caches may be cleared and will be rebuilt; they are not customer source
 or canonical uploaded recordings. These mounts still need validation in the
-actual Docker images. The bundle relies on separately configured model/provider
-endpoints and has not passed a fresh-server install, upgrade or rollback
-acceptance test.
+actual Docker images. A disposable Docker Compose lifecycle acceptance has
+verified the candidate API/UI images against populated synthetic organization,
+workflow and media data, including a signed backup, candidate upgrade and
+rollback to the prior images and data. This does not establish a fresh customer
+server install, production-signed package, provider connectivity, DNS/TLS or
+live telephony acceptance. The bundle relies on separately configured
+model/provider endpoints.
 
 The API validates the token, edition, installation ID, expiry and configured
 public domain for HTTP and WebSocket data plane requests. Protected HTTP and
