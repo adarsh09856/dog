@@ -275,6 +275,25 @@ class _OwnerAcceptanceServer:
             self.ip_ranges = self.licensed_ip_ranges
             self.enrollment_token = secrets.token_urlsafe(40)
 
+    def use_license(self, license_token: str) -> None:
+        """Switch disposable fixture policy between runtime and host-installer tests."""
+        from api.services.installation_license import load_license
+
+        license_data = load_license(license_token, self.license_public)
+        if license_data.installation_id != self.installation_id:
+            raise ValueError("CI owner fixture cannot switch installation identities")
+        with self._lock:
+            self.license_token = license_token
+            self.license_fingerprint = hashlib.sha256(license_token.encode("ascii")).hexdigest()
+            self.licensed_ip_ranges = tuple(license_data.ip_ranges)
+            self.public_key = None
+            self.used_nonces.clear()
+            self.observed_ips.clear()
+            self.revoked = False
+            self.integrity_findings.clear()
+            self.ip_ranges = self.licensed_ip_ranges
+            self.enrollment_token = secrets.token_urlsafe(40)
+
     def diagnostic_summary(self) -> str:
         """Return bounded, secret-free evidence for owner-poll CI failures."""
         with self._metrics_lock:
@@ -1665,7 +1684,10 @@ def verify(caddy_image: str, report: Path, *, customer_archive: bool = False) ->
                 # image boundary smoke. The derived API image adds only this
                 # disposable verifier CA; its protected application inventory must
                 # remain byte-for-byte identical before it can be signed/packaged.
-                owner.reset_for_fresh_install()
+                archive_license_token = _runtime_smoke_license(
+                    license_private.read_bytes(), license_public.read_text(encoding="ascii"),
+                )
+                owner.use_license(archive_license_token)
                 packaged_api_image = _derive_api_with_ci_owner_ca(api_image, owner.ca_file, directory)
                 from verify_images import verify_api
                 verify_api(packaged_api_image)
@@ -1698,7 +1720,7 @@ def verify(caddy_image: str, report: Path, *, customer_archive: bool = False) ->
                         package_ui_reference = package_payload["images"]["ui"]["reference"]
                         key_file = directory / "customer-installation.key"
                         _configure_customer_install(
-                            install_dir, license_token=license_token, key_file=key_file,
+                            install_dir, license_token=archive_license_token, key_file=key_file,
                             api_image=package_api_reference, ui_image=package_ui_reference,
                             minio_image=package_minio, caddy_image=caddy_image,
                             project=f"kw-install-{uuid.uuid4().hex[:10]}",
