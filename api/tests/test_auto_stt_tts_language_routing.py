@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from api.services.pipecat.speaches_stt import (
+    _advance_stable_language,
     _is_auto_language,
     _trusted_tts_language,
 )
@@ -23,8 +24,19 @@ def test_weak_language_fragment_keeps_the_last_confident_tts_language():
     assert _trusted_tts_language("ta", 0.4583, "hi", "held_previous_low_confidence") == "hi"
 
 
-def test_clear_english_detector_result_can_switch_from_hindi_voice_routing():
-    assert _trusted_tts_language("en", 0.5368, "hi", "detector") == "en"
+def test_single_english_detector_result_keeps_stable_hindi_voice_routing():
+    assert _trusted_tts_language("en", 0.5368, "hi", "detector") == "hi"
+
+
+def test_repeated_english_detector_result_confirms_language_switch():
+    pending = _advance_stable_language("hi", "en", 0.5368, "detector", None, 0)
+    assert pending == ("hi", "en", 1)
+
+    stable = _advance_stable_language(
+        pending[0], "en", 0.5368, "detector", pending[1], pending[2]
+    )
+    assert stable == ("en", None, 0)
+    assert _trusted_tts_language("en", 0.5368, stable[0], "detector") == "en"
 
 
 def test_recognized_language_without_an_installed_reply_voice_uses_supported_fallback():
