@@ -421,16 +421,23 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                     # changed the selected language.
                     if resolved_route != "detector":
                         language_route = resolved_route
-                    if phone_capture and language_route in {"phone_hi_rescue", "phone_en_rescue"}:
+                    if phone_capture:
+                        # A phone-number utterance is not evidence that the
+                        # caller changed the language of the conversation. Keep
+                        # LLM/TTS routing on the established call language even
+                        # when the primary decoder handled the digits (not only
+                        # when the alternate phone rescue decoder won).
                         reply_language = _phone_rescue_reply_language(
                             getattr(self, "_stable_detected_language", None),
                             settings.language,
                         )
-                        self.latest_detected_language = reply_language
-                        language_route = (
-                            "phone_rescue_kept_reply_language"
-                            if reply_language else "phone_rescue_without_language_change"
-                        )
+                        if reply_language:
+                            self.latest_detected_language = reply_language
+                            language_route = (
+                                "phone_rescue_kept_reply_language"
+                                if language_route in {"phone_hi_rescue", "phone_en_rescue"}
+                                else "phone_capture_kept_call_language"
+                            )
                 else:
                     self.latest_detected_language = self.latest_decoder_language
             else:
@@ -480,6 +487,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             and settings is not None
             and local_indic
             and _is_auto_language(settings.language)
+            and not phone_capture
         ):
             (
                 self._stable_detected_language,

@@ -46,6 +46,7 @@ from pipecat.frames.frames import (
     StartFrame,
     SystemFrame,
     TTSAudioRawFrame,
+    TTSStartedFrame,
     TTSStoppedFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor, FrameProcessorSetup
@@ -460,6 +461,9 @@ class BaseOutputTransport(FrameProcessor):
             self._bot_speaking = False
             # Indicates if TTS audio has been received since the last stop.
             self._tts_audio_received = False
+            # TTS synthesis can pause between streamed segments. Keep the
+            # speaking boundary open until its explicit stopped marker arrives.
+            self._tts_response_active = False
             # Last time a BotSpeakingFrame was pushed.
             self._bot_speaking_frame_time = 0
             # How often a BotSpeakingFrame should be pushed (value should be
@@ -580,6 +584,7 @@ class BaseOutputTransport(FrameProcessor):
             # A later completion must not drain the interrupted filter tail.
             self._resampler.reset()
             self._audio_buffer = bytearray()
+            self._tts_response_active = False
             # Cancel tasks.
             await self._cancel_clock_task()
             await self._cancel_video_task()
@@ -777,6 +782,7 @@ class BaseOutputTransport(FrameProcessor):
 
             self._bot_speaking = False
             self._tts_audio_received = False
+            self._tts_response_active = False
 
             # Do not clear `_audio_buffer` here. This notification can follow a
             # natural output-queue timeout while TTS is still synthesizing the
@@ -839,6 +845,9 @@ class BaseOutputTransport(FrameProcessor):
             """
             if isinstance(frame, OutputAudioRawFrame):
                 await self._handle_bot_speech(frame)
+            elif isinstance(frame, TTSStartedFrame):
+                self._tts_response_active = True
+                await self._transport.write_transport_frame(frame)
             elif isinstance(frame, OutputImageRawFrame):
                 await self._set_video_image(frame)
             elif isinstance(frame, SpriteFrame):
@@ -848,6 +857,7 @@ class BaseOutputTransport(FrameProcessor):
             elif isinstance(frame, OutputDTMFFrame):
                 await self._transport.write_dtmf(frame)
             elif isinstance(frame, TTSStoppedFrame):
+                self._tts_response_active = False
                 # We will only trigger bot stopped speaking based on the TTSStoppedFrame,
                 # if we have received audio from TTS
                 if self._tts_audio_received:
@@ -873,7 +883,8 @@ class BaseOutputTransport(FrameProcessor):
                         self._audio_queue.task_done()
                     except TimeoutError:
                         # Fallback: notify the bot stopped speaking upstream if necessary based on timeout.
-                        await self._bot_stopped_speaking()
+                        if not self._tts_response_active:
+                            await self._bot_stopped_speaking()
 
             async def with_mixer(vad_stop_secs: float) -> AsyncGenerator[Frame, None]:
                 # Caller below only invokes this when `self._mixer` is set.
@@ -892,7 +903,7 @@ class BaseOutputTransport(FrameProcessor):
                     except asyncio.QueueEmpty:
                         # Fallback: notify the bot stopped speaking upstream if necessary based on timeout.
                         diff_time = time.time() - last_frame_time
-                        if diff_time > vad_stop_secs:
+                        if diff_time > vad_stop_secs and not self._tts_response_active:
                             await self._bot_stopped_speaking()
                         # Generate an audio frame with only the mixer's part.
                         frame = OutputAudioRawFrame(

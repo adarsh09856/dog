@@ -206,12 +206,42 @@ def remember_recent_caller_statements(messages: list | None, state: dict | None)
     statements = state.get("recent_caller_statements")
     if not isinstance(statements, list):
         statements = []
-    for message in messages:
-        if not isinstance(message, dict) or message.get("role") != "user":
-            continue
+    user_messages = [
+        message for message in messages
+        if isinstance(message, dict) and message.get("role") == "user"
+        and isinstance(message.get("content"), str)
+    ]
+    # Keep the latest explicit booking request pinned outside the rolling
+    # eight-utterance window. Voice calls often split name, phone digits,
+    # date, and time into more than eight user turns; without this anchor the
+    # compacted LLM prompt can forget that those fragments belong to a booking.
+    latest_booking_request = None
+    latest_booking_index = None
+    if user_messages:
+        from api.services.workflow.confirmed_booking import (
+            new_booking_requested,
+            room_booking_active,
+        )
+
+        for index in range(len(user_messages) - 1, -1, -1):
+            content = user_messages[index]["content"]
+            if new_booking_requested(content) or room_booking_active([user_messages[index]]):
+                latest_booking_request = " ".join(content.split())[:180]
+                latest_booking_index = index
+                break
+    previous_booking_request = state.get("active_booking_request")
+    if (
+        latest_booking_request
+        and latest_booking_request != previous_booking_request
+    ):
+        state["active_booking_request"] = latest_booking_request
+        # A new booking must not inherit the previous booking's date/time
+        # fragments as if they belonged to this request.
+        statements = []
+    if latest_booking_index is not None:
+        user_messages = user_messages[latest_booking_index:]
+    for message in user_messages:
         content = message.get("content")
-        if not isinstance(content, str):
-            continue
         content = " ".join(content.split())[:180]
         if not content:
             continue
@@ -423,6 +453,18 @@ def caller_state_instruction(
     phone = values.get("caller_phone")
     if isinstance(phone, str) and re.fullmatch(r"\d{10,15}", phone):
         facts["phone"] = phone
+    active_booking_request = values.get("active_booking_request")
+    if isinstance(active_booking_request, str) and active_booking_request.strip():
+        active_booking_request = " ".join(active_booking_request.split())[:180]
+        visible_caller_text = [
+            " ".join(message["content"].split())
+            for message in (visible_messages or [])
+            if isinstance(message, dict)
+            and message.get("role") == "user"
+            and isinstance(message.get("content"), str)
+        ]
+        if not any(text.endswith(active_booking_request) for text in visible_caller_text):
+            facts["active_booking_request"] = active_booking_request
     statements = values.get("recent_caller_statements")
     if isinstance(statements, list):
         safe_statements = [
