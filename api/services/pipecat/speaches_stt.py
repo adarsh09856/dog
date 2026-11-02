@@ -143,13 +143,18 @@ def _trusted_tts_language(
     previous_stable: str | None,
     route: str,
 ) -> str | None:
-    """Avoid loading a different regional voice from a weak first-turn guess."""
+    """Keep reply language aligned with the stable auto-detection state.
+
+    A single confident detector result may be a genuine language switch, but
+    `_advance_stable_language` requires a second consistent turn before it
+    changes the stable call language. Routing the LLM/TTS from the raw first
+    guess would bypass that hysteresis and can make one noisy turn change the
+    response language or voice. Independent rescue routes remain immediate.
+    """
     code = str(selected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    if route == "urdu_routed_to_hindi" and code == "hi":
-        return "hi"
-    if route in {"competitive_indian_english", "whisper_english_rescue"} and code == "en":
-        return "en"
+    if route in _CONFIRMED_LANGUAGE_ROUTES and code in LOCAL_REPLY_TTS_LANGUAGES:
+        return code
     if not code:
         return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
     if code not in LOCAL_REPLY_TTS_LANGUAGES:
@@ -162,6 +167,8 @@ def _trusted_tts_language(
         return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
     if confidence is not None and confidence >= threshold:
+        if previous in LOCAL_REPLY_TTS_LANGUAGES and code != previous:
+            return previous
         return code
     return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
 
