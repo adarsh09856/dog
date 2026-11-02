@@ -79,9 +79,17 @@ def _image_helper(image: str, request: dict) -> dict:
             # unavailable helper; never include stdout, request data, or raw
             # stderr because the request carries license and private-key data.
             stderr = (result.stderr or "").strip()
-            match = re.fullmatch(r"Enrollment helper failed: ([A-Za-z][A-Za-z0-9_]*)", stderr)
+            match = re.fullmatch(
+                r"Enrollment helper failed: (?:(?P<stage>[a-z][a-z0-9_]*):)?"
+                r"(?P<error>[A-Za-z][A-Za-z0-9_]*)",
+                stderr,
+            )
             if match:
-                raise EnrollmentError(f"Approved API image helper failed ({match.group(1)})")
+                stage = match.group("stage")
+                phase = f" at {stage}" if stage else ""
+                raise EnrollmentError(
+                    f"Approved API image helper failed{phase} ({match.group('error')})"
+                )
             raise EnrollmentError("Approved API image helper exited unsuccessfully")
         output = json.loads(result.stdout)
         if not isinstance(output, dict):
