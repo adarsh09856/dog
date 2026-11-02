@@ -16,30 +16,76 @@ class MasterCredentialService:
     """Service to securely store, retrieve, encrypt, decrypt, and validate platform master credentials."""
 
     def __init__(self):
-        # Generate or load a 32-byte URL-safe base64-encoded key for Fernet
-        raw_secret = (
-            os.environ.get("MASTER_CREDENTIAL_ENCRYPTION_KEY")
-            or os.environ.get("KODEWAVES_SECRET_KEY")
-            or os.environ.get("OSS_JWT_SECRET")
-            or os.environ.get("JWT_SECRET")
-            or "kodewaves-master-sovereign-secret-key-32b"
-        )
-        try:
-            # If already a valid 32-byte urlsafe-base64 Fernet key
-            self._cipher = Fernet(raw_secret.encode())
-        except Exception:
-            # Otherwise derive 32-byte key via SHA-256
-            key = base64.urlsafe_b64encode(hashlib.sha256(raw_secret.encode()).digest())
-            self._cipher = Fernet(key)
+        # Resolve lazily so installations without platform-level provider
+        # credentials can start, but encryption fails closed on use.
+        self._keyring: tuple[Fernet, ...] | None = None
         self._db_unavailable_until: float = 0.0
 
+    @staticmethod
+    def _make_cipher(raw_secret: str, *, allow_legacy_derivation: bool = False) -> Fernet:
+        try:
+            normalized = raw_secret + "=" * (-len(raw_secret) % 4)
+            return Fernet(normalized.encode("ascii"))
+        except (ValueError, UnicodeEncodeError):
+            if not allow_legacy_derivation:
+                raise RuntimeError(
+                    "MASTER_CREDENTIAL_ENCRYPTION_KEY must be a valid URL-safe Fernet key"
+                )
+            # Older installs accepted arbitrary KODEWAVES_SECRET_KEY values and
+            # derived a Fernet key from SHA-256. Keep that explicit alias readable.
+            derived = base64.urlsafe_b64encode(
+                hashlib.sha256(raw_secret.encode("utf-8")).digest()
+            )
+            return Fernet(derived)
+
+    def _configured_keyring(self) -> tuple[Fernet, ...]:
+        if self._keyring is not None:
+            return self._keyring
+
+        current = os.environ.get("MASTER_CREDENTIAL_ENCRYPTION_KEY", "").strip()
+        legacy_alias = os.environ.get("KODEWAVES_SECRET_KEY", "").strip()
+        current_is_legacy = False
+        if not current:
+            current = legacy_alias
+            current_is_legacy = bool(current)
+
+        if not current:
+            raise RuntimeError(
+                "MASTER_CREDENTIAL_ENCRYPTION_KEY must be explicitly configured before storing or reading platform provider credentials"
+            )
+
+        secrets = [(current, current_is_legacy)]
+        if legacy_alias and legacy_alias != current:
+            # Read the explicit alias only for legacy records; new writes use current.
+            secrets.append((legacy_alias, True))
+
+        for previous in os.environ.get(
+            "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS", ""
+        ).split(","):
+            previous = previous.strip()
+            if previous and all(previous != value for value, _ in secrets):
+                secrets.append((previous, False))
+
+        self._keyring = tuple(
+            self._make_cipher(value, allow_legacy_derivation=allow_legacy)
+            for value, allow_legacy in secrets
+        )
+        return self._keyring
+
     def encrypt(self, plain_text: str) -> str:
-        """Encrypt plain text to base64 string."""
-        return self._cipher.encrypt(plain_text.encode()).decode()
+        """Encrypt with the explicitly configured current installation key."""
+        return self._configured_keyring()[0].encrypt(plain_text.encode()).decode()
 
     def decrypt(self, cipher_text: str) -> str:
-        """Decrypt cipher text back to plain text."""
-        return self._cipher.decrypt(cipher_text.encode()).decode()
+        last_error: Exception | None = None
+        for cipher in self._configured_keyring():
+            try:
+                return cipher.decrypt(cipher_text.encode()).decode()
+            except Exception as exc:
+                last_error = exc
+        raise RuntimeError(
+            "Stored platform provider credential cannot be decrypted with the configured keyring"
+        ) from last_error
 
     async def save_master_credential(
         self,

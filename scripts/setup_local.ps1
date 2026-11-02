@@ -34,6 +34,17 @@ function New-HexSecret([int]$ByteCount) {
     return ($buffer | ForEach-Object { $_.ToString('x2') }) -join ''
 }
 
+function New-FernetKey {
+    $buffer = [byte[]]::new(32)
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($buffer)
+    } finally {
+        $rng.Dispose()
+    }
+    return [Convert]::ToBase64String($buffer).Replace('+', '-').Replace('/', '_')
+}
+
 function Read-SecretValue([string]$Prompt) {
     $readHostCommand = Get-Command Read-Host
     if ($readHostCommand.Parameters.ContainsKey('MaskInput')) {
@@ -247,6 +258,7 @@ $postgresPassword = New-HexSecret 32
 $redisPassword = New-HexSecret 32
 $minioRootUser = "kodewaves$((New-HexSecret 6).Substring(0, 12))"
 $minioRootPassword = New-HexSecret 32
+$masterCredentialEncryptionKey = New-FernetKey
 
 $envLines = @(
     '# Container registry for Kodewaves images'
@@ -254,6 +266,10 @@ $envLines = @(
     ''
     '# JWT secret for OSS authentication'
     "OSS_JWT_SECRET=$ossJwtSecret"
+    ''
+    '# Per-installation key for encrypting provider credentials'
+    "MASTER_CREDENTIAL_ENCRYPTION_KEY=$masterCredentialEncryptionKey"
+    "KODEWAVES_SECRET_KEY=$masterCredentialEncryptionKey"
     ''
     '# PostgreSQL password. Used by the postgres container on first init and by'
     "# the API's DATABASE_URL. Do not change after the first start — the password"
@@ -296,7 +312,7 @@ Write-Success '╔════════════════════�
 Write-Success '║                    Setup Complete!                           ║'
 Write-Success '╚══════════════════════════════════════════════════════════════╝'
 Write-Host ''
-Write-Host "Files created in $CurrentDir:" -ForegroundColor Blue
+Write-Host "Files created in ${CurrentDir}:" -ForegroundColor Blue
 Write-Host '  - docker-compose.yaml'
 Write-Host '  - .env'
 if ($UseCoturn) {

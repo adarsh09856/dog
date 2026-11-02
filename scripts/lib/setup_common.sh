@@ -26,6 +26,31 @@ kodewaves_fail() {
     exit 1
 }
 
+kodewaves_generate_master_credential_key() {
+    local key=""
+
+    if command -v python3 >/dev/null 2>&1; then
+        if key="$(python3 -c 'import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("ascii"))' 2>/dev/null)" && \
+            [[ "$key" =~ ^[A-Za-z0-9_-]{43}=$ ]]; then
+            printf '%s\n' "$key"
+            return 0
+        fi
+    fi
+
+    if command -v openssl >/dev/null 2>&1; then
+        if key="$(openssl rand -base64 32 2>/dev/null)" && [[ -n "$key" ]]; then
+            key="${key//+/-}"
+            key="${key//\//_}"
+            if [[ "$key" =~ ^[A-Za-z0-9_-]{43}=$ ]]; then
+                printf '%s\n' "$key"
+                return 0
+            fi
+        fi
+    fi
+
+    kodewaves_fail "Unable to generate MASTER_CREDENTIAL_ENCRYPTION_KEY securely. Install a working python3 or openssl and retry."
+}
+
 kodewaves_project_dir() {
     if [[ -n "${KODEWAVES_DEPLOY_PROJECT_DIR:-}" ]]; then
         printf '%s\n' "$KODEWAVES_DEPLOY_PROJECT_DIR"

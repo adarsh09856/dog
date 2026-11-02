@@ -16,6 +16,17 @@ function New-HexSecret {
     return -join ($bytes | ForEach-Object { $_.ToString('x2') })
 }
 
+function New-FernetKey {
+    $bytes = [byte[]]::new(32)
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    } finally {
+        $rng.Dispose()
+    }
+    return [Convert]::ToBase64String($bytes).Replace('+', '-').Replace('/', '_')
+}
+
 function New-MinioRootUser {
     return "kodewaves$((New-HexSecret).Substring(0, 12))"
 }
@@ -208,6 +219,22 @@ if ([string]::IsNullOrEmpty($existingMinioRootPassword)) {
     }
 } else {
     Write-Host "MINIO_ROOT_PASSWORD is already set in $EnvFile."
+}
+
+$existingMasterKey = Get-DotEnvValue -Path $EnvFile -Key 'MASTER_CREDENTIAL_ENCRYPTION_KEY'
+$existingLegacyKey = Get-DotEnvValue -Path $EnvFile -Key 'KODEWAVES_SECRET_KEY'
+if ([string]::IsNullOrWhiteSpace($existingMasterKey)) {
+    $newMasterKey = New-FernetKey
+    Set-DotEnvValue -Path $EnvFile -Key 'MASTER_CREDENTIAL_ENCRYPTION_KEY' -Value $newMasterKey
+    if ([string]::IsNullOrWhiteSpace($existingLegacyKey)) {
+        Set-DotEnvValue -Path $EnvFile -Key 'KODEWAVES_SECRET_KEY' -Value $newMasterKey
+    } else {
+        Write-Host 'Preserving existing KODEWAVES_SECRET_KEY for legacy credential decryption.'
+    }
+    Write-Host "Created MASTER_CREDENTIAL_ENCRYPTION_KEY in $EnvFile."
+} elseif ([string]::IsNullOrWhiteSpace($existingLegacyKey)) {
+    Set-DotEnvValue -Path $EnvFile -Key 'KODEWAVES_SECRET_KEY' -Value $existingMasterKey
+    Write-Host "Created KODEWAVES_SECRET_KEY alias in $EnvFile."
 }
 
 Write-Host ''

@@ -330,7 +330,7 @@ POSTGRES_PASSWORD=$(openssl rand -hex 32)
 REDIS_PASSWORD=$(openssl rand -hex 32)
 MINIO_ROOT_USER="kodewaves$(openssl rand -hex 6)"
 MINIO_ROOT_PASSWORD=$(openssl rand -hex 32)
-MASTER_CREDENTIAL_ENCRYPTION_KEY=$(openssl rand -base64 32 2>/dev/null || python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null || echo "k5Zp9mR8wX2yQ4tL7vN1jF3bH6aC8eD0sU2iO4gA6cY=")
+MASTER_CREDENTIAL_ENCRYPTION_KEY="$(kodewaves_generate_master_credential_key)"
 KODEWAVES_DEVOPS_SECRET=$(openssl rand -hex 32)
 
 cat > .env << ENV_EOF

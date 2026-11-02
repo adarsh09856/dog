@@ -2,9 +2,12 @@
 
 This directory contains the source-free Compose deployment input for the
 client edition. It is an implementation package, not an accepted production
-installer. Disposable Compose upgrade/rollback acceptance has passed; fresh
-customer-server installation, production signing, owner rotation and live
-telephony acceptance remain open. Read
+installer. Disposable Compose upgrade/rollback acceptance passed in workflow
+run [41303436791](https://github.com/adarsh09856/dog/actions/runs/41303436791)
+for candidate commit `899dc3f150497bb85f8b6657f5f9ee60c95d0c2b`. Packaging and
+verification code changed after that run, so the current candidate still needs
+the lifecycle workflow. Fresh customer-server installation, production
+signing, owner rotation and live telephony acceptance remain open. Read
 [`../../docs/deployment/client-installation-license.md`](../../docs/deployment/client-installation-license.md)
 for the owner-issued license and security model.
 
@@ -204,8 +207,10 @@ release's Alembic head. After testing an upgrade from a specific older revision,
 add `--approved-upgrade-from <revision>` to the release command; repeat the
 option for each tested origin. The builder rejects revisions outside the release
 migration history before starting the image builds. Migration ancestry alone is
-not evidence that a customer upgrade was tested. Disposable upgrade/rollback
-acceptance passed, but no production customer release or upgrade is approved yet.
+not evidence that a customer upgrade was tested. The disposable lifecycle run
+above passed only for its named source candidate; it does not validate this
+worktree's later packaging changes. No production customer release or upgrade
+is approved yet.
 
 Example secret generation on a machine with Python 3:
 

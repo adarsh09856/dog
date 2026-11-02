@@ -5,6 +5,10 @@ ENV_FILE=".env"
 REGISTRY="${REGISTRY:-kodewaves}"
 ENABLE_TELEMETRY="${ENABLE_TELEMETRY:-true}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1090
+. "$SCRIPT_DIR/lib/setup_common.sh"
+
 fail() {
     echo "Error: $*" >&2
     exit 1
@@ -31,15 +35,7 @@ generate_minio_root_user() {
 }
 
 generate_fernet_key() {
-    if command -v python3 >/dev/null 2>&1 && python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null; then
-        python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
-        return
-    fi
-    if command -v openssl >/dev/null 2>&1; then
-        openssl rand -base64 32
-        return
-    fi
-    echo "k5Zp9mR8wX2yQ4tL7vN1jF3bH6aC8eD0sU2iO4gA6cY="
+    kodewaves_generate_master_credential_key
 }
 
 dotenv_value() {
@@ -211,11 +207,19 @@ else
 fi
 
 existing_fernet_key="$(dotenv_value MASTER_CREDENTIAL_ENCRYPTION_KEY || true)"
+existing_legacy_fernet_key="$(dotenv_value KODEWAVES_SECRET_KEY || true)"
 if [[ -z "$existing_fernet_key" ]]; then
     new_fernet_key="$(generate_fernet_key)"
     set_dotenv_value MASTER_CREDENTIAL_ENCRYPTION_KEY "$new_fernet_key"
-    set_dotenv_value KODEWAVES_SECRET_KEY "$new_fernet_key"
+    if [[ -z "$existing_legacy_fernet_key" ]]; then
+        set_dotenv_value KODEWAVES_SECRET_KEY "$new_fernet_key"
+    else
+        echo "Preserving existing KODEWAVES_SECRET_KEY for legacy credential decryption."
+    fi
     echo "Created MASTER_CREDENTIAL_ENCRYPTION_KEY in $ENV_FILE."
+elif [[ -z "$existing_legacy_fernet_key" ]]; then
+    set_dotenv_value KODEWAVES_SECRET_KEY "$existing_fernet_key"
+    echo "Created KODEWAVES_SECRET_KEY alias from MASTER_CREDENTIAL_ENCRYPTION_KEY."
 fi
 
 existing_devops_secret="$(dotenv_value KODEWAVES_DEVOPS_SECRET || true)"

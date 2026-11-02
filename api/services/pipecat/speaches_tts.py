@@ -262,6 +262,32 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         except BadRequestError as exc:
             yield ErrorFrame(error=f"Local speech request was rejected: {exc}")
 
+    async def _run_standard_tts(self, text: str, context_id: str):
+        """Retry once only when a successful provider stream contains no PCM."""
+        for attempt in range(2):
+            received_audio = False
+            provider_error = False
+            generator = super(SpeachesLiveTTSService, self).run_tts(
+                text, context_id
+            )
+            async with aclosing(generator) as frames:
+                async for frame in frames:
+                    if isinstance(frame, TTSAudioRawFrame):
+                        received_audio = True
+                    elif isinstance(frame, ErrorFrame):
+                        provider_error = True
+                    yield frame
+            # Never replay after PCM has started or after a provider error.
+            if received_audio or provider_error:
+                return
+            if attempt == 0:
+                logger.warning(
+                    "Speaches returned an empty successful stream for context {}; retrying once",
+                    context_id,
+                )
+            else:
+                yield ErrorFrame(error="Speaches returned no audio after one retry")
+
     async def run_tts(self, text: str, context_id: str):
         buffer_initial = self._claim_initial_pcm_buffer(context_id)
         async def keep_context_open():
@@ -275,7 +301,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             generator = (
                 self._run_combined_tts(text, context_id, self._request_speech_language())
                 if self._settings.model == "indic-vits-rasa-13"
-                else super().run_tts(text, context_id)
+                else self._run_standard_tts(text, context_id)
             )
             async with aclosing(generator) as frames:
                 output = self._buffer_initial_pcm(frames) if buffer_initial else frames
