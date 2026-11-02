@@ -52,6 +52,7 @@ if TYPE_CHECKING:
         TranscriptLogCoordinator,
     )
 
+from pipecat.audio.utils import is_silence
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
@@ -166,6 +167,7 @@ class RealtimeFeedbackObserver(BaseObserver):
             self._tts_audio_contexts[context_id] = {
                 "started_at": now,
                 "first_audio_at": None,
+                "first_non_silent_audio_at": None,
                 "last_audio_at": None,
                 "frames": 0,
                 "bytes": 0,
@@ -224,6 +226,13 @@ class RealtimeFeedbackObserver(BaseObserver):
                 return
             if stats["first_audio_at"] is None:
                 stats["first_audio_at"] = now
+            complete_pcm = audio[: len(audio) - (len(audio) % 2)]
+            if (
+                stats["first_non_silent_audio_at"] is None
+                and complete_pcm
+                and not is_silence(complete_pcm)
+            ):
+                stats["first_non_silent_audio_at"] = now
             if stats["last_audio_at"] is not None:
                 gap_ms = (now - float(stats["last_audio_at"])) * 1000.0
                 stats["max_gap_ms"] = max(float(stats["max_gap_ms"]), gap_ms)
@@ -247,14 +256,17 @@ class RealtimeFeedbackObserver(BaseObserver):
                 return
             started_at = float(stats["started_at"])
             first_audio_at = stats["first_audio_at"]
+            first_non_silent_audio_at = stats["first_non_silent_audio_at"]
             logger.info(
-                "voice_tts_trace run={} workflow={} turn={} context={} first_pcm_ms={} wall_ms={} pcm_frames={} pcm_bytes={} audio_ms={} max_pcm_gap_ms={} gaps_over_750ms={} no_audio={}",
+                "voice_tts_trace run={} workflow={} turn={} context={} first_pcm_ms={} first_non_silent_pcm_ms={} wall_ms={} pcm_frames={} pcm_bytes={} audio_ms={} max_pcm_gap_ms={} gaps_over_750ms={} no_audio={}",
                 self._workflow_run_id,
                 self._workflow_id,
                 self._trace_turn,
                 context_id,
                 round((float(first_audio_at) - started_at) * 1000.0, 1)
                 if first_audio_at is not None else None,
+                round((float(first_non_silent_audio_at) - started_at) * 1000.0, 1)
+                if first_non_silent_audio_at is not None else None,
                 round((now - started_at) * 1000.0, 1),
                 stats["frames"],
                 stats["bytes"],
@@ -270,6 +282,9 @@ class RealtimeFeedbackObserver(BaseObserver):
                     "stage": "tts_pcm",
                     "first_audio_ms": round((float(first_audio_at) - started_at) * 1000.0, 1)
                     if first_audio_at is not None else None,
+                    "first_non_silent_pcm_ms": round(
+                        (float(first_non_silent_audio_at) - started_at) * 1000.0, 1
+                    ) if first_non_silent_audio_at is not None else None,
                     "synthesis_wall_ms": round((now - started_at) * 1000.0, 1),
                     "audio_frames": int(stats["frames"]),
                     "audio_duration_ms": round(float(stats["duration_ms"]), 1),
