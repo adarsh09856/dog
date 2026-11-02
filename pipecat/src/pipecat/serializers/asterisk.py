@@ -148,6 +148,11 @@ class AsteriskFrameSerializer(FrameSerializer):
         )
         self._hangup_attempted = False
         self._transfer_attempted = False
+        # Asterisk's chan_websocket control message format is selected by
+        # server configuration/dial string. Learn it from MEDIA_START before
+        # sending commands; without that handshake this may be a legacy
+        # externalMedia peer that cannot consume FLUSH_MEDIA.
+        self._control_format: str | None = None
 
     async def setup(self, setup: FrameProcessorSetup):
         """Sets up the serializer with pipeline configuration.
@@ -166,7 +171,8 @@ class AsteriskFrameSerializer(FrameSerializer):
             frame: The Pipecat frame to serialize.
 
         Returns:
-            Serialized data as bytes (ulaw audio) or None if the frame isn't handled.
+            Raw ulaw bytes for audio, a TEXT command for supported control frames,
+            or None if the frame isn't handled.
         """
         if isinstance(frame, (EndFrame, CancelFrame)):
             frame_reason = getattr(frame, "reason", None)
@@ -209,8 +215,12 @@ class AsteriskFrameSerializer(FrameSerializer):
                     logger.warning(f"No hangup strategy configured for channel {self._channel_id}")
                 return None
         elif isinstance(frame, InterruptionFrame):
-            # Asterisk doesn't have a buffer clear command over the audio websocket.
-            # Returning None; the transport will stop sending audio.
+            if self._control_format == "json":
+                return json.dumps({"command": "FLUSH_MEDIA"})
+            if self._control_format == "text":
+                return "FLUSH_MEDIA"
+            # Do not guess the control protocol before chan_websocket's
+            # MEDIA_START handshake. Legacy peers may treat text as media.
             return None
         elif isinstance(frame, AudioRawFrame):
             data = frame.audio
@@ -231,7 +241,7 @@ class AsteriskFrameSerializer(FrameSerializer):
         """Deserializes Asterisk WebSocket data to Pipecat frames.
 
         Binary messages contain raw G.711 mu-law audio bytes.
-        Text messages contain JSON control events (if any).
+        Text messages contain plain-text or JSON control events.
 
         Args:
             data: The raw WebSocket data from Asterisk.
@@ -265,6 +275,7 @@ class AsteriskFrameSerializer(FrameSerializer):
 
             event = message.get("event") or message.get("type")
             if event == "MEDIA_START":
+                self._control_format = "json" if data.lstrip().startswith("{") else "text"
                 self._log_media_start(message)
             else:
                 logger.debug(f"Asterisk WebSocket event: {event} - {message}")
