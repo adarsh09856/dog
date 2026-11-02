@@ -166,6 +166,22 @@ def _trusted_tts_language(
     return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
 
 
+def _phone_rescue_reply_language(stable_language: str | None, configured_language: str | None) -> str | None:
+    """Keep digit-decoder rescues from changing the caller's conversation language.
+
+    The local recognizer may use an English decoder to recover spoken digits
+    while collecting a phone number. That decoder label describes the rescue
+    path, not the language the caller chose for the conversation.
+    """
+    stable = str(stable_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    if stable in LOCAL_REPLY_TTS_LANGUAGES:
+        return stable
+    configured = str(configured_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    if configured in LOCAL_REPLY_TTS_LANGUAGES and not _is_auto_language(configured_language):
+        return configured
+    return None
+
+
 class BoundedSpeachesSTTService(SpeachesSTTService):
     """Keep a stalled local STT request from holding a voice turn for minutes."""
 
@@ -389,6 +405,16 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                     # changed the selected language.
                     if resolved_route != "detector":
                         language_route = resolved_route
+                    if phone_capture and language_route in {"phone_hi_rescue", "phone_en_rescue"}:
+                        reply_language = _phone_rescue_reply_language(
+                            getattr(self, "_stable_detected_language", None),
+                            settings.language,
+                        )
+                        self.latest_detected_language = reply_language
+                        language_route = (
+                            "phone_rescue_kept_reply_language"
+                            if reply_language else "phone_rescue_without_language_change"
+                        )
                 else:
                     self.latest_detected_language = self.latest_decoder_language
             else:
@@ -412,6 +438,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             and local_indic
             and auto_language
             and self.latest_detected_language
+            and not phone_capture
         ):
             script_language, script_route = _resolve_script_language_conflict(
                 self.latest_detected_language,
