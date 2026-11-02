@@ -831,6 +831,21 @@ def _create_customer_compose_network(project: str) -> None:
     )
 
 
+def _with_no_proxy_hosts(env: dict[str, str], hosts: tuple[str, ...]) -> dict[str, str]:
+    """Preserve configured bypasses and add addresses used by the CI owner peer."""
+    entries: list[str] = []
+    seen: set[str] = set()
+    for value in (env.get("NO_PROXY", ""), env.get("no_proxy", ""), *hosts):
+        for entry in value.split(","):
+            entry = entry.strip()
+            key = entry.lower()
+            if entry and key not in seen:
+                entries.append(entry)
+                seen.add(key)
+    merged = ",".join(entries)
+    return {**env, "NO_PROXY": merged, "no_proxy": merged}
+
+
 def _verify_customer_archive_install(
     install_dir: Path,
     *,
@@ -842,12 +857,13 @@ def _verify_customer_archive_install(
 
     project = parse_env(install_dir / ".env")["COMPOSE_PROJECT_NAME"]
     compose = [sys.executable, str(install_dir / "compose_client.py")]
-    env = {
-        **os.environ,
+    env = _with_no_proxy_hosts(dict(os.environ), (
+        "172.31.40.1", "host.docker.internal", "127.0.0.1", "localhost",
+    ))
+    env.update({
         "SSL_CERT_FILE": str(owner.ca_file),
-        "NO_PROXY": "", "no_proxy": "",
         "COMPOSE_PROFILES": "",
-    }
+    })
     _create_customer_compose_network(project)
     try:
         subprocess.run([*compose, "pull", "api"], cwd=install_dir, check=True,
