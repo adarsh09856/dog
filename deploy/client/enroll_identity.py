@@ -74,12 +74,26 @@ def _image_helper(image: str, request: dict) -> dict:
             input=json.dumps(request), text=True, capture_output=True, timeout=60, check=False,
         )
         if result.returncode != 0:
-            raise EnrollmentError("Approved API image could not prepare or verify enrollment")
+            # The in-image CLI intentionally reports only the exception class.
+            # Preserve that safe diagnostic instead of masking it as an
+            # unavailable helper; never include stdout, request data, or raw
+            # stderr because the request carries license and private-key data.
+            stderr = (result.stderr or "").strip()
+            match = re.fullmatch(r"Enrollment helper failed: ([A-Za-z][A-Za-z0-9_]*)", stderr)
+            if match:
+                raise EnrollmentError(f"Approved API image helper failed ({match.group(1)})")
+            raise EnrollmentError("Approved API image helper exited unsuccessfully")
         output = json.loads(result.stdout)
         if not isinstance(output, dict):
             raise ValueError("invalid helper output")
         return output
-    except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+    except EnrollmentError:
+        raise
+    except OSError as exc:
+        raise EnrollmentError("Docker runtime could not start the approved API image helper") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise EnrollmentError("Approved API image helper timed out") from exc
+    except (TypeError, json.JSONDecodeError, ValueError) as exc:
         raise EnrollmentError("Approved API image enrollment helper is unavailable") from exc
 
 
