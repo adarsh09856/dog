@@ -846,6 +846,25 @@ def _with_no_proxy_hosts(env: dict[str, str], hosts: tuple[str, ...]) -> dict[st
     return {**env, "NO_PROXY": merged, "no_proxy": merged}
 
 
+def _safe_owner_peer_diagnostics(owner: _OwnerAcceptanceServer) -> str:
+    """Summarize archive enrollment routing without publishing source IPs."""
+    from api.services.installation_binding import license_ip_binding_valid
+
+    details = json.loads(owner.diagnostic_summary())
+    observed_ips = details.get("observed_ips", [])
+    return json.dumps({
+        "request_counts": details.get("request_counts", {}),
+        "response_statuses": details.get("response_statuses", {}),
+        "observed_peer_count": len(observed_ips),
+        "all_observed_peers_match_signed_ip_policy": bool(observed_ips) and all(
+            license_ip_binding_valid(owner.licensed_ip_ranges, ip) for ip in observed_ips
+        ),
+        "rejected_requests": details.get("rejected_requests", 0),
+        "rejection_types": details.get("rejection_types", {}),
+        "revoked": details.get("revoked", False),
+    }, sort_keys=True)
+
+
 def _verify_customer_archive_install(
     install_dir: Path,
     *,
@@ -868,11 +887,28 @@ def _verify_customer_archive_install(
     try:
         subprocess.run([*compose, "pull", "api"], cwd=install_dir, check=True,
                        env=env, capture_output=True, text=True, timeout=240)
-        enrollment = subprocess.run(
-            [sys.executable, str(install_dir / "enroll_identity.py")], cwd=install_dir,
-            input=owner.enrollment_token + "\n", capture_output=True, text=True,
-            env=env, check=True, timeout=120,
-        )
+        try:
+            enrollment = subprocess.run(
+                [sys.executable, str(install_dir / "enroll_identity.py")], cwd=install_dir,
+                input=owner.enrollment_token + "\n", capture_output=True, text=True,
+                env=env, check=True, timeout=120,
+            )
+        except subprocess.CalledProcessError as exc:
+            # The child may print getpass warnings alongside its fixed-stage
+            # helper error. Keep only the allowlisted stage and exception type;
+            # never copy raw child output (which can contain an enrollment token).
+            child_output = f"{exc.stdout or ''}\n{exc.stderr or ''}"
+            match = re.search(
+                r"Approved API image helper failed(?: at ([a-z][a-z0-9_]*))? "
+                r"\(([A-Za-z][A-Za-z0-9_]*)\)",
+                child_output,
+            )
+            stage = match.group(1) if match else "unknown"
+            error_type = match.group(2) if match else "EnrollmentProcessError"
+            raise ValueError(
+                f"Packaged enrollment failed at {stage} ({error_type}); "
+                f"owner peer diagnostics={_safe_owner_peer_diagnostics(owner)}"
+            ) from None
         if "Owner confirmed the enrolled installation identity." not in enrollment.stdout:
             raise ValueError("Packaged enrollment CLI did not confirm the owner identity")
         findings = validate_client_install(install_dir / ".env", install_dir / "docker-compose.client.yaml")
