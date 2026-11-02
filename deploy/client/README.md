@@ -92,7 +92,10 @@ does not carry WebRTC media traffic.
    rotation, set the new key as `MASTER_CREDENTIAL_ENCRYPTION_KEY` and the old
    key in `MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS`; re-save provider settings
    and run the supported workflow model-configuration migration before removing
-   the old key. Keep a protected database backup until the migration is accepted.
+   the old key. Installer upgrades preserve older JWT-derived keys in a
+   `legacy-b64:<base64url-encoded UTF-8 secret>` decrypt-only entry when a new
+   master key is generated. Keep a protected database backup until the migration
+   is accepted.
 4. Put the signed manifest for the selected API image at
    `client-release-manifest.json` beside this Compose file, or update
    `CLIENT_RELEASE_MANIFEST_FILE` to its local path.

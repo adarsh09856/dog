@@ -224,6 +224,35 @@ if ([string]::IsNullOrEmpty($existingMinioRootPassword)) {
 $existingMasterKey = Get-DotEnvValue -Path $EnvFile -Key 'MASTER_CREDENTIAL_ENCRYPTION_KEY'
 $existingLegacyKey = Get-DotEnvValue -Path $EnvFile -Key 'KODEWAVES_SECRET_KEY'
 if ([string]::IsNullOrWhiteSpace($existingMasterKey)) {
+    if ([string]::IsNullOrWhiteSpace($existingLegacyKey)) {
+        $existingPreviousKeys = Get-DotEnvValue -Path $EnvFile -Key 'MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS'
+        $previousKeys = @()
+        if (-not [string]::IsNullOrWhiteSpace($existingPreviousKeys)) {
+            $previousKeys += $existingPreviousKeys.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+        }
+        foreach ($keyName in @('OSS_JWT_SECRET', 'JWT_SECRET')) {
+            $legacySecret = Get-DotEnvValue -Path $EnvFile -Key $keyName
+            if (-not [string]::IsNullOrWhiteSpace($legacySecret)) {
+                $legacySecret = $legacySecret.Trim()
+                if (($legacySecret.StartsWith('"') -and $legacySecret.EndsWith('"')) -or
+                    ($legacySecret.StartsWith("'") -and $legacySecret.EndsWith("'"))) {
+                    $legacySecret = $legacySecret.Substring(1, $legacySecret.Length - 2)
+                }
+                if ([string]::IsNullOrEmpty($legacySecret)) { continue }
+                $legacyBytes = [System.Text.Encoding]::UTF8.GetBytes($legacySecret)
+                $legacyEncoded = [Convert]::ToBase64String($legacyBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+                $legacyEntry = "legacy-b64:$legacyEncoded"
+                if ($previousKeys -notcontains $legacyEntry) {
+                    $previousKeys += $legacyEntry
+                }
+            }
+        }
+        $migratedPreviousKeys = $previousKeys -join ','
+        if ($migratedPreviousKeys -ne $existingPreviousKeys) {
+            Set-DotEnvValue -Path $EnvFile -Key 'MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS' -Value $migratedPreviousKeys
+            Write-Host 'Preserved existing JWT-derived credential keys for decryption during key migration.'
+        }
+    }
     $newMasterKey = New-FernetKey
     Set-DotEnvValue -Path $EnvFile -Key 'MASTER_CREDENTIAL_ENCRYPTION_KEY' -Value $newMasterKey
     if ([string]::IsNullOrWhiteSpace($existingLegacyKey)) {

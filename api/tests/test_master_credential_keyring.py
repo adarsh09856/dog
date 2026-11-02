@@ -65,6 +65,41 @@ def test_master_provider_credentials_can_read_previous_key_during_rotation(monke
     assert Fernet(current_key).decrypt(rotated_ciphertext.encode()).decode() == "legacy provider credential"
 
 
+@pytest.mark.parametrize("legacy_env", ["OSS_JWT_SECRET", "JWT_SECRET"])
+def test_master_provider_credentials_can_read_typed_legacy_jwt_key(monkeypatch, legacy_env: str) -> None:
+    _clear_master_key_environment(monkeypatch)
+    current_key = Fernet.generate_key()
+    legacy_secret = "previous-deployment-jwt-secret-value"
+    monkeypatch.setenv("MASTER_CREDENTIAL_ENCRYPTION_KEY", current_key.decode())
+    monkeypatch.setenv("MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS", f"legacy:{legacy_secret}")
+    monkeypatch.setenv(legacy_env, legacy_secret)
+    old_ciphertext = _legacy_fernet(legacy_secret).encrypt(b"legacy database row").decode()
+
+    service = MasterCredentialService()
+    assert service.decrypt(old_ciphertext) == "legacy database row"
+
+    new_ciphertext = service.encrypt("updated provider credential")
+    assert Fernet(current_key).decrypt(new_ciphertext.encode()).decode() == "updated provider credential"
+
+
+def test_master_provider_credentials_can_read_losslessly_encoded_legacy_key(monkeypatch) -> None:
+    _clear_master_key_environment(monkeypatch)
+    current_key = Fernet.generate_key()
+    legacy_secret = " secret,with commas and spaces नमस्ते "
+    encoded_secret = base64.urlsafe_b64encode(legacy_secret.encode()).decode().rstrip("=")
+    monkeypatch.setenv("MASTER_CREDENTIAL_ENCRYPTION_KEY", current_key.decode())
+    monkeypatch.setenv(
+        "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS", f"legacy-b64:{encoded_secret}"
+    )
+    old_ciphertext = _legacy_fernet(legacy_secret).encrypt(b"legacy database row").decode()
+
+    service = MasterCredentialService()
+    assert service.decrypt(old_ciphertext) == "legacy database row"
+
+    new_ciphertext = service.encrypt("updated provider credential")
+    assert Fernet(current_key).decrypt(new_ciphertext.encode()).decode() == "updated provider credential"
+
+
 def test_master_provider_credentials_reject_ciphertext_outside_the_keyring(monkeypatch) -> None:
     _clear_master_key_environment(monkeypatch)
     monkeypatch.setenv("MASTER_CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())

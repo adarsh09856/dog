@@ -26,5 +26,6 @@
 .counts span { display:inline-flex;align-items:baseline;gap:6px;padding:7px 11px;border:1px solid var(--border);border-radius:999px;color:var(--muted-foreground);background:var(--background);font-size:10px; }
 .counts strong { color:var(--foreground);font-size:12px;font-variant-numeric:tabular-nums; }
 .loadingPage { padding:32px clamp(16px,3vw,42px); }
-@media(max-width:760px) { .hero { grid-template-columns:1fr;align-items:start;padding:26px 22px; } .actions { justify-content:flex-start; } .activeSection { padding:17px; } .sectionHead { align-items:flex-start;flex-direction:column; } }
+@media(max-width:1100px) { .hero { grid-template-columns:1fr;align-items:start;padding:30px clamp(22px,3vw,38px); } .actions { justify-content:flex-start; } }
+@media(max-width:760px) { .hero { padding:26px 22px; } .activeSection { padding:17px; } .sectionHead { align-items:flex-start;flex-direction:column; } }
 @media(prefers-reduced-motion:reduce) { .hero *, .activeSection * { transition-duration:.01ms!important;animation-duration:.01ms!important; } }

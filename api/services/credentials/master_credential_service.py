@@ -1,4 +1,5 @@
 import base64
+import binascii
 import json
 import os
 import hashlib
@@ -23,16 +24,24 @@ class MasterCredentialService:
 
     @staticmethod
     def _make_cipher(raw_secret: str, *, allow_legacy_derivation: bool = False) -> Fernet:
+        if allow_legacy_derivation:
+            return MasterCredentialService._make_legacy_cipher(raw_secret)
         try:
             normalized = raw_secret + "=" * (-len(raw_secret) % 4)
             return Fernet(normalized.encode("ascii"))
         except (ValueError, UnicodeEncodeError):
-            if not allow_legacy_derivation:
-                raise RuntimeError(
-                    "MASTER_CREDENTIAL_ENCRYPTION_KEY must be a valid URL-safe Fernet key"
-                )
-            # Older installs accepted arbitrary KODEWAVES_SECRET_KEY values and
-            # derived a Fernet key from SHA-256. Keep that explicit alias readable.
+            raise RuntimeError(
+                "MASTER_CREDENTIAL_ENCRYPTION_KEY must be a valid URL-safe Fernet key"
+            )
+
+    @staticmethod
+    def _make_legacy_cipher(raw_secret: str) -> Fernet:
+        """Reproduce the old direct-Fernet-then-SHA256 key derivation for reads only."""
+        try:
+            # The previous implementation tried the supplied key as-is, then
+            # SHA-256-derived a Fernet key from any value Fernet rejected.
+            return Fernet(raw_secret.encode("ascii"))
+        except (ValueError, UnicodeEncodeError):
             derived = base64.urlsafe_b64encode(
                 hashlib.sha256(raw_secret.encode("utf-8")).digest()
             )
@@ -64,7 +73,37 @@ class MasterCredentialService:
         ).split(","):
             previous = previous.strip()
             if previous and all(previous != value for value, _ in secrets):
-                secrets.append((previous, False))
+                if previous.startswith("legacy:"):
+                    legacy_secret = previous.removeprefix("legacy:")
+                    if not legacy_secret:
+                        raise RuntimeError(
+                            "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS contains an empty legacy key"
+                        )
+                    secrets.append((legacy_secret, True))
+                elif previous.startswith("legacy-b64:"):
+                    encoded_secret = previous.removeprefix("legacy-b64:")
+                    try:
+                        if not encoded_secret or not all(
+                            char in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+                            for char in encoded_secret
+                        ):
+                            raise ValueError("invalid base64url alphabet")
+                        legacy_secret = base64.b64decode(
+                            encoded_secret + "=" * (-len(encoded_secret) % 4),
+                            altchars=b"-_",
+                            validate=True,
+                        ).decode("utf-8")
+                    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
+                        raise RuntimeError(
+                            "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS contains an invalid encoded legacy key"
+                        ) from exc
+                    if not legacy_secret:
+                        raise RuntimeError(
+                            "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS contains an empty legacy key"
+                        )
+                    secrets.append((legacy_secret, True))
+                else:
+                    secrets.append((previous, False))
 
         self._keyring = tuple(
             self._make_cipher(value, allow_legacy_derivation=allow_legacy)

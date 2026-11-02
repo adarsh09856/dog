@@ -563,6 +563,59 @@ def test_client_install_preflight_rejects_malformed_previous_credential_key(tmp_
     assert any("MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS" in error for error in errors)
 
 
+@pytest.mark.parametrize(
+    "previous_key,should_error",
+    [
+        ("legacy:old-jwt-derived-secret", False),
+        ("legacy:", True),
+        (
+            "legacy-b64:" + base64.urlsafe_b64encode(b" secret,with commas ").decode().rstrip("="),
+            False,
+        ),
+        ("legacy-b64:not!base64", True),
+    ],
+)
+def test_client_install_preflight_validates_typed_legacy_previous_key(
+    tmp_path, previous_key, should_error
+):
+    root = Path(__file__).resolve().parents[2]
+    client_dir = root / "deploy/client"
+    sys.path.insert(0, str(client_dir))
+    try:
+        import validate_install
+    finally:
+        sys.path.remove(str(client_dir))
+
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
+    current_key = base64.urlsafe_b64encode(b"d" * 32).decode().rstrip("=")
+    lines = [
+        f"{name}=registry.example.com/kodewaves/{name.lower()}@sha256:{'d' * 64}"
+        for name in sorted(validate_install.IMAGE_KEYS)
+    ]
+    lines.extend(
+        [
+            "COMPOSE_PROFILES=direct-ingress",
+            "CLIENT_RELEASE_MANIFEST_FILE=manifest.json",
+            "KODEWAVES_INSTALLATION_ID=installation-123",
+            "KODEWAVES_LICENSE_TOKEN=payload.signature",
+            "PUBLIC_HOST=voice.customer.example.com",
+            "TURN_HOST=8.8.8.8",
+            f"MASTER_CREDENTIAL_ENCRYPTION_KEY={current_key}",
+            f"MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS={previous_key}",
+        ]
+    )
+    lines.extend(f"{name}={'s' * 40}" for name in validate_install.SECRET_KEYS)
+    env_file = tmp_path / ".env"
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    errors = validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")
+    has_previous_key_error = any(
+        "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS" in error for error in errors
+    )
+    assert has_previous_key_error is should_error
+
+
 @pytest.mark.parametrize("host", ["voice.example.com,evil.example.com", "voice.example.com { respond 200", "https://voice.example.com", "voice.example.com:443"])
 def test_client_install_preflight_rejects_non_dns_caddy_host_values(tmp_path, host):
     root = Path(__file__).resolve().parents[2]

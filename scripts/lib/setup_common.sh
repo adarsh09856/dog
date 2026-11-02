@@ -51,6 +51,45 @@ kodewaves_generate_master_credential_key() {
     kodewaves_fail "Unable to generate MASTER_CREDENTIAL_ENCRYPTION_KEY securely. Install a working python3 or openssl and retry."
 }
 
+# Return legacy JWT-derived keys in the typed, read-only format accepted by the
+# API. Base64url encoding keeps commas and whitespace lossless in the list.
+kodewaves_legacy_master_credential_previous_keys() {
+    local previous_keys="${1:-}"
+    local legacy_secret
+    local encoded_secret
+    local entry
+
+    shift || true
+    for legacy_secret in "$@"; do
+        [[ -n "$legacy_secret" ]] || continue
+        legacy_secret="${legacy_secret#"${legacy_secret%%[![:space:]]*}"}"
+        legacy_secret="${legacy_secret%"${legacy_secret##*[![:space:]]}"}"
+        if [[ "${legacy_secret:0:1}" == '"' && "${legacy_secret: -1}" == '"' ]] || \
+            [[ "${legacy_secret:0:1}" == "'" && "${legacy_secret: -1}" == "'" ]]; then
+            legacy_secret="${legacy_secret:1:${#legacy_secret}-2}"
+        fi
+        [[ -n "$legacy_secret" ]] || continue
+        if ! command -v base64 >/dev/null 2>&1 || ! command -v tr >/dev/null 2>&1; then
+            kodewaves_fail "Cannot preserve legacy credential keys without base64 and tr. Keep the existing key configured and retry after installing these tools."
+            return 1
+        fi
+        encoded_secret="$(printf '%s' "$legacy_secret" | base64 | tr '+/' '-_' | tr -d '=\n')"
+        entry="legacy-b64:$encoded_secret"
+        case ",$previous_keys," in
+            *",$entry,"*) ;;
+            *)
+                if [[ -n "$previous_keys" ]]; then
+                    previous_keys+=","$entry
+                else
+                    previous_keys="$entry"
+                fi
+                ;;
+        esac
+    done
+
+    printf '%s' "$previous_keys"
+}
+
 kodewaves_project_dir() {
     if [[ -n "${KODEWAVES_DEPLOY_PROJECT_DIR:-}" ]]; then
         printf '%s\n' "$KODEWAVES_DEPLOY_PROJECT_DIR"

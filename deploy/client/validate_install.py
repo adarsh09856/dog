@@ -261,6 +261,40 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
             continue
         for candidate in key_value.split(","):
             candidate = candidate.strip()
+            if (
+                key_name == "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS"
+                and candidate.startswith("legacy:")
+            ):
+                # Installer upgrades may preserve older JWT-derived keys as
+                # read-only entries. They are arbitrary old secrets, not Fernet
+                # keys, and must never be accepted as the current write key.
+                if not candidate.removeprefix("legacy:").strip():
+                    errors.append(
+                        f"{key_name} must not contain an empty legacy key"
+                    )
+                    break
+                continue
+            if (
+                key_name == "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS"
+                and candidate.startswith("legacy-b64:")
+            ):
+                encoded_secret = candidate.removeprefix("legacy-b64:")
+                try:
+                    if not re.fullmatch(r"[A-Za-z0-9_-]+", encoded_secret):
+                        raise ValueError
+                    decoded_secret = base64.b64decode(
+                        encoded_secret + "=" * (-len(encoded_secret) % 4),
+                        altchars=b"-_",
+                        validate=True,
+                    ).decode("utf-8")
+                    if not decoded_secret:
+                        raise ValueError
+                except (ValueError, UnicodeDecodeError, binascii.Error):
+                    errors.append(
+                        f"{key_name} contains an invalid base64url-encoded legacy key"
+                    )
+                    break
+                continue
             try:
                 # Fernet accepts URL-safe Base64 encodings of exactly 32 bytes.
                 # Validate the alphabet before decoding because urlsafe_b64decode

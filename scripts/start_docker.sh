@@ -209,6 +209,24 @@ fi
 existing_fernet_key="$(dotenv_value MASTER_CREDENTIAL_ENCRYPTION_KEY || true)"
 existing_legacy_fernet_key="$(dotenv_value KODEWAVES_SECRET_KEY || true)"
 if [[ -z "$existing_fernet_key" ]]; then
+    if [[ -z "$existing_legacy_fernet_key" ]]; then
+        existing_previous_keys="$(dotenv_value MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS || true)"
+        existing_oss_jwt_secret="$(dotenv_value OSS_JWT_SECRET || true)"
+        existing_jwt_secret="$(dotenv_value JWT_SECRET || true)"
+        for secret_name in existing_oss_jwt_secret existing_jwt_secret; do
+            secret_value="${!secret_name}"
+            if [[ "${secret_value:0:1}" == '"' && "${secret_value: -1}" == '"' ]] || \
+                [[ "${secret_value:0:1}" == "'" && "${secret_value: -1}" == "'" ]]; then
+                printf -v "$secret_name" '%s' "${secret_value:1:${#secret_value}-2}"
+            fi
+        done
+        migrated_previous_keys="$(kodewaves_legacy_master_credential_previous_keys \
+            "$existing_previous_keys" "$existing_oss_jwt_secret" "$existing_jwt_secret")"
+        if [[ "$migrated_previous_keys" != "$existing_previous_keys" ]]; then
+            set_dotenv_value MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS "$migrated_previous_keys"
+            echo "Preserved existing JWT-derived credential keys for decryption during key migration."
+        fi
+    fi
     new_fernet_key="$(generate_fernet_key)"
     set_dotenv_value MASTER_CREDENTIAL_ENCRYPTION_KEY "$new_fernet_key"
     if [[ -z "$existing_legacy_fernet_key" ]]; then

@@ -85,6 +85,36 @@ def test_key_generation_normalizes_openssl_base64_when_python_fails(tmp_path: Pa
     assert len(base64.urlsafe_b64decode(result.stdout.strip())) == 32
 
 
+@requires_linux_bash
+def test_previous_master_key_helper_preserves_and_deduplicates_legacy_values() -> None:
+    encoded_old = base64.urlsafe_b64encode(b"old-secret").decode().rstrip("=")
+    encoded_quoted = base64.urlsafe_b64encode(b" secret, with spaces ").decode().rstrip("=")
+    result = subprocess.run(
+        [
+            BASH or "bash",
+            "-c",
+            '. "$1"; kodewaves_legacy_master_credential_previous_keys "$2" "$3" "$4" "$5" "$6"',
+            "test-legacy-key-migration",
+            str(SETUP_COMMON),
+            "existing-fernet-key,legacy-b64:" + encoded_old,
+            "old-secret",
+            '  " secret, with spaces "  ',
+            "  trimmed-secret  ",
+            "",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == (
+        "existing-fernet-key,legacy-b64:" + encoded_old
+        + ",legacy-b64:" + encoded_quoted
+        + ",legacy-b64:" + base64.urlsafe_b64encode(b"trimmed-secret").decode().rstrip("=")
+    )
+
+
 def test_all_setup_variants_use_generated_installation_key() -> None:
     bash_setup = (REPO_ROOT / "scripts" / "setup_local.sh").read_text(encoding="utf-8")
     remote_setup = (REPO_ROOT / "scripts" / "setup_remote.sh").read_text(encoding="utf-8")
