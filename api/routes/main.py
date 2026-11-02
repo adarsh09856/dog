@@ -23,10 +23,8 @@ from api.routes.s3_signed_url import router as s3_router
 from api.routes.service_keys import router as service_keys_router
 from api.routes.catalog import router as catalog_router
 from api.routes.appointments import router as appointments_router
-from api.routes.billing_sovereign import router as billing_sovereign_router
 from api.routes.crm import router as crm_router
 from api.routes.forms import router as forms_router
-from api.routes.payments import router as payments_router
 from api.routes.prompt_templates import router as prompt_templates_router
 from api.routes.widgets import router as widgets_router
 from api.routes.telephony import router as telephony_router
@@ -42,7 +40,7 @@ from api.routes.workflow_text_chat import router as workflow_text_chat_router
 from api.routes.installation import router as installation_router
 from api.services.integrations import all_routers
 from api.constants import KODEWAVES_EDITION
-from api.services.deployment_edition import mount_owner_control_plane
+from api.services.deployment_edition import mount_owner_control_plane, mount_saas_billing
 
 router = APIRouter(
     tags=["main"],
@@ -56,8 +54,7 @@ router.include_router(appointments_router)
 router.include_router(forms_router)
 router.include_router(widgets_router)
 router.include_router(prompt_templates_router)
-router.include_router(billing_sovereign_router)
-router.include_router(payments_router)
+mount_saas_billing(router, KODEWAVES_EDITION)
 router.include_router(telephony_router)
 router.include_router(workflow_router)
 router.include_router(workflow_text_chat_router)

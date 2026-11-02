@@ -92,7 +92,7 @@ export function UploadWorkflowButton() {
                 data-hero-action="upload"
             >
                 <Upload className="w-4 h-4 mr-2" />
-                Upload Agent Definition
+                <span data-hero-label>Upload Agent Definition</span>
             </Button>
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>

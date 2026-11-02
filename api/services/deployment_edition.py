@@ -45,3 +45,21 @@ def mount_owner_control_plane(router: Any, edition: str) -> bool:
     router.include_router(admin_router)
     router.include_router(superuser_router)
     return True
+
+
+def mount_saas_billing(router: Any, edition: str) -> bool:
+    """Mount hosted subscription/catalog routes only in the SaaS edition."""
+    if edition == "client":
+        return False
+    if edition != "saas":
+        raise ValueError("edition must be either 'saas' or 'client'")
+
+    # Avoid registering hosted plan, wallet, checkout and payment APIs in a
+    # licensed customer installation. The client build is independently
+    # hidden at the UI middleware boundary.
+    from api.routes.billing_sovereign import router as billing_router
+    from api.routes.payments import router as payments_router
+
+    router.include_router(billing_router)
+    router.include_router(payments_router)
+    return True

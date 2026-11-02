@@ -64,6 +64,7 @@ const faqs = [
 ];
 
 export default function PricingPage() {
+  const isClientEdition = process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client";
   const [plans, setPlans] = useState<PublicSaaSPlan[]>([]);
   const [packages, setPackages] = useState<PublicCreditPackage[]>([]);
   const [planState, setPlanState] = useState("loading");
@@ -72,6 +73,7 @@ export default function PricingPage() {
   const [annual, setAnnual] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   useEffect(() => {
+    if (isClientEdition) return;
     let active = true;
     setPlanState("loading");
     setPackageState("loading");
@@ -102,7 +104,40 @@ export default function PricingPage() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, [isClientEdition, reloadKey]);
+
+  if (isClientEdition) {
+    return (
+      <div className="public-site public-pricing min-h-screen bg-background text-foreground">
+        <PublicHeader />
+        <main id="main-content" className={pageStyles.pageFrame}>
+          <section className={pageStyles.priceHero}>
+            <div className={pageStyles.priceHeroGrid}>
+              <div className={pageStyles.heroCopy}>
+                <p className={pageStyles.eyebrow}>Licensed installation</p>
+                <h1 className={pageStyles.headline}>
+                  Installation pricing is managed <span className={pageStyles.headlineAccent}>separately.</span>
+                </h1>
+                <p className={pageStyles.lede}>
+                  This self-hosted platform is licensed to its operator. Contact your installation administrator for the applicable license, usage, support, and maintenance terms. Hosted Kodewaves plans and checkout are not available here.
+                </p>
+              </div>
+              <aside className={pageStyles.priceTerms} aria-label="Client installation billing">
+                <strong>For this installation</strong>
+                <ul>
+                  <li><Check aria-hidden />License terms come from the installation provider</li>
+                  <li><Check aria-hidden />Usage and support terms are set for this deployment</li>
+                  <li><Check aria-hidden />No hosted SaaS checkout is offered here</li>
+                </ul>
+              </aside>
+            </div>
+          </section>
+        </main>
+        <PublicFooter />
+      </div>
+    );
+  }
+
   const hasCycleChoice = plans.some(
     (plan) => plan.monthly_price_cents > 0 && plan.annual_price_cents > 0,
   );

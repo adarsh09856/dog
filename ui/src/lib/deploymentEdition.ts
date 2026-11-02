@@ -5,6 +5,14 @@ export function isOwnerControlPlanePath(pathname: string): boolean {
   );
 }
 
+export function isHostedSaasBillingPath(pathname: string): boolean {
+  return ['/billing', '/billing-sovereign'].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
+
 export function isHiddenInClientEdition(pathname: string, edition?: string): boolean {
-  return edition === 'client' && isOwnerControlPlanePath(pathname);
+  return edition === 'client' && (
+    isOwnerControlPlanePath(pathname) || isHostedSaasBillingPath(pathname)
+  );
 }

@@ -37,7 +37,7 @@ export function CreateFolderButton() {
                 data-hero-action="folder"
             >
                 <FolderPlus className="w-4 h-4 mr-2" />
-                New Folder
+                <span data-hero-label>New Folder</span>
             </Button>
             <FolderFormDialog
                 open={isOpen}
