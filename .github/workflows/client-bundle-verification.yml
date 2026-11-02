@@ -92,6 +92,7 @@ jobs:
           ENVIRONMENT: test
           DATABASE_URL: postgresql+asyncpg://unit:unit@127.0.0.1:1/kodewaves_unit_test
           REDIS_URL: redis://127.0.0.1:1/15
+          MASTER_CREDENTIAL_ENCRYPTION_KEY: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
         run: python -m pytest --noconftest api/tests/test_client_package.py api/tests/test_client_installer_archive.py api/tests/test_client_ci_verification.py api/tests/test_client_image_tamper_gate.py api/tests/test_model_configuration_secret_encryption.py deploy/client/tests/test_ci_installer_archive_acceptance.py -q
       - name: Verify client backup and recovery failure handling
         run: |

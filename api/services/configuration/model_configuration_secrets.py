@@ -4,29 +4,86 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from typing import Any
+
+from cryptography.fernet import Fernet, InvalidToken
 
 from api.services.configuration.masking import (
     SERVICE_SECRET_FIELDS,
     SENTINEL_UNMASKED_KEYS,
 )
-from api.services.credentials.master_credential_service import master_credential_service
 
 ENCRYPTED_SECRET_PREFIX = "fernet:v1:"
+CURRENT_KEY_ENV = "MASTER_CREDENTIAL_ENCRYPTION_KEY"
+PREVIOUS_KEYS_ENV = "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS"
 WORKFLOW_MODEL_SECRET_BLOCKS = (
     "model_overrides",
     "model_configuration_v2_override",
 )
 
 
-def _is_encrypted_secret(value: Any) -> bool:
+class ModelConfigurationSecretError(RuntimeError):
+    """Raised when model secrets cannot be encrypted or decrypted safely."""
+
+
+def _configured_ciphers() -> tuple[Fernet, ...]:
+    current_key = os.environ.get(CURRENT_KEY_ENV, "").strip()
+    if not current_key:
+        raise ModelConfigurationSecretError(
+            f"{CURRENT_KEY_ENV} must be explicitly configured to store model provider credentials"
+        )
+
+    configured_keys = [current_key]
+    configured_keys.extend(
+        key.strip()
+        for key in os.environ.get(PREVIOUS_KEYS_ENV, "").split(",")
+        if key.strip()
+    )
+    ciphers: list[Fernet] = []
+    for key in dict.fromkeys(configured_keys):
+        try:
+            # The preflight accepts both padded and unpadded URL-safe Fernet
+            # encodings; cryptography's Fernet constructor requires padding.
+            normalized_key = key + "=" * (-len(key) % 4)
+            ciphers.append(Fernet(normalized_key.encode("ascii")))
+        except (ValueError, UnicodeEncodeError) as exc:
+            raise ModelConfigurationSecretError(
+                f"{CURRENT_KEY_ENV} and {PREVIOUS_KEYS_ENV} must contain valid Fernet keys"
+            ) from exc
+    return tuple(ciphers)
+
+
+def _decrypt_secret_payload(value: str) -> tuple[str, int]:
+    ciphertext = value[len(ENCRYPTED_SECRET_PREFIX) :]
+    for key_index, cipher in enumerate(_configured_ciphers()):
+        try:
+            return cipher.decrypt(ciphertext.encode("ascii")).decode("utf-8"), key_index
+        except (InvalidToken, ValueError, UnicodeEncodeError):
+            continue
+    raise ModelConfigurationSecretError(
+        "Encrypted model provider credential cannot be decrypted with the configured keyring"
+    )
+
+
+def _encrypt_secret_payload(payload: str) -> str:
+    cipher = _configured_ciphers()[0]
+    return ENCRYPTED_SECRET_PREFIX + cipher.encrypt(payload.encode("utf-8")).decode("ascii")
+
+
+def _read_encrypted_secret(value: Any) -> tuple[str, int] | None:
     if not isinstance(value, str) or not value.startswith(ENCRYPTED_SECRET_PREFIX):
-        return False
+        return None
     try:
-        json.loads(master_credential_service.decrypt(value[len(ENCRYPTED_SECRET_PREFIX):]))
+        payload, key_index = _decrypt_secret_payload(value)
+        json.loads(payload)
     except Exception as exc:
-        raise ValueError("Encrypted model provider credential cannot be decrypted") from exc
-    return True
+        if isinstance(exc, ModelConfigurationSecretError):
+            raise
+        raise ModelConfigurationSecretError(
+            "Encrypted model provider credential has an invalid payload"
+        ) from exc
+    return payload, key_index
 
 
 def _transform_model_secrets(value: Any, *, encrypt: bool) -> Any:
@@ -39,15 +96,23 @@ def _transform_model_secrets(value: Any, *, encrypt: bool) -> Any:
                 ):
                     result[key] = nested
                 elif encrypt:
-                    if _is_encrypted_secret(nested):
-                        result[key] = nested
+                    encrypted = _read_encrypted_secret(nested)
+                    if encrypted is not None:
+                        payload, key_index = encrypted
+                        result[key] = (
+                            nested if key_index == 0 else _encrypt_secret_payload(payload)
+                        )
                     else:
                         payload = json.dumps(nested, separators=(",", ":"))
-                        ciphertext = master_credential_service.encrypt(payload)
-                        result[key] = ENCRYPTED_SECRET_PREFIX + ciphertext
+                        result[key] = _encrypt_secret_payload(payload)
                 elif isinstance(nested, str) and nested.startswith(ENCRYPTED_SECRET_PREFIX):
-                    ciphertext = nested[len(ENCRYPTED_SECRET_PREFIX):]
-                    result[key] = json.loads(master_credential_service.decrypt(ciphertext))
+                    payload, _key_index = _decrypt_secret_payload(nested)
+                    try:
+                        result[key] = json.loads(payload)
+                    except json.JSONDecodeError as exc:
+                        raise ModelConfigurationSecretError(
+                            "Encrypted model provider credential has an invalid payload"
+                        ) from exc
                 else:
                     result[key] = _transform_model_secrets(nested, encrypt=False)
             else:

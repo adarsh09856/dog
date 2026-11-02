@@ -12,6 +12,8 @@ The rules are simple:
 import copy
 from typing import Any, Dict, Optional
 
+from fastapi import HTTPException
+
 from api.schemas.ai_model_configuration import EffectiveAIModelConfiguration
 from api.services.configuration.registry import ServiceConfig
 from api.services.integrations import get_node_secret_fields
@@ -178,10 +180,17 @@ def mask_workflow_configurations(config: Optional[Dict]) -> Optional[Dict]:
         return config
 
     from api.services.configuration.model_configuration_secrets import (
+        ModelConfigurationSecretError,
         decrypt_workflow_model_configuration_secrets,
     )
 
-    masked = decrypt_workflow_model_configuration_secrets(config)
+    try:
+        masked = decrypt_workflow_model_configuration_secrets(config)
+    except ModelConfigurationSecretError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Model provider credentials are unavailable; check the encryption key configuration.",
+        ) from exc
     if masked is None:
         return masked
     model_overrides = masked.get("model_overrides")

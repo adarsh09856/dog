@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
+from fastapi import HTTPException
 from loguru import logger
 from pydantic import ValidationError
 
@@ -39,6 +40,7 @@ from api.services.configuration.masking import (
 from api.services.configuration.registry import ServiceProviders
 from api.services.configuration.resolve import resolve_effective_config
 from api.services.configuration.model_configuration_secrets import (
+    ModelConfigurationSecretError,
     decrypt_model_configuration_secrets as _decrypt_model_configuration_secrets,
     decrypt_workflow_model_configuration_secrets,
     encrypt_model_configuration_secrets as _encrypt_model_configuration_secrets,
@@ -109,15 +111,27 @@ async def get_effective_ai_model_configuration_for_workflow(
         WORKFLOW_MODEL_CONFIGURATION_V2_OVERRIDE_KEY
     )
     if v2_override:
-        effective = compile_ai_model_configuration_v2(
-            OrganizationAIModelConfigurationV2.model_validate(
-                _decrypt_model_configuration_secrets(v2_override)
+        try:
+            effective = compile_ai_model_configuration_v2(
+                OrganizationAIModelConfigurationV2.model_validate(
+                    _decrypt_model_configuration_secrets(v2_override)
+                )
             )
-        )
+        except ModelConfigurationSecretError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Model provider credentials are unavailable; check the encryption key configuration.",
+            ) from exc
     else:
-        workflow_configurations = decrypt_workflow_model_configuration_secrets(
-            workflow_configurations
-        )
+        try:
+            workflow_configurations = decrypt_workflow_model_configuration_secrets(
+                workflow_configurations
+            )
+        except ModelConfigurationSecretError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Model provider credentials are unavailable; check the encryption key configuration.",
+            ) from exc
         configuration = await get_organization_ai_model_configuration_v2(organization_id)
         effective = resolve_effective_config(
             # Resolve credentials once, after overrides. Reusing a configuration
@@ -157,20 +171,6 @@ async def _get_organization_ai_model_configuration_v2_row(
         organization_id,
         OrganizationConfigurationKey.MODEL_CONFIGURATION_V2.value,
     )
-    if row is None or not isinstance(row.value, dict):
-        return row
-
-    # Upgrade existing plaintext BYOK rows the first time they are read. Valid
-    # ciphertext is returned unchanged by the encryptor, so this write only
-    # occurs for legacy plaintext credentials.
-    encrypted_value = _encrypt_model_configuration_secrets(row.value)
-    if encrypted_value != row.value:
-        row = await db_client.upsert_configuration(
-            organization_id,
-            OrganizationConfigurationKey.MODEL_CONFIGURATION_V2.value,
-            encrypted_value,
-            last_validated_at=row.last_validated_at,
-        )
     return row
 
 
@@ -184,6 +184,16 @@ def _parse_organization_ai_model_configuration_v2(
         return OrganizationAIModelConfigurationV2.model_validate(
             _decrypt_model_configuration_secrets(row.value)
         )
+    except ModelConfigurationSecretError as exc:
+        logger.error(
+            "Model configuration credentials for organization {} could not be decrypted: {}",
+            organization_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Model provider credentials are unavailable; check the encryption key configuration.",
+        ) from exc
     except Exception as exc:
         logger.warning(
             "Invalid org AI model configuration v2 for organization "
@@ -196,12 +206,19 @@ async def upsert_organization_ai_model_configuration_v2(
     organization_id: int,
     configuration: OrganizationAIModelConfigurationV2,
 ) -> OrganizationAIModelConfigurationV2:
+    try:
+        encrypted = _encrypt_model_configuration_secrets(
+            configuration.model_dump(mode="json", exclude_none=True)
+        )
+    except ModelConfigurationSecretError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Model provider credentials cannot be stored; configure a valid encryption key.",
+        ) from exc
     await db_client.upsert_configuration(
         organization_id,
         OrganizationConfigurationKey.MODEL_CONFIGURATION_V2.value,
-        _encrypt_model_configuration_secrets(
-            configuration.model_dump(mode="json", exclude_none=True)
-        ),
+        encrypted,
         last_validated_at=datetime.now(UTC),
     )
     return configuration
@@ -284,9 +301,15 @@ def migrate_workflow_configuration_model_override_to_v2(
     if not isinstance(workflow_configurations, dict):
         return {}, False
 
-    workflow_configurations = decrypt_workflow_model_configuration_secrets(
-        workflow_configurations
-    )
+    try:
+        workflow_configurations = decrypt_workflow_model_configuration_secrets(
+            workflow_configurations
+        )
+    except ModelConfigurationSecretError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Model provider credentials are unavailable; check the encryption key configuration.",
+        ) from exc
     migrated = copy.deepcopy(workflow_configurations)
     model_overrides = migrated.get("model_overrides")
     existing_v2_override = migrated.get(WORKFLOW_MODEL_CONFIGURATION_V2_OVERRIDE_KEY)

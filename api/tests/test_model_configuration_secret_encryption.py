@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from cryptography.fernet import Fernet
+from fastapi import HTTPException
 import pytest
 
 from api.schemas.ai_model_configuration import (
@@ -16,9 +18,18 @@ from api.services.configuration.ai_model_configuration import (
 )
 from api.services.configuration.masking import mask_workflow_configurations
 from api.services.configuration.model_configuration_secrets import (
+    CURRENT_KEY_ENV,
+    PREVIOUS_KEYS_ENV,
+    ModelConfigurationSecretError,
     decrypt_workflow_model_configuration_secrets,
     encrypt_workflow_model_configuration_secrets,
 )
+
+
+@pytest.fixture(autouse=True)
+def configured_model_secret_key(monkeypatch):
+    monkeypatch.setenv(CURRENT_KEY_ENV, Fernet.generate_key().decode("ascii"))
+    monkeypatch.delenv(PREVIOUS_KEYS_ENV, raising=False)
 
 
 def _byok_config() -> OrganizationAIModelConfigurationV2:
@@ -67,7 +78,7 @@ def test_workflow_model_blocks_encrypt_and_mask_both_override_formats():
 
 
 def test_invalid_ciphertext_fails_closed_instead_of_being_reencrypted():
-    with pytest.raises(ValueError, match="cannot be decrypted"):
+    with pytest.raises(ModelConfigurationSecretError, match="cannot be decrypted"):
         encrypt_workflow_model_configuration_secrets(
             {
                 "model_overrides": {
@@ -75,6 +86,67 @@ def test_invalid_ciphertext_fails_closed_instead_of_being_reencrypted():
                 }
             }
         )
+
+
+def test_model_secrets_require_explicit_encryption_key(monkeypatch):
+    monkeypatch.delenv(CURRENT_KEY_ENV, raising=False)
+    with pytest.raises(ModelConfigurationSecretError, match="must be explicitly configured"):
+        encrypt_workflow_model_configuration_secrets(
+            {"model_overrides": {"llm": {"api_key": "provider-secret"}}}
+        )
+
+
+def test_model_secrets_accept_unpadded_fernet_key(monkeypatch):
+    key = Fernet.generate_key().decode("ascii").rstrip("=")
+    monkeypatch.setenv(CURRENT_KEY_ENV, key)
+
+    encrypted = encrypt_workflow_model_configuration_secrets(
+        {"model_overrides": {"llm": {"api_key": "provider-secret"}}}
+    )
+
+    assert decrypt_workflow_model_configuration_secrets(encrypted)["model_overrides"]["llm"]["api_key"] == "provider-secret"
+
+
+def test_previous_key_decrypts_and_reencrypts_with_current_key(monkeypatch):
+    old_key = Fernet.generate_key()
+    current_key = Fernet.generate_key()
+    monkeypatch.setenv(CURRENT_KEY_ENV, current_key.decode("ascii"))
+    monkeypatch.setenv(PREVIOUS_KEYS_ENV, old_key.decode("ascii"))
+    old_ciphertext = "fernet:v1:" + Fernet(old_key).encrypt(b'"provider-secret"').decode("ascii")
+
+    rotated = encrypt_workflow_model_configuration_secrets(
+        {"model_overrides": {"llm": {"api_key": old_ciphertext}}}
+    )
+
+    new_ciphertext = rotated["model_overrides"]["llm"]["api_key"]
+    assert new_ciphertext != old_ciphertext
+    assert Fernet(current_key).decrypt(new_ciphertext.removeprefix("fernet:v1:").encode("ascii")) == b'"provider-secret"'
+    assert decrypt_workflow_model_configuration_secrets(rotated)["model_overrides"]["llm"]["api_key"] == "provider-secret"
+
+
+def test_wrong_key_fails_closed(monkeypatch):
+    ciphertext = encrypt_workflow_model_configuration_secrets(
+        {"model_overrides": {"llm": {"api_key": "provider-secret"}}}
+    )["model_overrides"]["llm"]["api_key"]
+    monkeypatch.setenv(CURRENT_KEY_ENV, Fernet.generate_key().decode("ascii"))
+    monkeypatch.delenv(PREVIOUS_KEYS_ENV, raising=False)
+
+    with pytest.raises(ModelConfigurationSecretError, match="cannot be decrypted"):
+        decrypt_workflow_model_configuration_secrets(
+            {"model_overrides": {"llm": {"api_key": ciphertext}}}
+        )
+
+
+def test_workflow_api_masking_returns_service_unavailable_for_wrong_key(monkeypatch):
+    encrypted = encrypt_workflow_model_configuration_secrets(
+        {"model_overrides": {"llm": {"api_key": "provider-secret"}}}
+    )
+    monkeypatch.setenv(CURRENT_KEY_ENV, Fernet.generate_key().decode("ascii"))
+
+    with pytest.raises(HTTPException) as raised:
+        mask_workflow_configurations(encrypted)
+
+    assert raised.value.status_code == 503
 
 
 @pytest.mark.asyncio
@@ -136,7 +208,7 @@ async def test_workflow_legacy_override_backfill_encrypts_persisted_v2(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_existing_org_plaintext_keys_are_encrypted_on_read(monkeypatch):
+async def test_existing_org_plaintext_keys_remain_readable_without_get_side_effects(monkeypatch):
     from datetime import UTC, datetime
 
     from api.services.configuration import ai_model_configuration
@@ -144,26 +216,18 @@ async def test_existing_org_plaintext_keys_are_encrypted_on_read(monkeypatch):
     config = _byok_config()
     plaintext = config.model_dump(mode="json", exclude_none=True)
     validated_at = datetime.now(UTC)
-    saved = []
+    upsert = AsyncMock()
 
     async def get_configuration(_organization_id, _key):
         return SimpleNamespace(value=plaintext, last_validated_at=validated_at)
 
-    async def upsert_configuration(organization_id, key, value, last_validated_at=None):
-        saved.append((organization_id, key, value, last_validated_at))
-        return SimpleNamespace(value=value, last_validated_at=last_validated_at)
-
     monkeypatch.setattr(ai_model_configuration.db_client, "get_configuration", get_configuration)
-    monkeypatch.setattr(ai_model_configuration.db_client, "upsert_configuration", upsert_configuration)
+    monkeypatch.setattr(ai_model_configuration.db_client, "upsert_configuration", upsert)
 
     loaded = await ai_model_configuration.get_organization_ai_model_configuration_v2(42)
 
     assert loaded.byok.pipeline.llm.api_key == "org-llm-secret-1234"
-    assert len(saved) == 1
-    assert saved[0][:2] == (42, "MODEL_CONFIGURATION_V2")
-    assert "org-llm-secret-1234" not in str(saved[0][2])
-    assert saved[0][2]["byok"]["pipeline"]["llm"]["api_key"].startswith("fernet:v1:")
-    assert saved[0][3] == validated_at
+    upsert.assert_not_awaited()
 
 
 @pytest.mark.asyncio

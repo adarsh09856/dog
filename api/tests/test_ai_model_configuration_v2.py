@@ -174,17 +174,6 @@ async def test_resolved_org_v2_uses_last_validated_at_as_validation_cache(
         "get_configuration",
         AsyncMock(return_value=row),
     )
-    persist_encrypted = AsyncMock(
-        side_effect=lambda organization_id, key, value, last_validated_at=None: SimpleNamespace(
-            value=value,
-            last_validated_at=last_validated_at,
-        )
-    )
-    monkeypatch.setattr(
-        ai_model_configuration.db_client,
-        "upsert_configuration",
-        persist_encrypted,
-    )
     from api.services.configuration import kodewaves_resolver
 
     async def passthrough_resolution(effective, _organization_id):
@@ -200,10 +189,6 @@ async def test_resolved_org_v2_uses_last_validated_at_as_validation_cache(
 
     assert resolved.source == "organization_v2"
     assert resolved.effective.last_validated_at == last_validated_at
-    persist_encrypted.assert_awaited_once()
-    stored_value = persist_encrypted.await_args.args[2]
-    assert stored_value["kodewaves"]["api_key"].startswith("fernet:v1:")
-    assert persist_encrypted.await_args.kwargs["last_validated_at"] == last_validated_at
 
 
 @pytest.mark.asyncio

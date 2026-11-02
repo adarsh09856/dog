@@ -527,6 +527,42 @@ def test_client_install_preflight_rejects_malformed_credential_encryption_key(tm
     assert any("MASTER_CREDENTIAL_ENCRYPTION_KEY" in error for error in errors)
 
 
+def test_client_install_preflight_rejects_malformed_previous_credential_key(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    client_dir = root / "deploy/client"
+    sys.path.insert(0, str(client_dir))
+    try:
+        import validate_install
+    finally:
+        sys.path.remove(str(client_dir))
+
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"payload": {}}), encoding="utf-8")
+    current_key = base64.urlsafe_b64encode(b"c" * 32).decode().rstrip("=")
+    lines = [
+        f"{name}=registry.example.com/kodewaves/{name.lower()}@sha256:{'f' * 64}"
+        for name in sorted(validate_install.IMAGE_KEYS)
+    ]
+    lines.extend(
+        [
+            "COMPOSE_PROFILES=direct-ingress",
+            "CLIENT_RELEASE_MANIFEST_FILE=manifest.json",
+            "KODEWAVES_INSTALLATION_ID=installation-123",
+            "KODEWAVES_LICENSE_TOKEN=payload.signature",
+            "PUBLIC_HOST=voice.customer.example.com",
+            "TURN_HOST=8.8.4.4",
+            f"MASTER_CREDENTIAL_ENCRYPTION_KEY={current_key}",
+            "MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS=not-a-valid-key",
+        ]
+    )
+    lines.extend(f"{name}={'r' * 40}" for name in validate_install.SECRET_KEYS)
+    env_file = tmp_path / ".env"
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    errors = validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")
+    assert any("MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS" in error for error in errors)
+
+
 @pytest.mark.parametrize("host", ["voice.example.com,evil.example.com", "voice.example.com { respond 200", "https://voice.example.com", "voice.example.com:443"])
 def test_client_install_preflight_rejects_non_dns_caddy_host_values(tmp_path, host):
     root = Path(__file__).resolve().parents[2]

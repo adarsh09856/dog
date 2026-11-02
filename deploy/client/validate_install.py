@@ -253,22 +253,31 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
             errors.append(f"{key} must contain at least 32 URL-safe characters (A-Z, a-z, 0-9, _ or -)")
 
     credential_key = env.get("MASTER_CREDENTIAL_ENCRYPTION_KEY", "")
-    if credential_key and "<" not in credential_key and ">" not in credential_key:
-        try:
-            # A 32-byte Fernet key has 43 URL-safe Base64 characters, optionally
-            # followed by one padding character. Validate the alphabet before
-            # decoding: urlsafe_b64decode silently discards arbitrary characters.
-            if not re.fullmatch(r"[A-Za-z0-9_-]{43}=?", credential_key):
-                raise ValueError
-            decoded = base64.b64decode(
-                credential_key + "=" * (-len(credential_key) % 4),
-                altchars=b"-_",
-                validate=True,
-            )
-            if len(decoded) != 32:
-                raise ValueError
-        except (ValueError, binascii.Error):
-            errors.append("MASTER_CREDENTIAL_ENCRYPTION_KEY must be URL-safe base64 for exactly 32 random bytes")
+    for key_name, key_value in (
+        ("MASTER_CREDENTIAL_ENCRYPTION_KEY", credential_key),
+        ("MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS", env.get("MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS", "")),
+    ):
+        if not key_value or "<" in key_value or ">" in key_value:
+            continue
+        for candidate in key_value.split(","):
+            candidate = candidate.strip()
+            try:
+                # Fernet accepts URL-safe Base64 encodings of exactly 32 bytes.
+                # Validate the alphabet before decoding because urlsafe_b64decode
+                # otherwise silently discards malformed characters.
+                # Python Fernet keys may omit their optional trailing padding.
+                if not re.fullmatch(r"[A-Za-z0-9_-]{43}=?", candidate):
+                    raise ValueError
+                decoded = base64.b64decode(
+                    candidate + "=" * (-len(candidate) % 4),
+                    altchars=b"-_",
+                    validate=True,
+                )
+                if len(decoded) != 32:
+                    raise ValueError
+            except (ValueError, binascii.Error):
+                errors.append(f"{key_name} must contain comma-separated URL-safe base64 Fernet keys for exactly 32 random bytes")
+                break
 
     manifest = env.get("CLIENT_RELEASE_MANIFEST_FILE", "")
     if manifest and "<" not in manifest and ">" not in manifest:

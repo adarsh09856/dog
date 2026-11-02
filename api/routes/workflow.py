@@ -42,6 +42,7 @@ from api.services.configuration.masking import (
     merge_workflow_api_keys,
 )
 from api.services.configuration.model_configuration_secrets import (
+    ModelConfigurationSecretError,
     decrypt_workflow_model_configuration_secrets,
     encrypt_workflow_model_configuration_secrets,
 )
@@ -63,6 +64,16 @@ from api.services.workflow.dto import ReactFlowDTO, sanitize_workflow_definition
 from api.services.workflow.duplicate import duplicate_workflow
 from api.services.workflow.errors import ItemKind, WorkflowError
 from api.services.workflow.run_creation import prepare_workflow_run_inputs
+
+
+def _decrypt_workflow_configurations_for_update(configurations):
+    try:
+        return decrypt_workflow_model_configuration_secrets(configurations)
+    except ModelConfigurationSecretError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Model provider credentials are unavailable; check the encryption key configuration.",
+        ) from exc
 from api.services.workflow.run_usage_response import (
     format_public_cost_info,
     format_public_usage_info,
@@ -1340,7 +1351,7 @@ async def update_workflow(
                 if existing_draft
                 else existing_workflow.released_definition.workflow_configurations
             )
-            existing_configs = decrypt_workflow_model_configuration_secrets(
+            existing_configs = _decrypt_workflow_configurations_for_update(
                 existing_configs
             )
             existing_v2_override = (existing_configs or {}).get(
@@ -1404,7 +1415,7 @@ async def update_workflow(
                 if existing_draft
                 else existing_workflow.released_definition.workflow_configurations
             )
-            existing_configs = decrypt_workflow_model_configuration_secrets(
+            existing_configs = _decrypt_workflow_configurations_for_update(
                 existing_configs
             )
             workflow_configurations = merge_workflow_configuration_secrets(

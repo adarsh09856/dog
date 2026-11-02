@@ -85,6 +85,11 @@ does not carry WebRTC media traffic.
    must be a URL-safe-base64 encoding of 32 random bytes. Keep `.env` readable
    only by the installation operator and out of source control and backups that
    are not encrypted.
+   Existing encrypted provider settings require the matching key at startup. For
+   rotation, set the new key as `MASTER_CREDENTIAL_ENCRYPTION_KEY` and the old
+   key in `MASTER_CREDENTIAL_ENCRYPTION_KEY_PREVIOUS`; re-save provider settings
+   and run the supported workflow model-configuration migration before removing
+   the old key. Keep a protected database backup until the migration is accepted.
 4. Put the signed manifest for the selected API image at
    `client-release-manifest.json` beside this Compose file, or update
    `CLIENT_RELEASE_MANIFEST_FILE` to its local path.
