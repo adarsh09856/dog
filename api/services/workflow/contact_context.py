@@ -193,6 +193,59 @@ def contact_context_instruction(context: dict | None) -> str:
     )
 
 
+def _caller_turn_identity(messages: list, user_index: int) -> dict[str, str] | None:
+    """Build the stable-or-context turn identity used for phone deduplication."""
+    if not isinstance(messages, list) or not 0 <= user_index < len(messages):
+        return None
+    user_turn = messages[user_index]
+    if not isinstance(user_turn, dict) or user_turn.get("role") != "user":
+        return None
+    stable_turn_id = next((
+        user_turn[key]
+        for key in ("turn_id", "message_id", "id", "event_id", "timestamp")
+        if user_turn.get(key) is not None
+    ), None)
+    if stable_turn_id is not None:
+        return {"kind": "id", "value": str(stable_turn_id)}
+    preceding_assistant = next((
+        message.get("content", "")
+        for message in reversed(messages[:user_index])
+        if isinstance(message, dict) and message.get("role") == "assistant"
+    ), "")
+    text = user_turn.get("content")
+    if not isinstance(text, str):
+        return None
+    return {
+        "kind": "context",
+        "assistant": str(preceding_assistant),
+        "text": text,
+    }
+
+
+def _caller_turn_identity_candidates(messages: list, user_index: int) -> list[dict[str, str]]:
+    """Return stable and fallback identities for a turn across context compaction."""
+    identity = _caller_turn_identity(messages, user_index)
+    if identity is None:
+        return []
+    if identity["kind"] != "id":
+        return [identity]
+    user_turn = messages[user_index]
+    preceding_assistant = next((
+        message.get("content", "")
+        for message in reversed(messages[:user_index])
+        if isinstance(message, dict) and message.get("role") == "assistant"
+    ), "")
+    text = user_turn.get("content")
+    if not isinstance(text, str):
+        return [identity]
+    fallback = {
+        "kind": "context",
+        "assistant": str(preceding_assistant),
+        "text": text,
+    }
+    return [identity, fallback]
+
+
 def remember_recent_caller_statements(messages: list | None, state: dict | None) -> None:
     """Keep a small, call-scoped copy of caller facts if the LLM trims history.
 
@@ -211,6 +264,48 @@ def remember_recent_caller_statements(messages: list | None, state: dict | None)
         if isinstance(message, dict) and message.get("role") == "user"
         and isinstance(message.get("content"), str)
     ]
+    # A successfully persisted booking is a lifecycle boundary. Old history
+    # remains in the transcript, but must not repopulate the next task's
+    # booking anchor or date fragments. The identity uses the same upstream
+    # IDs, with the existing preceding-assistant/text fallback used by phone
+    # turn deduplication. If compaction removed the boundary message, all
+    # retained messages are later than that boundary in this call's timeline.
+    boundary = state.get("_completed_booking_turn_boundary")
+    if isinstance(boundary, dict):
+        boundary_identities = boundary.get("identities")
+        if not isinstance(boundary_identities, list):
+            boundary_identities = [boundary]
+        stable_boundary = next((
+            identity for identity in boundary_identities
+            if isinstance(identity, dict) and identity.get("kind") == "id"
+        ), None)
+        boundary_index = None
+        if stable_boundary is not None:
+            boundary_index = next((
+                index for index, message in enumerate(messages)
+                if isinstance(message, dict)
+                and message.get("role") == "user"
+                and _caller_turn_identity(messages, index) == stable_boundary
+            ), None)
+        if boundary_index is None:
+            fallback_boundaries = [
+                identity for identity in boundary_identities
+                if isinstance(identity, dict) and identity.get("kind") == "context"
+            ]
+            boundary_index = next((
+                index for index, message in enumerate(messages)
+                if isinstance(message, dict)
+                and message.get("role") == "user"
+                and _caller_turn_identity(messages, index) in fallback_boundaries
+            ), None)
+        if boundary_index is not None:
+            user_messages = [
+                message for index, message in enumerate(messages)
+                if index > boundary_index
+                and isinstance(message, dict)
+                and message.get("role") == "user"
+                and isinstance(message.get("content"), str)
+            ]
     # Keep the latest explicit booking request as historical context outside
     # the rolling eight-utterance window. Voice calls often split name, phone
     # digits, date, and time into more than eight user turns. This anchor is
@@ -1341,6 +1436,41 @@ def booking_confirmation_decline_reply(messages: list, state: dict) -> str | Non
     if state.get("reply_language") == "English" or re.fullmatch(r"\s*(?:no|nope|not now)[.!\s]*", latest, re.I):
         return "Okay, I won't book that time. Tell me if you would prefer another date and time."
     return "ठीक है, उस समय की बुकिंग नहीं करूँगी। दूसरा दिन या समय चाहें तो बताइए।"
+
+
+def clear_completed_booking_state(
+    state: dict, booking_result: dict, messages: list | None = None
+) -> None:
+    """Drop only staged booking context after persistence confirms success.
+
+    Caller identity and phone capture/retry state are intentionally retained.
+    Failed or conflicting saves must leave the staged details available for a
+    retry, so this helper is a no-op unless the persistence result is explicit.
+    """
+    if not isinstance(state, dict) or not isinstance(booking_result, dict):
+        return
+    if booking_result.get("booked") is not True:
+        return
+    if isinstance(messages, list):
+        latest_user_index = next((
+            index for index in range(len(messages) - 1, -1, -1)
+            if isinstance(messages[index], dict)
+            and messages[index].get("role") == "user"
+        ), None)
+        if latest_user_index is not None:
+            identities = _caller_turn_identity_candidates(messages, latest_user_index)
+            if identities:
+                state["_completed_booking_turn_boundary"] = {
+                    "identities": identities,
+                }
+    for key in (
+        "booking_confirmation_slot",
+        "booking_time_question_date",
+        "prior_booking_request",
+        "active_booking_request",
+        "recent_caller_statements",
+    ):
+        state.pop(key, None)
 
 
 def confirmed_staged_booking_arguments(

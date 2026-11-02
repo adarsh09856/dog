@@ -340,6 +340,7 @@ class CustomToolManager:
                 messages = context.get_messages() if context is not None else []
                 from api.services.workflow.contact_context import (
                     caller_supplied_phone,
+                    clear_completed_booking_state,
                     known_contact,
                 )
 
@@ -371,6 +372,7 @@ class CustomToolManager:
                               "error": "The phone number does not match the caller's supplied number. Confirm the phone number again; no booking was saved."}
                 else:
                     result = await execute_booking(arguments, await self.get_organization_id())
+                clear_completed_booking_state(state, result, messages)
             except Exception as exc:
                 logger.error("Appointment tool persistence failed ({})", type(exc).__name__)
                 result = {"status": "error", "booked": False,

@@ -837,6 +837,7 @@ async def execute_text_chat_pending_turn(
                 caller_name_followup_reply,
                 caller_phone_fragment_reply,
                 confirmed_staged_booking_arguments,
+                clear_completed_booking_state,
                 known_contact,
                 remember_explicit_caller_name,
             )
@@ -901,6 +902,9 @@ async def execute_text_chat_pending_turn(
                 )
                 booking_result = await execute_booking(
                     booking_arguments, workflow.organization_id
+                )
+                clear_completed_booking_state(
+                    contact_state, booking_result, context.get_messages()
                 )
                 capture_processor._append_event(
                     "tool_call_result",
