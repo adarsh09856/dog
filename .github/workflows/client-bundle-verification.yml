@@ -188,6 +188,8 @@ jobs:
           src/app/prompt-templates/page.test.tsx
           src/app/campaigns/page.test.tsx
           src/app/widgets/page.test.tsx
+          src/lib/deploymentEdition.test.ts
+          src/middleware.test.ts
           src/components/BrandLogo.test.tsx
           src/components/BrandTagline.test.tsx
           src/components/telephony/SipConnectivityCard.test.tsx

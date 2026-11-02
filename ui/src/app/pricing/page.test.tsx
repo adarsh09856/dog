@@ -23,6 +23,21 @@ describe("public pricing", () => {
     mocks.getPublicCreditOffers.mockReset();
   });
 
+  it("explains client installation terms without requesting hosted plans or credit offers", () => {
+    vi.stubEnv("NEXT_PUBLIC_KODEWAVES_EDITION", "client");
+    try {
+      render(<PricingPage />);
+
+      expect(screen.getByText(/Installation pricing is managed/)).toBeTruthy();
+      expect(screen.getByText(/Contact your installation administrator/)).toBeTruthy();
+      expect(screen.queryByText("Workspace plans")).toBeNull();
+      expect(mocks.getPublicPlans).not.toHaveBeenCalled();
+      expect(mocks.getPublicCreditOffers).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("does not display hard-coded prices after a live pricing request fails and can retry", async () => {
     mocks.getPublicPlans
       .mockRejectedValueOnce(new Error("plans unavailable"))

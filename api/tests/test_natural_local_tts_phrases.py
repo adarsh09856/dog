@@ -13,14 +13,12 @@ async def test_long_followup_releases_a_coherent_phrase_before_sentence_end():
     )
     aggregator = service._text_aggregator
     try:
-        first = [part async for part in aggregator.aggregate('आपका नाम मिल गया है। क')]
-        assert len(first) == 1
         sentence = (
-            'कृपया अपना पूरा मोबाइल नंबर एक साथ बताइए ताकि संपर्क की सही जानकारी मिल सके '
+            'आपका नाम मिल गया है। कृपया अपना पूरा मोबाइल नंबर एक साथ बताइए ताकि संपर्क की सही जानकारी मिल सके '
             'और मैं आपकी बुकिंग के लिए आवश्यक जानकारी सही तरीके से दर्ज कर सकूँ। '
         )
         parts = []
-        for word in sentence[1:].split(' '):
+        for word in sentence.split(' '):
             parts.extend([part async for part in aggregator.aggregate(word + ' ')])
         tail = await aggregator.flush()
         if tail:
@@ -49,7 +47,7 @@ async def test_first_phrase_releases_at_16_chars_on_a_safe_word_boundary():
 
 
 @pytest.mark.asyncio
-async def test_followup_phrase_waits_for_coherent_48_chars_to_reduce_audio_gaps():
+async def test_first_phrase_waits_for_24_safe_chars_and_followup_batches_to_reduce_gaps():
     service = SpeachesLiveTTSService(
         api_key='test', base_url='http://localhost:8000/v1',
         settings=SpeachesTTSSettings(model='indic-vits-rasa-13', voice='HIN_F'),
@@ -58,21 +56,22 @@ async def test_followup_phrase_waits_for_coherent_48_chars_to_reduce_audio_gaps(
     try:
         assert aggregator._streaming_phrase_characters == 48
         first = [part async for part in aggregator.aggregate("I can help you today, ")]
-        assert [part.text for part in first] == ["I can help you today, "]
+        assert first == []
 
         followup = [
             part async for part in aggregator.aggregate("please tell me your name and number ")
         ]
-        assert followup == []
+        assert [part.text for part in followup] == ["I can help you today, please "]
+        assert len(followup[0].text.strip()) >= 24
 
         followup = [
             part async for part in aggregator.aggregate("so I can find the right appointment for you ")
         ]
         assert len(followup) == 1
-        assert followup[0].text == "please tell me your name and number so I can find "
+        assert followup[0].text == "tell me your name and number so I can find the right "
         tail = await aggregator.flush()
         assert tail is not None
-        assert tail.text == "the right appointment for you"
+        assert tail.text == "appointment for you"
     finally:
         await service._client.close()
 

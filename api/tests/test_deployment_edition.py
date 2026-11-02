@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI
 
 from api.services import deployment_edition
 from api.services.deployment_edition import (
+    mount_saas_billing,
     mount_owner_control_plane,
     public_signup_enabled,
 )
@@ -28,6 +29,25 @@ def test_saas_edition_mounts_owner_control_plane_routes():
     paths = app.openapi()["paths"]
     assert any(path.startswith("/admin") for path in paths)
     assert any(path.startswith("/superuser") for path in paths)
+
+
+def test_client_edition_does_not_mount_hosted_billing_or_payment_routes():
+    client_router = APIRouter()
+
+    assert mount_saas_billing(client_router, "client") is False
+    assert client_router.routes == []
+
+
+def test_saas_edition_mounts_hosted_billing_and_payment_routes():
+    saas_router = APIRouter()
+
+    assert mount_saas_billing(saas_router, "saas") is True
+    app = FastAPI()
+    app.include_router(saas_router)
+    paths = app.openapi()["paths"]
+    assert "/billing-sovereign/public/plans" in paths
+    assert "/billing-sovereign/public/packages" in paths
+    assert "/payments/create-order" in paths
 
 
 def test_admin_routes_require_superuser_except_signed_installation_status():

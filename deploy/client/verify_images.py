@@ -71,6 +71,12 @@ owner = [path for path in paths if path == '/admin' or path.startswith('/admin/'
          or path == '/api/v1/admin' or path.startswith('/api/v1/admin/')
          or path == '/api/v1/superuser' or path.startswith('/api/v1/superuser/')]
 assert not owner, f'Owner-only API routes shipped: {owner}'
+saas_billing_prefixes = ('/api/v1/billing-sovereign', '/api/v1/payments')
+saas_billing = [path for path in paths if any(
+    path == prefix or path.startswith(prefix + '/')
+    for prefix in saas_billing_prefixes
+)]
+assert not saas_billing, f'Hosted SaaS billing/payment routes shipped: {saas_billing}'
 assert '/api/v1/installation/license' in paths, 'Client license status route is missing'
 print(f'Client API source and route boundary verified ({len(paths)} routes)')
 """.replace(
@@ -107,6 +113,7 @@ if (owner.length || privileged.length) {
   throw new Error(`Owner-only UI routes shipped: ${[...owner, ...privileged].join(', ')}`);
 }
 if (!routes.includes('/page')) throw new Error('Public page missing from client UI');
+if (!routes.includes('/pricing/page')) throw new Error('Client installation pricing guidance is missing');
 const routing = JSON.parse(fs.readFileSync('/app/.next/routes-manifest.json', 'utf8'));
 const rewrites = routing.rewrites || {};
 const deployedRewrites = Array.isArray(rewrites)

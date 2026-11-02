@@ -840,7 +840,11 @@ def test_client_image_verifier_requires_local_administration_without_owner_sourc
     assert "IMAGE_EDITION == 'client'" in verifier
     assert "from api.app import app" in verifier
     assert "Owner-only API routes shipped" in verifier
+    assert "Hosted SaaS billing/payment routes shipped" in verifier
+    assert "'/api/v1/billing-sovereign'" in verifier
+    assert "'/api/v1/payments'" in verifier
     assert "'/api/v1/installation/license' in paths" in verifier
+    assert "routes.includes('/pricing/page')" in verifier
     assert "os.getuid() != 0" in verifier
     assert "os.getuid() == 10001" in verifier
     assert "process.getuid() === 0" in verifier

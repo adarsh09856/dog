@@ -1,10 +1,6 @@
 import { NextRequest } from "next/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/deploymentEdition", () => ({
-  isHiddenInClientEdition: () => false,
-}));
-
 import { middleware } from "./middleware";
 
 describe("public route access", () => {
@@ -14,6 +10,19 @@ describe("public route access", () => {
       const response = await middleware(new NextRequest(`http://localhost${pathname}`));
       expect(response.status).toBe(200);
       expect(response.headers.get("x-middleware-next")).toBe("1");
+    },
+  );
+
+  it.each(["/billing", "/billing-sovereign", "/admin/client-installations"]) (
+    "hides hosted billing and owner routes in a client installation: %s",
+    async (pathname) => {
+      vi.stubEnv("KODEWAVES_EDITION", "client");
+      try {
+        const response = await middleware(new NextRequest(`http://localhost${pathname}`));
+        expect(response.status).toBe(404);
+      } finally {
+        vi.unstubAllEnvs();
+      }
     },
   );
 

@@ -9,9 +9,17 @@ describe('client edition route visibility', () => {
     expect(isHiddenInClientEdition('/superadmin/runs', 'client')).toBe(true);
   });
 
-  it('keeps tenant application routes and SaaS owner routes available', () => {
+  it('hides hosted SaaS billing surfaces but keeps a client pricing explanation', () => {
+    expect(isHiddenInClientEdition('/pricing', 'client')).toBe(false);
+    expect(isHiddenInClientEdition('/billing', 'client')).toBe(true);
+    expect(isHiddenInClientEdition('/billing-sovereign', 'client')).toBe(true);
+    expect(isHiddenInClientEdition('/billing-sovereign/checkout', 'client')).toBe(true);
+  });
+
+  it('keeps tenant application routes and SaaS marketing routes available', () => {
     expect(isHiddenInClientEdition('/workflow', 'client')).toBe(false);
     expect(isHiddenInClientEdition('/settings', 'client')).toBe(false);
+    expect(isHiddenInClientEdition('/pricing', 'saas')).toBe(false);
     expect(isHiddenInClientEdition('/admin', 'saas')).toBe(false);
   });
 });
