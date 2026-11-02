@@ -141,6 +141,40 @@ EXTERNAL_TURN_USER_STOP_TIMEOUT = 30.0
 _PRE_CALL_FETCH_TASKS: dict[asyncio.Task, asyncio.Task] = {}
 
 
+def _is_local_segmented_stt(user_config, *, is_realtime: bool) -> bool:
+    """Return whether this call resolves to the self-hosted CPU STT path.
+
+    A missing/`none` API key is a valid local Speaches configuration because
+    the factory supplies the in-network Indic endpoint. It is not enough by
+    itself to classify a managed Kodewaves provider as local: those requests
+    can resolve to cloud credentials.
+    """
+    if is_realtime:
+        return False
+    stt_config = getattr(user_config, "stt", None)
+    if stt_config is None:
+        return False
+    provider_value = getattr(stt_config, "provider", None)
+    provider = str(getattr(provider_value, "value", provider_value) or "").strip().casefold()
+    api_key = str(getattr(stt_config, "api_key", None) or "").strip().casefold()
+    local_tokens = {"sovereign-local-cpu", "local-cpu-token"}
+    if provider in {ServiceProviders.SPEACHES.value, "speaches"}:
+        return api_key in local_tokens | {"", "none"}
+    if provider in {ServiceProviders.KODEWAVES.value, "kodewaves"}:
+        return api_key in local_tokens
+    return False
+
+
+def _uses_local_indic_phone_capture(stt, user_config, *, is_realtime: bool) -> bool:
+    """Gate phone-specific STT handling on the resolved local Indic service."""
+    return (
+        stt is not None
+        and getattr(getattr(user_config, "stt", None), "model", None)
+        == "indicconformer-ctc-int8"
+        and _is_local_segmented_stt(user_config, is_realtime=is_realtime)
+    )
+
+
 def _schedule_pre_call_fetch(
     *,
     workflow_run_id: int,
@@ -922,6 +956,9 @@ async def _run_pipeline_impl(
 
     # Detect realtime mode (speech-to-speech services like OpenAI Realtime, Gemini Live)
     is_realtime = user_config.is_realtime and user_config.realtime is not None
+    local_segmented_stt = _is_local_segmented_stt(
+        user_config, is_realtime=is_realtime
+    )
 
     # Create services based on user configuration
     if is_realtime:
@@ -942,11 +979,8 @@ async def _run_pipeline_impl(
             keyterms=keyterms,
             correlation_id=mps_correlation_id,
         )
-        if (
-            stt is not None
-            and getattr(user_config.stt, "model", None) == "indicconformer-ctc-int8"
-            and getattr(user_config.stt, "api_key", None)
-            in {"sovereign-local-cpu", "local-cpu-token"}
+        if _uses_local_indic_phone_capture(
+            stt, user_config, is_realtime=is_realtime
         ):
             # Local STT can try its already-warm English decoder during phone
             # capture. This stays per segment and does not change the selected
@@ -1161,21 +1195,6 @@ async def _run_pipeline_impl(
     # Segmented local STT needs a whole phrase for language detection and
     # spoken numbers. Use longer endpointing only while collecting a phone
     # number; ordinary turns keep the low-latency 200 ms default.
-    local_segmented_stt = (
-        not is_realtime
-        and getattr(user_config.stt, "provider", None) in {
-            ServiceProviders.SPEACHES.value,
-            ServiceProviders.KODEWAVES.value,
-            "speaches",
-            "kodewaves",
-        }
-        and getattr(user_config.stt, "api_key", None) in {
-            "sovereign-local-cpu",
-            "local-cpu-token",
-            "none",
-            None,
-        }
-    )
     vad_stop_s = float(run_configs.get("vad_stop_secs", 0.2))
     vad_params = VADParams(stop_secs=vad_stop_s)
     if local_segmented_stt and "vad_stop_secs" not in run_configs:
