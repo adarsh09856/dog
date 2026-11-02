@@ -952,7 +952,12 @@ def _verify_customer_archive_install(
                 break
             time.sleep(0.5)
         if not owner_confirmed:
-            raise ValueError("Archive-installed API did not complete the signed owner installation check")
+            owner_peer = _safe_owner_peer_diagnostics(owner)
+            owner_poll = _owner_poll_log_summary(logs.stdout + logs.stderr)
+            raise ValueError(
+                "Archive-installed API did not complete the signed owner installation check; "
+                f"owner peer diagnostics={owner_peer}; owner poll={owner_poll}"
+            )
         password = secrets.token_urlsafe(32) + "Aa1!"
         bootstrap_output = _run_interactive(
             [*compose, "run", "--rm", "--no-deps", "api", "python", "-m",
