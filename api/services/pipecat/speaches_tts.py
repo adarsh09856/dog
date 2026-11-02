@@ -52,7 +52,12 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             # downstream PCM/history ordering is handled by the base service.
             self._text_aggregator = LocalSpeechAggregator(
                 min_characters=24,
-                first_chunk_characters=12,
+                # A 12-character opening fragment regularly became its own
+                # short VITS request (under a second of speech), which then
+                # drained before the next CPU synthesis request was ready.
+                # Wait for a natural clause/word boundary with enough audio
+                # to bridge the next request instead of starting on a stub.
+                first_chunk_characters=24,
                 first_clause_characters=24,
                 # If the LLM has not completed a sentence yet, start speech
                 # after a coherent word-boundary phrase instead of waiting
@@ -60,7 +65,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # every character and keeps later phrases at the larger size.
                 # Lower the first-phrase threshold to reduce the gap to speech;
                 # word/date guards still prevent unsafe phrase boundaries.
-                first_phrase_characters=10,
+                first_phrase_characters=24,
                 # Do not turn each short word group into a separate TTS request.
                 # The local CPU synthesizer is single-worker; tiny sequential
                 # requests can drain the playback queue between phrases. Keep
