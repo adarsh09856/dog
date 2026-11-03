@@ -1644,7 +1644,8 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         normalized,
     )
     english = re.search(
-        r"(?:\bat\s+)?(\d{1,2}|[a-z]+)(?::([0-5]\d))?\s*"
+        r"(?:\bat\s+)?(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
+        r"(?::([0-5]\d))?\s*(?:बजे\s*)?"
         r"(am|pm|[ap]\s*\.?\s*m\.?|ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?)\b",
         normalized, re.I,
     )
