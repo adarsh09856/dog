@@ -223,6 +223,10 @@ first workspace and membership in one database transaction. API keys are created
 later from the client administrator's **API Keys** page, which shows each raw
 key only once; bootstrap does not create a hidden key whose secret cannot be
 recovered.
+This account is a superuser only inside the customer's own installation. It is
+not a Kodewaves owner superadmin and cannot issue licenses, change signed
+entitlements, or publish client releases. Those owner-only controls stay on the
+Kodewaves SaaS deployment and are not shipped in the client image.
 Run it only against the intended new client database. The client administrator
 can then create and select workspaces and create or suspend local users in the
 Settings page. These paths apply the signed `max_workspaces` and `max_seats`
@@ -378,8 +382,10 @@ the signed license and applied to the client public page, sign-in branding and
 app navigation. The API validates the color and logo URL; client branding
 cannot change installation identity, feature grants or limits.
 
-Selected voice, telephony, campaign, CRM, appointment, form, knowledge-base,
-widget and billing API paths require their corresponding signed feature. New
+Selected voice, telephony, campaign, CRM, appointment, form, knowledge-base and
+widget API paths require their corresponding signed feature. Hosted billing and
+payment APIs are not included in the client edition and cannot be granted by a
+client installation license. New
 calls require the appropriate voice/source grants and a positive
 `max_concurrent_calls` limit. Call admission applies the installation-wide cap
 atomically in Redis alongside the organization limit. A missing grant or limit

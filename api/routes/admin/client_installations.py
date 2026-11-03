@@ -56,7 +56,7 @@ router.include_router(client_release_control_router)
 
 SUPPORTED_FEATURES = frozenset({
     "voice", "telephony", "campaigns", "crm", "appointments", "forms",
-    "widgets", "knowledge_base", "billing",
+    "widgets", "knowledge_base",
 })
 SUPPORTED_LIMITS = frozenset({
     "max_concurrent_calls", "max_seats", "max_workspaces", "max_agents", "max_campaigns",
