@@ -189,10 +189,16 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
 
 
 def refresh_caller_language_tts_capabilities(llm: Any, tts: Any) -> frozenset[str]:
-    """Recompute language routing after async voice-inventory preparation."""
+    """Refresh LLM and shared recognizer routing after voice discovery."""
     capabilities = caller_language_tts_capabilities(tts)
     if llm is not None:
         llm._caller_language_supported_codes = capabilities
+        # A workflow can activate a different agent after the shared STT
+        # service was constructed. Keep its filter aligned with the active
+        # agent's verified TTS inventory instead of the prior agent's cache.
+        source = getattr(llm, "_caller_language_source", None)
+        if source is not None:
+            source._caller_language_supported_codes = capabilities
     return capabilities
 
 
