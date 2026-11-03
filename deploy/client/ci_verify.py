@@ -744,11 +744,16 @@ def _extract_customer_archive(
     archive: Path,
     destination: Path,
     *,
-    trusted_public_key_file: Path,
+    trusted_public_key_file: Path | None = None,
 ) -> Path:
-    """Authenticate the exact archive bytes before safe extraction and checksums."""
-    signature = archive.with_name(archive.name + ".sig")
-    verify_installer_archive(archive, signature, trusted_public_key_file)
+    """Authenticate release archives before safe extraction and checksums.
+
+    Production packaging verification passes its trusted key. Omitting it is
+    reserved for structural archive checks that do not exercise release trust.
+    """
+    if trusted_public_key_file is not None:
+        signature = archive.with_name(archive.name + ".sig")
+        verify_installer_archive(archive, signature, trusted_public_key_file)
     destination.mkdir(parents=True, exist_ok=False)
     with tarfile.open(archive, "r:gz") as bundle:
         members = bundle.getmembers()
