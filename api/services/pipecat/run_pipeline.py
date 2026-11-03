@@ -964,15 +964,20 @@ async def _run_pipeline_impl(
     if is_realtime:
         llm = create_realtime_llm_service(user_config, audio_config)
         stt = None
-        # Realtime models synthesize their dynamic replies themselves. Keep a
-        # normal configured TTS service only for app-authored greetings and
-        # other scripted messages, routed through the same call output queue.
-        tts = create_tts_service(
-            user_config,
-            audio_config,
-            correlation_id=mps_correlation_id,
-            organization_id=workflow.organization_id,
-            tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
+        # Realtime models synthesize dynamic replies themselves. An explicitly
+        # configured script TTS is optional and must remain independent of the
+        # realtime provider's native voice. Older S2S configs have no standalone
+        # TTS setting, so keep their existing native-voice path working.
+        tts = (
+            create_tts_service(
+                user_config,
+                audio_config,
+                correlation_id=mps_correlation_id,
+                organization_id=workflow.organization_id,
+                tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
+            )
+            if user_config.tts is not None
+            else None
         )
         # Realtime services don't implement run_inference, so create a
         # separate text LLM for variable extraction and other out-of-band

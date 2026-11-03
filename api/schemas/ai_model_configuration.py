@@ -75,6 +75,31 @@ class KodewavesManagedAIModelConfiguration(BaseModel):
     is_realtime: Optional[bool] = False
     realtime_provider: Optional[str] = None
     realtime_model: Optional[str] = None
+    # S2S keeps its native voice separate from voice output for app-authored
+    # workflow text. These settings are optional for backwards compatibility.
+    script_tts_engine_type: Optional[Literal["cloud", "local_cpu"]] = None
+    script_tts_model: Optional[str] = None
+    script_tts_voice: Optional[str] = None
+    script_tts_speed: Optional[float] = Field(default=None, ge=0.5, le=2.0)
+    script_tts_language: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_script_tts_selection(self):
+        has_script_tts = bool(
+            self.script_tts_engine_type
+            or self.script_tts_model
+            or self.script_tts_voice
+        )
+        selection = (
+            self.script_tts_engine_type,
+            self.script_tts_model,
+            self.script_tts_voice,
+        )
+        if has_script_tts and not all(selection):
+            raise ValueError(
+                "Workflow script TTS requires an engine, model, and voice selection"
+            )
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -108,11 +133,13 @@ class BYOKRealtimeAIModelConfiguration(BaseModel):
     realtime: RealtimeConfig
     llm: LLMConfig
     embeddings: EmbeddingsConfig | None = None
+    script_tts: TTSConfig | None = None
 
     @model_validator(mode="after")
     def reject_kodewaves_providers(self):
         _reject_kodewaves_provider("llm", self.llm)
         _reject_kodewaves_provider("embeddings", self.embeddings)
+        _reject_kodewaves_provider("script_tts", self.script_tts)
         return self
 
 
@@ -191,6 +218,7 @@ def compile_ai_model_configuration_v2(
     realtime = configuration.byok.realtime
     return EffectiveAIModelConfiguration(
         llm=realtime.llm,
+        tts=realtime.script_tts,
         realtime=realtime.realtime,
         embeddings=realtime.embeddings,
         is_realtime=True,
@@ -240,7 +268,27 @@ def _compile_kodewaves_configuration(
                 language=configuration.language if configuration.language != "multi" else "en",
             )
 
+        script_tts = None
+        if any((
+            configuration.script_tts_engine_type,
+            configuration.script_tts_model,
+            configuration.script_tts_voice,
+        )):
+            script_tts = KodewavesTTSService(
+                provider=ServiceProviders.KODEWAVES,
+                api_key=(
+                    "sovereign-local-cpu"
+                    if configuration.script_tts_engine_type == "local_cpu"
+                    else api_key
+                ),
+                model=configuration.script_tts_model or "default",
+                voice=configuration.script_tts_voice or "default",
+                speed=configuration.script_tts_speed or 1.0,
+                language=configuration.script_tts_language or "en",
+            )
+
         return EffectiveAIModelConfiguration(
+            tts=script_tts,
             realtime=realtime_service,
             llm=KodewavesLLMService(
                 provider=ServiceProviders.KODEWAVES,

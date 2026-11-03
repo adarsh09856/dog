@@ -1522,16 +1522,25 @@ class PipecatEngine:
                 if self._is_realtime:
                     if self.active_agent.llm is None:
                         return completed(PlaybackOutcome.FAILED)
-                    from api.services.pipecat.realtime.conversation import (
-                        RealtimeScriptTTSSpeakFrame,
-                    )
-
                     queue_frame = self.active_agent.llm.queue_frame
-                    speak_frame = RealtimeScriptTTSSpeakFrame(
-                        text,
-                        append_to_context=append_to_context,
-                        persist_to_logs=persist_to_logs,
-                    )
+                    if self.active_agent.tts is not None:
+                        from api.services.pipecat.realtime.conversation import (
+                            RealtimeScriptTTSSpeakFrame,
+                        )
+
+                        speak_frame = RealtimeScriptTTSSpeakFrame(
+                            text,
+                            append_to_context=append_to_context,
+                            persist_to_logs=persist_to_logs,
+                        )
+                    else:
+                        # Preserve the provider's native voice for legacy S2S
+                        # configs that have not selected an auxiliary script TTS.
+                        speak_frame = TTSSpeakFrame(
+                            text,
+                            append_to_context=append_to_context,
+                            persist_to_logs=persist_to_logs,
+                        )
                 else:
                     if self.active_agent.worker is None:
                         return completed(PlaybackOutcome.FAILED)

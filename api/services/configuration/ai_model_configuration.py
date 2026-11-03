@@ -395,6 +395,7 @@ def convert_legacy_ai_model_configuration_to_v2(
                     realtime=configuration.realtime,
                     llm=configuration.llm,
                     embeddings=configuration.embeddings,
+                    script_tts=configuration.tts,
                 ),
             ),
         )
@@ -452,7 +453,7 @@ def _merge_byok_secret_fields(incoming_byok: dict | None, existing_byok: dict | 
     section_names = (
         ("llm", "tts", "stt", "embeddings")
         if incoming_mode == "pipeline"
-        else ("realtime", "llm", "embeddings")
+        else ("realtime", "llm", "script_tts", "embeddings")
     )
     incoming_container = incoming_byok.get(incoming_mode)
     existing_container = existing_byok.get(existing_mode)
@@ -562,6 +563,31 @@ def _convert_any_kodewaves_legacy_configuration(
             is_realtime=configuration.is_realtime,
             realtime_provider=getattr(_provider(configuration.realtime), "value", _provider(configuration.realtime)),
             realtime_model=selected_model(configuration.realtime),
+            # Legacy model config may carry a distinct configured TTS alongside
+            # S2S. Preserve it as script TTS, never infer it from realtime.voice.
+            script_tts_engine_type=(
+                selected_engine("tts")
+                if configuration.is_realtime and configuration.tts
+                else None
+            ),
+            script_tts_model=(
+                selected_model(configuration.tts)
+                if configuration.is_realtime and configuration.tts
+                else None
+            ),
+            script_tts_voice=(
+                getattr(configuration.tts, "voice", None)
+                if configuration.is_realtime and configuration.tts
+                else None
+            ),
+            script_tts_speed=(
+                speed if configuration.is_realtime and configuration.tts else None
+            ),
+            script_tts_language=(
+                getattr(configuration.tts, "language", None)
+                if configuration.is_realtime and configuration.tts
+                else None
+            ),
         ),
     )
 

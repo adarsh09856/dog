@@ -73,6 +73,7 @@ const STANDARD_TABS: { key: ServiceSegment; label: string }[] = [
 const REALTIME_TABS: { key: ServiceSegment; label: string }[] = [
     { key: "realtime", label: "Realtime Model" },
     { key: "llm", label: "LLM" },
+    { key: "tts", label: "Script Voice" },
     { key: "embeddings", label: "Embedding" },
 ];
 
