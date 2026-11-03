@@ -51,6 +51,7 @@ export default function AdminModerationPage() {
   const [bannedWords, setBannedWords] = useState<BannedWord[]>([]);
   const [violations, setViolations] = useState<FlaggedViolation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Add Banned Word Dialog
   const [modalOpen, setModalOpen] = useState(false);
@@ -61,14 +62,16 @@ export default function AdminModerationPage() {
 
   const fetchData = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [words, viols] = await Promise.all([
-        adminApi.getBannedWords().catch(() => []),
-        adminApi.getViolations().catch(() => []),
+        adminApi.getBannedWords(),
+        adminApi.getViolations(),
       ]);
       setBannedWords(words);
       setViolations(viols);
     } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load moderation data. Please retry.");
       console.error("Failed to load moderation data:", err);
     } finally {
       setLoading(false);
@@ -142,6 +145,7 @@ export default function AdminModerationPage() {
           <Button
             size="sm"
             className="gap-2"
+            disabled={loading || Boolean(loadError)}
             onClick={() => {
               setKeyword("");
               setSeverity("high");
@@ -158,7 +162,10 @@ export default function AdminModerationPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="keywords" className="space-y-6">
+      {loadError && <p role="alert" className="text-sm text-destructive">{loadError}</p>}
+      {loading || loadError ? (
+        <p className="text-sm text-muted-foreground">{loading ? "Loading moderation data…" : "Moderation data unavailable. Use Refresh to retry."}</p>
+      ) : <Tabs defaultValue="keywords" className="space-y-6">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="keywords" className="gap-2">
             <Ban className="h-4 w-4" />
@@ -350,7 +357,7 @@ export default function AdminModerationPage() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
+      </Tabs>}
 
       {/* ADD KEYWORD DIALOG */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

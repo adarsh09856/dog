@@ -177,6 +177,7 @@ jobs:
           npm test -- --config vitest.panel-check.mts --run
           'src/app/handler/[...stack]/stack-theme.test.ts'
           src/app/admin/client-installations/page.test.tsx
+          src/app/admin/moderation/page.test.tsx
           src/app/admin/plans/page.test.tsx
           src/app/admin/credit-packages/page.test.tsx
           src/app/admin/settings/page.test.tsx
