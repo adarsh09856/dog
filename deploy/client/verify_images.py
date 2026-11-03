@@ -13,7 +13,20 @@ from pathlib import Path
 
 
 def _run(*args: str) -> str:
-    result = subprocess.run(args, check=True, capture_output=True, text=True)
+    try:
+        result = subprocess.run(args, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as exc:
+        # Preserve the reason an isolated container check failed. Do not echo
+        # argv: callers may pass temporary credentials in environment flags.
+        details = "\n".join(
+            part.strip()
+            for part in (exc.stdout or "", exc.stderr or "")
+            if part.strip()
+        )
+        message = f"Image verification container exited with status {exc.returncode}."
+        if details:
+            message = f"{message}\n{details}"
+        raise RuntimeError(message) from exc
     return result.stdout.strip()
 
 
