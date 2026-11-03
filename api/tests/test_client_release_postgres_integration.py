@@ -59,6 +59,7 @@ from api.services import installation_license
 from api.services.client_binding_requests import accept_binding_request, approve_binding_request
 from api.routes.admin import client_installation_check
 from api.routes.admin import client_installations as admin_client_installations
+from api.routes import client_installation_update_report
 from api.services.installation_identity import sign_binding_request, sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status_claims
 from api.services import client_update_protocol
@@ -835,6 +836,7 @@ async def test_signed_client_release_rollout_progress_replay_and_rollback_in_pos
         release_public = public_string(release_signer)
         monkeypatch.setattr(client_update_protocol, "trusted_release_public_key", lambda: release_public)
         mock_owner_signer(monkeypatch, client_installation_check, (owner_private, owner_public))
+        mock_owner_signer(monkeypatch, client_installation_update_report, (owner_private, owner_public))
 
         now = int(time.time())
         installs = {}
