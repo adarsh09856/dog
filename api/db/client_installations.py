@@ -586,11 +586,13 @@ async def claim_client_integrity_alert_email(alert_id: int, *, lease_seconds: in
             .where(ClientIntegrityAlertModel.id == alert_id)
         )
         row = result.one_or_none()
-        await session.commit()
         if row is None:
+            await session.commit()
             return None
         alert, customer_id = row
-        return {
+        # Async sessions expire ORM attributes on commit. Materialize the task
+        # payload while the selected row is still loaded, then commit the lease.
+        payload = {
             "id": alert.id,
             "installation_id": alert.installation_id,
             "customer_id": customer_id,
@@ -600,6 +602,8 @@ async def claim_client_integrity_alert_email(alert_id: int, *, lease_seconds: in
             "observed_sha256": alert.observed_sha256,
             "attempt_count": alert.email_attempt_count,
         }
+        await session.commit()
+        return payload
 
 
 async def mark_client_integrity_alert_email_sent(alert_id: int) -> None:
