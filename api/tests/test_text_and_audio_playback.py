@@ -171,6 +171,7 @@ async def run_pipeline_and_capture_frames(
     functions: List[Dict[str, Any]],
     fetch_recording_audio=None,
     num_text_steps: int = 1,
+    caller_message: str | None = None,
 ) -> tuple[MockLLMService, LLMContext, list[Frame]]:
     """Run a pipeline with mock tool calls and capture frames queued via task.queue_frame.
 
@@ -253,7 +254,9 @@ async def run_pipeline_and_capture_frames(
             return_value=1,
         ),
     ):
-        await run_engine_test_pipeline(task, engine, mock_transport)
+        await run_engine_test_pipeline(
+            task, engine, mock_transport, caller_message=caller_message
+        )
 
     return llm, context, queued_frames
 
@@ -680,6 +683,7 @@ class TestTransitionSpeech:
             workflow=text_workflow,
             functions=functions,
             num_text_steps=2,
+            caller_message="Please end the call.",
         )
 
         # Pipeline completes: 1st gen on StartNode, 2nd gen on EndNode
@@ -717,6 +721,7 @@ class TestTransitionSpeech:
             functions=functions,
             fetch_recording_audio=mock_fetch,
             num_text_steps=2,
+            caller_message="Please end the call.",
         )
 
         # Pipeline completes
