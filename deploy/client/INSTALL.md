@@ -17,11 +17,23 @@ volume. Point the licensed hostname at this server. Allow TCP 80/443, UDP 443,
 TURN UDP/TCP 3478 and UDP 49152-49200 through its firewall. Back up an existing
 installation before changing images or credentials.
 
-Extract this archive into a private installation directory. Check `SHA256SUMS`
-against the package you received, and verify the archive checksum through your
-trusted delivery channel. A checksum stored inside an archive does not
-authenticate its sender. The release public key is also included for operator
-inspection; the application images use their own baked verification keys.
+Before extracting or running anything from this archive, obtain the detached
+`.sig` file, `verify_installer.py`, and the trusted release public key through
+the owner's authenticated delivery channel. Do not use the public key from
+inside the archive to authenticate that archive. Verify the exact archive bytes
+first:
+
+```bash
+python3 /secure/trusted/verify_installer.py --archive /secure/downloads/customer-installer.tar.gz --signature /secure/downloads/customer-installer.tar.gz.sig --trusted-public-key /secure/trusted/release-public-key.txt
+```
+
+Only after the command reports that the signature is verified, extract the
+archive into a private installation directory. If you enable the bundled
+systemd update timer, use `/opt/kodewaves/client`; its service is pinned to that
+path. The package's `SHA256SUMS`
+detects accidental changes inside the archive; the detached Ed25519 signature
+authenticates the complete archive. The included release public key is for
+operator inspection and must not be used as the trust source for this check.
 
 ## Configure this installation
 
@@ -131,6 +143,63 @@ or workspace exists. Sign in on your licensed HTTPS hostname. Client
 administrators manage local users, workspaces and permitted branding in
 Settings. The owner controls licenses, enabled features, limits and releases.
 Public self-registration is disabled on client installations.
+
+## Enable owner-controlled updates
+
+The update timer is optional. Complete enrollment and confirm the first owner
+check succeeded before enabling it. It polls every 15 minutes, and only applies
+a release that the Kodewaves owner has signed, published, targeted to this
+installation and activated. It never accepts an image tag or shell command from
+the customer update response.
+
+From `/opt/kodewaves/client`, install and enable the supplied units:
+
+```bash
+sudo install -m 0644 kodewaves-client-update.service /etc/systemd/system/
+sudo install -m 0644 kodewaves-client-update.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now kodewaves-client-update.timer
+sudo systemctl start kodewaves-client-update.service
+sudo systemctl status kodewaves-client-update.timer
+```
+
+For a non-mutating owner-status check, run
+`python3 update_agent.py --directory /opt/kodewaves/client --check`. Review
+service output with `sudo journalctl -u kodewaves-client-update.service`. Before
+changing API/UI image pins, the updater verifies the signed release and
+manifest, checks schema rollback compatibility, and makes a cold PostgreSQL and
+MinIO recovery archive under `.client-update-work`. It then rechecks that the
+rollout is still active, applies the pinned images, and checks API/UI health and
+the database migration head. Only after that health check does it atomically
+replace the signed allowlist of host-side Compose, recovery, preflight, updater,
+and Kodewaves update-unit files. It then reloads systemd and records a durable
+rollback journal until the host update completes. A failed application health
+check restores the saved release and data volumes; a failed host-file update
+restores the previous host files and can retry while retaining the healthy app
+release. Keep the installation directory root-only; the recovery archive
+contains the environment file and enrolled identity key.
+
+### One-time migration for existing update timers
+
+Older installations use a hardened updater service that cannot write systemd
+unit files. Before the first host-tool update, the updater stops and prints a
+one-time manual migration message without changing application images. Obtain
+the updated signed client package through the owner's authenticated delivery
+channel, verify it as described above, then install the two updated units and
+reload systemd:
+
+```bash
+sudo install -m 0644 kodewaves-client-update.service /etc/systemd/system/
+sudo install -m 0644 kodewaves-client-update.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart kodewaves-client-update.timer
+```
+
+The updated updater service permits atomic replacement of its fixed-path host
+files. Its systemd sandbox grants write access to `/etc/systemd/system` for
+atomic publication of the Kodewaves service and timer. Docker/systemd live
+acceptance, including rollback and retry on a disposable enrolled installation,
+remains required before production use.
 
 ## Renewal and recovery
 

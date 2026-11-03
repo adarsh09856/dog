@@ -14,6 +14,7 @@ import json
 import os
 import re
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
@@ -320,6 +321,34 @@ def verify_installation_status_claims(
             or status["expires_at"] - status["issued_at"] > 300
         ):
             raise InstallationLicenseError("Owner installation status is invalid")
+        if "update" in status:
+            from api.services.client_update_protocol import (
+                ClientUpdateProtocolError,
+                verify_release_envelope,
+            )
+
+            update = status["update"]
+            if not isinstance(update, dict) or set(update) != {
+                "release_id", "version", "archive_url", "archive_sha256",
+                "archive_signature", "min_current_version", "notes", "rollout_id",
+                "target_status", "rollout_state",
+            }:
+                raise InstallationLicenseError("Owner installation update is invalid")
+            try:
+                if str(uuid.UUID(update["rollout_id"])) != update["rollout_id"]:
+                    raise ValueError("non-canonical rollout ID")
+                if update["target_status"] not in {"staged", "downloading", "applying"}:
+                    raise ValueError("invalid rollout target state")
+                if update["rollout_state"] not in {"active", "paused", "stopped"}:
+                    raise ValueError("invalid rollout state")
+                if update["rollout_state"] in {"paused", "stopped"} and update["target_status"] != "applying":
+                    raise ValueError("paused or stopped rollout is not already applying")
+                release_envelope = {key: value for key, value in update.items() if key != "rollout_id"}
+                release_envelope.pop("target_status")
+                release_envelope.pop("rollout_state")
+                verify_release_envelope(release_envelope)
+            except (ClientUpdateProtocolError, ValueError, TypeError, KeyError) as exc:
+                raise InstallationLicenseError("Owner installation update is invalid") from exc
         return status
     except InstallationLicenseError:
         raise

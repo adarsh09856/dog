@@ -239,22 +239,66 @@ python owner-tools/package_client_installer.py \
   --images-env /secure/releases/approved-images.env \
   --manifest /secure/releases/client-release-manifest.json \
   --release-public-key /secure/releases/release-public.key \
+  --release-private-key /secure/owner-keys/release-private.key \
   --output /secure/releases/customer-installer.tar.gz
 ```
 
 Run this owner-side command from the repository root. It verifies the release
 signature, signed schema metadata and matching API/UI registry digests before
 creating an archive. It refuses an existing output path and any unexpected
-image-input keys, including secrets. The fixed delivery set contains a customer
-installation guide, Compose/Caddy/preflight files, a pinned `.env.example`, the
-signed manifest, public release key and file checksums. No application checkout,
-owner build/signing tools, local `.env` or private keys are included.
+image-input keys, including secrets. It signs the exact deterministic archive
+bytes with the same owner Ed25519 release key that signed the manifest and
+creates `customer-installer.tar.gz.sig` beside the archive. It refuses a
+private/public key mismatch and refuses to overwrite either output. The fixed
+delivery set contains a customer installation guide, Compose/Caddy/preflight
+files, the update runner and systemd units, a pinned `.env.example`, the signed
+manifest, a convenience copy of the customer-side verifier, the public release
+key and file checksums. No
+application checkout, owner build/signing tools, local `.env` or private keys
+are included. The verifier copy inside the archive cannot authenticate the
+archive before extraction; obtain a trusted copy independently.
 
-Deliver the installation ID and license token separately. Send the archive's
-SHA-256 through the trusted delivery channel so the recipient can authenticate
-the downloaded package. The file checksums inside the archive detect accidental
-file changes; they do not authenticate its sender. Packaging does not replace
-image build, clean-install, owner-alert or upgrade/rollback acceptance.
+Deliver the installation ID and license token separately. Send the archive,
+detached `.sig`, verifier CLI and trusted release public key through an
+authenticated delivery channel. The recipient must obtain the verifier and
+public key independently of the archive and verify the signature before
+extracting or running archive contents. The public key inside the archive is
+not a trust source for authenticating that archive. The file checksums inside
+the archive detect accidental file changes. Packaging does not replace image
+build, clean-install, owner-alert or upgrade/rollback acceptance.
+
+### Sign an owner update envelope
+
+After uploading the immutable installer archive to an HTTPS location reachable
+by client installations, sign its release metadata offline. This command hashes
+the exact archive bytes and creates the seven-field JSON envelope used by the
+superadmin release screen. The release private key stays outside the repository
+and is never uploaded:
+
+```bash
+python owner-tools/sign_client_update_release.py \
+  --archive /secure/releases/customer-installer.tar.gz \
+  --release-id client-1.48.0 \
+  --version 1.48.0 \
+  --archive-url https://releases.example.com/kodewaves/client-1.48.0.tar.gz \
+  --min-current-version 1.47.0 \
+  --notes "Security and reliability updates" \
+  --release-private-key /secure/owner-keys/release-private.key \
+  --trusted-public-key /secure/releases/release-public.key \
+  --output /secure/releases/client-1.48.0.json
+```
+
+Paste the envelope fields into **Admin → Client Installations → Releases**,
+review and publish it, then stage a rollout for active enrolled installation
+IDs and activate it. The customer timer polls only the baked owner endpoint;
+the API must verify both the owner-signed status and release signature before
+it can download the archive. Keep the installer `.sig` sidecar for
+authenticating initial customer downloads; the signed update envelope binds the
+archive SHA-256 for automatic updates.
+
+Pausing or stopping a rollout prevents new updates from starting. A client that
+already reported `applying` may send its final signed applied, failed, or rolled
+back result so the owner sees the actual outcome.
 
 ## Start and create the first administrator
 
@@ -313,10 +357,27 @@ with Kodewaves.
 
 ## Updates and recovery
 
-Back up the database and persistent volumes before an update. Update the API and
-UI image digests and install the matching newly signed release manifest as one
-approved release, then recreate the services. Keep the previous image digests,
-manifest and encrypted backup available for recovery. By default, Docker restore
+When the optional `kodewaves-client-update.timer` is enabled, clients poll every
+15 minutes and apply only a signed, published, targeted and activated owner
+rollout. The updater downloads the immutable archive, verifies its owner-signed
+digest and release manifest, checks schema compatibility, creates a cold
+Postgres/MinIO backup, then updates only API/UI digest pins and the signed
+manifest path. It rechecks rollout state immediately before activation and
+reports signed per-installation progress. API/UI health and the database
+migration head must match the signed release before it reports success; on
+failure it restores the saved data volumes and release. Use
+`python3 update_agent.py --directory /opt/kodewaves/client --check` to check
+owner status without downloading or applying an update.
+
+An application rollout changes the API/UI image pins and signed release
+manifest. It verifies the other installer files in the downloaded archive but
+does not replace the privileged updater, recovery helpers or host systemd
+units. Updating those host-side control tools requires a separately reviewed
+maintenance procedure; automatic updater self-replacement is not part of this
+release path.
+
+Keep the previous image digests, manifest and encrypted backup available for
+recovery. By default, Docker restore
 requires the active `.env` and manifest to match the archive. To restore an
 older signed API/UI release as well as its data, explicitly pass
 `--allow-release-rollback` and `--release-public-key`; the active signed release

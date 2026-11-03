@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 
 import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
+import { PublicEnterpriseLeadCTA } from "@/components/lead-forms/PublicEnterpriseLeadCTA";
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { useClientBranding } from "@/context/ClientBrandingContext";
 
@@ -101,11 +102,15 @@ export default function HomePage() {
                 Answer inbound calls, run outbound campaigns, qualify leads and book appointments. Configure browser and phone agents, speech and language models, routing, tools and knowledge in one workspace.
               </p>
               <div className={styles.actions}>
-                <Link href="/auth/login" className={styles.primaryAction}>
-                  Open your workspace <ArrowRight aria-hidden className="size-4" />
-                </Link>
+                <PublicEnterpriseLeadCTA
+                  label="Talk to our team"
+                  className={styles.primaryAction}
+                />
                 <Link href="/platform" className={styles.secondaryAction}>
                   Explore the platform
+                </Link>
+                <Link href="/auth/login" className={styles.secondaryAction}>
+                  Open your workspace
                 </Link>
               </div>
             </div>

@@ -553,3 +553,84 @@ class AuditLogModel(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     actor = relationship("UserModel")
+
+
+class ClientReleaseCatalogModel(Base):
+    """Immutable owner-signed archive metadata for one client release."""
+
+    __tablename__ = "client_release_catalog"
+
+    release_id = Column(String(100), primary_key=True)
+    version = Column(String(32), nullable=False, unique=True)
+    archive_url = Column(Text, nullable=False)
+    archive_sha256 = Column(String(64), nullable=False)
+    archive_signature = Column(String(86), nullable=False)
+    min_current_version = Column(String(32), nullable=False)
+    notes = Column(Text, nullable=False, default="")
+    signed_envelope = Column(JSON, nullable=False)
+    envelope_sha256 = Column(String(64), nullable=False, unique=True)
+    state = Column(String(16), nullable=False, default="draft")
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    published_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    published_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("state in ('draft', 'published')", name="ck_client_release_catalog_state"),
+    )
+
+
+class ClientReleaseRolloutModel(Base):
+    """Audited staged delivery of one immutable release to selected installs."""
+
+    __tablename__ = "client_release_rollouts"
+
+    rollout_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    release_id = Column(
+        String(100), ForeignKey("client_release_catalog.release_id", ondelete="RESTRICT"),
+        nullable=False, index=True,
+    )
+    state = Column(String(16), nullable=False, default="staged")
+    idempotency_key = Column(String(100), nullable=False)
+    request_fingerprint = Column(String(64), nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    paused_at = Column(DateTime(timezone=True), nullable=True)
+    stopped_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("created_by_user_id", "idempotency_key", name="uq_client_release_rollout_idempotency"),
+        CheckConstraint("state in ('staged', 'active', 'paused', 'stopped', 'completed')", name="ck_client_release_rollout_state"),
+    )
+
+
+class ClientReleaseRolloutTargetModel(Base):
+    """Per-install delivery status; only enrolled clients may advance it."""
+
+    __tablename__ = "client_release_rollout_targets"
+
+    rollout_id = Column(
+        String(36), ForeignKey("client_release_rollouts.rollout_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    installation_id = Column(
+        String(100), ForeignKey("client_installations.installation_id", ondelete="CASCADE"),
+        primary_key=True, index=True,
+    )
+    status = Column(String(16), nullable=False, default="staged")
+    current_version = Column(String(32), nullable=True)
+    detail = Column(Text, nullable=False, default="")
+    last_reported_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        CheckConstraint(
+            "status in ('staged', 'downloading', 'applying', 'applied', 'failed', 'rolled_back')",
+            name="ck_client_release_rollout_target_status",
+        ),
+    )

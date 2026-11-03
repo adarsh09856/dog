@@ -21,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 _DOMAIN = b"kodewaves-owner-check-v1\n"
 _ENROLLMENT_DOMAIN = b"kodewaves-installation-enrollment-v1\n"
 _BINDING_REQUEST_DOMAIN = b"kodewaves-installation-binding-request-v1\n"
+_VERSION_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _REASONS = frozenset({
     "unknown", "modified_file", "missing_file", "added_file",
     "invalid_manifest", "missing_manifest", "missing_trust_root",
@@ -50,6 +51,7 @@ def _encode_urlsafe(value: bytes) -> str:
 def owner_check_message(
     *, installation_id: str, license_token: str, nonce: str, issued_at: int,
     integrity_ok: bool, integrity_finding: dict[str, Any] | None,
+    current_version: str | None = None,
 ) -> bytes:
     """Build the canonical, domain-separated bytes signed by an installation."""
     if not isinstance(installation_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{2,127}", installation_id):
@@ -62,6 +64,11 @@ def owner_check_message(
         raise InstallationIdentityError("Invalid integrity result")
     if not isinstance(license_token, str) or not license_token or not license_token.isascii():
         raise InstallationIdentityError("Invalid installation license token")
+    if current_version is not None and (
+        not isinstance(current_version, str) or not _VERSION_RE.fullmatch(current_version)
+        or any(int(part) > 2**31 - 1 for part in current_version.split("."))
+    ):
+        raise InstallationIdentityError("Invalid current client version")
 
     finding = None
     if integrity_finding is not None:
@@ -88,6 +95,8 @@ def owner_check_message(
         "integrity_ok": integrity_ok,
         "integrity_finding": finding,
     }
+    if current_version is not None:
+        payload["current_version"] = current_version
     return _DOMAIN + json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
@@ -102,9 +111,12 @@ def sign_owner_check(private_key: bytes, **fields: Any) -> str:
 def owner_check_payload(
     *, installation_id: str, license_token: str, nonce: str, integrity_ok: bool,
     integrity_finding: dict[str, Any] | None, private_key_path: str = "", issued_at: int | None = None,
+    current_version: str | None = None,
 ) -> dict[str, Any]:
     """Attach a proof when configured; never fall back to bearer-only on key errors."""
     payload = {"nonce": nonce, "integrity_ok": integrity_ok, "integrity_finding": integrity_finding}
+    if current_version is not None:
+        payload["current_version"] = current_version
     if not private_key_path:
         return payload
     try:
@@ -115,7 +127,8 @@ def owner_check_payload(
     payload["proof_issued_at"] = timestamp
     payload["proof_signature"] = sign_owner_check(
         private_key, installation_id=installation_id, license_token=license_token,
-        nonce=nonce, issued_at=timestamp, integrity_ok=integrity_ok, integrity_finding=integrity_finding,
+        nonce=nonce, issued_at=timestamp, integrity_ok=integrity_ok,
+        integrity_finding=integrity_finding, current_version=current_version,
     )
     return payload
 

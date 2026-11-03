@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
+import { PublicEnterpriseLeadCTA } from "@/components/lead-forms/PublicEnterpriseLeadCTA";
 import { Button } from "@/components/ui/button";
 import {
   publicApi,
@@ -119,7 +120,7 @@ export default function PricingPage() {
                   Installation pricing is managed <span className={pageStyles.headlineAccent}>separately.</span>
                 </h1>
                 <p className={pageStyles.lede}>
-                  This self-hosted platform is licensed to its operator. Contact your installation administrator for the applicable license, usage, support, and maintenance terms. Hosted Kodewaves plans and checkout are not available here.
+                  This self-hosted platform is licensed to its operator. Use the installation inquiry below to discuss the applicable license, usage, support, and maintenance terms. Hosted Kodewaves plans and checkout are not available here.
                 </p>
               </div>
               <aside className={pageStyles.priceTerms} aria-label="Client installation billing">
@@ -130,6 +131,15 @@ export default function PricingPage() {
                   <li><Check aria-hidden />No hosted SaaS checkout is offered here</li>
                 </ul>
               </aside>
+            </div>
+            <div className={pageStyles.actions}>
+              <PublicEnterpriseLeadCTA
+                label="Discuss this installation"
+                className={pageStyles.primaryAction}
+              />
+              <Link href="/deployment" className={pageStyles.secondaryAction}>
+                Compare deployment options
+              </Link>
             </div>
           </section>
         </main>

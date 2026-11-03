@@ -11,6 +11,8 @@ services:
     # bypasses preflight and accidentally enables direct ingress without a pin.
     image: ${CLIENT_CADDY_IMAGE:-registry.invalid/kodewaves-caddy-disabled@sha256:0000000000000000000000000000000000000000000000000000000000000000}
     restart: unless-stopped
+    cpus: ${CLIENT_CADDY_CPUS:-0.25}
+    mem_limit: ${CLIENT_CADDY_MEMORY_LIMIT:-256m}
     profiles: [direct-ingress]
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:?Set licensed public host}
@@ -29,6 +31,8 @@ services:
   postgres:
     image: ${CLIENT_POSTGRES_IMAGE:?Set approved pgvector image digest}
     restart: unless-stopped
+    cpus: ${CLIENT_POSTGRES_CPUS:-1.0}
+    mem_limit: ${CLIENT_POSTGRES_MEMORY_LIMIT:-1g}
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set database password}
@@ -44,6 +48,8 @@ services:
   redis:
     image: ${CLIENT_REDIS_IMAGE:?Set approved Redis image digest}
     restart: unless-stopped
+    cpus: ${CLIENT_REDIS_CPUS:-0.5}
+    mem_limit: ${CLIENT_REDIS_MEMORY_LIMIT:-256m}
     command: [redis-server, --requirepass, "${REDIS_PASSWORD:?Set Redis password}"]
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set Redis password}
@@ -58,6 +64,8 @@ services:
   minio:
     image: ${CLIENT_MINIO_IMAGE:?Set approved MinIO image digest}
     restart: unless-stopped
+    cpus: ${CLIENT_MINIO_CPUS:-0.5}
+    mem_limit: ${CLIENT_MINIO_MEMORY_LIMIT:-512m}
     command: [server, /data, --console-address, ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MinIO user}
@@ -74,6 +82,8 @@ services:
   coturn:
     image: ${CLIENT_COTURN_IMAGE:?Set approved Coturn image digest}
     restart: unless-stopped
+    cpus: ${CLIENT_COTURN_CPUS:-0.5}
+    mem_limit: ${CLIENT_COTURN_MEMORY_LIMIT:-256m}
     command:
       - -n
       - --listening-port=3478
@@ -95,6 +105,8 @@ services:
   api:
     image: ${CLIENT_API_IMAGE:?Set pinned client API image digest}
     restart: unless-stopped
+    cpus: ${CLIENT_API_CPUS:-1.5}
+    mem_limit: ${CLIENT_API_MEMORY_LIMIT:-2g}
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -156,6 +168,8 @@ services:
   ui:
     image: ${CLIENT_UI_IMAGE:?Set pinned client UI image digest}
     restart: unless-stopped
+    cpus: ${CLIENT_UI_CPUS:-0.5}
+    mem_limit: ${CLIENT_UI_MEMORY_LIMIT:-512m}
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

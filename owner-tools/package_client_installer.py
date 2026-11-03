@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import gzip
 import hashlib
 import io
@@ -15,11 +16,12 @@ import tarfile
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deploy/client"))
-from build_and_verify import read_public_key
+from build_and_verify import read_public_key, validate_owner_private_key_path
 from validate_install import IMAGE_KEYS, PINNED_IMAGE, parse_env
 
 
@@ -27,13 +29,16 @@ def package_installer(
     images_env: Path,
     manifest: Path,
     public_key_file: Path,
+    private_key_file: Path,
     output: Path,
     *,
     root: Path = ROOT,
 ) -> None:
     """Ship only allowlisted installation files, never keys or runtime secrets."""
-    if output.exists():
+    signature_output = output.with_name(output.name + ".sig")
+    if output.exists() or signature_output.exists():
         raise ValueError("Installer archive already exists; choose a new output path")
+    private_key_file = validate_owner_private_key_path(private_key_file, ROOT)
     images = parse_env(images_env)
     if set(images) != IMAGE_KEYS:
         raise ValueError("Image input must contain exactly the seven CLIENT_*_IMAGE values and no secrets")
@@ -45,6 +50,35 @@ def package_installer(
             raise ValueError("Installer image registry port must be between 1 and 65535")
 
     public_key = read_public_key(public_key_file)
+    private_key_bytes = private_key_file.read_bytes()
+    if len(private_key_bytes) != 32:
+        try:
+            encoded_key = private_key_bytes.decode("ascii").strip()
+            if not re.fullmatch(r"[A-Za-z0-9_-]{43}=?", encoded_key):
+                raise ValueError("invalid encoding")
+            private_key_bytes = base64.b64decode(
+                encoded_key + "=" * (-len(encoded_key) % 4), altchars=b"-_", validate=True,
+            )
+            if (
+                len(private_key_bytes) != 32
+                or base64.urlsafe_b64encode(private_key_bytes).rstrip(b"=").decode("ascii")
+                != encoded_key.rstrip("=")
+            ):
+                raise ValueError("non-canonical key")
+        except (UnicodeDecodeError, ValueError, binascii.Error) as exc:
+            raise ValueError("Owner release private key must be 32 raw bytes or canonical URL-safe Base64") from exc
+    private_key = Ed25519PrivateKey.from_private_bytes(private_key_bytes)
+    trusted_public_key_raw = base64.urlsafe_b64decode(
+        public_key + "=" * (-len(public_key) % 4)
+    )
+    derived_public = base64.urlsafe_b64encode(
+        private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+    ).rstrip(b"=").decode("ascii")
+    if derived_public != base64.urlsafe_b64encode(trusted_public_key_raw).rstrip(b"=").decode("ascii"):
+        raise ValueError("Release private key does not match the trusted public key")
     manifest_bytes = manifest.read_bytes()
     signed = json.loads(manifest_bytes)
     payload = signed.get("payload") if isinstance(signed, dict) else None
@@ -115,9 +149,13 @@ def package_installer(
         "compose_client.py": (directory / "compose_client.py").read_bytes(),
         "recovery_lock.py": (directory / "recovery_lock.py").read_bytes(),
         "enroll_identity.py": (directory / "enroll_identity.py").read_bytes(),
+        "update_agent.py": (directory / "update_agent.py").read_bytes(),
+        "kodewaves-client-update.service": (directory / "kodewaves-client-update.service").read_bytes(),
+        "kodewaves-client-update.timer": (directory / "kodewaves-client-update.timer").read_bytes(),
         ".env.example": env_template.encode("utf-8"),
         "client-release-manifest.json": manifest_bytes,
         "release-public-key.txt": (public_key + "\n").encode("ascii"),
+        "verify_installer.py": (directory / "verify_installer.py").read_bytes(),
     }
     files["SHA256SUMS"] = "".join(
         f"{hashlib.sha256(content).hexdigest()}  {name}\n"
@@ -136,8 +174,23 @@ def package_installer(
     output.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation avoids overwriting an existing package even if another
     # process created it while signature verification was running.
-    with output.open("xb") as destination:
-        destination.write(archive.getvalue())
+    archive_bytes = archive.getvalue()
+    signature = base64.urlsafe_b64encode(private_key.sign(archive_bytes)).rstrip(b"=") + b"\n"
+    archive_created = False
+    signature_created = False
+    try:
+        with output.open("xb") as destination:
+            archive_created = True
+            destination.write(archive_bytes)
+        with signature_output.open("xb") as destination:
+            signature_created = True
+            destination.write(signature)
+    except Exception:
+        if archive_created:
+            output.unlink(missing_ok=True)
+        if signature_created:
+            signature_output.unlink(missing_ok=True)
+        raise
 
 
 def main() -> int:
@@ -145,10 +198,16 @@ def main() -> int:
     parser.add_argument("--images-env", required=True, type=Path)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--release-public-key", required=True, type=Path)
+    parser.add_argument("--release-private-key", required=True, type=Path,
+                        help="Owner-only Ed25519 key that signed the release manifest")
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
-    package_installer(args.images_env, args.manifest, args.release_public_key, args.output)
+    package_installer(
+        args.images_env, args.manifest, args.release_public_key,
+        args.release_private_key, args.output,
+    )
     print(f"Customer installation archive written: {args.output.resolve()}")
+    print(f"Detached archive signature written: {args.output.with_name(args.output.name + '.sig').resolve()}")
     return 0
 
 

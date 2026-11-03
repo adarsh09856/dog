@@ -400,7 +400,7 @@ export function AppSidebar() {
   );
 
   return (
-    <Sidebar collapsible="icon" variant="sidebar" className={cn("app-workspace-nav", chrome.navigation)}>
+    <Sidebar collapsible="icon" variant="floating" className={cn("app-sidebar-dock", chrome.navigation)}>
       <SidebarHeader className="px-2 py-3 notranslate" translate="no">
         <div className="flex items-center justify-between">
           <div className={cn("flex items-center gap-2", isCollapsed && "hidden")}>

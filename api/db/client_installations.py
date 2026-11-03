@@ -16,6 +16,7 @@ from api.db.kodewaves_models import (
     ClientInstallationNonceModel,
     ClientIntegrityAlertModel,
 )
+from api.db.models import UserModel
 
 
 async def save_domain_challenge(customer_id: str, domain: str, token_sha256: str) -> datetime:
@@ -435,6 +436,9 @@ async def record_client_installation_check(
         ):
             return None
         now = datetime.now(UTC)
+        integrity_alert_notification = (
+            not integrity_ok and record.integrity_failed_at is None
+        )
         if expected_public_key is not None:
             if not nonce_fingerprint or nonce_expires_at is None or _utc(nonce_expires_at) <= now:
                 return None
@@ -494,6 +498,7 @@ async def record_client_installation_check(
             "installation_id": record.installation_id,
             "revoked_at": record.revoked_at.isoformat() if record.revoked_at else None,
             "integrity_failed_at": record.integrity_failed_at.isoformat() if record.integrity_failed_at else None,
+            "integrity_alert_notification": integrity_alert_notification,
             "expires_at": int(
                 (record.previous_token_valid_until if previous_token else record.expires_at).timestamp()
             ),
@@ -535,3 +540,19 @@ async def acknowledge_client_integrity_alert(alert_id: int, user_id: int) -> boo
             alert.acknowledged_by_user_id = user_id
             await session.commit()
         return True
+
+
+async def list_active_platform_superadmin_emails() -> list[str]:
+    """Return normalized recipient addresses for active platform superadmins."""
+    async with kodewaves_db_client.get_session() as session:
+        result = await session.execute(
+            select(UserModel.email).where(
+                UserModel.is_superuser.is_(True),
+                UserModel.is_active.is_(True),
+                UserModel.email.is_not(None),
+            )
+        )
+        return sorted({
+            address.strip() for address in result.scalars().all()
+            if isinstance(address, str) and address.strip()
+        })

@@ -50,6 +50,10 @@ from api.services.owner_license_signer_client import (
 
 router = APIRouter(prefix="/client-installations", tags=["admin-client-installations"])
 
+from api.routes.admin.client_release_control import router as client_release_control_router
+
+router.include_router(client_release_control_router)
+
 SUPPORTED_FEATURES = frozenset({
     "voice", "telephony", "campaigns", "crm", "appointments", "forms",
     "widgets", "knowledge_base", "billing",

@@ -269,6 +269,66 @@ missing manifest, invalid signature or changed protected file stops the
 affected process. The manifest must be regenerated and re-signed for every
 approved release.
 
+The customer installer is also signed as a complete byte-for-byte archive with
+the owner Ed25519 release key. `owner-tools/package_client_installer.py` writes
+a detached `.sig` sidecar beside the archive and refuses a release private key
+that does not match the trusted release public key. Before extraction, the
+customer runs `deploy/client/verify_installer.py` with the archive, sidecar and
+a trusted public key obtained independently through the owner's authenticated
+delivery channel. The public key carried inside the archive is not trusted for
+authenticating that archive. The CI customer-archive acceptance verifies the
+signature before it extracts any package files.
+
+### Owner-controlled client updates
+
+The SaaS owner control plane stores immutable signed release metadata and
+rollouts targeted only to active, enrolled, non-revoked installations. To create
+the seven-field envelope that the superadmin release screen accepts, upload the
+archive to a client-reachable HTTPS URL and sign the metadata offline:
+
+```bash
+python owner-tools/sign_client_update_release.py \
+  --archive /secure/releases/customer-installer.tar.gz \
+  --release-id client-1.48.0 \
+  --version 1.48.0 \
+  --archive-url https://releases.example.com/kodewaves/client-1.48.0.tar.gz \
+  --min-current-version 1.47.0 \
+  --notes "Security and reliability updates" \
+  --release-private-key /secure/owner-keys/release-private.key \
+  --trusted-public-key /secure/releases/release-public.key \
+  --output /secure/releases/client-1.48.0.json
+```
+
+This tool hashes the exact archive bytes, validates release metadata using the
+same canonical rules as the API, verifies that the offline private key matches
+the externally held trusted key, and exclusively creates the JSON envelope.
+The private key never enters the UI or a deployed service. In the owner panel,
+save and publish the envelope, create a rollout for enrolled target installation
+IDs, then explicitly activate it. Paused or stopped rollouts are withheld from
+the client poll response. Status proofs are installation-key signed, fresh and
+replay protected; a completed installation may report rollback only while no
+newer rollout targets it.
+
+If the owner pauses or stops a rollout after a client has entered `applying`,
+that client may still submit its final signed applied, failed, or rolled-back
+status. This closes the in-flight transaction and does not start another update.
+
+Customers can install the optional systemd timer from the bundle. It polls every
+15 minutes and acts only on an owner-signed active rollout. Before changing the
+API/UI digest pins it verifies the release hash, manifest signature, version and
+schema rollback compatibility, then creates a cold Postgres/MinIO recovery
+archive under the installation directory. It rechecks owner activation after
+the backup, applies the release, and verifies API/UI health plus the Alembic
+head before reporting success. If the update fails these checks, it restores
+the matching saved data volumes and images. The timer uses fixed paths under
+`/opt/kodewaves/client`; see the bundled `INSTALL.md` for installation and
+status commands. This application rollout does not replace the privileged
+updater/recovery scripts or host systemd units; changing those requires a
+separately reviewed signed maintenance procedure. Release tooling and local
+test evidence do not certify a production
+customer update until the disposable lifecycle and the owner/client runtime
+path both pass acceptance.
+
 The client Compose file is standalone: it does not extend the development
 stack, build from source, or mount a source checkout. Supply approved digest
 references for API, UI, pgvector, Redis, MinIO, Coturn and, when enabled, Caddy.

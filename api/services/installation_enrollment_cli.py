@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from api.services.installation_identity import _decode_urlsafe, sign_enrollment, sign_owner_check
 from api.services.installation_license import _canonical_domain, load_license, verify_installation_status_claims
+from api.services.client_update_protocol import update_report_message
 from api.services.owner_trust import trusted_license_public_keys, trusted_owner_status_url
 
 
@@ -56,7 +57,7 @@ def execute(request: dict[str, Any]) -> dict[str, Any]:
                 license_data.ip_ranges and status.get("binding_valid") is not True
             ):
                 raise ValueError("Owner status does not permit this installation")
-            return {"verified": True}
+            return {"verified": True, "status": status}
 
         stage = "installation_key_decode"
         seed = _decode_urlsafe(request["private_key"], 32)
@@ -83,14 +84,41 @@ def execute(request: dict[str, Any]) -> dict[str, Any]:
                 "owner_status_url": trusted_owner_status_url(), "public_key": public_key,
                 "nonce": nonce, "issued_at": issued_at, "signature": signature,
             }
-        if action == "prepare_status":
+        if action in {"prepare_status", "prepare_update_check"}:
             stage = "owner_status_signature"
-            signature = sign_owner_check(seed, integrity_ok=True, integrity_finding=None, **common)
+            current_version = request.get("current_version")
+            if action == "prepare_status" and current_version is not None:
+                raise ValueError("Current version is only accepted for update checks")
+            if action == "prepare_update_check" and current_version is None:
+                raise ValueError("Current version is required for update checks")
+            signature = sign_owner_check(
+                seed, integrity_ok=True, integrity_finding=None,
+                current_version=current_version, **common,
+            )
             stage = "owner_status_endpoint"
             return {
                 "owner_status_url": trusted_owner_status_url(), "nonce": nonce,
                 "issued_at": issued_at, "signature": signature,
+                "current_version": current_version,
             }
+        if action == "prepare_update_report":
+            stage = "update_report_signature"
+            fields = {
+                "installation_id": license_data.installation_id,
+                "license_token": token,
+                "rollout_id": request["rollout_id"],
+                "release_id": request["release_id"],
+                "version": request["version"],
+                "nonce": request["nonce"],
+                "issued_at": request["issued_at"],
+                "status": request["status"],
+                "detail": request.get("detail", ""),
+            }
+            message = update_report_message(**fields)
+            stage = "installation_key_construction"
+            signature = Ed25519PrivateKey.from_private_bytes(seed).sign(message)
+            stage = "update_report_signature"
+            return {"proof_signature": base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")}
         raise ValueError("Unknown enrollment action")
     except _EnrollmentHelperFailure:
         raise

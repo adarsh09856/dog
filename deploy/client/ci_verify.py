@@ -46,6 +46,7 @@ from cryptography.hazmat.primitives.serialization import (
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from validate_install import PINNED_IMAGE
 from validate_install import validate as validate_client_install
+from verify_installer import verify_installer_archive
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "owner-tools"))
 from package_client_installer import package_installer
@@ -728,7 +729,10 @@ def _package_customer_archive(
         release_private_key, {"api": package_images["api"], "ui": package_images["ui"]},
     )
     installer = directory / "customer-installer.tar.gz"
-    package_installer(images_env, customer_manifest, release_public_key_file, installer, root=root)
+    package_installer(
+        images_env, customer_manifest, release_public_key_file,
+        release_private_key, installer, root=root,
+    )
     from verify_images import verify_api, verify_startup_rejection, verify_ui
     verify_api(api_image)
     verify_ui(ui_image)
@@ -736,8 +740,15 @@ def _package_customer_archive(
     return installer
 
 
-def _extract_customer_archive(archive: Path, destination: Path) -> Path:
-    """Extract only regular top-level package files and verify every checksum."""
+def _extract_customer_archive(
+    archive: Path,
+    destination: Path,
+    *,
+    trusted_public_key_file: Path,
+) -> Path:
+    """Authenticate the exact archive bytes before safe extraction and checksums."""
+    signature = archive.with_name(archive.name + ".sig")
+    verify_installer_archive(archive, signature, trusted_public_key_file)
     destination.mkdir(parents=True, exist_ok=False)
     with tarfile.open(archive, "r:gz") as bundle:
         members = bundle.getmembers()
@@ -1761,7 +1772,10 @@ def verify(caddy_image: str, report: Path, *, customer_archive: bool = False) ->
                             release_private_key=release_private, release_public_key_file=release_public,
                             registry_images=registry_images,
                         )
-                        install_dir = _extract_customer_archive(archive, directory / "customer-install")
+                        install_dir = _extract_customer_archive(
+                            archive, directory / "customer-install",
+                            trusted_public_key_file=release_public,
+                        )
                         package_manifest = json.loads(
                             (install_dir / "client-release-manifest.json").read_text(encoding="utf-8")
                         )

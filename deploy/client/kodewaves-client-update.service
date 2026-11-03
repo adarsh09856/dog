@@ -1,0 +1,23 @@
+[Unit]
+Description=Apply owner-authorized Kodewaves client release updates
+Documentation=https://app.kodewaves.in/deployment
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/kodewaves/client
+ExecStart=/usr/bin/python3 /opt/kodewaves/client/update_agent.py --directory /opt/kodewaves/client
+TimeoutStartSec=45min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+# Atomic replacements are limited in code to the two Kodewaves unit files.
+ReadWritePaths=/opt/kodewaves/client /etc/systemd/system
+PrivateDevices=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CPUQuota=50%
+MemoryMax=512M

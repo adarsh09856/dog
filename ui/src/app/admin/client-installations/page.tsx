@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/kodewavesApi";
 
+import { ClientReleaseControl } from "./ReleaseControl";
 import admin from "../AdminWorkspace.module.css";
 import styles from "./InstallationsWorkspace.module.css";
 
@@ -546,6 +547,7 @@ export default function ClientInstallationsPage() {
           </div>
         </CardContent>
       </Card>
+      <ClientReleaseControl installations={records} />
     </div>
   );
 }
