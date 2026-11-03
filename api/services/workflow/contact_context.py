@@ -667,6 +667,7 @@ def booking_date_time_question(
     # the caller on the deterministic date/time path instead of allowing the
     # LLM to reuse or invent a time from the stale confirmation.
     state.pop("booking_confirmation_slot", None)
+    state.pop("booking_pending_time_hour", None)
     state["booking_time_question_date"] = stated_date
     parsed = date.fromisoformat(stated_date)
     hindi = state.get("reply_language") == "Hindi" or bool(
@@ -1464,6 +1465,7 @@ def booking_confirmation_decline_reply(messages: list, state: dict) -> str | Non
         return None
     state.pop("booking_confirmation_slot", None)
     state.pop("booking_time_question_date", None)
+    state.pop("booking_pending_time_hour", None)
     if state.get("reply_language") == "English" or re.fullmatch(r"\s*(?:no|nope|not now)[.!\s]*", latest, re.I):
         return "Okay, I won't book that time. Tell me if you would prefer another date and time."
     return "ठीक है, उस समय की बुकिंग नहीं करूँगी। दूसरा दिन या समय चाहें तो बताइए।"
@@ -1497,6 +1499,7 @@ def clear_completed_booking_state(
     for key in (
         "booking_confirmation_slot",
         "booking_time_question_date",
+        "booking_pending_time_hour",
         "prior_booking_request",
         "active_booking_request",
         "recent_caller_statements",
@@ -1645,7 +1648,21 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         r"(am|pm|[ap]\s*\.?\s*m\.?|ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?)\b",
         normalized, re.I,
     )
-    if hindi:
+    period_only = re.fullmatch(
+        r"\s*(am|a\s*\.?\s*m\.?|pm|p\s*\.?\s*m\.?|"
+        r"ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?|"
+        r"morning|afternoon|evening|night|सुबह|दोपहर|शाम|रात)[.!?।\s]*",
+        normalized, re.I,
+    )
+    pending_hour = state.get("booking_pending_time_hour")
+    if isinstance(pending_hour, int) and 1 <= pending_hour <= 12 and period_only:
+        hour, minute = pending_hour, 0
+        period = period_only.group(1).casefold().replace(" ", "").replace(".", "")
+        hour24 = hour % 12 + (12 if period in {
+            "pm", "पीएम", "afternoon", "evening", "night", "दोपहर", "शाम", "रात"
+        } else 0)
+        state.pop("booking_pending_time_hour", None)
+    elif hindi:
         period_match = re.search(r"सुबह|दोपहर|शाम", normalized)
         period, hour, minute = period_match.group(), spoken_hour(hindi.group(1)), int(hindi.group(2) or 0)
         if hour is None:
@@ -1661,7 +1678,20 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
             return None
         period = english.group(3).lower().replace(" ", "").replace(".", "")
         hour24 = hour % 12 + (12 if period.startswith(("p", "पी")) else 0)
+        state.pop("booking_pending_time_hour", None)
     else:
+        partial_hour = re.fullmatch(
+            r"\s*(?:at\s+)?(\d{1,2}|[a-z]+)\s*[.!?]*", normalized, re.I
+        )
+        if partial_hour:
+            hour = spoken_hour(partial_hour.group(1))
+            if hour is not None and 1 <= hour <= 12:
+                state["booking_pending_time_hour"] = hour
+                if state.get("reply_language") == "English" or not re.search(
+                    r"[\u0900-\u097f]", latest
+                ):
+                    return f"You said {hour}. Is that AM or PM?"
+                return f"आपने {hour} बजे कहा—सुबह या शाम?"
         # A recognized date plus a short number/time-like answer is an
         # incomplete time, not permission for the LLM to supply a default.
         # Ask for the missing AM/PM or day-period explicitly and keep the
