@@ -841,7 +841,11 @@ async def execute_text_chat_pending_turn(
                 known_contact,
                 remember_explicit_caller_name,
             )
-            from api.services.workflow.direct_caller_reply import direct_caller_reply, has_live_lookup_tools
+            from api.services.workflow.direct_caller_reply import (
+                direct_caller_reply,
+                has_live_lookup_tools,
+                has_room_booking_capability,
+            )
 
             from api.services.workflow.confirmed_booking import room_booking_active
 
@@ -855,7 +859,9 @@ async def execute_text_chat_pending_turn(
                 for tool in active_tools
             )
             direct_reply = direct_caller_reply(
-                pending_user_message, has_lookup_tools=has_live_lookup_tools(active_tools)
+                pending_user_message,
+                has_lookup_tools=has_live_lookup_tools(active_tools),
+                has_room_booking_tool=has_room_booking_capability(active_tools),
             )
             known_name_reply = remember_explicit_caller_name(
                 context.get_messages(), engine._contact_conversation_state

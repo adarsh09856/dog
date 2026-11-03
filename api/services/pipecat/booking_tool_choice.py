@@ -399,7 +399,10 @@ class _BookingToolChoiceMixin:
             remember_recent_caller_statements,
             remember_explicit_caller_name,
         )
-        from api.services.workflow.direct_caller_reply import direct_caller_reply
+        from api.services.workflow.direct_caller_reply import (
+            direct_caller_reply,
+            has_room_booking_capability,
+        )
 
         contact_state = getattr(self, "_contact_conversation_state", None)
         if not isinstance(contact_state, dict):
@@ -482,6 +485,7 @@ class _BookingToolChoiceMixin:
                 getattr(tool, "name", None) not in _END_CALL_TOOLS
                 for tool in tools
             ),
+            has_room_booking_tool=has_room_booking_capability(tools),
         )
         if direct_reply:
             state = getattr(self, "_contact_conversation_state", None)

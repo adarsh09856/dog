@@ -151,6 +151,45 @@ _ROOM_BOOKING_NEGATION = re.compile(
     re.IGNORECASE,
 )
 
+_ROOM_RESOURCE = re.compile(
+    r"\b(?:room|rooms|hotel|hotels|accommodation|lodging)\b", re.IGNORECASE
+)
+_ROOM_ACTION = re.compile(
+    r"\b(?:book|booking|reserve|reservation|availability|available|"
+    r"vacancy|vacancies|search|find)\b",
+    re.IGNORECASE,
+)
+_ROOM_AND_OTHER_INTENT = re.compile(
+    r"\b(?:and|also|then|aur|bhi)\b.{0,50}\b(?:tell|ask|explain|check|change|cancel|"
+    r"what|when|where|how|price|hours|bataiye|batao|bataye)\b"
+    r"|(?:और|साथ ही|फिर).{0,50}(?:बताइ|बताओ|क्या|कब|कहाँ|कैसे|बदल|रद्द|समय)",
+    re.IGNORECASE,
+)
+
+
+def has_room_booking_capability(tools) -> bool:
+    """Return true only when a tool explicitly describes room/hotel actions.
+
+    Generic tools (including appointment booking and CRM lookup) do not imply
+    room inventory or reservation access. Inspect both the public tool name
+    and description so custom tool schemas can declare the capability without
+    requiring one canonical function name.
+    """
+    for tool in tools or []:
+        if isinstance(tool, dict):
+            function = tool.get("function")
+            schema = function if isinstance(function, dict) else tool
+            name = schema.get("name", "")
+            description = schema.get("description", "")
+        else:
+            name = getattr(tool, "name", "")
+            description = getattr(tool, "description", "")
+
+        searchable = f"{name or ''} {description or ''}"
+        if _ROOM_RESOURCE.search(searchable) and _ROOM_ACTION.search(searchable):
+            return True
+    return False
+
 _HINDI_ORDER_ENQUIRY = re.compile(
     r"(?:(?:अः|अं|उम्)[,،]?\s+)?(?:मुझे|हमको|हमें)\s+"
     r"(?:(?:एक|अपने)\s+)?ऑर्डर\b"
@@ -215,7 +254,12 @@ _ROMAN_HINDI_HELP_REQUEST = re.compile(
 )
 
 
-def direct_caller_reply(text: str, *, has_lookup_tools: bool) -> str | None:
+def direct_caller_reply(
+    text: str,
+    *,
+    has_lookup_tools: bool,
+    has_room_booking_tool: bool = False,
+) -> str | None:
     """Skip inference only for exact, capability-safe caller requests.
 
     A vague request to discuss an order gets a clarification even when the
@@ -241,14 +285,31 @@ def direct_caller_reply(text: str, *, has_lookup_tools: bool) -> str | None:
         return "ज़रूर, ऑर्डर में क्या मदद चाहिए?"
     if _ENGLISH_ORDER_ENQUIRY.fullmatch(text):
         return "Sure, what do you need help with on the order?"
+    from api.services.workflow.confirmed_booking import room_booking_active
+
+    room_request = (
+        not _ROOM_BOOKING_NEGATION.search(text)
+        and not _ROOM_AND_OTHER_INTENT.search(text)
+        and (
+            _HINDI_ROOM_BOOKING.fullmatch(text)
+            or _ENGLISH_ROOM_BOOKING.fullmatch(text)
+            or _ROMAN_HINDI_ROOM_BOOKING.fullmatch(text)
+            or room_booking_active([{"role": "user", "content": text}])
+        )
+    )
+    # A generic lookup or appointment tool cannot book a room. Older callers
+    # that do not provide an explicit room capability retain the previous
+    # no-tools behavior; live call sites pass an exact capability result.
+    if room_request and not has_room_booking_tool:
+        roman_hindi = re.search(
+            r"\b(?:mujhe|mere|kamra|kamre|karna|karni|chahiye|hai|tha)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if not re.search(r"[\u0900-\u097f]", text) and not roman_hindi:
+            return "Sorry, I can’t check room availability or make a booking here. Please contact the support team."
+        return "माफ़ कीजिए, मैं यहाँ कमरे की उपलब्धता या बुकिंग की पुष्टि नहीं कर सकती। कृपया सहायता टीम से संपर्क करें।"
     if not has_lookup_tools:
-        if not _ROOM_BOOKING_NEGATION.search(text):
-            if _HINDI_ROOM_BOOKING.fullmatch(text):
-                return "माफ़ कीजिए, मैं यहाँ कमरे की उपलब्धता या बुकिंग की पुष्टि नहीं कर सकती। कृपया सहायता टीम से संपर्क करें।"
-            if _ENGLISH_ROOM_BOOKING.fullmatch(text):
-                return "Sorry, I can’t check room availability or make a booking here. Please contact the support team."
-            if _ROMAN_HINDI_ROOM_BOOKING.fullmatch(text):
-                return "माफ़ कीजिए, मैं यहाँ कमरे की उपलब्धता या बुकिंग की पुष्टि नहीं कर सकती। कृपया सहायता टीम से संपर्क करें।"
         if _HINDI_UNAVAILABLE_BOOKING.fullmatch(text):
             return "माफ़ कीजिए, यहाँ अपॉइंटमेंट बुक करने की सुविधा उपलब्ध नहीं है। कृपया आधिकारिक सपोर्ट से बुकिंग करें।"
         if _ENGLISH_UNAVAILABLE_BOOKING.fullmatch(text):
