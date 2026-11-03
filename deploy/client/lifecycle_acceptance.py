@@ -421,14 +421,27 @@ def _record_failure_diagnostics(result: dict[str, Any], phase: str,
     result["status"] = "failed"
     result["failed_phase"] = phase
     result["failure_type"] = type(exc).__name__
-    detail = str(exc).replace("\r", " ").replace("\n", " ")
-    detail = re.sub(
-        r"(?i)\b(password|token|secret|credential|private[_ -]?key)\b([=:]\s*)[^\s,;]+",
-        r"\1\2<redacted>", detail,
-    )
-    detail = re.sub(r"(?<![A-Za-z0-9])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9])", "<redacted>", detail)
-    detail = re.sub(r"(?<!\w)/(?:tmp|home|run|app)/[^\s,;]+", "<path>", detail)
-    if detail:
+    def scrub(line: str) -> str:
+        line = re.sub(
+            r"(?i)\b(password|token|secret|credential|private[_ -]?key)\b([=:]\s*)[^\s,;]+",
+            r"\1\2<redacted>", line,
+        )
+        line = re.sub(r"(?<![A-Za-z0-9])[A-Za-z0-9_-]{32,}(?![A-Za-z0-9])", "<redacted>", line)
+        return re.sub(r"(?<!\w)/(?:tmp|home|run|app)/[^\s,;]+", "<path>", line).strip()
+
+    lines = [scrub(line) for line in str(exc).replace("\r", "").split("\n") if line.strip()]
+    if lines:
+        detail = " ".join(lines)
+        if len(detail) > 240:
+            # Container startup output can precede the useful exception by
+            # hundreds of characters. Keep only the final exception line when
+            # available so the sanitized report identifies the failed check.
+            actionable = next(
+                (line for line in reversed(lines)
+                 if re.match(r"^[A-Za-z_][A-Za-z0-9_.]*Error:\s*", line)),
+                lines[-1],
+            )
+            detail = actionable[-240:]
         result["failure_detail"] = detail[:240]
     result["completed_phases"] = list(completed_phases)
     result["last_successful_phase"] = completed_phases[-1] if completed_phases else None

@@ -205,6 +205,25 @@ def test_failure_diagnostics_include_scrubbed_actionable_detail():
     assert "a" * 40 not in result["failure_detail"]
 
 
+def test_failure_diagnostics_keep_safe_tail_exception_after_startup_logs():
+    result = {}
+    lifecycle_acceptance._record_failure_diagnostics(
+        result,
+        "verify_prior_api_image",
+        [],
+        RuntimeError(
+            "Pipecat startup logs " + "noise " * 100
+            + "\nAssertionError: owner route boundary failed; token=temporary-secret"
+        ),
+    )
+
+    assert result["failure_detail"] == (
+        "AssertionError: owner route boundary failed; token=<redacted>"
+    )
+    assert "noise" not in result["failure_detail"]
+    assert "temporary-secret" not in result["failure_detail"]
+
+
 def test_network_cleanup_only_ignores_explicitly_missing_network():
     assert lifecycle_acceptance._network_is_missing("Error response from daemon: network kw-test_internal not found")
     assert lifecycle_acceptance._network_is_missing("No such network: kw-test_internal")
