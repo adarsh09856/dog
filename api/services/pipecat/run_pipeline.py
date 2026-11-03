@@ -175,6 +175,31 @@ def _uses_local_indic_phone_capture(stt, user_config, *, is_realtime: bool) -> b
     )
 
 
+def create_optional_realtime_script_tts(
+    user_config,
+    audio_config,
+    *,
+    correlation_id: str | None = None,
+    organization_id: int | None = None,
+    tts_cache_enabled: bool = False,
+):
+    """Create auxiliary TTS only when realtime config explicitly selected it.
+
+    Legacy S2S configurations contain a provider-native realtime voice, not a
+    standalone TTS config. Treating that voice as a TTS provider config crashes
+    startup and can route authored speech to an unintended voice.
+    """
+    if user_config.tts is None:
+        return None
+    return create_tts_service(
+        user_config,
+        audio_config,
+        correlation_id=correlation_id,
+        organization_id=organization_id,
+        tts_cache_enabled=tts_cache_enabled,
+    )
+
+
 def _schedule_pre_call_fetch(
     *,
     workflow_run_id: int,
@@ -968,16 +993,12 @@ async def _run_pipeline_impl(
         # configured script TTS is optional and must remain independent of the
         # realtime provider's native voice. Older S2S configs have no standalone
         # TTS setting, so keep their existing native-voice path working.
-        tts = (
-            create_tts_service(
-                user_config,
-                audio_config,
-                correlation_id=mps_correlation_id,
-                organization_id=workflow.organization_id,
-                tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
-            )
-            if user_config.tts is not None
-            else None
+        tts = create_optional_realtime_script_tts(
+            user_config,
+            audio_config,
+            correlation_id=mps_correlation_id,
+            organization_id=workflow.organization_id,
+            tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
         )
         # Realtime services don't implement run_inference, so create a
         # separate text LLM for variable extraction and other out-of-band
