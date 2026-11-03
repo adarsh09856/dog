@@ -476,11 +476,22 @@ class PipecatEngine:
                     logger.info(
                         f"Playing transition audio: {transition_speech_recording_id}"
                     )
-                    await self.queue_speech(
-                        recording_pk=int(transition_speech_recording_id), mute_user=True
+                    transition_playback = await self.queue_speech(
+                        recording_pk=int(transition_speech_recording_id),
+                        mute_user=True,
+                        append_to_context=True,
                     )
+                    await transition_playback.wait()
                 elif transition_speech:
-                    await self.queue_text_message(transition_speech, mute_user=True)
+                    # The tool result below triggers the next LLM turn. Wait for
+                    # this authored phrase to drain first so its TTS cannot
+                    # overlap or be reordered with the next node's reply.
+                    transition_playback = await self.queue_speech(
+                        transition_speech,
+                        mute_user=True,
+                        append_to_context=True,
+                    )
+                    await transition_playback.wait()
 
                 # Set context for the new node, so that when the function call result
                 # frame is received by LLMContextAggregator and an LLM generation
