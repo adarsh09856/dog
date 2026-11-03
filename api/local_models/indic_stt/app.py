@@ -686,6 +686,8 @@ async def transcribe(
             if lang not in installed:
                 raise HTTPException(status_code=503, detail="Selected STT language is not installed on this engine")
         lid_ms = round((time.monotonic() - lid_started) * 1000) if auto_detect else 0
+        audio_ms = round(len(waveform) * 1000 / sample_rate)
+        decoder_was_resident = lang in _loaded
         decode_started = time.monotonic()
         text = await asyncio.to_thread(decode, lang)
         phone_rescue_language = _phone_rescue_language(
@@ -719,11 +721,13 @@ async def transcribe(
         decode_ms = round((time.monotonic() - decode_started) * 1000)
     duration_ms = round((time.monotonic() - started) * 1000)
     _logger.info(
-        "indic_stt_request_trace auto=%s language=%s route=%s queue_ms=%s lid_ms=%s "
-        "decode_ms=%s duration_ms=%s",
+        "indic_stt_request_trace auto=%s language=%s route=%s audio_ms=%s "
+        "decoder_was_resident=%s queue_ms=%s lid_ms=%s decode_ms=%s duration_ms=%s",
         auto_detect,
         lang,
         language_route,
+        audio_ms,
+        decoder_was_resident,
         round((started - request_started) * 1000),
         lid_ms,
         decode_ms,
