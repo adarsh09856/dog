@@ -780,7 +780,7 @@ class _BookingToolChoiceMixin:
                 params["messages"] = messages
         if (
             getattr(self, "_kodewaves_local_ollama", False)
-            and model.startswith(("qwen3:", "qwen3.5:"))
+            and "qwen" in model
             and isinstance(messages, list)
         ):
             # Ollama's OpenAI endpoint reads reasoning_effort and max_tokens.
@@ -986,7 +986,7 @@ class _BookingToolChoiceMixin:
         # CPU inference to reprocess conversation history unnecessarily.
         messages = params.get("messages")
         if (
-            model.startswith(("qwen2.5:", "qwen3:", "qwen3.5:"))
+            "qwen" in model
             and isinstance(messages, list)
         ):
             from api.services.pipecat.caller_language_context import CallerLanguageContext

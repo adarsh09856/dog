@@ -1409,11 +1409,15 @@ def create_tts_service(
 def _voice_completion_settings(model: str, temperature: float | None = None) -> dict:
     """Apply the same CPU voice budget through every OpenAI-compatible alias."""
     values = {"model": model, "temperature": 0.1 if temperature is None else temperature}
-    if model.casefold().startswith(("qwen2.5:", "qwen3:", "qwen3.5:")):
+    model_name = model.casefold()
+    # Local Ollama profiles may expose a branded/rollback alias instead of the
+    # upstream `qwen3.5:` tag. Keep the voice token budget for those aliases too.
+    is_qwen = "qwen" in model_name
+    if is_qwen:
         # Voice turns should stay concise so CPU synthesis and telephony do not
         # spend several extra seconds rendering an unexpectedly long answer.
         values["max_tokens"] = 80
-    if model.casefold().startswith(("qwen3:", "qwen3.5:")):
+    if model_name.startswith(("qwen3:", "qwen3.5:")):
         # Keep local voice responses grounded and predictable; calibrated
         # temperature and penalty avoid repetition collapse on Indic vocabularies.
         values["temperature"] = 0.2 if temperature is None else temperature
