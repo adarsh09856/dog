@@ -1601,7 +1601,8 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
     previous = next((m.get("content") for m in reversed(messages[:latest_index])
                      if isinstance(m, dict) and m.get("role") == "assistant"), None)
     asked_for_time = isinstance(previous, str) and bool(re.search(
-        r"किस समय|कौन सा समय|समय\s+क्या|किस तारीख|किस तारीख और समय|कितने बजे|"
+        r"किस समय|कौन सा समय|समय\s+क्या|किस तारीख|किस तारीख और समय|"
+        r"कितने बजे|कितने\s+समय|समय\s+पर|"
         r"समय बताइ|कौन\s+से?\s+समय|"
         r"what time|at what time|which time|time works|time would|time do you want|"
         r"what date|date and time|what day and time|"
