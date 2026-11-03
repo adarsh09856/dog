@@ -996,6 +996,12 @@ async def _run_pipeline_impl(
             tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
         )
         llm = create_llm_service(user_config, correlation_id=mps_correlation_id)
+        if llm is not None:
+            from api.services.pipecat.caller_language_tts import (
+                caller_language_tts_capabilities,
+            )
+
+            llm._caller_language_supported_codes = caller_language_tts_capabilities(tts)
         # The recognizer's detected language is call-scoped and changes on
         # every utterance. The LLM adapter reads it only for the outgoing
         # request, without adding diagnostic text to transcript history.

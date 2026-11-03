@@ -285,7 +285,10 @@ class _BookingToolChoiceMixin:
 
     def can_speculate_caller_turn(self, text: str) -> bool:
         """Keep confirmed-only contact/settings handling out of speculation."""
-        from api.services.pipecat.caller_language_context import standalone_language_request
+        from api.services.pipecat.caller_language_context import (
+            reply_language_switch_capabilities,
+            standalone_language_request,
+        )
         from api.services.workflow.contact_context import (
             caller_name_followup_reply,
             caller_phone_fragment_reply,
@@ -293,7 +296,11 @@ class _BookingToolChoiceMixin:
         from api.services.workflow.direct_caller_reply import direct_caller_reply
 
         state = dict(getattr(self, "_contact_conversation_state", {}))
-        if standalone_language_request(text) or state.get("awaiting_phone"):
+        source = getattr(self, "_caller_language_source", None)
+        supported_languages = reply_language_switch_capabilities(
+            getattr(self, "_caller_language_supported_codes", None), source
+        )
+        if standalone_language_request(text, supported_languages) or state.get("awaiting_phone"):
             return False
         if direct_caller_reply(text, has_lookup_tools=False):
             return False
@@ -369,6 +376,10 @@ class _BookingToolChoiceMixin:
         from api.services.workflow.confirmed_booking import confirmed_booking_arguments
         from pipecat.services.llm_service import FunctionCallFromLLM
 
+        # This is request scoped. A generated localization must never leak into
+        # a later caller turn if this request exits early or is cancelled.
+        self._pending_contact_followup_localization = None
+
         # Speculative responses are held and may be discarded if speech resumes.
         # Keep deterministic shortcuts out of this pass because some of them
         # update conversation state before the speculation gate can confirm it.
@@ -403,49 +414,64 @@ class _BookingToolChoiceMixin:
         )
         from api.services.pipecat.caller_language_context import (
             CallerLanguageContext,
+            reply_language_switch_capabilities,
             standalone_language_request,
             sync_contact_reply_language,
         )
 
-        requested_language = standalone_language_request(latest_user_text)
+        source = getattr(self, "_caller_language_source", None)
+        supported_languages = reply_language_switch_capabilities(
+            getattr(self, "_caller_language_supported_codes", None), source
+        )
+        requested_language = standalone_language_request(
+            latest_user_text, supported_languages
+        )
         if requested_language:
             if not hasattr(self, "_caller_language_context"):
                 self._caller_language_context = CallerLanguageContext()
-            source = getattr(self, "_caller_language_source", None)
             select_recognition = getattr(source, "select_caller_language", None)
+            language_switch_validated = True
             if callable(select_recognition):
                 try:
-                    await select_recognition(requested_language)
+                    language_switch_validated = (
+                        await select_recognition(requested_language)
+                    ) is not False
                 except Exception:
-                    # The reply choice remains valid even when recognition
-                    # inventory is temporarily unavailable. Keep errors free
-                    # of endpoint credentials and caller text.
+                    language_switch_validated = False
                     logger.warning("Caller recognition-language switch unavailable")
-            self._caller_language_context.choose_language(
-                requested_language, source, text=latest_user_text
-            )
-            self._caller_language_context.apply(messages, source)
-            state = getattr(self, "_contact_conversation_state", None)
-            if not isinstance(state, dict):
-                state = {}
-                self._contact_conversation_state = state
-            state["reply_language"] = requested_language
-            await self._emit_direct_reply(
-                "Yes, we can continue in English."
-                if requested_language == "English"
-                else "ज़रूर, हम हिंदी में बात कर सकते हैं।"
-            )
-            return
+            if language_switch_validated:
+                self._caller_language_context.choose_language(
+                    requested_language, source, text=latest_user_text
+                )
+                self._caller_language_context.apply(
+                    messages, source, supported_languages=supported_languages
+                )
+                state = getattr(self, "_contact_conversation_state", None)
+                if not isinstance(state, dict):
+                    state = {}
+                    self._contact_conversation_state = state
+                state["reply_language"] = requested_language
+                if requested_language == "English":
+                    await self._emit_direct_reply("Yes, we can continue in English.")
+                    return
+                if requested_language == "Hindi":
+                    await self._emit_direct_reply("ज़रूर, हम हिंदी में बात कर सकते हैं।")
+                    return
+            else:
+                # An installed-language check failed or timed out. Do not
+                # advertise a switch the active recognizer cannot support.
+                supported_languages = frozenset()
 
         # Deterministic contact replies run before the normal LLM-parameter
         # hook. Refresh the call-scoped language route here so phone/date
         # follow-ups do not keep an old explicit language after auto routing
         # has already switched the caller back to Hindi or English.
-        source = getattr(self, "_caller_language_source", None)
         if source is not None:
             if not hasattr(self, "_caller_language_context"):
                 self._caller_language_context = CallerLanguageContext()
-            self._caller_language_context.apply(messages, source)
+            self._caller_language_context.apply(
+                messages, source, supported_languages=supported_languages
+            )
             sync_contact_reply_language(contact_state, source)
 
         direct_reply = direct_caller_reply(
@@ -469,25 +495,45 @@ class _BookingToolChoiceMixin:
             contact_state = {}
             self._contact_conversation_state = contact_state
         known_name_reply = remember_explicit_caller_name(messages, contact_state)
+        deferred_contact_followup = False
         if known_name_reply:
-            await self._emit_direct_reply(known_name_reply)
-            return
-        phone_fragment_reply = caller_phone_fragment_reply(messages, contact_state)
-        if phone_fragment_reply:
-            await self._emit_direct_reply(phone_fragment_reply)
-            return
+            if self._defer_contact_followup_localization(
+                known_name_reply, supported_languages
+            ):
+                deferred_contact_followup = True
+            else:
+                await self._emit_direct_reply(known_name_reply)
+                return
+        phone_fragment_reply = (
+            None if deferred_contact_followup
+            else caller_phone_fragment_reply(messages, contact_state)
+        )
+        if phone_fragment_reply and not deferred_contact_followup:
+            if self._defer_contact_followup_localization(
+                phone_fragment_reply, supported_languages,
+                phone_state=contact_state,
+            ):
+                deferred_contact_followup = True
+            else:
+                await self._emit_direct_reply(phone_fragment_reply)
+                return
         booking_tool_available = any(
             getattr(tool, "name", None) == "book_appointment" for tool in tools
         )
         known_phone = (getattr(self, "_known_contact", {}) or {}).get("customer_phone")
-        name_followup_reply = caller_name_followup_reply(
+        name_followup_reply = None if deferred_contact_followup else caller_name_followup_reply(
             messages, contact_state,
             booking_available=booking_tool_available,
             known_phone=known_phone,
         )
         if name_followup_reply:
-            await self._emit_direct_reply(name_followup_reply)
-            return
+            if self._defer_contact_followup_localization(
+                name_followup_reply, supported_languages
+            ):
+                deferred_contact_followup = True
+            else:
+                await self._emit_direct_reply(name_followup_reply)
+                return
 
         known = getattr(self, "_known_contact", {})
         contact_state = getattr(self, "_contact_conversation_state", None)
@@ -498,6 +544,8 @@ class _BookingToolChoiceMixin:
                 known = {**known, "customer_phone": contact_state["caller_phone"]}
         has_booking_tool = any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
         if (
+            not deferred_contact_followup
+            and
             messages and isinstance(messages[-1], dict)
             and messages[-1].get("role") == "user"
             and any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
@@ -520,7 +568,7 @@ class _BookingToolChoiceMixin:
                 )])
                 return
         fast_booking_question = None
-        if has_booking_tool:
+        if has_booking_tool and not deferred_contact_followup:
             fast_booking_question = booking_contact_question(
                 messages, known, contact_state if contact_state is not None else {}
             )
@@ -529,8 +577,13 @@ class _BookingToolChoiceMixin:
             # parser has had a chance to route a fully specified caller-approved
             # booking to the registered tool. Incomplete requests still take
             # this short path and avoid an unnecessary model round trip.
-            await self._emit_direct_reply(fast_booking_question)
-            return
+            if self._defer_contact_followup_localization(
+                fast_booking_question, supported_languages
+            ):
+                deferred_contact_followup = True
+            else:
+                await self._emit_direct_reply(fast_booking_question)
+                return
         self._completion_has_text = False
         self._completion_has_tool_calls = False
         try:
@@ -553,6 +606,59 @@ class _BookingToolChoiceMixin:
             if not self._completion_has_text and not self._completion_has_tool_calls:
                 await self._push_llm_text(self._completion_recovery_text(messages))
             raise
+
+    def _defer_contact_followup_localization(
+        self, deterministic_reply: str, supported_languages, *, phone_state=None,
+    ) -> bool:
+        """Use the configured model only to phrase non-Hindi/English follow-ups.
+
+        Contact parsing and state mutation have already completed before this
+        method is called. The one-turn prompt explicitly prohibits changing
+        those values; Hindi and English keep the zero-model fast path.
+        """
+        from api.services.configuration.language_normalizer import (
+            normalize_language_code,
+        )
+
+        state = getattr(self, "_contact_conversation_state", None)
+        raw_language = state.get("reply_language") if isinstance(state, dict) else None
+        language = getattr(raw_language, "value", raw_language)
+        code = normalize_language_code(str(language or ""))
+        if code in {"", "en", "hi"} or code not in supported_languages:
+            return False
+
+        if isinstance(phone_state, dict):
+            if phone_state.get("caller_phone_confirmation_pending"):
+                # Do not expose or ask the model to repeat the captured digits.
+                # The parser retains them and the caller can confirm or redictate.
+                intent = (
+                    "Ask briefly whether the phone number you heard is correct. "
+                    "Tell the caller they may say yes or repeat the full number "
+                    "one digit at a time. Do not state or guess any digits."
+                )
+            elif phone_state.get("caller_phone_pending_double"):
+                intent = "Ask which digit follows the word double."
+            elif phone_state.get("replace_phone_digits_on_next_turn"):
+                intent = (
+                    "One phone digit was unclear. Ask the caller to repeat the "
+                    "full phone number one digit at a time."
+                )
+            elif phone_state.get("caller_phone_digits"):
+                intent = (
+                    "Ask the caller to continue dictating the remaining phone "
+                    "digits. Do not state a digit count or invent digits."
+                )
+            else:
+                intent = None
+        else:
+            intent = None
+
+        self._pending_contact_followup_localization = {
+            "language": str(language),
+            "reply": deterministic_reply,
+            "intent": intent,
+        }
+        return True
 
     def _completion_recovery_text(self, messages):
         from api.services.configuration.language_normalizer import normalize_language_code
@@ -601,6 +707,43 @@ class _BookingToolChoiceMixin:
                 dict(message) if isinstance(message, dict) else message
                 for message in params["messages"]
             ]
+        pending_localization = getattr(
+            self, "_pending_contact_followup_localization", None
+        )
+        if isinstance(pending_localization, dict):
+            # Consume once even if a later adapter hook fails. This temporary
+            # instruction is never written into persistent conversation history.
+            self._pending_contact_followup_localization = None
+            language = pending_localization["language"]
+            intent = pending_localization.get("intent")
+            if intent:
+                task = intent
+            else:
+                task = (
+                    "Translate the deterministic follow-up below faithfully. "
+                    "Keep every name and every digit unchanged and in the same "
+                    "order; do not add facts, infer missing values, or change "
+                    "the contact or booking state.\n"
+                    f"Deterministic follow-up: {pending_localization['reply']}"
+                )
+            messages = params.get("messages")
+            if isinstance(messages, list):
+                latest_user_index = next((
+                    index for index in range(len(messages) - 1, -1, -1)
+                    if isinstance(messages[index], dict)
+                    and messages[index].get("role") == "user"
+                ), len(messages))
+                messages.insert(latest_user_index, {
+                    "role": "system",
+                    "content": (
+                        f"This is a one-turn contact follow-up. Respond only in "
+                        f"{language}. {task} Output one concise spoken sentence "
+                        "and do not call a tool."
+                    ),
+                })
+                params["messages"] = messages
+            params.pop("tools", None)
+            params.pop("tool_choice", None)
         model = str(getattr(self._settings, "model", "") or "").casefold()
         messages = params.get("messages")
         if model.startswith("qwen3:") and isinstance(messages, list):
@@ -847,7 +990,11 @@ class _BookingToolChoiceMixin:
             if not hasattr(self, "_caller_language_context"):
                 self._caller_language_context = CallerLanguageContext()
             params["messages"] = self._caller_language_context.apply(
-                messages, getattr(self, "_caller_language_source", None)
+                messages,
+                getattr(self, "_caller_language_source", None),
+                supported_languages=getattr(
+                    self, "_caller_language_supported_codes", None
+                ),
             )
         if getattr(self, "_kodewaves_local_ollama", False):
             from api.services.workflow.contact_context import caller_state_instruction

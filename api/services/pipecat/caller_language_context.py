@@ -47,6 +47,97 @@ _STANDALONE_HINDI_REQUEST = re.compile(
 )
 
 
+_LANGUAGE_SWITCH_VERBS = r"(?:speak|talk|reply|answer|continue|switch)"
+_LANGUAGE_REQUEST_WRAPPERS = r"(?:can|could|would)\s+you\s+(?:please\s+)?"
+_LANGUAGE_NAME_ALIASES = {"Odia": ("Odia", "Oriya")}
+
+
+def _supported_language_codes(supported_languages=None) -> frozenset[str]:
+    """Return the reply-language capability set for this agent visit.
+
+    ``None`` keeps the legacy Hindi/English behavior for callers that do not
+    have a TTS capability descriptor (for example text-only helpers). An
+    explicit empty set means this visit has no verified language-switching
+    capability.
+    """
+    if supported_languages is None:
+        return frozenset({"en", "hi"})
+    result = set()
+    for language in supported_languages:
+        code = normalize_language_code(str(language))
+        if code in SPEECH_LANGUAGE_NAMES:
+            result.add(code)
+    return frozenset(result)
+
+
+def reply_language_switch_capabilities(supported_languages, source=None) -> frozenset[str]:
+    """Intersect TTS routing with the active recognizer's switch capability.
+
+    Auto STT remains auto-detected and keeps the TTS capability set. A fixed
+    recognizer without an in-call language selector can only receive input in
+    its configured language. Selectable recognizers validate non-auto targets
+    asynchronously before the caller's override is persisted.
+    """
+    codes = _supported_language_codes(supported_languages)
+    if source is None:
+        return codes
+    settings = getattr(source, "_settings", None)
+    language = getattr(settings, "language", None)
+    if language is None or str(getattr(language, "value", language)).strip().casefold() in {
+        "", "auto", "multi", "multilingual", "unknown", "default", "none",
+    }:
+        return codes
+    if callable(getattr(source, "select_caller_language", None)):
+        return codes
+    current = normalize_language_code(str(getattr(language, "value", language)))
+    return codes.intersection({current})
+
+
+def _language_names(supported_languages=None) -> dict[str, str]:
+    codes = _supported_language_codes(supported_languages)
+    names = {}
+    for code in codes:
+        name = SPEECH_LANGUAGE_NAMES[code]
+        names[name.casefold()] = name
+        for alias in _LANGUAGE_NAME_ALIASES.get(name, ()):
+            names[alias.casefold()] = name
+    return names
+
+
+def _generic_language_request(text: str, supported_languages=None) -> str | None:
+    """Recognize an explicit switch only to languages this TTS can emit."""
+    names = _language_names(supported_languages)
+    if not names:
+        return None
+    target = "(?P<language>" + "|".join(
+        re.escape(name) for name in sorted(names, key=len, reverse=True)
+    ) + ")"
+    patterns = (
+        re.compile(
+            rf"\b{_LANGUAGE_REQUEST_WRAPPERS}{_LANGUAGE_SWITCH_VERBS}"
+            rf"(?:\s+to\s+me)?\s+(?:(?:in|to)\s+)?{target}\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            rf"\b{_LANGUAGE_SWITCH_VERBS}\s+(?:in|to)\s+{target}\b",
+            re.IGNORECASE,
+        ),
+        re.compile(rf"\b{target}\s+(?:please|mein|me|main)\b", re.IGNORECASE),
+    )
+    for pattern in patterns:
+        match = pattern.search(text)
+        if match:
+            return names[match.group("language").casefold()]
+    # Keep the existing Hindi-recognizer tolerance for explicit English/Hindi
+    # requests while allowing every configured language name above.
+    if "hi" in _supported_language_codes(supported_languages):
+        if _ENGLISH_SWITCH.search(text):
+            return "English"
+        if _HINDI_SWITCH.search(text):
+            return "Hindi"
+    return None
+
+
 def _trusted_detected_language(source) -> str | None:
     """Use the voice router's confidence-filtered language when available.
 
@@ -84,29 +175,39 @@ def sync_contact_reply_language(state: dict, source) -> None:
         state.pop("reply_language", None)
 
 
-def standalone_language_request(text: str) -> str | None:
+def standalone_language_request(text: str, supported_languages=None) -> str | None:
     """A reply-language setting request with no other task to drop."""
-    if _STANDALONE_ENGLISH_REQUEST.fullmatch(text):
+    names = _language_names(supported_languages)
+    if not names:
+        return None
+    for alias, display in sorted(names.items(), key=lambda item: len(item[0]), reverse=True):
+        escaped = re.escape(alias)
+        if re.fullmatch(
+            rf"\s*(?:(?:please|कृपया|अः|अह|uh|um)\s+)?"
+            rf"(?:(?:can|could|would)\s+you\s+(?:please\s+)?)?"
+            rf"(?:{_LANGUAGE_SWITCH_VERBS})(?:\s+to\s+me)?\s+"
+            rf"(?:(?:in|to)\s+)?{escaped}(?:\s+please)?[.?!।\s]*",
+            text,
+            re.IGNORECASE,
+        ) or re.fullmatch(
+            rf"\s*(?:{escaped})\s+(?:please|mein|me|main)[.?!।\s]*",
+            text,
+            re.IGNORECASE,
+        ):
+            return display
+    if "en" in _supported_language_codes(supported_languages) and _STANDALONE_ENGLISH_REQUEST.fullmatch(text):
         return "English"
-    if _STANDALONE_HINDI_REQUEST.fullmatch(text):
+    if "hi" in _supported_language_codes(supported_languages) and _STANDALONE_HINDI_REQUEST.fullmatch(text):
         return "Hindi"
     return None
 
 
-def _requested_language(text: str) -> str | None:
+def _requested_language(text: str, supported_languages=None) -> str | None:
     """Recognize an explicit reply-language request, even in another language."""
-    standalone = standalone_language_request(text)
+    standalone = standalone_language_request(text, supported_languages)
     if standalone:
         return standalone
-    english = _ENGLISH_SWITCH.search(text)
-    hindi = _HINDI_SWITCH.search(text)
-    if english and hindi:
-        return "English" if english.start() > hindi.start() else "Hindi"
-    if english:
-        return "English"
-    if hindi:
-        return "Hindi"
-    return None
+    return _generic_language_request(text, supported_languages)
 
 
 class CallerLanguageContext:
@@ -114,6 +215,7 @@ class CallerLanguageContext:
         self._hints: dict[tuple[int, str], str] = {}
         self._explicit_preference: str | None = None
         self._explicit_source_language: str | None = None
+        self._explicit_target_language: str | None = None
 
     def choose_language(self, language: str, source=None, *, text: str = "") -> None:
         # Keep the transcript's raw STT result intact, but guide the LLM with
@@ -123,10 +225,12 @@ class CallerLanguageContext:
         spoken = SPEECH_LANGUAGE_NAMES.get(code)
         if not spoken:
             spoken = "Hindi" if re.search(r"[\u0900-\u097f]", text) else "English"
-        self._explicit_preference = language
+        code = normalize_language_code(language)
+        self._explicit_preference = SPEECH_LANGUAGE_NAMES.get(code, language)
+        self._explicit_target_language = code
         self._explicit_source_language = spoken
 
-    def apply(self, messages: list, source) -> list:
+    def apply(self, messages: list, source, supported_languages=None) -> list:
         """Keep earlier utterances identical as a caller changes language.
 
         The STT source describes only its latest recognition. Remember the
@@ -135,6 +239,9 @@ class CallerLanguageContext:
         cached prefix. This state belongs to one LLM service, never a global
         cache, and does not modify the transcript or supplied dictionaries.
         """
+        supported_languages = reply_language_switch_capabilities(
+            supported_languages, source
+        )
         users = [
             (index, message["content"])
             for index, message in enumerate(messages)
@@ -147,6 +254,7 @@ class CallerLanguageContext:
         if not users:
             self._explicit_preference = None
             self._explicit_source_language = None
+            self._explicit_target_language = None
 
         # Text chat creates a new service for each turn and has no STT source.
         # Recover explicit choices from its persisted caller history so a
@@ -158,9 +266,10 @@ class CallerLanguageContext:
             from api.services.pipecat.booking_tool_choice import _clearly_english_caller_text
 
             for ordinal, (_, text) in enumerate(users):
-                requested = standalone_language_request(text)
+                requested = standalone_language_request(text, supported_languages)
                 if requested:
                     self._explicit_preference = requested
+                    self._explicit_target_language = normalize_language_code(requested)
                 if self._explicit_preference:
                     self._hints.setdefault((ordinal, text), (
                         f"Caller explicitly chose {self._explicit_preference}. "
@@ -177,9 +286,12 @@ class CallerLanguageContext:
         detected = _trusted_detected_language(source)
         detected_text = getattr(source, "latest_detected_text", None)
         latest_user_text = users[-1][1] if users else ""
-        explicit_language = _requested_language(latest_user_text) if users else None
+        explicit_language = (
+            _requested_language(latest_user_text, supported_languages) if users else None
+        )
         if explicit_language:
             self._explicit_preference = explicit_language
+            self._explicit_target_language = normalize_language_code(explicit_language)
             # A low-confidence detector may intentionally expose no TTS
             # language. Still honor the caller's explicit reply-language
             # request, while tracking the utterance's likely source language
@@ -197,15 +309,24 @@ class CallerLanguageContext:
             language = SPEECH_LANGUAGE_NAMES.get(code)
             key = (len(users) - 1, users[-1][1])
             if language and key not in self._hints:
-                requested = explicit_language or _requested_language(users[-1][1])
+                requested = explicit_language or _requested_language(
+                    users[-1][1], supported_languages
+                )
                 if requested:
                     self._explicit_preference = requested
                     self._explicit_source_language = language
-                elif self._explicit_source_language != language:
+                    self._explicit_target_language = normalize_language_code(requested)
+                elif (
+                    self._explicit_source_language != language
+                    and self._explicit_target_language != code
+                ):
                     # A later utterance in another language resumes automatic
-                    # matching without rewriting any earlier request hints.
+                    # matching without rewriting any earlier request hints. A
+                    # caller may also start using their explicitly requested
+                    # reply language; that must not cancel their preference.
                     self._explicit_preference = None
                     self._explicit_source_language = None
+                    self._explicit_target_language = None
                 answer_language = self._explicit_preference or language
                 if self._explicit_preference and answer_language != language:
                     self._hints[key] = (
@@ -225,10 +346,13 @@ class CallerLanguageContext:
         # Keep this override call-scoped on the recognizer and clear it as
         # soon as a later utterance changes the detected source language.
         if source is not None:
-            source.reply_language_override = {
-                "English": "en",
-                "Hindi": "hi",
-            }.get(self._explicit_preference)
+            source.reply_language_override = (
+                normalize_language_code(self._explicit_preference)
+                if self._explicit_preference
+                and normalize_language_code(self._explicit_preference)
+                in _supported_language_codes(supported_languages)
+                else None
+            )
 
         result = list(messages)
         for ordinal, (index, content) in enumerate(users):

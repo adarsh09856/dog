@@ -197,7 +197,11 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         if preferred is not None:
             raw_preferred = getattr(preferred, "value", preferred)
             preferred_code = normalize_language_code(raw_preferred)
-            if preferred_code in {"en", "hi"}:
+            from api.services.pipecat.caller_language_tts import (
+                caller_language_tts_capabilities,
+            )
+
+            if preferred_code in caller_language_tts_capabilities(self):
                 return preferred_code
         # Auto STT may expose a best-effort language to the LLM even when the
         # detector confidence is too weak to choose a regional voice. In that

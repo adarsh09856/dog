@@ -55,7 +55,11 @@ _NON_NAME_ANSWERS = frozenset({
 
 
 def _looks_like_name(value: str) -> bool:
-    if standalone_language_request(value) or re.fullmatch(
+    from api.services.configuration.language_normalizer import SPEECH_LANGUAGE_NAMES
+
+    if standalone_language_request(
+        value, supported_languages=SPEECH_LANGUAGE_NAMES.keys()
+    ) or re.fullmatch(
         r"(?:speak|talk|reply|answer|continue|switch)\s+(?:in|to)\s+[A-Za-z]+",
         value, re.IGNORECASE,
     ):

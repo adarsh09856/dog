@@ -7,7 +7,10 @@ from typing import Any
 
 from loguru import logger
 
-from api.services.configuration.language_normalizer import normalize_language_code
+from api.services.configuration.language_normalizer import (
+    SPEECH_LANGUAGE_NAMES,
+    normalize_language_code,
+)
 from pipecat.transcriptions.language import Language
 
 
@@ -28,6 +31,89 @@ SARVAM_SUPPORTED_LANGUAGE_ENUMS = {
 }
 
 _NO_ACTIVE_CALLER_LANGUAGE_TURN = object()
+
+# This is the reply-language intersection exposed by the currently configured
+# Rasa 13 local voice router, not the wider Indic STT detector inventory.
+LOCAL_RASA_REPLY_LANGUAGE_CODES = frozenset({
+    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
+    "ne", "pa", "sa", "ta", "te",
+})
+LOCAL_RASA_VOICE_GENDERS = {
+    "asm_f": "female", "asm_m": "male",
+    "ben_f": "female", "ben_m": "male",
+    "brx_f": "female", "brx_m": "male",
+    "doi_f": "female", "doi_m": "male",
+    "kan_f": "female", "kan_m": "male",
+    "mai_m": "male", "mal_f": "female",
+    "mar_f": "female", "mar_m": "male",
+    "nep_f": "female", "pan_f": "female", "pan_m": "male",
+    "san_m": "male", "tam_f": "female", "tel_f": "female",
+    "hin_m": "male", "hin_f": "female", "eng_in": "unspecified",
+}
+LOCAL_RASA_LANGUAGE_GENDERS = {
+    "as": frozenset({"female", "male"}),
+    "bn": frozenset({"female", "male"}),
+    "brx": frozenset({"female", "male"}),
+    "doi": frozenset({"female", "male"}),
+    "en": frozenset({"unspecified"}),
+    "hi": frozenset({"female", "male"}),
+    "kn": frozenset({"female", "male"}),
+    "mai": frozenset({"male"}),
+    "ml": frozenset({"female"}),
+    "mr": frozenset({"female", "male"}),
+    "ne": frozenset({"female"}),
+    "pa": frozenset({"female", "male"}),
+    "sa": frozenset({"male"}),
+    "ta": frozenset({"female"}),
+    "te": frozenset({"female"}),
+}
+
+
+def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
+    """Return language codes this configured TTS service can route per turn.
+
+    Provider adapters advertise only combinations for which runtime voice
+    switching is implemented and the selected voice is verified. Other
+    providers are treated as fixed-language services and expose only their
+    configured language.
+    """
+    if service is None:
+        return frozenset()
+
+    settings = getattr(service, "_settings", None)
+    model = str(getattr(settings, "model", "") or "").casefold()
+    voice = str(getattr(settings, "voice", "") or "").casefold()
+
+    if model == "indic-vits-rasa-13" and voice in LOCAL_RASA_VOICE_GENDERS:
+        gender = LOCAL_RASA_VOICE_GENDERS[voice]
+        return frozenset(
+            code for code, genders in LOCAL_RASA_LANGUAGE_GENDERS.items()
+            if gender in genders or "unspecified" in genders
+        )
+
+    if (
+        getattr(service, "_caller_language_routing_enabled", False)
+        and model == "bulbul:v3"
+    ):
+        speakers = {
+            str(speaker).casefold()
+            for speaker in getattr(getattr(service, "_config", None), "speakers", ())
+        }
+        if voice and voice in speakers:
+            return frozenset(SARVAM_SUPPORTED_LANGUAGE_ENUMS)
+
+    configured = getattr(settings, "language", None)
+    raw_configured = getattr(configured, "value", configured)
+    if raw_configured is not None and str(raw_configured).strip():
+        if str(raw_configured).strip().casefold() in {
+            "auto", "multi", "multilingual", "unknown", "default", "none",
+        }:
+            return frozenset()
+        code = normalize_language_code(str(raw_configured))
+        if code in SPEECH_LANGUAGE_NAMES:
+            return frozenset({code})
+    return frozenset()
+
 
 def caller_reply_language(
     source: Any,

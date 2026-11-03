@@ -180,6 +180,12 @@ class AgentRuntimeFactory:
             organization_id=self._organization_id,
             tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
         )
+        if llm is not None:
+            from api.services.pipecat.caller_language_tts import (
+                caller_language_tts_capabilities,
+            )
+
+            llm._caller_language_supported_codes = caller_language_tts_capabilities(tts)
         if self._caller_language_source is not None:
             for service in (llm, tts):
                 if service is not None:
