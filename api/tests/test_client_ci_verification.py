@@ -1,6 +1,7 @@
 """CI signing material must stay disposable and never publish customer releases."""
 
 import base64
+import hashlib
 import io
 import json
 import re
@@ -42,6 +43,81 @@ def verifier(monkeypatch):
     return ci_verify
 
 
+def test_archive_installer_proxy_bypass_preserves_existing_hosts(verifier):
+    env = verifier._with_no_proxy_hosts(
+        {"NO_PROXY": "registry.internal,localhost", "no_proxy": "registry.internal"},
+        ("172.31.40.1", "host.docker.internal", "127.0.0.1", "localhost"),
+    )
+
+    assert env["NO_PROXY"] == (
+        "registry.internal,localhost,172.31.40.1,host.docker.internal,127.0.0.1"
+    )
+    assert env["no_proxy"] == env["NO_PROXY"]
+
+
+def test_owner_peer_failure_diagnostic_hides_addresses_and_checks_signed_policy(verifier):
+    owner = SimpleNamespace(
+        licensed_ip_ranges=("172.31.40.0/24",),
+        diagnostic_summary=lambda: json.dumps({
+            "request_counts": {"/check": 1},
+            "response_statuses": {"200": 1},
+            "observed_ips": ["203.0.113.24"],
+            "rejected_requests": 0,
+            "rejection_types": {},
+            "revoked": False,
+        }),
+    )
+
+    diagnostic = verifier._safe_owner_peer_diagnostics(owner)
+
+    assert "203.0.113.24" not in diagnostic
+    assert '"observed_peer_count": 1' in diagnostic
+    assert '"all_observed_peers_match_signed_ip_policy": false' in diagnostic
+
+
+def test_owner_can_switch_to_unrestricted_archive_fixture_and_reset_state(verifier, tmp_path):
+    license_private, license_public = verifier._temporary_keypair(tmp_path, "license-switch")
+    public_text = license_public.read_text(encoding="ascii")
+    restricted_token = verifier._runtime_smoke_license(
+        license_private.read_bytes(), public_text, ip_ranges=["172.31.40.0/24"]
+    )
+    archive_token = verifier._runtime_smoke_license(license_private.read_bytes(), public_text)
+
+    with verifier._OwnerAcceptanceServer(
+        tmp_path, restricted_token, license_private.read_bytes(), public_text
+    ) as owner:
+        owner.public_key = "runtime-installation-public-key"
+        owner.observed_ips.add("172.31.40.3")
+        owner.use_license(archive_token)
+
+        assert owner.license_token == archive_token
+        assert owner.license_fingerprint == hashlib.sha256(
+            archive_token.encode("ascii")
+        ).hexdigest()
+        assert owner.licensed_ip_ranges == ()
+        assert owner.ip_ranges == ()
+        assert owner.public_key is None
+        assert owner.observed_ips == set()
+
+
+def test_archive_diagnostic_treats_empty_ip_policy_as_optional(verifier):
+    owner = SimpleNamespace(
+        licensed_ip_ranges=(),
+        diagnostic_summary=lambda: json.dumps({
+            "request_counts": {"/check": 1},
+            "response_statuses": {"200": 1},
+            "observed_ips": ["192.0.2.10"],
+            "rejected_requests": 0,
+            "rejection_types": {},
+            "revoked": False,
+        }),
+    )
+
+    diagnostic = verifier._safe_owner_peer_diagnostics(owner)
+
+    assert '"all_observed_peers_match_signed_ip_policy": true' in diagnostic
+
+
 def test_owner_poll_failure_summary_extracts_bounded_exception_messages(verifier):
     lines = "\n".join([
         "INFO startup complete",
@@ -55,6 +131,43 @@ def test_owner_poll_failure_summary_extracts_bounded_exception_messages(verifier
     assert verifier._owner_poll_log_summary("no owner poll attempt") == (
         "no owner-poll warning was logged"
     )
+
+
+def test_archive_owner_ca_is_mounted_after_package_extraction(verifier, tmp_path):
+    install_dir = tmp_path / "customer-install"
+    install_dir.mkdir()
+    identity_file = install_dir / "docker-compose.identity.yaml"
+    identity_file.write_text(
+        "services:\n"
+        "  api:\n"
+        "    environment:\n"
+        "      KODEWAVES_INSTALLATION_KEY_FILE: /run/kodewaves-identity/installation.key\n"
+        "    volumes:\n"
+        "      - type: bind\n"
+        "        source: /tmp/installation.key\n"
+        "        target: /run/kodewaves-identity/installation.key\n"
+        "        read_only: true\n",
+        encoding="utf-8",
+    )
+    ca_file = tmp_path / "ci-owner-ca.pem"
+    ca_file.write_text("public test CA", encoding="ascii")
+
+    assert verifier._configure_ci_owner_ca_overlay(install_dir, ca_file) == identity_file
+
+    document = verifier.yaml.safe_load(identity_file.read_text(encoding="utf-8"))
+    api = document["services"]["api"]
+    assert api["environment"]["KODEWAVES_INSTALLATION_KEY_FILE"] == (
+        "/run/kodewaves-identity/installation.key"
+    )
+    assert api["environment"]["SSL_CERT_FILE"] == "/run/kodewaves-ci-owner/ca.pem"
+    assert api["volumes"][0]["target"] == "/run/kodewaves-identity/installation.key"
+    assert api["volumes"][1] == {
+        "type": "bind",
+        "source": str(ca_file.resolve()),
+        "target": "/run/kodewaves-ci-owner/ca.pem",
+        "read_only": True,
+        "bind": {"create_host_path": False},
+    }
 
 
 def test_ci_verifies_without_publishing_or_retaining_signing_material(verifier, monkeypatch, tmp_path):

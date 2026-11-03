@@ -934,6 +934,7 @@ def _verify_customer_archive_install(
         failures = [finding for finding in findings if not finding.startswith("preflight passed;")]
         if failures:
             raise ValueError("Extracted customer installation preflight failed: " + "; ".join(failures))
+        _configure_ci_owner_ca_overlay(install_dir, owner.ca_file)
         subprocess.run([*compose, "config", "--quiet"], cwd=install_dir, check=True,
                        env=env, capture_output=True, text=True, timeout=60)
         subprocess.run([*compose, "up", "--detach", "--wait", "--wait-timeout", "300", "api"],
@@ -986,6 +987,50 @@ def _verify_customer_archive_install(
                        cwd=install_dir, check=False, env=env, capture_output=True, text=True, timeout=90)
         subprocess.run(["docker", "network", "rm", f"{project}_internal"], check=False,
                        capture_output=True, text=True, timeout=30)
+
+
+def _configure_ci_owner_ca_overlay(install_dir: Path, ca_file: Path) -> Path:
+    """Trust the disposable CI owner CA in the extracted API container only.
+
+    The package checksums are verified before this function is called. The
+    temporary acceptance peer uses a private CA, so the extracted customer
+    identity overlay must mount that CA into the API container for its real
+    HTTPS owner-status poll. This test-only mutation is never included in the
+    signed installer archive or a production client release.
+    """
+    identity_file = install_dir / "docker-compose.identity.yaml"
+    if not identity_file.is_file() or identity_file.is_symlink():
+        raise ValueError("Extracted installer is missing its safe identity Compose overlay")
+    if not ca_file.is_file() or ca_file.is_symlink():
+        raise ValueError("Disposable owner CA is missing or unsafe")
+    document = yaml.safe_load(identity_file.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise ValueError("Extracted identity Compose overlay is invalid")
+    services = document.get("services")
+    api = services.get("api") if isinstance(services, dict) else None
+    if not isinstance(api, dict):
+        raise ValueError("Extracted identity Compose overlay has no API service")
+    environment = api.setdefault("environment", {})
+    if not isinstance(environment, dict):
+        raise ValueError("Extracted identity API environment must be a mapping")
+    environment["SSL_CERT_FILE"] = "/run/kodewaves-ci-owner/ca.pem"
+    volumes = api.setdefault("volumes", [])
+    if not isinstance(volumes, list):
+        raise ValueError("Extracted identity API volumes must be a list")
+    target = "/run/kodewaves-ci-owner/ca.pem"
+    volumes[:] = [
+        volume for volume in volumes
+        if not (isinstance(volume, dict) and volume.get("target") == target)
+    ]
+    volumes.append({
+        "type": "bind",
+        "source": str(ca_file.resolve()),
+        "target": target,
+        "read_only": True,
+        "bind": {"create_host_path": False},
+    })
+    identity_file.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
+    return identity_file
 
 
 def _run_interactive(
