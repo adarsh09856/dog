@@ -94,8 +94,20 @@ class ClientIntegrityAlertModel(Base):
     occurrence_count = Column(Integer, nullable=False, default=1)
     acknowledged_at = Column(DateTime(timezone=True), nullable=True, index=True)
     acknowledged_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    email_status = Column(String(16), nullable=False, default="sent", server_default="sent")
+    email_attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
+    email_scheduled_for = Column(DateTime(timezone=True), nullable=True)
+    email_last_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    email_sent_at = Column(DateTime(timezone=True), nullable=True)
+    email_last_error = Column(String(80), nullable=True)
 
-    __table_args__ = (UniqueConstraint("installation_id", "event_fingerprint", name="uq_client_integrity_alert_event"),)
+    __table_args__ = (
+        UniqueConstraint("installation_id", "event_fingerprint", name="uq_client_integrity_alert_event"),
+        CheckConstraint(
+            "email_status in ('pending', 'sending', 'sent', 'failed')",
+            name="ck_client_integrity_alerts_email_status",
+        ),
+    )
 
 
 class ClientBindingRequestModel(Base):

@@ -65,6 +65,11 @@ interface IntegrityAlert {
   first_seen_at: string;
   last_seen_at: string;
   occurrence_count: number;
+  email_status: "pending" | "sending" | "sent" | "failed";
+  email_attempt_count: number;
+  email_last_attempt_at: string | null;
+  email_sent_at: string | null;
+  email_last_error: string | null;
 }
 
 interface BindingRequest {
@@ -411,7 +416,7 @@ export default function ClientInstallationsPage() {
         <CardContent className="space-y-3"><div><Label htmlFor="enrollment-token">One-time enrollment token</Label><Input id="enrollment-token" readOnly value={enrollment.enrollment_token} className="font-mono text-xs" /></div><Button variant="outline" onClick={() => setEnrollment(null)}>I have saved the token</Button></CardContent>
       </Card>}
       {alerts.length > 0 && <Card className={styles.sectionCard}>
-        <CardHeader><CardTitle className="flex items-center gap-2 text-base text-destructive"><Ban className="h-4 w-4" />Installation integrity alerts ({alerts.length})</CardTitle><CardDescription>These reports contain protected-file paths and hashes only. Acknowledging an alert does not re-enable the client installation.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2 text-base text-destructive"><Ban className="h-4 w-4" />Installation integrity alerts ({alerts.length})</CardTitle><CardDescription>These reports contain protected-file paths and hashes only. Acknowledging an alert does not re-enable the client installation. Owner email retries up to six times; a worker crash after SMTP accepts a message can result in one duplicate email.</CardDescription></CardHeader>
         <CardContent className="space-y-3">
           {alerts.map((alert) => <div key={alert.id} className={styles.alertCard}>
             <div className={styles.alertHeading}><strong>{alert.installation_id} · {alert.reason.replaceAll("_", " ")}</strong><span className="text-xs text-destructive">Blocked · review required</span></div>
@@ -421,6 +426,11 @@ export default function ClientInstallationsPage() {
               <div className={styles.metaCell}><span className={styles.metaLabel}>Observed SHA-256</span><span className={styles.metaValue}>{alert.observed_sha256 || (alert.reason === "missing_file" ? "Missing" : "Unavailable")}</span></div>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">First seen {new Date(alert.first_seen_at).toLocaleString()} · Last seen {new Date(alert.last_seen_at).toLocaleString()} · {alert.occurrence_count} check{alert.occurrence_count === 1 ? "" : "s"}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Owner email: {alert.email_status === "sent" ? "sent" : alert.email_status === "failed" ? "failed after retries" : alert.email_status === "sending" ? "sending" : "pending"}
+              {alert.email_attempt_count > 0 ? ` · ${alert.email_attempt_count} attempt${alert.email_attempt_count === 1 ? "" : "s"}` : ""}
+              {alert.email_last_error ? ` · ${alert.email_last_error}` : ""}
+            </p>
             <Button className="mt-2" type="button" variant="outline" size="sm" onClick={() => void acknowledgeAlert(alert.id)}>Acknowledge</Button>
           </div>)}
         </CardContent>

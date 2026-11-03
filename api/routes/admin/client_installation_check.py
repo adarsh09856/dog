@@ -41,7 +41,7 @@ from api.services.client_update_protocol import (
     ClientUpdateProtocolError,
     validate_current_version,
 )
-from api.services.client_integrity_notifications import notify_client_integrity_alert
+from api.tasks.client_integrity_email import enqueue_client_integrity_alert_email
 from api.services.installation_client_ip import observed_client_ip as _observed_client_ip
 
 router = APIRouter(prefix="/client-installations", tags=["client-installation-check"])
@@ -259,18 +259,19 @@ async def check_client_installation(
         raise HTTPException(status_code=503, detail="Owner license signer is unavailable") from exc
     response = {"signed_status": signed_status}
     if record.get("integrity_alert_notification"):
-        return JSONResponse(
-            response,
-            background=BackgroundTask(
-                notify_client_integrity_alert,
-                installation_id=license_data.installation_id,
-                customer_id=license_data.customer_id,
-                finding=request.integrity_finding.model_dump() if request.integrity_finding else {
-                    "reason": "unknown", "component": "release",
-                    "expected_sha256": None, "observed_sha256": None,
-                },
-            ),
-        )
+        alert_id = record.get("integrity_alert_notification_id")
+        if alert_id is not None:
+            return JSONResponse(
+                response,
+                background=BackgroundTask(
+                    enqueue_client_integrity_alert_email,
+                    alert_id=alert_id,
+                    attempt=1,
+                ),
+            )
+        # The alert row is the durable queue; the periodic sweeper recovers the
+        # rare case where RETURNING did not provide its identifier.
+        return JSONResponse(response)
     return response
 
 

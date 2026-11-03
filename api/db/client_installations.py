@@ -5,7 +5,7 @@ import hmac
 import json
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from api.db.kodewaves_client import kodewaves_db_client
@@ -439,6 +439,7 @@ async def record_client_installation_check(
         integrity_alert_notification = (
             not integrity_ok and record.integrity_failed_at is None
         )
+        integrity_alert_notification_id = None
         if expected_public_key is not None:
             if not nonce_fingerprint or nonce_expires_at is None or _utc(nonce_expires_at) <= now:
                 return None
@@ -479,6 +480,9 @@ async def record_client_installation_check(
                 first_seen_at=now,
                 last_seen_at=now,
                 occurrence_count=1,
+                email_status="pending",
+                email_attempt_count=0,
+                email_scheduled_for=now,
             ).on_conflict_do_update(
                 constraint="uq_client_integrity_alert_event",
                 set_={
@@ -490,7 +494,10 @@ async def record_client_installation_check(
                     "acknowledged_by_user_id": None,
                 },
             )
-            await session.execute(statement)
+            alert_result = await session.execute(
+                statement.returning(ClientIntegrityAlertModel.id)
+            )
+            integrity_alert_notification_id = alert_result.scalar_one_or_none()
         record.updated_at = now
         # SQLAlchemy expires ORM attributes on commit; capture the status while
         # the row is loaded, then return it only after the commit succeeds.
@@ -499,6 +506,9 @@ async def record_client_installation_check(
             "revoked_at": record.revoked_at.isoformat() if record.revoked_at else None,
             "integrity_failed_at": record.integrity_failed_at.isoformat() if record.integrity_failed_at else None,
             "integrity_alert_notification": integrity_alert_notification,
+            "integrity_alert_notification_id": (
+                integrity_alert_notification_id if integrity_alert_notification else None
+            ),
             "expires_at": int(
                 (record.previous_token_valid_until if previous_token else record.expires_at).timestamp()
             ),
@@ -525,8 +535,123 @@ async def list_client_integrity_alerts(*, include_acknowledged: bool = False) ->
                 "last_seen_at": alert.last_seen_at.isoformat(),
                 "occurrence_count": alert.occurrence_count,
                 "acknowledged_at": alert.acknowledged_at.isoformat() if alert.acknowledged_at else None,
+                "email_status": alert.email_status,
+                "email_attempt_count": alert.email_attempt_count,
+                "email_last_attempt_at": (
+                    alert.email_last_attempt_at.isoformat() if alert.email_last_attempt_at else None
+                ),
+                "email_sent_at": alert.email_sent_at.isoformat() if alert.email_sent_at else None,
+                "email_last_error": alert.email_last_error,
             }
             for alert in result.scalars().all()
+        ]
+
+
+async def claim_client_integrity_alert_email(alert_id: int, *, lease_seconds: int = 90) -> dict | None:
+    """Atomically claim one due alert email and return its mail payload.
+
+    The persisted lease prevents duplicate ARQ jobs from sending concurrently.
+    If a worker dies, ``email_scheduled_for`` expires and the sweeper can reclaim it.
+    SMTP is at-least-once: a crash after server acceptance but before success is
+    recorded may cause one duplicate notification after lease expiry.
+    """
+    now = datetime.now(UTC)
+    async with kodewaves_db_client.get_session() as session:
+        claimed = await session.execute(
+            update(ClientIntegrityAlertModel)
+            .where(
+                ClientIntegrityAlertModel.id == alert_id,
+                ClientIntegrityAlertModel.email_status.in_(("pending", "sending")),
+                ClientIntegrityAlertModel.email_scheduled_for.is_not(None),
+                ClientIntegrityAlertModel.email_scheduled_for <= now,
+            )
+            .values(
+                email_status="sending",
+                email_attempt_count=ClientIntegrityAlertModel.email_attempt_count + 1,
+                email_last_attempt_at=now,
+                email_scheduled_for=now + timedelta(seconds=lease_seconds),
+                email_last_error=None,
+            )
+            .returning(ClientIntegrityAlertModel.id)
+        )
+        if claimed.scalar_one_or_none() is None:
+            await session.rollback()
+            return None
+        result = await session.execute(
+            select(ClientIntegrityAlertModel, ClientInstallationModel.customer_id)
+            .join(
+                ClientInstallationModel,
+                ClientInstallationModel.installation_id == ClientIntegrityAlertModel.installation_id,
+            )
+            .where(ClientIntegrityAlertModel.id == alert_id)
+        )
+        row = result.one_or_none()
+        await session.commit()
+        if row is None:
+            return None
+        alert, customer_id = row
+        return {
+            "id": alert.id,
+            "installation_id": alert.installation_id,
+            "customer_id": customer_id,
+            "reason": alert.reason,
+            "component": alert.component,
+            "expected_sha256": alert.expected_sha256,
+            "observed_sha256": alert.observed_sha256,
+            "attempt_count": alert.email_attempt_count,
+        }
+
+
+async def mark_client_integrity_alert_email_sent(alert_id: int) -> None:
+    now = datetime.now(UTC)
+    async with kodewaves_db_client.get_session() as session:
+        await session.execute(
+            update(ClientIntegrityAlertModel)
+            .where(ClientIntegrityAlertModel.id == alert_id, ClientIntegrityAlertModel.email_status == "sending")
+            .values(
+                email_status="sent", email_sent_at=now, email_scheduled_for=None,
+                email_last_error=None,
+            )
+        )
+        await session.commit()
+
+
+async def schedule_client_integrity_alert_email_retry(
+    alert_id: int, *, retry_at: datetime, error_code: str, terminal: bool = False,
+) -> None:
+    """Record a safe error code and schedule retry or terminal failure."""
+    async with kodewaves_db_client.get_session() as session:
+        await session.execute(
+            update(ClientIntegrityAlertModel)
+            .where(ClientIntegrityAlertModel.id == alert_id, ClientIntegrityAlertModel.email_status == "sending")
+            .values(
+                email_status="failed" if terminal else "pending",
+                email_scheduled_for=None if terminal else retry_at,
+                email_last_error=error_code[:80],
+            )
+        )
+        await session.commit()
+
+
+async def get_due_client_integrity_alert_emails(
+    *, now: datetime | None = None, limit: int = 100, after_id: int = 0,
+) -> list[dict]:
+    cutoff = now or datetime.now(UTC)
+    async with kodewaves_db_client.get_session() as session:
+        result = await session.execute(
+            select(ClientIntegrityAlertModel.id, ClientIntegrityAlertModel.email_attempt_count)
+            .where(
+                ClientIntegrityAlertModel.email_status.in_(("pending", "sending")),
+                ClientIntegrityAlertModel.email_scheduled_for.is_not(None),
+                ClientIntegrityAlertModel.email_scheduled_for <= cutoff,
+                ClientIntegrityAlertModel.id > after_id,
+            )
+            .order_by(ClientIntegrityAlertModel.id)
+            .limit(limit)
+        )
+        return [
+            {"id": row.id, "attempt_count": row.email_attempt_count}
+            for row in result.all()
         ]
 
 

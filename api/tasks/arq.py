@@ -61,6 +61,10 @@ from api.tasks.campaign_tasks import (
     process_campaign_batch,
     sync_campaign_source,
 )
+from api.tasks.client_integrity_email import (
+    deliver_client_integrity_alert_email,
+    sweep_client_integrity_alert_emails,
+)
 from api.tasks.knowledge_base_processing import process_knowledge_base_document
 from api.tasks.run_integrations import run_integrations_post_workflow_run
 from api.tasks.text_chat_inactivity import (
@@ -79,6 +83,7 @@ class WorkerSettings:
         process_campaign_batch,
         process_knowledge_base_document,
         deliver_webhook,
+        deliver_client_integrity_alert_email,
         complete_inactive_text_chat_session,
     ]
     cron_jobs = [
@@ -88,6 +93,14 @@ class WorkerSettings:
             sweep_webhook_deliveries,
             minute=set(range(0, 60, 5)),
             second=0,
+            run_at_startup=True,
+        ),
+        # Persisted owner integrity notifications survive Redis loss and worker
+        # crashes; expired sending leases are reclaimed by this sweep.
+        cron(
+            sweep_client_integrity_alert_emails,
+            minute=set(range(0, 60, 1)),
+            second=15,
             run_at_startup=True,
         ),
         # Text chats do not have a transport disconnect callback. Close stale
