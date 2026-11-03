@@ -593,10 +593,26 @@ class SmallWebRTCClient:
         self._in_sample_rate = _params.audio_in_sample_rate or setup.audio_in_sample_rate
         self._out_sample_rate = _params.audio_out_sample_rate or setup.audio_out_sample_rate
         self._params = _params
+        # Install the sender track before connect() can report ICE connected.
+        # The connection callback may otherwise race the first synthesized frame.
+        self._ensure_audio_output_track()
         self._audio_in_layout = "stereo" if self._audio_in_channels == 2 else "mono"
         self._audio_in_resampler = AudioResampler(
             "s16", self._audio_in_layout, self._in_sample_rate
         )
+
+    def _ensure_audio_output_track(self) -> None:
+        """Create and register the configured audio sender before speech starts."""
+        if not self._params or not self._params.audio_out_enabled:
+            return
+        if self._audio_output_track is None:
+            self._audio_output_track = RawAudioTrack(
+                sample_rate=self._out_sample_rate,
+                auto_silence=self._params.audio_out_auto_silence,
+            )
+        # Re-register on connect in case the peer transceiver was not ready
+        # during setup. Replacing the same track is safe and does not renegotiate.
+        self._webrtc_connection.replace_audio_track(self._audio_output_track)
 
     @acquires("connection")
     async def connect(self):
@@ -650,12 +666,7 @@ class SmallWebRTCClient:
         self._audio_input_track = self._webrtc_connection.audio_input_track()
         self._video_input_track = self._webrtc_connection.video_input_track()
         self._screen_video_track = self._webrtc_connection.screen_video_input_track()
-        if self._params.audio_out_enabled:
-            self._audio_output_track = RawAudioTrack(
-                sample_rate=self._out_sample_rate,
-                auto_silence=self._params.audio_out_auto_silence,
-            )
-            self._webrtc_connection.replace_audio_track(self._audio_output_track)
+        self._ensure_audio_output_track()
 
         if self._params.video_out_enabled:
             self._video_output_track = RawVideoTrack(
