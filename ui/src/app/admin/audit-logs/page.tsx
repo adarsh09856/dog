@@ -20,6 +20,34 @@ import {
 import { useClientBranding } from "@/context/ClientBrandingContext";
 import { adminApi, AuditLogItem } from "@/lib/kodewavesApi";
 
+const csvCell = (value: unknown) => {
+  const text = value == null ? "" : String(value);
+  const formulaLike = /^[\u0000-\u0020]*[=+\-@]/.test(text) || /^[\t\r\n]/.test(text);
+  const safeText = formulaLike ? `'${text}` : text;
+  return `"${safeText.replace(/"/g, '""')}"`;
+};
+
+export function buildAuditLogsCsv(logs: AuditLogItem[]) {
+  const headers = ["Timestamp", "Admin / Actor", "Action", "Target Resource", "Payload Details", "IP Address"];
+  const rows = logs.map((log) => {
+    const timestamp = log.created_at
+      ? (() => {
+          const parsed = new Date(log.created_at);
+          return Number.isNaN(parsed.getTime()) ? log.created_at : parsed.toISOString();
+        })()
+      : "";
+    return [
+      timestamp,
+      log.user_email || "System",
+      log.action,
+      log.target_resource,
+      log.details ? JSON.stringify(log.details) : "",
+      log.ip_address || "Unavailable",
+    ];
+  });
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
 export default function AdminAuditLogsPage() {
   const { company_name } = useClientBranding();
   const [logs, setLogs] = useState<AuditLogItem[]>([]);
@@ -52,20 +80,8 @@ export default function AdminAuditLogsPage() {
   );
 
   const exportCsv = () => {
-    const headers = ["Timestamp", "Admin / Actor", "Action", "Target Resource", "Payload Details", "IP Address"];
-    const rows = filteredLogs.map((l) => [
-      l.created_at ? new Date(l.created_at).toISOString() : "",
-      l.user_email || "System",
-      l.action,
-      l.target_resource,
-      l.details ? JSON.stringify(l.details).replace(/"/g, '""') : "",
-      l.ip_address || "127.0.0.1",
-    ]);
-    const csvContent = "data:text/csv;charset=utf-8," + [
-      headers.join(","),
-      ...rows.map((e) => e.map((x) => `"${x}"`).join(",")),
-    ].join("\n");
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = buildAuditLogsCsv(filteredLogs);
+    const encodedUri = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
     link.setAttribute("download", `kodewaves_audit_logs_${new Date().toISOString().slice(0, 10)}.csv`);
@@ -156,7 +172,7 @@ export default function AdminAuditLogsPage() {
                         {l.details ? JSON.stringify(l.details) : "—"}
                       </TableCell>
                       <TableCell className="text-xs text-right font-mono text-muted-foreground">
-                        {l.ip_address || "127.0.0.1"}
+                        {l.ip_address || "Unavailable"}
                       </TableCell>
                     </TableRow>
                   ))
