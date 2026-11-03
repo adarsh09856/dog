@@ -71,6 +71,44 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
     model = str(getattr(settings, "model", "") or "").casefold()
     voice = str(getattr(settings, "voice", "") or "").casefold()
 
+    if model == "indic-mio-tts":
+        contract = getattr(service, "_caller_language_tts_capability_contract", None)
+        inventory_endpoint = getattr(
+            service, "_caller_language_tts_capability_inventory_endpoint", None
+        )
+        if isinstance(inventory_endpoint, str) and inventory_endpoint:
+            # Reuse only the short-lived inventory fetched during node setup;
+            # never add a model-service network request to the call path.
+            from api.services.catalog.local_inventory import (
+                get_cached_local_tts_model,
+                local_tts_capability_contract,
+            )
+
+            inventory = get_cached_local_tts_model(inventory_endpoint, model)
+            contract = (
+                local_tts_capability_contract(inventory)
+                if inventory is not None
+                else None
+            )
+        if (
+            voice in {"default", "indic-mio-default"}
+            and isinstance(contract, dict)
+            and contract.get("model") == model
+        ):
+            installed_voices = contract.get("voices")
+            languages = contract.get("languages")
+            if (
+                isinstance(installed_voices, (set, frozenset, list, tuple))
+                and voice in {str(item).casefold() for item in installed_voices}
+                and isinstance(languages, (set, frozenset, list, tuple))
+            ):
+                return frozenset(
+                    str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
+                    for item in languages
+                    if isinstance(item, str) and str(item).strip()
+                )
+        return frozenset()
+
     if model == "indic-vits-rasa-13":
         contract = getattr(service, "_caller_language_tts_capability_contract", None)
         inventory_endpoint = getattr(

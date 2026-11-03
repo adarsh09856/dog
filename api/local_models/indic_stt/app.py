@@ -57,14 +57,10 @@ LID_LANGUAGE_CODES = (
     "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai",
     "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 )
-# Keep the recognizer's product language inventory explicit. The LID model has
-# extra classes, but these eight languages are intentionally not exposed in
-# Kodewaves. Detection of an excluded class falls back to the caller's last
-# supported language (or Hindi) rather than returning Urdu text or a 422.
-AUTO_DETECT_LANGUAGES = frozenset({
-    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
-    "ne", "pa", "sa", "ta", "te",
-})
+# The pinned detector and decoder repositories include all 22 scheduled
+# Indian languages plus Indian English. Keep the runtime inventory derived
+# from the detector codes so no installed decoder is hidden by another list.
+AUTO_DETECT_LANGUAGES = frozenset(LID_LANGUAGE_CODES)
 SCHEDULED_INDIAN_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
 AUTO_ENGLISH_MIN_CONFIDENCE = 0.50
@@ -520,19 +516,6 @@ def _resolve_decode_language(
     fallback = str(fallback_language or "").lower().replace("_", "-").split("-", 1)[0]
     supported = installed & AUTO_DETECT_LANGUAGES
     if detected not in supported:
-        if detected in LID_LANGUAGE_CODES and detected not in AUTO_DETECT_LANGUAGES:
-            # Do not expose or decode excluded languages. Reuse the established
-            # supported language when available; otherwise use Hindi, then
-            # English, so an auto-detected utterance still receives a final.
-            if fallback in supported:
-                return fallback, "excluded_language_to_previous_supported"
-            if "hi" in supported:
-                return "hi", "excluded_language_to_hindi"
-            if "en" in supported:
-                return "en", "excluded_language_to_english"
-            if supported:
-                return sorted(supported)[0], "excluded_language_to_first_supported"
-            raise RuntimeError("No supported automatic STT language is installed")
         threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
         if confidence >= threshold:
             raise HTTPException(

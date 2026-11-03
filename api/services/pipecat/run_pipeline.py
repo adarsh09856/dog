@@ -1002,6 +1002,8 @@ async def _run_pipeline_impl(
             )
 
             llm._caller_language_supported_codes = caller_language_tts_capabilities(tts)
+            if stt is not None:
+                stt._caller_language_supported_codes = llm._caller_language_supported_codes
         # The recognizer's detected language is call-scoped and changes on
         # every utterance. The LLM adapter reads it only for the outgoing
         # request, without adding diagnostic text to transcript history.

@@ -25,6 +25,11 @@ LOCAL_REPLY_TTS_LANGUAGES = frozenset({
     "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
     "ne", "pa", "sa", "ta", "te",
 })
+LOCAL_INDIC_STT_LANGUAGES = frozenset({
+    "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok",
+    "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd",
+    "ta", "te", "ur",
+})
 _DEVANAGARI_LANGUAGES = frozenset({"hi", "mr", "ne", "sa", "mai", "brx", "doi"})
 _CONFIRMED_LANGUAGE_ROUTES = frozenset({
     "urdu_routed_to_hindi",
@@ -80,23 +85,17 @@ def _resolve_auto_language(
     confidence: float | None,
     previous_stable: str | None,
 ) -> tuple[str | None, str]:
-    """Keep short uncertain fragments from changing the call's reply language.
-
-    Urdu is intentionally not an active Kodewaves speech language. Hindi and
-    Urdu are acoustically close in Hindustani speech, so map that detector label
-    to the Hindi decoder/voice route selected for this product.
-    """
+    """Keep uncertain fragments stable while retaining all scheduled STT codes."""
     code = str(detected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    if code == "ur":
-        return "hi", "urdu_routed_to_hindi"
     if not code:
         return previous or None, "missing_detector_language"
-    if code not in LOCAL_REPLY_TTS_LANGUAGES:
+    if code not in LOCAL_INDIC_STT_LANGUAGES:
+        if previous in LOCAL_REPLY_TTS_LANGUAGES:
+            return previous, "unknown_language_to_previous_tts"
         return (
-            previous if previous in LOCAL_REPLY_TTS_LANGUAGES else "hi",
-            "excluded_language_to_previous_supported" if previous in LOCAL_REPLY_TTS_LANGUAGES
-            else "excluded_language_to_hindi",
+            "hi",
+            "unknown_language_to_hindi",
         )
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
     if confidence is not None and confidence < threshold and previous:
@@ -121,7 +120,7 @@ def _advance_stable_language(
     """
     stable = str(current or "").strip().lower().replace("_", "-").split("-", 1)[0]
     detected = str(candidate or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    if detected not in LOCAL_REPLY_TTS_LANGUAGES:
+    if detected not in LOCAL_INDIC_STT_LANGUAGES:
         return stable or None, None, 0
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
     confirmed_route = route in _CONFIRMED_LANGUAGE_ROUTES
@@ -147,6 +146,7 @@ def _trusted_tts_language(
     confidence: float | None,
     previous_stable: str | None,
     route: str,
+    supported_codes: set[str] | frozenset[str] | None = None,
 ) -> str | None:
     """Keep reply language aligned with the stable auto-detection state.
 
@@ -158,27 +158,36 @@ def _trusted_tts_language(
     """
     code = str(selected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    if route in _CONFIRMED_LANGUAGE_ROUTES and code in LOCAL_REPLY_TTS_LANGUAGES:
+    supported = (
+        LOCAL_REPLY_TTS_LANGUAGES
+        if supported_codes is None
+        else frozenset(supported_codes)
+    )
+    if route in _CONFIRMED_LANGUAGE_ROUTES and code in supported:
         return code
     if not code:
-        return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
-    if code not in LOCAL_REPLY_TTS_LANGUAGES:
+        return previous if previous in supported else None
+    if code not in supported:
         # Preserve the speech transcript's detector result, but never route the
         # response to a voice that is absent from the configured TTS inventory.
-        return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else "hi"
+        return previous if previous in supported else None
     if confidence is None:
         # A best-effort transcript label may still help the LLM, but it is not
         # sufficient evidence to cold-switch the caller's voice mid-call.
-        return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
+        return previous if previous in supported else None
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
     if confidence is not None and confidence >= threshold:
-        if previous in LOCAL_REPLY_TTS_LANGUAGES and code != previous:
+        if previous in supported and code != previous:
             return previous
         return code
-    return previous if previous in LOCAL_REPLY_TTS_LANGUAGES else None
+    return previous if previous in supported else None
 
 
-def _phone_rescue_reply_language(stable_language: str | None, configured_language: str | None) -> str | None:
+def _phone_rescue_reply_language(
+    stable_language: str | None,
+    configured_language: str | None,
+    supported_codes: set[str] | frozenset[str] | None = None,
+) -> str | None:
     """Keep digit-decoder rescues from changing the caller's conversation language.
 
     The local recognizer may use an English decoder to recover spoken digits
@@ -186,10 +195,15 @@ def _phone_rescue_reply_language(stable_language: str | None, configured_languag
     path, not the language the caller chose for the conversation.
     """
     stable = str(stable_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    if stable in LOCAL_REPLY_TTS_LANGUAGES:
+    supported = (
+        LOCAL_REPLY_TTS_LANGUAGES
+        if supported_codes is None
+        else frozenset(supported_codes)
+    )
+    if stable in supported:
         return stable
     configured = str(configured_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    if configured in LOCAL_REPLY_TTS_LANGUAGES and not _is_auto_language(configured_language):
+    if configured in supported and not _is_auto_language(configured_language):
         return configured
     return None
 
@@ -435,6 +449,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                         reply_language = _phone_rescue_reply_language(
                             getattr(self, "_stable_detected_language", None),
                             settings.language,
+                            getattr(self, "_caller_language_supported_codes", None),
                         )
                         if reply_language:
                             self.latest_detected_language = reply_language
@@ -523,6 +538,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 self._latest_language_confidence,
                 getattr(self, "_stable_detected_language", None),
                 language_route,
+                getattr(self, "_caller_language_supported_codes", None),
             )
         elif text:
             # Providers that do not return calibrated detector confidence keep
