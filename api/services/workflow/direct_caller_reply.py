@@ -225,13 +225,13 @@ _ROMAN_HINDI_NEW_ORDER_REQUEST = re.compile(
 # Permit one common hesitation prefix, while fullmatch keeps added intent on
 # the normal model/tool path.
 _HESITATION_PREFIX = (
-    r"(?:(?:हम्म|ह्म्म|अच्छा|जी|हाँ|हां|अं|अः|उम्|hmm|umm|um|uh|well|okay|ok|haan|acha)"
+    r"(?:(?:हम्म|ह्म्म|अच्छा|जी|हाँ|हां|हा|अं|अः|उम्|hmm|umm|um|uh|well|okay|ok|haan|acha)"
     r"[,،]?\s+)?"
 )
 _HINDI_HELP_REQUEST = re.compile(
     _HESITATION_PREFIX +
     r"(?:मुझे|हमें|हमको)\s+(?:(?:एक|कुछ)\s+)?(?:मदद|सहायता|हेल्प)\s+"
-    r"(?:चाहिए|चाह|रह)(?:\s+(?:है|था|थी))?[.!?।\s]*$",
+    r"(?:चाहिए|चाहद|चाह|रह)(?:\s+(?:है|था|थी))?[.!?।\s]*$",
 )
 _HINDI_INFO_REQUEST = re.compile(
     _HESITATION_PREFIX +
