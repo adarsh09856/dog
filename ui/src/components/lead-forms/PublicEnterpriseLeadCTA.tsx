@@ -40,6 +40,26 @@ export function PublicEnterpriseLeadCTA({ label, className }: PublicEnterpriseLe
     );
   }
 
+  if (!process.env.NEXT_PUBLIC_ONBOARDING_API_URL) {
+    const supportEmail = branding.support_email?.trim();
+    if (supportEmail) {
+      return (
+        <a
+          className={className}
+          href={`mailto:${supportEmail}?subject=${encodeURIComponent("Enterprise enquiry")}`}
+        >
+          {label} <ArrowRight aria-hidden className="size-4" />
+        </a>
+      );
+    }
+
+    return (
+      <p role="note" className="max-w-md text-sm leading-6 text-muted-foreground">
+        Enterprise enquiries are not configured. Contact the platform administrator.
+      </p>
+    );
+  }
+
   return (
     <>
       <button type="button" className={className} onClick={() => setOpen(true)}>
