@@ -83,7 +83,7 @@ interface BindingRequest {
   created_at: string;
 }
 
-const DEFAULT_FEATURES = "voice, telephony, campaigns, crm, appointments, forms, widgets, knowledge_base, billing";
+const DEFAULT_FEATURES = "voice, telephony, campaigns, crm, appointments, forms, widgets, knowledge_base";
 
 export default function ClientInstallationsPage() {
   const { user, loading: authLoading } = useAuth();
