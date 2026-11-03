@@ -81,6 +81,8 @@ jobs:
             platform: { name: linux/amd64, runner: ubuntu-24.04, short: amd64 }
           - service: { name: kodewaves-indic-vits-tts, dockerfile: api/local_models/indic_vits/Dockerfile, context: api/local_models/indic_vits }
             platform: { name: linux/amd64, runner: ubuntu-24.04, short: amd64 }
+          - service: { name: kodewaves-indic-mio-tts, dockerfile: api/local_models/indic_mio/Dockerfile, context: api/local_models/indic_mio }
+            platform: { name: linux/amd64, runner: ubuntu-24.04, short: amd64 }
     runs-on: ${{ matrix.platform.runner }}
     steps:
       - name: Free Disk Space
@@ -196,6 +198,13 @@ jobs:
           merge-multiple: true
           path: /tmp/digests/kodewaves-indic-vits-tts
 
+      - name: Download Indic-Mio TTS digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-kodewaves-indic-mio-tts-*
+          merge-multiple: true
+          path: /tmp/digests/kodewaves-indic-mio-tts
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -268,6 +277,7 @@ jobs:
           publish_service kodewaves-indic-stt
           publish_service kodewaves-indus-tts
           publish_service kodewaves-indic-vits-tts
+          publish_service kodewaves-indic-mio-tts
 
   notify:
     needs:
