@@ -1609,16 +1609,17 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         r"kis samay|kis time|kitne baje|kaun se time",
         previous, re.I,
     ))
-    if not asked_for_time:
-        return None
     # The live conversation window can omit an earlier booking request after
-    # several name/phone/date turns. A staged date plus the assistant's
-    # explicit time question is itself a call-scoped capture state, so accept
-    # a short answer such as "8 AM" without sending it to the slow LLM.
+    # several name/phone/date turns. A staged date is call-scoped capture
+    # state: accept a clear time answer such as "8 AM" even if the assistant
+    # phrased its question differently from the prompt matcher above. The
+    # strict time parser below still rejects unrelated or incomplete answers.
     staged_date = state.get("booking_time_question_date")
     staged_date_is_valid = isinstance(staged_date, str) and bool(
         re.fullmatch(r"\d{4}-\d{2}-\d{2}", staged_date)
     )
+    if not asked_for_time and not staged_date_is_valid:
+        return None
     has_prior_booking = len(users) >= 2 and any(
         new_booking_requested(m["content"]) for m in users[:-1]
     )
