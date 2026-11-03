@@ -155,6 +155,7 @@ services:
 
       # WebRTC NAT Traversal (STUN / TURN)
       ENABLE_COTURN: "${ENABLE_COTURN:-true}"
+      FORCE_TURN_RELAY: "${FORCE_TURN_RELAY:-true}"
       TURN_HOST: "${PUBLIC_HOST:-your-domain.com}"
       TURN_SECRET: "${TURN_SECRET:-coturn_shared_secret}"
 
