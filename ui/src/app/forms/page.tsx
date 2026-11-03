@@ -92,6 +92,8 @@ export default function FormsPage() {
     setSubmissionsOpen(false);
     setModalOpen(false);
     setEditingForm(null);
+    setLoadingSubs(false);
+    setLoadingMoreSubs(false);
     if (!authLoading && user) void fetchForms();
     return () => {
       formsRequest.current += 1;
@@ -137,6 +139,7 @@ export default function FormsPage() {
     setSelectedFormId(form.id);
     setSubmissionsOpen(true);
     setLoadingSubs(true);
+    setLoadingMoreSubs(false);
     setSubmissionsError(null);
     setLoadMoreSubsError(null);
     setSubmissions([]);
@@ -505,6 +508,8 @@ export default function FormsPage() {
           setSubmissions([]);
           setSubmissionsTotal(0);
           setSelectedFormId(null);
+          setLoadingSubs(false);
+          setLoadingMoreSubs(false);
         }
       }}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
