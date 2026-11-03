@@ -124,7 +124,8 @@ export function ClientReleaseControl({ installations }: { installations: Release
   const [envelopeJson, setEnvelopeJson] = useState("");
   const [selectedRelease, setSelectedRelease] = useState("");
   const [selectedInstallations, setSelectedInstallations] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -135,6 +136,7 @@ export function ClientReleaseControl({ installations }: { installations: Release
 
   const refresh = useCallback(async () => {
     if (!isOwner) return;
+    setLoading(true);
     setError("");
     try {
       const [releaseResponse, rolloutResponse] = await Promise.all([
@@ -154,8 +156,8 @@ export function ClientReleaseControl({ installations }: { installations: Release
   }, [isOwner]);
 
   useEffect(() => {
-    if (isOwner) void refresh();
-  }, [isOwner, refresh]);
+    if (isOwner && expanded) void refresh();
+  }, [expanded, isOwner, refresh]);
 
   const createRelease = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -256,12 +258,17 @@ export function ClientReleaseControl({ installations }: { installations: Release
               <CardTitle id="client-release-control-title" className="flex items-center gap-2 text-base"><PackageCheck className="h-4 w-4" />Client releases and updates</CardTitle>
               <CardDescription className="mt-1 max-w-3xl">Publish owner-signed, immutable installation packages and stage an update for active, enrolled clients. The private release key stays offline and is never accepted by this page.</CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading || busy !== null}>
-              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh releases
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {expanded && <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading || busy !== null}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh releases
+              </Button>}
+              <Button type="button" variant={expanded ? "outline" : "default"} size="sm" aria-expanded={expanded} aria-controls="client-release-controls" onClick={() => setExpanded((current) => !current)}>
+                {expanded ? "Hide release controls" : "Manage releases and rollouts"}
+              </Button>
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-6">
+        {!expanded ? <CardContent className="pt-0 text-sm text-muted-foreground">Open release management when you need to publish a signed package or review staged client updates.</CardContent> : <CardContent id="client-release-controls" className="grid gap-6">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,.8fr)]">
             <form className="grid content-start gap-3 rounded-xl border bg-background/60 p-4" onSubmit={(event) => void createRelease(event)}>
               <div>
@@ -368,7 +375,7 @@ export function ClientReleaseControl({ installations }: { installations: Release
               })}
             </div>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
     </section>
   );

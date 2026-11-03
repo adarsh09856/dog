@@ -122,6 +122,9 @@ export default function PricingPage() {
                 <p className={pageStyles.lede}>
                   This self-hosted platform is licensed to its operator. Use the installation inquiry below to discuss the applicable license, usage, support, and maintenance terms. Hosted Kodewaves plans and checkout are not available here.
                 </p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Contact your installation administrator for the active license, usage limits, support, and renewal details.
+                </p>
               </div>
               <aside className={pageStyles.priceTerms} aria-label="Client installation billing">
                 <strong>For this installation</strong>
