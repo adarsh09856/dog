@@ -1,6 +1,9 @@
 name: Client release lifecycle acceptance
 
 on:
+  push:
+    branches:
+      - codex/client-bundle-theme
   workflow_dispatch:
     inputs:
       prior_commit:
@@ -36,7 +39,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.prior_commit }}
+          ref: ${{ inputs.prior_commit || github.event.before }}
           fetch-depth: 0
           path: prior-source
           submodules: recursive
@@ -50,9 +53,9 @@ jobs:
         run: python deploy/client/lifecycle_acceptance.py --self-test
       - name: Validate immutable inputs and run disposable upgrade/rollback
         env:
-          PRIOR_COMMIT: ${{ inputs.prior_commit }}
-          COTURN_IMAGE: ${{ inputs.coturn_image }}
-          CADDY_IMAGE: ${{ inputs.caddy_image }}
+          PRIOR_COMMIT: ${{ inputs.prior_commit || github.event.before }}
+          COTURN_IMAGE: ${{ inputs.coturn_image || 'coturn/coturn@sha256:bbefd3e1fdfdc0d58770fe01b581fd8b00d9f3a5580d00acb77cf719a6bc78e3' }}
+          CADDY_IMAGE: ${{ inputs.caddy_image || 'caddy@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f' }}
           CANDIDATE_COMMIT: ${{ github.sha }}
           LIFECYCLE_REPORT: ${{ runner.temp }}/client-release-lifecycle.json
         run: >-
