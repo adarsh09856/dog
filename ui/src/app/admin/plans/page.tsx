@@ -48,6 +48,12 @@ function formatMoney(amount: number, currency: string) {
   }
 }
 
+function hasPositivePlanPrice(plan: Partial<SaaSPlan> | null | undefined) {
+  return [plan?.monthly_price_cents, plan?.annual_price_cents].some(
+    (price) => Number.isSafeInteger(price) && (price ?? 0) > 0,
+  );
+}
+
 export default function AdminPlansPage() {
   const [plans, setPlans] = useState<SaaSPlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,13 +86,25 @@ export default function AdminPlansPage() {
   const activeCount = plans.filter((plan) => plan.is_active).length;
   const publicCount = plans.filter((plan) => plan.is_active && plan.is_public).length;
   const managedKeyCount = plans.filter((plan) => !plan.allow_user_byok).length;
+  const originalEditingPlan = editingPlan?.id
+    ? plans.find((plan) => String(plan.id) === String(editingPlan.id))
+    : undefined;
+  const isZeroPricePlan = Boolean(
+    editingPlan && editingPlan.monthly_price_cents === 0 && editingPlan.annual_price_cents === 0,
+  );
+  const isAvailablePlan = Boolean(editingPlan?.is_active || editingPlan?.is_public);
+  const newlyFreeOrAvailable = Boolean(
+    !editingPlan?.id ||
+    !originalEditingPlan ||
+    hasPositivePlanPrice(originalEditingPlan) ||
+    (editingPlan?.is_active && !originalEditingPlan.is_active) ||
+    (editingPlan?.is_public && !originalEditingPlan.is_public),
+  );
+  const freePlanConfirmationRequired = isZeroPricePlan && isAvailablePlan && newlyFreeOrAvailable;
 
   const handleSave = async () => {
     if (!editingPlan || !editingPlan.name || !editingPlan.code) return;
-    if (!editingPlan.id && (editingPlan.is_active || editingPlan.is_public) &&
-        !(Number.isSafeInteger(editingPlan.monthly_price_cents) && (editingPlan.monthly_price_cents ?? 0) > 0) &&
-        !(Number.isSafeInteger(editingPlan.annual_price_cents) && (editingPlan.annual_price_cents ?? 0) > 0) &&
-        !freePlanConfirmed) return;
+    if (freePlanConfirmationRequired && !freePlanConfirmed) return;
     setSaving(true);
     try {
       if (editingPlan.id) {
@@ -258,7 +276,7 @@ export default function AdminPlansPage() {
                     </div>
                   </CardContent>
                   <div className={styles.cardActions}>
-                    <Button variant="outline" size="sm" aria-label={`Edit ${p.name}`} onClick={() => { setEditingPlan(p); setModalOpen(true); }}>
+                    <Button variant="outline" size="sm" aria-label={`Edit ${p.name}`} onClick={() => { setFreePlanConfirmed(false); setEditingPlan(p); setModalOpen(true); }}>
                       <Edit className="mr-1.5 h-3.5 w-3.5" /> Edit plan
                     </Button>
                     <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" aria-label={`Delete ${p.name}`} onClick={() => handleDelete(p.id)}>
@@ -336,16 +354,14 @@ export default function AdminPlansPage() {
                 onChange={(e) => { setFreePlanConfirmed(false); setEditingPlan((prev) => prev ? { ...prev, annual_price_cents: Math.max(0, Math.round((Number(e.target.value) || 0) * 100)) } : null); }}
               />
             </div>
-            {!editingPlan?.id && editingPlan?.monthly_price_cents === 0 && editingPlan?.annual_price_cents === 0 && (
+            {freePlanConfirmationRequired && (
               <div className="sm:col-span-2">
                 <Button type="button" variant={freePlanConfirmed ? "secondary" : "outline"} onClick={() => setFreePlanConfirmed(!freePlanConfirmed)}>
                   {freePlanConfirmed ? "Free plan confirmed" : "Confirm this as a free plan"}
                 </Button>
               </div>
             )}
-            {!editingPlan?.id && (editingPlan?.is_active || editingPlan?.is_public) &&
-              !(Number.isSafeInteger(editingPlan.monthly_price_cents) && (editingPlan.monthly_price_cents ?? 0) > 0) &&
-              !(Number.isSafeInteger(editingPlan.annual_price_cents) && (editingPlan.annual_price_cents ?? 0) > 0) && !freePlanConfirmed && (
+            {freePlanConfirmationRequired && !freePlanConfirmed && (
                 <p role="alert" className="text-sm text-destructive sm:col-span-2">
                   Set a positive monthly or annual price, or confirm that this plan is free, before activating or publishing it.
                 </p>
@@ -418,14 +434,14 @@ export default function AdminPlansPage() {
               <Switch
                 id="plan-active"
                 checked={editingPlan?.is_active ?? false}
-                onCheckedChange={(checked) => setEditingPlan((prev) => prev ? { ...prev, is_active: checked } : null)}
+                onCheckedChange={(checked) => { setFreePlanConfirmed(false); setEditingPlan((prev) => prev ? { ...prev, is_active: checked } : null); }}
               />
             </div>
             <div className="col-span-2 space-y-1">
               <div className="flex items-center justify-between gap-3">
                 <Label htmlFor="plan-public" className="text-xs">Show in public pricing and self-service checkout</Label>
                 <Switch id="plan-public" checked={editingPlan?.is_public ?? false}
-                  onCheckedChange={(checked) => setEditingPlan((prev) => prev ? { ...prev, is_public: checked } : null)} />
+                  onCheckedChange={(checked) => { setFreePlanConfirmed(false); setEditingPlan((prev) => prev ? { ...prev, is_public: checked } : null); }} />
               </div>
               <p className="text-xs text-muted-foreground">
                 Private active plans stay available for direct owner assignment but are hidden from the public catalog and checkout.
@@ -448,7 +464,7 @@ export default function AdminPlansPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving || (!editingPlan?.id && Boolean(editingPlan?.is_active || editingPlan?.is_public) && !(Number.isSafeInteger(editingPlan?.monthly_price_cents) && (editingPlan?.monthly_price_cents ?? 0) > 0) && !(Number.isSafeInteger(editingPlan?.annual_price_cents) && (editingPlan?.annual_price_cents ?? 0) > 0) && !freePlanConfirmed)}>
+            <Button onClick={handleSave} disabled={saving || (freePlanConfirmationRequired && !freePlanConfirmed)}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Plan
             </Button>

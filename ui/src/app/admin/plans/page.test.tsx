@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getPlans: vi.fn(), createPlan: vi.fn() }));
+const mocks = vi.hoisted(() => ({ getPlans: vi.fn(), createPlan: vi.fn(), updatePlan: vi.fn() }));
 vi.mock("@/lib/kodewavesApi", () => ({ adminApi: mocks }));
 
 import AdminPlansPage from "./page";
@@ -10,6 +10,7 @@ describe("owner plan configuration", () => {
   beforeEach(() => {
     mocks.getPlans.mockReset().mockResolvedValue([]);
     mocks.createPlan.mockReset().mockResolvedValue({});
+    mocks.updatePlan.mockReset().mockResolvedValue({});
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -77,6 +78,34 @@ describe("owner plan configuration", () => {
 
     await waitFor(() => expect(mocks.createPlan).toHaveBeenCalledWith(expect.objectContaining({
       monthly_price_cents: 0, annual_price_cents: 0, is_active: false, is_public: true,
+    })));
+  });
+
+  it("requires explicit confirmation before changing an existing paid public plan to free", async () => {
+    mocks.getPlans.mockResolvedValue([{
+      id: "pro-id", name: "Growth Pro", code: "growth-pro", currency: "INR",
+      monthly_price_cents: 499900, annual_price_cents: 4990000, included_minutes: 2500,
+      max_concurrent_calls: 8, max_agents: 12,
+      has_crm_access: true, has_appointments_access: true, has_forms_access: true,
+      has_widget_access: true, has_campaigns_access: true, allow_user_byok: false,
+      is_active: true, is_public: true, is_default: false,
+    }]);
+
+    render(<AdminPlansPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Growth Pro" }));
+    fireEvent.change(screen.getByLabelText("Monthly price (INR)"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("Annual price (INR, optional)"), { target: { value: "0" } });
+
+    expect(screen.getByRole("button", { name: "Confirm this as a free plan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save Plan" })).toHaveProperty("disabled", true);
+    expect(mocks.updatePlan).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm this as a free plan" }));
+    expect(screen.getByRole("button", { name: "Save Plan" })).toHaveProperty("disabled", false);
+    fireEvent.click(screen.getByRole("button", { name: "Save Plan" }));
+
+    await waitFor(() => expect(mocks.updatePlan).toHaveBeenCalledWith("pro-id", expect.objectContaining({
+      monthly_price_cents: 0, annual_price_cents: 0,
     })));
   });
 
