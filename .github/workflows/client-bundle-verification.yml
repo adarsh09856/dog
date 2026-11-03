@@ -58,6 +58,7 @@ jobs:
           python -m pip install opencv-python-headless
       - name: Verify owner enrollment and client limits with PostgreSQL
         env:
+          ENVIRONMENT: test
           KODEWAVES_CLIENT_RELEASE_TEST_DATABASE_URL: postgresql+asyncpg://kodewaves_test:disposable_ci_password@127.0.0.1:5432/kodewaves_client_release_test
           DATABASE_URL: postgresql+asyncpg://kodewaves_test:disposable_ci_password@127.0.0.1:5432/kodewaves_client_release_test
           REDIS_URL: redis://127.0.0.1:6379/15

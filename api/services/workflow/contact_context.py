@@ -1681,7 +1681,7 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         state.pop("booking_pending_time_hour", None)
     else:
         partial_hour = re.fullmatch(
-            r"\s*(?:at\s+)?(\d{1,2}|[a-z]+)\s*[.!?]*", normalized, re.I
+            r"\s*(?:at\s+)?(\d{1,2}|[^\W_]+)\s*[.!?]*", normalized, re.I
         )
         if partial_hour:
             hour = spoken_hour(partial_hour.group(1))
