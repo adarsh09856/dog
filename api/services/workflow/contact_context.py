@@ -5,7 +5,7 @@ import re
 from datetime import date, datetime, timedelta, timezone
 import unicodedata
 
-from api.utils.spoken_digits import REGIONAL_SPOKEN_DIGITS
+from api.utils.spoken_digits import PHONE_SPOKEN_DIGITS
 from api.services.pipecat.caller_language_context import standalone_language_request
 from api.services.configuration.language_normalizer import normalize_language_code
 
@@ -778,35 +778,7 @@ def caller_name_followup_reply(
     return f"Thanks, {candidate}. What's your mobile number?"
 
 
-_SPOKEN_DIGITS = {
-    **REGIONAL_SPOKEN_DIGITS,
-    "zero": "0", "oh": "0", "शून्य": "0", "जीरो": "0", "ज़ीरो": "0",
-    "one": "1", "एक": "1", "वन": "1", "ओन": "1", "two": "2", "दो": "2", "टू": "2",
-    "three": "3", "तीन": "3", "थ्री": "3", "four": "4", "चार": "4", "फोर": "4",
-    "five": "5", "पांच": "5", "पाँच": "5", "फाइव": "5",
-    "six": "6", "छह": "6", "सिक्स": "6", "seven": "7", "सात": "7", "सेवन": "7",
-    "eight": "8", "आठ": "8", "एट": "8", "ऐट": "8", "nine": "9", "नौ": "9", "नाइन": "9",
-    # STT commonly renders spoken English digit names phonetically in Devanagari.
-    "नीन": "9", "निन": "9", "नान": "9", "नाईन": "9",
-    "थी": "3", "आइट": "8", "आईट": "8",
-    # Auto STT can transcribe English phone-number words in the caller's
-    # regional script, even when the surrounding conversation is Hindi.
-    # Keep these aliases limited to clear phonetic digit forms.
-    # During an explicit phone-number answer, English "one" is also commonly
-    # heard by CPU STT as "on" or "run"; the booking flow confirms the number
-    # before performing a booking action.
-    "on": "1", "run": "1", "won": "1", "wan": "1",
-    # Hindi ASR occasionally joins adjacent English digit words into one token.
-    # Accept only observed, unambiguous phone-context joins; arbitrary fuzzy
-    # splitting could turn ordinary speech into a different phone number.
-    "फोरन": "41", "नाइनफोर": "94",
-    "નાઇન": "9", "નાઈટ": "9", "ફાઇવ": "5", "ફાઈવ": "5",
-    "થ્રી": "3", "એઇટ": "8", "એઈટ": "8", "ફોર": "4", "વન": "1",
-    "જીરો": "0", "ઝીરો": "0",
-    "நைன்": "9", "ஃபைவ்": "5", "பைவ்": "5", "த்ரீ": "3",
-    "எய்ட்": "8", "ஏய்ட்": "8", "ஏஐட்": "8",
-    "ஜீரோ": "0", "ஜிரோ": "0", "ஃபோர்": "4",
-}
+_SPOKEN_DIGITS = PHONE_SPOKEN_DIGITS
 _DOUBLE_DIGIT_WORDS = {"double", "डबल", "ડબલ", "டபுள்"}
 _PHONE_DIGIT_READBACKS = {
     "English": ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"),

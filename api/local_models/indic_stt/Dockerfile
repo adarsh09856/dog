@@ -6,5 +6,6 @@ WORKDIR /app
 RUN pip install --no-cache-dir fastapi uvicorn python-multipart sherpa-onnx \
     huggingface_hub numpy soundfile soxr==0.5.0.post1 onnxruntime==1.20.1
 COPY app.py /app/app.py
+COPY spoken_digits.py /app/spoken_digits.py
 EXPOSE 8000
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

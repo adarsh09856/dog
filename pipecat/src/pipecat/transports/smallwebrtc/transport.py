@@ -27,6 +27,7 @@ from pipecat.frames.frames import (
     ClientConnectedFrame,
     EndFrame,
     Frame,
+    InterruptionFrame,
     InputAudioRawFrame,
     InputTransportMessageFrame,
     OutputAudioRawFrame,
@@ -151,6 +152,22 @@ class RawAudioTrack(AudioStreamTrack):
             if future and not future.done():
                 future.set_result(True)
         self._chunk_queue.clear()
+
+    def discard_pending_audio(self):
+        """Drop encoded PCM left in the sender queue after barge-in.
+
+        The output transport can cancel its own media queue on interruption,
+        but frames already copied into this WebRTC track are outside that queue.
+        Resolve their writers and discard the stale samples so they cannot play
+        over the caller's next turn.
+        """
+        for _, future in self._chunk_queue:
+            if future and not future.done():
+                future.set_result(True)
+        self._chunk_queue.clear()
+        if self._bot_speaking:
+            self._speech_end_pending = True
+            self._finish_speech_metrics()
 
     async def recv(self):
         """Return the next audio frame for WebRTC transmission.
@@ -1072,7 +1089,12 @@ class SmallWebRTCOutputTransport(BaseOutputTransport):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         track = self._client._audio_output_track
         await super().process_frame(frame, direction)
-        if isinstance(frame, TTSStoppedFrame) and track and direction == FrameDirection.DOWNSTREAM:
+        if isinstance(frame, InterruptionFrame) and track and direction == FrameDirection.DOWNSTREAM:
+            # BaseOutputTransport first cancels its paced sender task. Clear the
+            # separate aiortc track queue afterward so a resumed writer cannot
+            # append another frame from the interrupted response.
+            track.discard_pending_audio()
+        elif isinstance(frame, TTSStoppedFrame) and track and direction == FrameDirection.DOWNSTREAM:
             track.mark_speech_end()
 
     async def write_video_frame(self, frame: OutputImageRawFrame) -> bool:

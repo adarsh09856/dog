@@ -58,7 +58,12 @@ def _resolve_script_language_conflict(
     if code in {"pa", "hi"} and latin > max(devanagari, gurmukhi):
         if devanagari and previous in _DEVANAGARI_LANGUAGES:
             return previous, "script_conflict_preserve_devanagari_context"
-        return "en", f"script_conflict_{code}_to_latin"
+        # Latin letters are common in Romanized Hindi, Punjabi and Hinglish.
+        # The audio LID already chose the decoder; transcript script alone is
+        # not enough evidence to turn that decision into English. In
+        # particular, doing so bypasses language hysteresis and can change
+        # both the LLM's language hint and the selected TTS voice on one turn.
+        return code, "latin_transliteration_kept_detected"
     if code != "pa" and gurmukhi > max(devanagari, latin):
         return "pa", "script_conflict_to_gurmukhi"
     return detected, "script_consistent"

@@ -24,6 +24,17 @@ import soxr
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from huggingface_hub import hf_hub_download
 
+try:
+    from api.local_models.indic_stt.spoken_digits import (
+        PHONE_SCORING_DIGITS as _PHONE_DIGIT_WORDS,
+        count_spoken_phone_digits as _phone_digit_count,
+    )
+except ModuleNotFoundError:  # Standalone image copies this shared file beside app.py.
+    from spoken_digits import (
+        PHONE_SCORING_DIGITS as _PHONE_DIGIT_WORDS,
+        count_spoken_phone_digits as _phone_digit_count,
+    )
+
 REPOSITORY = "parismitaglobalsolutions/indicconformer-sherpa-onnx"
 REVISION = "9721eb71eea141fae0982cfcdb9dd2e3d4953c4a"
 ENGLISH_REPOSITORY = "csukuangfj/sherpa-onnx-moonshine-tiny-en-int8"
@@ -68,72 +79,6 @@ PREWARM = os.environ.get("INDIC_STT_PREWARM_LANGUAGES", "").strip().lower()
 THREADS = max(1, int(os.environ.get("INDIC_STT_THREADS", "2")))
 LID_ENABLED = os.environ.get("INDIC_STT_AUTO_DETECT", "1").strip().lower() not in {"0", "false", "no"}
 LID_THREADS = max(1, int(os.environ.get("INDIC_STT_LID_THREADS", "2")))
-
-_PHONE_DIGIT_WORDS = {
-    "zero": "0", "oh": "0", "shunya": "0", "शून्य": "0", "जीरो": "0",
-    "one": "1", "एक": "1", "वन": "1", "ओन": "1", "two": "2", "दो": "2", "टू": "2", "three": "3",
-    "तीन": "3", "थ्री": "3", "four": "4", "चार": "4", "फोर": "4",
-    "five": "5", "पांच": "5", "पाँच": "5", "फाइव": "5", "six": "6",
-    "छह": "6", "सिक्स": "6", "seven": "7", "सात": "7", "सेवन": "7",
-    "eight": "8", "आठ": "8", "एट": "8", "ऐट": "8", "nine": "9", "नौ": "9", "ज़ीरो": "0",
-    "नाइन": "9", "double": "double", "डबल": "double", "ડબલ": "double", "டபுள்": "double",
-    # Keep the rescue scorer aligned with the call-side phone parser: Hindi
-    # ASR often renders English digit names phonetically in Devanagari.
-    "नीन": "9", "निन": "9", "नान": "9", "नाईन": "9",
-    "थी": "3", "आइट": "8", "आईट": "8",
-    # Match the call-scoped phone parser's explicit regional spellings. Without
-    # these, a valid regional-script primary decode can look like zero digits
-    # and incorrectly lose to a poorer English rescue candidate.
-    "ডবল": "double",
-    "শূন্য": "0", "এক": "1", "দুই": "2", "তিন": "3", "চার": "4",
-    "পাঁচ": "5", "ছয়": "6", "সাত": "7", "আট": "8", "নয়": "9",
-    "பூஜ்யம்": "0", "ஒன்று": "1", "இரண்டு": "2", "மூன்று": "3", "நான்கு": "4",
-    "ஐந்து": "5", "ஆறு": "6", "ஏழு": "7", "எட்டு": "8", "ஒன்பது": "9",
-    "సున్నా": "0", "ఒకటి": "1", "రెండు": "2", "మూడు": "3", "నాలుగు": "4",
-    "ఐదు": "5", "ఆరు": "6", "ఏడు": "7", "ఎనిమిది": "8", "తొమ్మిది": "9",
-    "ಸೊನ್ನೆ": "0", "ಒಂದು": "1", "ಎರಡು": "2", "ಮೂರು": "3", "ನಾಲ್ಕು": "4",
-    "ಐದು": "5", "ಆರು": "6", "ಏಳು": "7", "ಎಂಟು": "8", "ಒಂಬತ್ತು": "9",
-    "പൂജ്യം": "0", "ഒന്ന്": "1", "രണ്ട്": "2", "മൂന്ന്": "3", "നാല്": "4",
-    "അഞ്ച്": "5", "ആറ്": "6", "ഏഴ്": "7", "എട്ട്": "8", "ഒൻപത്": "9",
-    "ਸਿਫ਼ਰ": "0", "ਇੱਕ": "1", "ਦੋ": "2", "ਤਿੰਨ": "3", "ਚਾਰ": "4",
-    "ਪੰਜ": "5", "ਛੇ": "6", "ਸੱਤ": "7", "ਅੱਠ": "8", "ਨੌਂ": "9",
-    "दोन": "2", "पाच": "5", "सहा": "6", "नऊ": "9",
-    # Phonetic Gujarati and Tamil renderings of English digit words accepted
-    # by the call-side parser must count as primary-recognizer evidence too.
-    "નાઇન": "9", "નાઈટ": "9", "ફાઇવ": "5", "ફાઈવ": "5",
-    "થ્રી": "3", "એઇટ": "8", "એઈટ": "8", "ફોર": "4", "વન": "1",
-    "જીરો": "0", "ઝીરો": "0",
-    "நைன்": "9",
-    "ஜீரோ": "0", "ஜிரோ": "0", "ஃபோர்": "4", "ஃபைவ்": "5",
-    "பைவ்": "5", "த்ரீ": "3", "எய்ட்": "8", "ஏய்ட்": "8",
-    "ஏஐட்": "8",
-}
-
-
-def _phone_digit_count(text: str) -> int:
-    """Count explicit digit groups without interpreting general number words."""
-    tokens = [
-        token.strip("()[]{}\"'")
-        for token in re.split(r"[\s,.!?।॥:;\-–—]+", str(text or "").casefold())
-        if token.strip("()[]{}\"'")
-    ]
-    count = 0
-    repeat_next = False
-    for token in tokens:
-        if token.isdecimal():
-            count += len(token)
-            repeat_next = False
-            continue
-        value = _PHONE_DIGIT_WORDS.get(token)
-        if value == "double":
-            repeat_next = True
-        elif value is not None:
-            count += 2 if repeat_next else 1
-            repeat_next = False
-        else:
-            repeat_next = False
-    return count
-
 
 def _phone_decode_has_unknown_tokens(text: str) -> bool:
     """Return whether a phone-slot decode contains non-digit, unknown words.
