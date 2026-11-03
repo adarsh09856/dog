@@ -7,6 +7,7 @@ import unicodedata
 
 from api.utils.spoken_digits import REGIONAL_SPOKEN_DIGITS
 from api.services.pipecat.caller_language_context import standalone_language_request
+from api.services.configuration.language_normalizer import normalize_language_code
 
 _NAME_REQUEST = re.compile(
     r"\b(?:name|full\s+name)\b|नाम", re.IGNORECASE
@@ -812,6 +813,49 @@ _PHONE_DIGIT_READBACKS = {
     "Hindi": ("शून्य", "एक", "दो", "तीन", "चार", "पाँच", "छह", "सात", "आठ", "नौ"),
 }
 
+# A phone readback must accept a clear native-language yes/no before the turn
+# can advance. Keep these exact standalone answers language-scoped: substring
+# matching can mistake ordinary caller speech for consent.
+_PHONE_CONFIRMATION_YES = {
+    "as": {"হয়", "হয়", "অঁ"},
+    "bn": {"হ্যাঁ", "হ্যা", "জি"},
+    "brx": {"नंगौ"},
+    "doi": {"हां", "हाँ"},
+    "kn": {"ಹೌದು", "ಸರಿ"},
+    "mai": {"हँ", "हां", "हाँ"},
+    "ml": {"അതെ", "ഉവ്വ്", "ശരി"},
+    "mr": {"हो", "होय", "बरोबर"},
+    "ne": {"हो", "अँ", "हुन्छ"},
+    "pa": {"ਹਾਂ", "ਹਾਂ ਜੀ", "ਠੀਕ ਹੈ"},
+    "sa": {"आम्", "अस्तु", "सत्यम्"},
+    "ta": {"ஆம்", "ஆமாம்", "சரி"},
+    "te": {"అవును", "సరే"},
+}
+_PHONE_CONFIRMATION_NO = {
+    "as": {"নহয়", "নহয়", "নাই"},
+    "bn": {"না", "নয়", "নয়"},
+    "brx": {"नङा"},
+    "doi": {"नेईं"},
+    "kn": {"ಇಲ್ಲ"},
+    "mai": {"नहि", "नहीं"},
+    "ml": {"ഇല്ല", "വേണ്ട"},
+    "mr": {"नाही"},
+    "ne": {"होइन", "अहँ"},
+    "pa": {"ਨਹੀਂ"},
+    "sa": {"न", "नहि", "नास्ति"},
+    "ta": {"இல்லை", "வேண்டாம்"},
+    "te": {"కాదు", "లేదు", "వద్దు"},
+}
+
+
+def _regional_phone_confirmation(text: str, language_code: str, *, affirmative: bool) -> bool:
+    answers = (
+        _PHONE_CONFIRMATION_YES if affirmative else _PHONE_CONFIRMATION_NO
+    ).get(language_code, set())
+    normalized = unicodedata.normalize("NFC", text).casefold().strip()
+    normalized = normalized.strip(" \t\r\n.,!?।؛،")
+    return normalized in answers
+
 
 def _phone_confirmation_reply(digits: str, *, hindi: bool) -> str:
     """Read every phone digit separately, including repeated zeroes."""
@@ -906,8 +950,15 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
         return None
 
     if isinstance(pending_confirmation, str):
-        reply_in_english = state.get("reply_language") == "English" or not re.search(
-            r"[\u0900-\u097f]", text + str(assistant_text)
+        raw_reply_language = state.get("reply_language")
+        language_code = (
+            normalize_language_code(str(raw_reply_language))
+            if raw_reply_language
+            else ""
+        )
+        reply_in_english = language_code == "en" or (
+            not language_code
+            and not re.search(r"[\u0900-\u097f]", text + str(assistant_text))
         )
         affirmative = re.fullmatch(
             r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|"
@@ -918,11 +969,15 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
             r"(?:sahi\s+(?:hai|he)|theek\s+(?:hai|he)|correct|right))[.!?।\s]*",
             phone_text,
             re.IGNORECASE,
+        ) or _regional_phone_confirmation(
+            phone_text, language_code, affirmative=True
         )
         negative = re.fullmatch(
             r"\s*(?:no|nope|wrong|नहीं|नही|नको)[.!?।\s]*",
             phone_text,
             re.IGNORECASE,
+        ) or _regional_phone_confirmation(
+            phone_text, language_code, affirmative=False
         )
         if affirmative:
             state.pop("caller_phone_confirmation_pending", None)
