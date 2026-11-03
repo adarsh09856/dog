@@ -1,6 +1,6 @@
 """Conversation behavior shared by Kodewaves's realtime service adapters."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from loguru import logger
 
@@ -39,6 +39,17 @@ class RealtimeConversationMixin:
             await self.push_frame(frame, direction)
             return
         if isinstance(frame, TTSSpeakFrame):
+            if isinstance(frame, RealtimeScriptTTSSpeakFrame):
+                # Configured prompts and tool-authored scripts are synthesized
+                # by the outbound-only TTS stage in the call pipeline. Seed the
+                # realtime provider with the opening text, but do not ask it to
+                # speak the same greeting a second time.
+                if not self._handled_initial_context:
+                    await self.handle_prerecorded_greeting(
+                        self._context, frame.text.strip() if frame.text else ""
+                    )
+                await self.push_frame(frame, direction)
+                return
             # Realtime owns speech output. Only the opening TTS trigger is
             # meaningful; later prompts use LLMMessagesAppendFrame instead.
             if self._handled_initial_context:
@@ -84,7 +95,6 @@ class RealtimeConversationMixin:
     async def _open_after_prerecorded_greeting(self, transcript: str | None) -> None:
         """Seed the spoken greeting, accept caller audio, and stay silent."""
         raise NotImplementedError
-
     async def _send_user_audio(self, frame: InputAudioRawFrame):
         await super()._send_user_audio(await self._prepare_user_audio(frame))
 
@@ -115,3 +125,15 @@ class RealtimeConversationMixin:
         if audio is frame.audio and target_rate == frame.sample_rate:
             return frame
         return replace(frame, audio=audio, sample_rate=target_rate)
+
+
+@dataclass
+class RealtimeScriptTTSSpeakFrame(TTSSpeakFrame):
+    """Text explicitly authored by the workflow and sent to auxiliary TTS.
+
+    Realtime provider output remains untouched. This marker lets the shared
+    conversation adapter distinguish app-authored scripts from provider-owned
+    speech frames without changing Pipecat's TTSSpeakFrame contract.
+    """
+
+    realtime_script: bool = True

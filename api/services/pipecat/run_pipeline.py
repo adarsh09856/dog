@@ -964,7 +964,16 @@ async def _run_pipeline_impl(
     if is_realtime:
         llm = create_realtime_llm_service(user_config, audio_config)
         stt = None
-        tts = None
+        # Realtime models synthesize their dynamic replies themselves. Keep a
+        # normal configured TTS service only for app-authored greetings and
+        # other scripted messages, routed through the same call output queue.
+        tts = create_tts_service(
+            user_config,
+            audio_config,
+            correlation_id=mps_correlation_id,
+            organization_id=workflow.organization_id,
+            tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
+        )
         # Realtime services don't implement run_inference, so create a
         # separate text LLM for variable extraction and other out-of-band
         # inference calls.
@@ -1377,9 +1386,11 @@ async def _run_pipeline_impl(
             AgentGenerationProcessor(
                 generation_started_callback=engine.create_generation_started_callback(),
                 llm_text_frame_callback=engine.handle_llm_text_frame,
+                skip_tts_text=True,
             ),
             pipeline_metrics_aggregator,
             termination_funnel,
+            script_tts=tts,
         )
     else:
         pipeline = build_pipeline(
@@ -1428,6 +1439,10 @@ async def _run_pipeline_impl(
     # Now set the task and transport output on the engine
     engine.call_worker = task
     engine.set_transport_output(transport.output())
+    if is_realtime:
+        engine.active_agent.tts = tts
+        engine.active_agent.user_config = user_config
+        engine.active_agent.runtime_configuration = runtime_configuration
 
     from api.services.observability.call_events.runtime import create_session
 

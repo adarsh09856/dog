@@ -1137,33 +1137,21 @@ class PipecatEngine:
                         f"Failed to fetch audio greeting {greeting_value}, "
                         "falling back to LLM generation"
                     )
-                elif greeting_value and agent.worker is not None:
+                elif greeting_value and (
+                    agent.worker is not None or self._is_realtime
+                ):
                     logger.debug("Playing text greeting via TTS")
                     # Completed greeting playback is retained in context so
-                    # the LLM knows the caller has already been greeted.
-                    if self._is_realtime:
-                        # Realtime adapters consume the opening text as a prompt
-                        # and generate a response; configured tool text is skipped.
-                        speech = self.speech_playback.expect_response(
-                            source=agent.llm, mute_user=mute_user
-                        )
-                        try:
-                            await agent.speak(
-                                greeting_value,
-                                append_to_context=True,
-                                persist_to_logs=False,
-                            )
-                        except BaseException:
-                            speech.finish(PlaybackOutcome.FAILED)
-                            raise
-                    else:
-                        speech = await self.queue_speech(
-                            greeting_value,
-                            append_to_context=True,
-                            persist_to_logs=False,
-                            mute_user=mute_user,
-                            greeting=True,
-                        )
+                    # the LLM knows the caller has already been greeted. The
+                    # realtime adapter seeds its provider session and forwards
+                    # this marked script to the auxiliary outbound TTS stage.
+                    speech = await self.queue_speech(
+                        greeting_value,
+                        append_to_context=True,
+                        persist_to_logs=False,
+                        mute_user=mute_user,
+                        greeting=True,
+                    )
                     if wait_for_playback:
                         await speech.wait()
                     return NodeOpeningResult("greeting", speech)
@@ -1503,7 +1491,7 @@ class PipecatEngine:
         try:
             if self.is_call_disposed():
                 return completed(PlaybackOutcome.CLOSED)
-            if text is not None and (self._is_realtime or not text.strip()):
+            if text is not None and not text.strip():
                 return completed(PlaybackOutcome.SKIPPED)
             if recording_pk is not None or recording_id is not None:
                 if not self._fetch_recording_audio or self._transport_output is None:
@@ -1531,16 +1519,29 @@ class PipecatEngine:
                 append_to_context = False
                 persist_to_logs = True
             if text is not None:
-                if self.active_agent.worker is None:
-                    return completed(PlaybackOutcome.FAILED)
-                queue_frame = self.active_agent.queue_frame
-                frames.append(
-                    TTSSpeakFrame(
+                if self._is_realtime:
+                    if self.active_agent.llm is None:
+                        return completed(PlaybackOutcome.FAILED)
+                    from api.services.pipecat.realtime.conversation import (
+                        RealtimeScriptTTSSpeakFrame,
+                    )
+
+                    queue_frame = self.active_agent.llm.queue_frame
+                    speak_frame = RealtimeScriptTTSSpeakFrame(
                         text,
                         append_to_context=append_to_context,
                         persist_to_logs=persist_to_logs,
                     )
-                )
+                else:
+                    if self.active_agent.worker is None:
+                        return completed(PlaybackOutcome.FAILED)
+                    queue_frame = self.active_agent.queue_frame
+                    speak_frame = TTSSpeakFrame(
+                        text,
+                        append_to_context=append_to_context,
+                        persist_to_logs=persist_to_logs,
+                    )
+                frames.append(speak_frame)
             else:
                 if not audio or self._transport_output is None:
                     return completed(PlaybackOutcome.FAILED)
