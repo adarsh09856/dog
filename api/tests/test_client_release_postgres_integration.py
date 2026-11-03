@@ -971,7 +971,9 @@ async def test_signed_client_release_rollout_progress_replay_and_rollback_in_pos
                     "detail": "integration test",
                 }
                 signature = base64.urlsafe_b64encode(
-                    client_private.sign(client_update_protocol.update_report_message(**fields))
+                    Ed25519PrivateKey.from_private_bytes(client_private).sign(
+                        client_update_protocol.update_report_message(**fields)
+                    )
                 ).rstrip(b"=").decode("ascii")
                 return await http.post(
                     "/client-installations/update-status",
