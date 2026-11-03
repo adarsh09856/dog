@@ -355,7 +355,7 @@ services:
   indus-tts:
     build:
       context: ./api/local_models/indus_tts
-    image: kodewaves-indus-tts:v1.0.0
+    image: "${KODEWAVES_INDUS_TTS_IMAGE:-kodewaves-indus-tts:v1.0.0}"
     container_name: kodewaves_indus_tts
     restart: unless-stopped
     profiles: ["indus"]
@@ -386,7 +386,7 @@ services:
   indic-vits-tts:
     build:
       context: ./api/local_models/indic_vits
-    image: kodewaves-indic-vits-tts:v1.0.0
+    image: "${KODEWAVES_INDIC_VITS_TTS_IMAGE:-kodewaves-indic-vits-tts:v1.0.0}"
     container_name: kodewaves_indic_vits_tts
     restart: unless-stopped
     profiles: ["local"]

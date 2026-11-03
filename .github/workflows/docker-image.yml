@@ -64,23 +64,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - name: kodewaves-api
-            dockerfile: api/Dockerfile
-            context: .
-          - name: kodewaves-ui
-            dockerfile: ui/Dockerfile
-            context: .
-          - name: kodewaves-indic-stt
-            dockerfile: api/local_models/indic_stt/Dockerfile
-            context: api/local_models/indic_stt
-        platform:
-          - name: linux/amd64
-            runner: ubuntu-24.04
-            short: amd64
-          - name: linux/arm64
-            runner: ubuntu-24.04-arm
-            short: arm64
+        include:
+          - service: { name: kodewaves-api, dockerfile: api/Dockerfile, context: . }
+            platform: { name: linux/amd64, runner: ubuntu-24.04, short: amd64 }
+          - service: { name: kodewaves-api, dockerfile: api/Dockerfile, context: . }
+            platform: { name: linux/arm64, runner: ubuntu-24.04-arm, short: arm64 }
+          - service: { name: kodewaves-ui, dockerfile: ui/Dockerfile, context: . }
+            platform: { name: linux/amd64, runner: ubuntu-24.04, short: amd64 }
+          - service: { name: kodewaves-ui, dockerfile: ui/Dockerfile, context: . }
+            platform: { name: linux/arm64, runner: ubuntu-24.04-arm, short: arm64 }
+          - service: { name: kodewaves-indic-stt, dockerfile: api/local_models/indic_stt/Dockerfile, context: api/local_models/indic_stt }
+            platform: { name: linux/amd64, runner: ubuntu-24.04, short: amd64 }
+          - service: { name: kodewaves-indic-stt, dockerfile: api/local_models/indic_stt/Dockerfile, context: api/local_models/indic_stt }
+            platform: { name: linux/arm64, runner: ubuntu-24.04-arm, short: arm64 }
+          - service: { name: kodewaves-indus-tts, dockerfile: api/local_models/indus_tts/Dockerfile, context: api/local_models/indus_tts }
+            platform: { name: linux/amd64, runner: ubuntu-24.04, short: amd64 }
+          - service: { name: kodewaves-indic-vits-tts, dockerfile: api/local_models/indic_vits/Dockerfile, context: api/local_models/indic_vits }
+            platform: { name: linux/amd64, runner: ubuntu-24.04, short: amd64 }
     runs-on: ${{ matrix.platform.runner }}
     steps:
       - name: Free Disk Space
@@ -182,6 +182,20 @@ jobs:
           merge-multiple: true
           path: /tmp/digests/kodewaves-indic-stt
 
+      - name: Download Indus TTS digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-kodewaves-indus-tts-*
+          merge-multiple: true
+          path: /tmp/digests/kodewaves-indus-tts
+
+      - name: Download Indic VITS TTS digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-kodewaves-indic-vits-tts-*
+          merge-multiple: true
+          path: /tmp/digests/kodewaves-indic-vits-tts
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -252,6 +266,8 @@ jobs:
           publish_service kodewaves-api
           publish_service kodewaves-ui
           publish_service kodewaves-indic-stt
+          publish_service kodewaves-indus-tts
+          publish_service kodewaves-indic-vits-tts
 
   notify:
     needs:
