@@ -50,25 +50,12 @@ LOCAL_RASA_VOICE_GENDERS = {
     "san_m": "male", "tam_f": "female", "tel_f": "female",
     "hin_m": "male", "hin_f": "female", "eng_in": "unspecified",
 }
-LOCAL_RASA_LANGUAGE_GENDERS = {
-    "as": frozenset({"female", "male"}),
-    "bn": frozenset({"female", "male"}),
-    "brx": frozenset({"female", "male"}),
-    "doi": frozenset({"female", "male"}),
-    "en": frozenset({"unspecified"}),
-    "hi": frozenset({"female", "male"}),
-    "kn": frozenset({"female", "male"}),
-    "mai": frozenset({"male"}),
-    "ml": frozenset({"female"}),
-    "mr": frozenset({"female", "male"}),
-    "ne": frozenset({"female"}),
-    "pa": frozenset({"female", "male"}),
-    "sa": frozenset({"male"}),
-    "ta": frozenset({"female"}),
-    "te": frozenset({"female"}),
+LOCAL_RASA_VOICE_NATIVE_LANGUAGES = {
+    "asm": "as", "ben": "bn", "brx": "brx", "doi": "doi",
+    "kan": "kn", "mai": "mai", "mal": "ml", "mar": "mr",
+    "nep": "ne", "pan": "pa", "san": "sa", "tam": "ta",
+    "tel": "te", "hin": "hi", "eng": "en",
 }
-
-
 def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
     """Return language codes this configured TTS service can route per turn.
 
@@ -84,12 +71,60 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
     model = str(getattr(settings, "model", "") or "").casefold()
     voice = str(getattr(settings, "voice", "") or "").casefold()
 
-    if model == "indic-vits-rasa-13" and voice in LOCAL_RASA_VOICE_GENDERS:
-        gender = LOCAL_RASA_VOICE_GENDERS[voice]
-        return frozenset(
-            code for code, genders in LOCAL_RASA_LANGUAGE_GENDERS.items()
-            if gender in genders or "unspecified" in genders
+    if model == "indic-vits-rasa-13":
+        contract = getattr(service, "_caller_language_tts_capability_contract", None)
+        inventory_endpoint = getattr(
+            service, "_caller_language_tts_capability_inventory_endpoint", None
         )
+        if isinstance(inventory_endpoint, str) and inventory_endpoint:
+            # Read only the short-lived /v1/models cache populated by catalog
+            # or node-preparation code. Never probe a local model from a turn.
+            from api.services.catalog.local_inventory import (
+                get_cached_local_tts_model,
+                local_tts_capability_contract,
+            )
+
+            inventory = get_cached_local_tts_model(
+                inventory_endpoint, "indic-vits-rasa-13"
+            )
+            # If the cache snapshot expired, discard any prior snapshot from
+            # service construction instead of advertising stale voices.
+            contract = (
+                local_tts_capability_contract(inventory)
+                if inventory is not None
+                else None
+            )
+        if isinstance(contract, dict) and contract.get("model") == model:
+            installed_voices = contract.get("voices")
+            languages = contract.get("languages")
+            if not isinstance(installed_voices, (set, frozenset, list, tuple)):
+                return frozenset()
+            if voice not in {str(item).casefold() for item in installed_voices}:
+                return frozenset()
+            if not isinstance(languages, (set, frozenset, list, tuple)):
+                return frozenset()
+            return frozenset(
+                str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
+                for item in languages
+                if isinstance(item, str)
+                and str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
+                in LOCAL_RASA_REPLY_LANGUAGE_CODES
+            )
+
+        # A cold cache can safely promise only the configured regional voice's
+        # native language. Hindi/English aliases are readiness-dependent:
+        # HIN_M can be absent when Indus replaces Piper, and ENG_IN can be
+        # absent when neither Indus nor Melo is loaded. HIN_F is present in
+        # both supported runtime modes (Inaya or Piper Hindi female).
+        if voice == "hin_f":
+            return frozenset({"hi"})
+        if voice in {"hin_m", "eng_in"}:
+            return frozenset()
+        native_language = LOCAL_RASA_VOICE_NATIVE_LANGUAGES.get(
+            voice.rsplit("_", 1)[0]
+        )
+        if native_language and voice in LOCAL_RASA_VOICE_GENDERS:
+            return frozenset({native_language})
 
     if (
         getattr(service, "_caller_language_routing_enabled", False)
@@ -113,6 +148,14 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
         if code in SPEECH_LANGUAGE_NAMES:
             return frozenset({code})
     return frozenset()
+
+
+def refresh_caller_language_tts_capabilities(llm: Any, tts: Any) -> frozenset[str]:
+    """Recompute language routing after async voice-inventory preparation."""
+    capabilities = caller_language_tts_capabilities(tts)
+    if llm is not None:
+        llm._caller_language_supported_codes = capabilities
+    return capabilities
 
 
 def caller_reply_language(

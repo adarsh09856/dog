@@ -1073,7 +1073,7 @@ def create_tts_service(
 
                 service_type = SpeachesCachingTTSService
                 cache_kwargs = {"speech_cache": cache, "organization_id": organization_id}
-            return service_type(
+            tts_service = service_type(
                 api_key="local",
                 base_url=speaches_url.rstrip("/"),
                 sample_rate=24000,
@@ -1087,6 +1087,29 @@ def create_tts_service(
                 skip_aggregator_types=["recording_router", "recording"],
                 **cache_kwargs,
             )
+            if selected_model.casefold() == "indic-vits-rasa-13":
+                # Use only a recent /v1/models snapshot already fetched by
+                # catalog/configuration code. Runtime call setup never probes
+                # the local TTS endpoint or initializes an inference model.
+                try:
+                    from api.services.catalog.local_inventory import (
+                        local_tts_api_base,
+                    )
+
+                    inventory_base = local_tts_api_base(
+                        {"indic_vits_tts_endpoint": speaches_url},
+                        selected_model,
+                    )
+                    tts_service._caller_language_tts_capability_inventory_endpoint = (
+                        inventory_base
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "local_tts_capability_inventory_unavailable model={} error_type={}",
+                        selected_model,
+                        type(exc).__name__,
+                    )
+            return tts_service
         from pipecat.services.piper.tts import PiperHttpTTSSettings
         from api.services.pipecat.piper_tts import PiperOwnedSessionTTSService
         piper_host = (getattr(user_config.tts, "base_url", None) or os.environ.get("PIPER_ENDPOINT") or "http://piper:5000").rstrip("/")

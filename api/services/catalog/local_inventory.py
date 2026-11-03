@@ -56,6 +56,33 @@ async def get_local_tts_models(api_base: str) -> dict[str, dict]:
     return models
 
 
+def get_cached_local_tts_model(api_base: str, model_id: str) -> dict | None:
+    """Read a fresh local TTS inventory snapshot without network or inference."""
+    endpoint = api_base.rstrip("/")
+    cached = _tts_model_cache.get(endpoint)
+    if not cached or time.monotonic() - cached[0] >= _TTS_MODEL_CACHE_SECONDS:
+        return None
+    return cached[1].get(model_id)
+
+
+def local_tts_capability_contract(model: dict) -> dict[str, object]:
+    """Build a small runtime contract from the serving engine's /models row."""
+    voice_ids = {
+        str(voice_id).casefold()
+        for voice_id in local_model_voice_ids(model)
+        if isinstance(voice_id, str)
+    }
+    languages = model.get("languages") or []
+    if isinstance(languages, str):
+        languages = [languages]
+    language_codes = {
+        str(language).strip().casefold().replace("_", "-").split("-", 1)[0]
+        for language in languages
+        if isinstance(language, str) and language.strip()
+    }
+    return {"model": model.get("id"), "languages": language_codes, "voices": voice_ids}
+
+
 def piper_voice_inventory(payload: Any) -> dict[str, dict]:
     """Accept Piper's voice-id mapping and compatible wrapped inventories."""
     voices = payload.get("voices", payload) if isinstance(payload, dict) else payload

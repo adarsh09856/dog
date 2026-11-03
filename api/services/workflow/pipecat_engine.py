@@ -879,6 +879,15 @@ class PipecatEngine:
             speech_instructions.append(
                 await selected_voice_persona_instruction(agent.user_config)
             )
+            if agent.llm is not None and agent.tts is not None:
+                from api.services.pipecat.caller_language_tts import (
+                    refresh_caller_language_tts_capabilities,
+                )
+
+                # Local voice-persona lookup has just refreshed the cached
+                # /v1/models inventory. Recompute language switching from that
+                # snapshot without adding another request to call setup.
+                refresh_caller_language_tts_capabilities(agent.llm, agent.tts)
         # Keep caller-specific values after the stable language and voice rules
         # so changing contacts does not invalidate that reusable model prefix.
         speech_instructions.append(contact_context_instruction(self._call_context_vars))
