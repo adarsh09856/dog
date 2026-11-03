@@ -14,6 +14,9 @@ vi.mock("@/lib/kodewavesApi", () => ({
 }));
 
 vi.mock("@/components/PublicSiteChrome", () => ({ PublicHeader: () => null, PublicFooter: () => null }));
+vi.mock("@/components/lead-forms/PublicEnterpriseLeadCTA", () => ({
+  PublicEnterpriseLeadCTA: ({ label }: { label: string }) => <button type="button">{label}</button>,
+}));
 
 import PricingPage from "./page";
 
@@ -29,8 +32,10 @@ describe("public pricing", () => {
       render(<PricingPage />);
 
       expect(screen.getByText(/Installation pricing is managed/)).toBeTruthy();
-      expect(screen.getByText(/Contact your installation administrator/)).toBeTruthy();
+      expect(screen.getByText(/Ask your installation administrator/)).toBeTruthy();
       expect(screen.queryByText("Workspace plans")).toBeNull();
+      expect(screen.getByRole("button", { name: "Discuss this installation" })).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Compare deployment options" }).getAttribute("href")).toBe("/deployment");
       expect(mocks.getPublicPlans).not.toHaveBeenCalled();
       expect(mocks.getPublicCreditOffers).not.toHaveBeenCalled();
     } finally {

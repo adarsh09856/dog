@@ -57,21 +57,22 @@ describe("recognitionLanguagesForSttModel", () => {
         "pa-IN", "sa-IN", "sat-IN", "sd-IN", "ta-IN", "te-IN", "ur-IN",
     ];
 
-    it("lists only enabled installed recognizers plus English and includes auto when supported", () => {
+    it("lists every installed scheduled recognizer plus English and includes auto when supported", () => {
         expect(recognitionLanguagesForSttModel(managedLanguages, installedLanguages, true, true)).toEqual([
-            "multi", "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml",
-            "mr", "ne", "pa", "sa", "ta", "te",
+            "multi", "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks",
+            "kok", "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat",
+            "sd", "ta", "te", "ur",
         ]);
     });
 
-    it("keeps only enabled local languages when auto-detection is unavailable", () => {
+    it("keeps all installed local languages when auto-detection is unavailable", () => {
         const result = recognitionLanguagesForSttModel(managedLanguages, installedLanguages, true, false);
         expect(result).not.toContain("multi");
-        expect(result).toHaveLength(15);
+        expect(result).toHaveLength(23);
         expect(result).toContain("hi");
         expect(result).toContain("ta");
-        for (const excluded of ["gu", "ks", "kok", "mni", "or", "sat", "sd", "ur"]) {
-            expect(result).not.toContain(excluded);
+        for (const code of ["gu", "ks", "kok", "mni", "or", "sat", "sd", "ur"]) {
+            expect(result).toContain(code);
         }
     });
 
@@ -95,11 +96,11 @@ describe("recognitionLanguagesForSttModel", () => {
         expect(languageForLocalSttSelection("multi", true, [], managedLanguages, "hi")).not.toBe("multi");
     });
 
-    it("does not restore excluded saved languages when reconciling an installed local model", () => {
+    it("restores a scheduled language when its local decoder is installed", () => {
         const selected = languageForLocalSttSelection("ur", true, installedLanguages, managedLanguages, "hi");
-        expect(selected).toBe("hi");
+        expect(selected).toBe("ur");
         expect(recognitionLanguagesForSttModel(managedLanguages, installedLanguages, true, true))
-            .not.toContain(selected === "ur" ? "ur" : "gu");
+            .toContain(selected);
     });
 });
 

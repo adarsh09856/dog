@@ -43,4 +43,18 @@ describe("owner credit bundle configuration", () => {
       price_cents: 0, is_active: true,
     })));
   });
+
+  it("does not allow bundle creation until the inventory request succeeds", async () => {
+    mocks.getCreditPackages.mockReset()
+      .mockRejectedValueOnce(new Error("Inventory request failed"))
+      .mockResolvedValueOnce([]);
+
+    render(<AdminCreditPackagesPage />);
+    await screen.findByText(/Inventory unavailable/);
+    expect(screen.getByRole("button", { name: "Create Bundle" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await screen.findByText(/No top-up bundles created yet/);
+    expect(screen.getByRole("button", { name: "Create Bundle" })).toHaveProperty("disabled", false);
+  });
 });

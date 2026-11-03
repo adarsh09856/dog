@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   auth: { loading: true, user: null as null | { id: string } },
-  getContacts: vi.fn(),
+  getContactsPage: vi.fn(),
   getStages: vi.fn(),
   createContact: vi.fn(),
   updateContact: vi.fn(),
@@ -18,10 +18,13 @@ const selectedStage = { id: "22222222-2222-4222-8222-222222222222", name: "Quali
 
 beforeEach(() => {
   mocks.auth = { loading: true, user: null };
-  for (const mock of [mocks.getContacts, mocks.getStages, mocks.createContact, mocks.updateContact, mocks.deleteContact]) {
+  for (const mock of [mocks.getContactsPage, mocks.getStages, mocks.createContact, mocks.updateContact, mocks.deleteContact]) {
     mock.mockReset();
   }
-  mocks.getContacts.mockResolvedValue([]);
+  mocks.getContactsPage.mockResolvedValue({
+    contacts: [], total_count: 0, filtered_count: 0, email_count: 0,
+    stage_counts: {}, page: 1, limit: 50, total_pages: 0,
+  });
   mocks.getStages.mockResolvedValue([firstStage, selectedStage]);
   mocks.createContact.mockResolvedValue({});
   mocks.updateContact.mockResolvedValue({});
@@ -31,19 +34,23 @@ beforeEach(() => {
 
 describe("CRM page loading", () => {
   it("waits for authentication, then tolerates contacts without a first name", async () => {
-    mocks.getContacts.mockResolvedValue([{ id: "contact-1", first_name: null, phone: "+15550123456" }]);
+    mocks.getContactsPage.mockResolvedValue({
+      contacts: [{ id: "contact-1", first_name: null, phone: "+15550123456" }],
+      total_count: 1, filtered_count: 1, email_count: 0,
+      stage_counts: {}, page: 1, limit: 50, total_pages: 1,
+    });
     mocks.getStages.mockResolvedValue([]);
     const view = render(<CRMPage />);
-    expect(mocks.getContacts).not.toHaveBeenCalled();
+    expect(mocks.getContactsPage).not.toHaveBeenCalled();
     mocks.auth = { loading: false, user: { id: "user-1" } };
     view.rerender(<CRMPage />);
     expect((await screen.findAllByText("+15550123456")).length).toBeGreaterThan(0);
-    expect(mocks.getContacts).toHaveBeenCalledTimes(1);
+    expect(mocks.getContactsPage).toHaveBeenCalledTimes(1);
   });
 
   it("shows a failed load instead of silently replacing server data", async () => {
     mocks.auth = { loading: false, user: { id: "user-1" } };
-    mocks.getContacts.mockRejectedValue(new Error("CRM unavailable"));
+    mocks.getContactsPage.mockRejectedValue(new Error("CRM unavailable"));
     mocks.getStages.mockResolvedValue([]);
     render(<CRMPage />);
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("CRM unavailable"));
@@ -72,28 +79,50 @@ describe("CRM lead-stage editing", () => {
 
   it("shows stage counts and filters both the records view and its result count", async () => {
     mocks.auth = { loading: false, user: { id: "user-1" } };
-    mocks.getContacts.mockResolvedValue([
+    const contacts = [
       { id: "contact-1", first_name: "Asha", last_name: "Rao", phone: "+919876543210", stage_id: firstStage.id },
       { id: "contact-2", first_name: "Kabir", last_name: "Shah", phone: "+919876543211", stage_id: selectedStage.id },
-    ]);
+    ];
+    mocks.getContactsPage.mockImplementation(({ search, stageId }) => {
+      const filtered = contacts.filter((contact) =>
+        (!stageId || contact.stage_id === stageId) &&
+        (!search || `${contact.first_name} ${contact.last_name} ${contact.phone}`.toLowerCase().includes(search.toLowerCase())),
+      );
+      return Promise.resolve({
+        contacts: filtered, total_count: contacts.length, filtered_count: filtered.length,
+        email_count: 0, stage_counts: { [firstStage.id]: 1, [selectedStage.id]: 1 },
+        page: 1, limit: 50, total_pages: filtered.length ? 1 : 0,
+      });
+    });
     render(<CRMPage />);
 
     expect(await screen.findByRole("button", { name: /All contacts/ })).toBeTruthy();
-    const qualifiedStage = screen.getByRole("button", { name: /Qualified/ });
+    const qualifiedStage = await screen.findByRole("button", { name: /Qualified/ });
     expect(qualifiedStage.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(qualifiedStage);
 
     await waitFor(() => expect(qualifiedStage.getAttribute("aria-pressed")).toBe("true"));
+    await waitFor(() => expect(within(screen.getByRole("table")).queryByText("Asha Rao")).toBeNull());
     expect(screen.getAllByText("Kabir Shah").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Asha Rao")).toBeNull();
     expect(screen.getByText("Showing Qualified leads")).toBeTruthy();
   });
 
   it("shows a useful empty state and clears search and stage filters", async () => {
     mocks.auth = { loading: false, user: { id: "user-1" } };
-    mocks.getContacts.mockResolvedValue([
+    const contacts = [
       { id: "contact-1", first_name: "Asha", last_name: "Rao", phone: "+919876543210", stage_id: firstStage.id },
-    ]);
+    ];
+    mocks.getContactsPage.mockImplementation(({ search, stageId }) => {
+      const filtered = contacts.filter((contact) =>
+        (!stageId || contact.stage_id === stageId) &&
+        (!search || `${contact.first_name} ${contact.last_name} ${contact.phone}`.toLowerCase().includes(search.toLowerCase())),
+      );
+      return Promise.resolve({
+        contacts: filtered, total_count: contacts.length, filtered_count: filtered.length,
+        email_count: 0, stage_counts: { [firstStage.id]: 1 },
+        page: 1, limit: 50, total_pages: filtered.length ? 1 : 0,
+      });
+    });
     render(<CRMPage />);
 
     const search = await screen.findByRole("textbox", { name: "Search contacts" });

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ getForms: vi.fn(), getSubmissions: vi.fn(), createForm: vi.fn(), updateForm: vi.fn(), user: { id: 'user-1' } }));
+const mocks = vi.hoisted(() => ({ getForms: vi.fn(), getSubmissionsPage: vi.fn(), createForm: vi.fn(), updateForm: vi.fn(), user: { id: 'user-1' } }));
 vi.mock('@/lib/auth', () => ({ useAuth: () => ({ user: mocks.user, loading: false }) }));
 vi.mock('@/lib/kodewavesApi', () => ({ formsApi: mocks }));
 import FormsPage from './page';
@@ -11,6 +11,7 @@ describe('form builder and submissions', () => {
     vi.clearAllMocks();
     mocks.user = { id: 'user-1' };
     mocks.getForms.mockResolvedValue([]);
+    mocks.getSubmissionsPage.mockResolvedValue({ submissions: [], total: 0 });
     mocks.createForm.mockResolvedValue({ id: 'form-1' });
   });
 
@@ -27,7 +28,7 @@ describe('form builder and submissions', () => {
 
   it('shows submission errors without claiming the form has no responses', async () => {
     mocks.getForms.mockResolvedValue([{ id: 'form-1', title: 'Customer intake', slug: 'customer-intake', fields: [], is_active: true, submission_count: 1 }]);
-    mocks.getSubmissions.mockRejectedValue(new Error('Submission service unavailable'));
+    mocks.getSubmissionsPage.mockRejectedValue(new Error('Submission service unavailable'));
     render(<FormsPage />);
     const row = (await screen.findByText('Customer intake')).closest('tr')!;
     fireEvent.click(within(row).getByRole('button', { name: '1 leads' }));
@@ -50,7 +51,7 @@ describe('form builder and submissions', () => {
   it('does not overwrite the current form with an earlier submission response', async () => {
     let finishOld!: (value: unknown[]) => void;
     mocks.getForms.mockResolvedValue(['A', 'B'].map(id => ({ id, title: `Form ${id}`, slug: id, fields: [], is_active: true, submission_count: 1 })));
-    mocks.getSubmissions.mockReturnValueOnce(new Promise(resolve => { finishOld = resolve; })).mockResolvedValue([{ id: 'b', data: { note: 'Current response B' }, created_at: '2026-10-20T00:00:00Z' }]);
+    mocks.getSubmissionsPage.mockReturnValueOnce(new Promise(resolve => { finishOld = resolve; })).mockResolvedValue({ submissions: [{ id: 'b', data: { note: 'Current response B' }, created_at: '2026-10-20T00:00:00Z' }], total: 1 });
     render(<FormsPage />);
     fireEvent.click(within((await screen.findByText('Form A')).closest('tr')!).getByRole('button', { name: '1 leads' }));
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));

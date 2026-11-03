@@ -5,6 +5,9 @@ vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light", setTheme: vi.fn() }),
 }));
+vi.mock("@/components/lead-forms/PublicEnterpriseLeadCTA", () => ({
+  PublicEnterpriseLeadCTA: ({ label }: { label: string }) => <button type="button">{label}</button>,
+}));
 vi.mock("@/context/ClientBrandingContext", () => ({
   useClientBranding: () => ({
     company_name: "Acme Voice",
@@ -36,6 +39,9 @@ describe("public home branding", () => {
     render(<HomePage />);
 
     const heroHeading = screen.getByRole("heading", { level: 1 });
+    expect(screen.getByRole("button", { name: "Talk to our team" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Explore the platform" }).getAttribute("href")).toBe("/platform");
+    expect(screen.getAllByRole("link", { name: "Open your workspace" }).some((link) => link.getAttribute("href") === "/auth/login")).toBe(true);
     expect(heroHeading.textContent).toContain("AI voice agents for calls.");
     expect(heroHeading.textContent).toContain("Workflows that get things done.");
     expect(screen.getByText("Configure the full call lifecycle")).toBeTruthy();
