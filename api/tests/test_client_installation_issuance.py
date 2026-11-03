@@ -34,6 +34,7 @@ from api.tests.owner_signer_test_utils import mock_owner_signer
         {"features": ["voice"], "limits": {"max_concurrent_calls": 2, "max_workspaces": 0}},
         {"features": ["voice"], "limits": {"max_concurrent_calls": 2, "max_agents": True}},
         {"features": ["campaigns", "voice"], "limits": {"max_concurrent_calls": 2}},
+        {"features": ["billing"]},
         {"installation_id": "  "},
         {"installation_id": "ab"},
         {"installation_id": "client/invalid"},

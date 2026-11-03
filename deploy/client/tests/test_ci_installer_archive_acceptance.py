@@ -2,17 +2,40 @@ from __future__ import annotations
 
 import hashlib
 import io
+import base64
 import tarfile
 from pathlib import Path
 import sys
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ci_verify import _configure_customer_install, _extract_customer_archive
 
 
-def _archive(path: Path, files: dict[str, bytes]) -> None:
+def _keypair(directory: Path) -> tuple[Path, Ed25519PrivateKey]:
+    private = Ed25519PrivateKey.generate()
+    private_path = directory / "release-private.key"
+    private_path.write_bytes(private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+        serialization.NoEncryption(),
+    ))
+    public = private.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+    )
+    public_path = directory / "trusted-release-public.key"
+    public_path.write_text(base64.urlsafe_b64encode(public).rstrip(b"=").decode("ascii"), encoding="ascii")
+    return public_path, private
+
+
+def _sign(path: Path, private: Ed25519PrivateKey) -> None:
+    signature = base64.urlsafe_b64encode(private.sign(path.read_bytes())).rstrip(b"=")
+    path.with_name(path.name + ".sig").write_bytes(signature + b"\n")
+
+
+def _archive(path: Path, files: dict[str, bytes], private: Ed25519PrivateKey) -> None:
     checksums = "".join(
         f"{hashlib.sha256(data).hexdigest()}  {name}\n"
         for name, data in sorted(files.items())
@@ -24,21 +47,26 @@ def _archive(path: Path, files: dict[str, bytes]) -> None:
             item.size = len(content)
             item.mode = 0o644
             bundle.addfile(item, io.BytesIO(content))
+    _sign(path, private)
 
 
 def test_extracted_installer_checks_every_file(tmp_path: Path) -> None:
+    trusted_key, private = _keypair(tmp_path)
     archive = tmp_path / "customer.tar.gz"
-    _archive(archive, {"README.md": b"install", "client-release-manifest.json": b"signed"})
+    _archive(archive, {"README.md": b"install", "client-release-manifest.json": b"signed"}, private)
 
-    extracted = _extract_customer_archive(archive, tmp_path / "unpacked")
+    extracted = _extract_customer_archive(
+        archive, tmp_path / "unpacked", trusted_public_key_file=trusted_key,
+    )
 
     assert (extracted / "README.md").read_bytes() == b"install"
     assert (extracted / "client-release-manifest.json").read_bytes() == b"signed"
 
 
 def test_extraction_rejects_checksum_mismatch(tmp_path: Path) -> None:
+    trusted_key, private = _keypair(tmp_path)
     archive = tmp_path / "customer.tar.gz"
-    _archive(archive, {"README.md": b"install"})
+    _archive(archive, {"README.md": b"install"}, private)
     # Rebuild a structurally valid archive whose recorded digest no longer
     # matches its file, as would happen after an accidental package mutation.
     bad_archive = tmp_path / "tampered.tar.gz"
@@ -51,9 +79,26 @@ def test_extraction_rejects_checksum_mismatch(tmp_path: Path) -> None:
             item.size = len(content)
             item.mode = 0o644
             bundle.addfile(item, io.BytesIO(content))
+    _sign(bad_archive, private)
 
     with pytest.raises(ValueError, match="checksum failed: README.md"):
-        _extract_customer_archive(bad_archive, tmp_path / "tampered")
+        _extract_customer_archive(
+            bad_archive, tmp_path / "tampered", trusted_public_key_file=trusted_key,
+        )
+
+
+def test_signature_is_checked_before_destination_creation(tmp_path: Path) -> None:
+    trusted_key, private = _keypair(tmp_path)
+    archive = tmp_path / "customer.tar.gz"
+    _archive(archive, {"README.md": b"install"}, private)
+    archive.write_bytes(archive.read_bytes() + b"attacker edit")
+    destination = tmp_path / "must-not-exist"
+
+    with pytest.raises(ValueError, match="signature is invalid"):
+        _extract_customer_archive(
+            archive, destination, trusted_public_key_file=trusted_key,
+        )
+    assert not destination.exists()
 
 
 @pytest.mark.parametrize(
@@ -66,6 +111,7 @@ def test_extraction_rejects_checksum_mismatch(tmp_path: Path) -> None:
 def test_extraction_rejects_unsafe_entries(
     tmp_path: Path, name: str, member_type: bytes, linkname: str
 ) -> None:
+    trusted_key, private = _keypair(tmp_path)
     archive = tmp_path / "unsafe.tar.gz"
     with tarfile.open(archive, "w:gz") as bundle:
         member = tarfile.TarInfo(name)
@@ -73,21 +119,28 @@ def test_extraction_rejects_unsafe_entries(
         member.linkname = linkname
         member.size = 0
         bundle.addfile(member)
+    _sign(archive, private)
 
     with pytest.raises(ValueError, match="unsafe entry"):
-        _extract_customer_archive(archive, tmp_path / "unsafe")
+        _extract_customer_archive(
+            archive, tmp_path / "unsafe", trusted_public_key_file=trusted_key,
+        )
 
 
 def test_extraction_rejects_duplicate_names(tmp_path: Path) -> None:
+    trusted_key, private = _keypair(tmp_path)
     archive = tmp_path / "duplicate.tar.gz"
     with tarfile.open(archive, "w:gz") as bundle:
         for content in (b"first", b"second"):
             member = tarfile.TarInfo("README.md")
             member.size = len(content)
             bundle.addfile(member, io.BytesIO(content))
+    _sign(archive, private)
 
     with pytest.raises(ValueError, match="duplicate or missing entries"):
-        _extract_customer_archive(archive, tmp_path / "duplicate")
+        _extract_customer_archive(
+            archive, tmp_path / "duplicate", trusted_public_key_file=trusted_key,
+        )
 
 
 def test_customer_env_uses_pinned_digest_images_and_fresh_identity_path(tmp_path: Path) -> None:

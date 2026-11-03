@@ -20,6 +20,13 @@ describe("owner integrity alert refresh", () => {
 
   afterEach(() => vi.useRealTimers());
 
+  it("does not offer hosted billing as a client installation entitlement", async () => {
+    render(<ClientInstallationsPage />);
+    await act(async () => { await Promise.resolve(); });
+    const featureInput = screen.getByLabelText("Enabled features, comma separated") as HTMLInputElement;
+    expect(featureInput.value).not.toContain("billing");
+  });
+
   it("refreshes owner alert data every 30 seconds and stops polling on unmount", async () => {
     let alertAvailable = false;
     mocks.apiFetch.mockImplementation((endpoint: string) => Promise.resolve(
@@ -29,6 +36,9 @@ describe("owner integrity alert refresh", () => {
             component: "api/app.py", expected_sha256: "a".repeat(64),
             observed_sha256: "b".repeat(64), first_seen_at: "2026-10-26T00:00:00Z",
             last_seen_at: "2026-10-26T00:00:00Z", occurrence_count: 1,
+            email_status: "pending", email_attempt_count: 1,
+            email_last_attempt_at: "2026-10-26T00:01:00Z", email_sent_at: null,
+            email_last_error: "smtp_delivery_failed",
           }]
         : [],
     ));
@@ -41,6 +51,8 @@ describe("owner integrity alert refresh", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
     expect(mocks.apiFetch).toHaveBeenCalledTimes(6);
     expect(screen.getByText(/installation-1/)).toBeTruthy();
+    expect(screen.getByText(/Owner email: pending · 1 attempt · smtp_delivery_failed/)).toBeTruthy();
+    expect(screen.getByText(/a worker crash after SMTP accepts a message can result in one duplicate email/i)).toBeTruthy();
 
     view.unmount();
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
@@ -54,6 +66,9 @@ describe("owner integrity alert refresh", () => {
       component: "api/app.py", expected_sha256: "a".repeat(64),
       observed_sha256: "b".repeat(64), first_seen_at: "2026-10-26T00:00:00Z",
       last_seen_at: "2026-10-26T00:00:00Z", occurrence_count,
+      email_status: "sent", email_attempt_count: 1,
+      email_last_attempt_at: "2026-10-26T00:01:00Z", email_sent_at: "2026-10-26T00:01:01Z",
+      email_last_error: null,
     });
     mocks.apiFetch.mockImplementation((endpoint: string, options?: { method?: string }) => {
       if (endpoint.endsWith("/alerts/41/acknowledge") && options?.method === "POST") {
@@ -182,7 +197,7 @@ describe("owner integrity alert refresh", () => {
 
   it("surfaces the installation trust boundary and all owner actions in the registry card", async () => {
     mocks.apiFetch.mockImplementation((endpoint: string) => Promise.resolve(
-      endpoint.endsWith("/alerts") || endpoint.includes("/binding-requests") ? [] : [{
+      endpoint.endsWith("/alerts") || endpoint.includes("/binding-requests") || endpoint.endsWith("/releases") || endpoint.endsWith("/rollouts") ? [] : [{
         installation_id: "customer-prod-eu", customer_id: "customer-42",
         domains: ["voice.customer.example"], ip_ranges: ["198.51.100.10/32"],
         features: ["voice", "crm"], limits: { max_concurrent_calls: 6, max_agents: 20 },
@@ -208,7 +223,7 @@ describe("owner integrity alert refresh", () => {
 
   it("explains safe recovery and disables renewal after an integrity failure", async () => {
     mocks.apiFetch.mockImplementation((endpoint: string) => Promise.resolve(
-      endpoint.endsWith("/alerts") || endpoint.includes("/binding-requests") ? [] : [{
+      endpoint.endsWith("/alerts") || endpoint.includes("/binding-requests") || endpoint.endsWith("/releases") || endpoint.endsWith("/rollouts") ? [] : [{
         installation_id: "installation-compromised", customer_id: "customer-1",
         domains: ["customer.example"], ip_ranges: [], features: ["voice"],
         limits: { max_concurrent_calls: 1 }, expires_at: 1_800_000_000,
@@ -230,6 +245,7 @@ describe("owner integrity alert refresh", () => {
       if (endpoint.endsWith("/enrollment-token") && options?.method === "POST") {
         return Promise.resolve({ installation_id: "client-1", enrollment_token: "temporary-secret", expires_at: 1_800_000_000 });
       }
+      if (endpoint.endsWith("/releases") || endpoint.endsWith("/rollouts")) return Promise.resolve([]);
       if (endpoint.endsWith("/alerts")) return Promise.resolve([]);
       if (endpoint.includes("/binding-requests")) return Promise.resolve([]);
       return Promise.resolve([{
@@ -259,6 +275,7 @@ describe("owner integrity alert refresh", () => {
       last_seen_at: null, integrity_failed_at: null,
     };
     mocks.apiFetch.mockImplementation((endpoint: string) => {
+      if (endpoint.endsWith("/releases") || endpoint.endsWith("/rollouts")) return Promise.resolve([]);
       if (endpoint.endsWith("/alerts")) return Promise.resolve([]);
       if (endpoint.includes("/binding-requests")) return Promise.resolve([]);
       if (endpoint.endsWith("/renew")) {
@@ -293,6 +310,7 @@ describe("owner integrity alert refresh", () => {
       revoked_at: null as string | null, last_seen_at: null, integrity_failed_at: null,
     };
     mocks.apiFetch.mockImplementation((endpoint: string, options?: { method?: string }) => {
+      if (endpoint.endsWith("/releases") || endpoint.endsWith("/rollouts")) return Promise.resolve([]);
       if (endpoint.endsWith("/alerts")) return Promise.resolve([]);
       if (endpoint.includes("/binding-requests")) return Promise.resolve([]);
       if (endpoint.endsWith("/revoke") && options?.method === "POST") {

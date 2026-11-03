@@ -16,12 +16,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 def package_inputs(monkeypatch, tmp_path):
     repository = Path(__file__).resolve().parents[2]
     monkeypatch.syspath_prepend(str(repository / "owner-tools"))
+    monkeypatch.syspath_prepend(str(repository / "deploy/client"))
     import package_client_installer as packager
 
     root = tmp_path / "source"
     directory = root / "deploy/client"
     directory.mkdir(parents=True)
-    for name in ("INSTALL.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "docker-compose.recovery.yaml", "Caddyfile", "validate_install.py", "recovery.py", "compose_client.py", "recovery_lock.py", "enroll_identity.py", ".env.example"):
+    for name in ("INSTALL.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "docker-compose.recovery.yaml", "Caddyfile", "validate_install.py", "recovery.py", "compose_client.py", "recovery_lock.py", "enroll_identity.py", "verify_installer.py", "update_agent.py", "kodewaves-client-update.service", "kodewaves-client-update.timer", ".env.example"):
         shutil.copy2(repository / "deploy/client" / name, directory / name)
     (directory / ".env").write_text("KODEWAVES_LICENSE_TOKEN=customer-secret")
     (root / "owner-tools").mkdir()
@@ -37,6 +38,12 @@ def package_inputs(monkeypatch, tmp_path):
     images_env = tmp_path / "images.env"
     images_env.write_text("".join(f"{key}={value}\n" for key, value in sorted(images.items())))
     private = Ed25519PrivateKey.generate()
+    private_key_file = tmp_path / "release-private.key"
+    private_key_file.write_bytes(private.private_bytes(
+        serialization.Encoding.Raw,
+        serialization.PrivateFormat.Raw,
+        serialization.NoEncryption(),
+    ))
     public = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     public_key = tmp_path / "release-public.key"
     public_key.write_text(base64.urlsafe_b64encode(public).rstrip(b"=").decode("ascii"))
@@ -56,17 +63,17 @@ def package_inputs(monkeypatch, tmp_path):
         "payload": payload,
         "signature": base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii"),
     }))
-    return packager, root, images, images_env, manifest, public_key, tmp_path / "installer.tar.gz", private
+    return packager, root, images, images_env, manifest, public_key, private_key_file, tmp_path / "installer.tar.gz", private
 
 
 def test_customer_archive_contains_only_installation_files_and_matching_images(package_inputs):
-    packager, root, images, images_env, manifest, public_key, output, _ = package_inputs
-    packager.package_installer(images_env, manifest, public_key, output, root=root)
+    packager, root, images, images_env, manifest, public_key, private_key, output, _ = package_inputs
+    packager.package_installer(images_env, manifest, public_key, private_key, output, root=root)
 
     with tarfile.open(output, "r:gz") as archive:
         assert set(archive.getnames()) == {
             "README.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "docker-compose.recovery.yaml", "Caddyfile", "validate_install.py", "enroll_identity.py",
-            "recovery.py", "compose_client.py", "recovery_lock.py", ".env.example", "client-release-manifest.json", "release-public-key.txt", "SHA256SUMS",
+            "recovery.py", "compose_client.py", "recovery_lock.py", "verify_installer.py", "update_agent.py", "kodewaves-client-update.service", "kodewaves-client-update.timer", ".env.example", "client-release-manifest.json", "release-public-key.txt", "SHA256SUMS",
         }
         contents = {name: archive.extractfile(name).read() for name in archive.getnames()}
         assert archive.getmember(".env.example").mode == 0o600
@@ -83,6 +90,23 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
     for key, value in images.items():
         assert f"{key}={value}" in template
     assert contents["client-release-manifest.json"] == manifest.read_bytes()
+    assert b"prepare_update_check" in contents["update_agent.py"]
+    assert b"ExecStart=/usr/bin/python3 /opt/kodewaves/client/update_agent.py" in contents["kodewaves-client-update.service"]
+    assert b"OnUnitActiveSec=15min" in contents["kodewaves-client-update.timer"]
+    from verify_installer import verify_installer_archive
+    assert verify_installer_archive(
+        output, output.with_name(output.name + ".sig"), public_key
+    ) == hashlib.sha256(output.read_bytes()).hexdigest()
+
+    # The client updater consumes this exact owner-packaged archive format.
+    # Exercise the package -> updater boundary, not a hand-built archive that
+    # could drift away from the installer allowlist.
+    import update_agent
+    updater_extract = output.parent / "updater-extracted"
+    release_manifest = update_agent._extract_verified_archive(output, updater_extract)
+    assert release_manifest["payload"]["edition"] == "client"
+    assert {path.name for path in updater_extract.iterdir()} == update_agent._PACKAGE_FILES
+
     for line in contents["SHA256SUMS"].decode("ascii").splitlines():
         digest, name = line.split("  ", 1)
         assert hashlib.sha256(contents[name]).hexdigest() == digest
@@ -132,22 +156,52 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
 
 
 def test_customer_archive_is_reproducible_for_identical_release_inputs(package_inputs, monkeypatch):
-    packager, root, _, images_env, manifest, public_key, output, _ = package_inputs
+    packager, root, _, images_env, manifest, public_key, private_key, output, _ = package_inputs
     second_output = output.with_name("installer-second.tar.gz")
 
-    packager.package_installer(images_env, manifest, public_key, output, root=root)
+    packager.package_installer(images_env, manifest, public_key, private_key, output, root=root)
     import gzip
 
     real_time = gzip.time.time
     monkeypatch.setattr(gzip.time, "time", lambda: real_time() + 10)
-    packager.package_installer(images_env, manifest, public_key, second_output, root=root)
+    packager.package_installer(images_env, manifest, public_key, private_key, second_output, root=root)
 
     assert output.read_bytes() == second_output.read_bytes()
+    assert output.with_name(output.name + ".sig").read_bytes() == second_output.with_name(second_output.name + ".sig").read_bytes()
 
 
-@pytest.mark.parametrize("problem", ["signature", "image", "floating", "secret", "schema", "port"])
+@pytest.mark.parametrize("problem", ["archive", "signature", "trusted_key"])
+def test_customer_archive_detached_signature_rejects_tampering(package_inputs, tmp_path, problem):
+    packager, root, _, images_env, manifest, public_key, private_key, output, _ = package_inputs
+    packager.package_installer(images_env, manifest, public_key, private_key, output, root=root)
+    signature = output.with_name(output.name + ".sig")
+    archive_to_check = output
+    signature_to_check = signature
+    trusted_key = public_key
+    if problem == "archive":
+        archive_to_check = tmp_path / "modified.tar.gz"
+        archive_to_check.write_bytes(output.read_bytes() + b"modified")
+    elif problem == "signature":
+        signature_to_check = tmp_path / "modified.sig"
+        original = signature.read_text(encoding="ascii").strip()
+        signature_to_check.write_text(("A" if original[0] != "A" else "B") + original[1:], encoding="ascii")
+    else:
+        wrong_private = Ed25519PrivateKey.generate()
+        wrong_public = wrong_private.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+        )
+        trusted_key = tmp_path / "wrong-public.key"
+        trusted_key.write_text(base64.urlsafe_b64encode(wrong_public).rstrip(b"=").decode("ascii"), encoding="ascii")
+
+    from verify_installer import verify_installer_archive
+    with pytest.raises(ValueError, match="signature is invalid"):
+        verify_installer_archive(archive_to_check, signature_to_check, trusted_key)
+
+
+@pytest.mark.parametrize("problem", ["signature", "image", "floating", "secret", "schema", "port", "private_key"])
 def test_customer_archive_rejects_untrusted_or_unmatched_inputs_without_output(package_inputs, problem):
-    packager, root, images, images_env, manifest, public_key, output, private = package_inputs
+    packager, root, images, images_env, manifest, public_key, private_key, output, private = package_inputs
+    private_key_to_use = private_key
     if problem == "signature":
         signed = json.loads(manifest.read_text())
         signed["payload"]["files"]["api/app.py"] = "d" * 64
@@ -166,6 +220,15 @@ def test_customer_archive_rejects_untrusted_or_unmatched_inputs_without_output(p
     elif problem == "port":
         images_env.write_text(images_env.read_text().replace("registry.example.com/", "registry.example.com:99999/"))
         error = "registry port must be between"
+    elif problem == "private_key":
+        wrong_private = Ed25519PrivateKey.generate()
+        private_key_to_use = output.with_name("wrong-release-private.key")
+        private_key_to_use.write_bytes(wrong_private.private_bytes(
+            serialization.Encoding.Raw,
+            serialization.PrivateFormat.Raw,
+            serialization.NoEncryption(),
+        ))
+        error = "does not match the trusted public key"
     else:
         signed = json.loads(manifest.read_text())
         signed["payload"].pop("schema_compatibility")
@@ -175,13 +238,13 @@ def test_customer_archive_rejects_untrusted_or_unmatched_inputs_without_output(p
         error = "signed schema compatibility metadata"
 
     with pytest.raises(ValueError, match=error):
-        packager.package_installer(images_env, manifest, public_key, output, root=root)
+        packager.package_installer(images_env, manifest, public_key, private_key_to_use, output, root=root)
     assert not output.exists()
 
 
 def test_customer_archive_never_overwrites_an_existing_delivery(package_inputs):
-    packager, root, _, images_env, manifest, public_key, output, _ = package_inputs
+    packager, root, _, images_env, manifest, public_key, private_key, output, _ = package_inputs
     output.write_bytes(b"existing-approved-delivery")
     with pytest.raises(ValueError, match="already exists"):
-        packager.package_installer(images_env, manifest, public_key, output, root=root)
+        packager.package_installer(images_env, manifest, public_key, private_key, output, root=root)
     assert output.read_bytes() == b"existing-approved-delivery"

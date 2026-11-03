@@ -38,6 +38,7 @@ from api.db.client_installations import (
     renew_client_installation_record,
     revoke_client_installation_record,
 )
+from api.db.client_releases import get_rollout
 from api.db.kodewaves_client import kodewaves_db_client
 from api.db.kodewaves_models import (
     ClientBindingRequestModel,
@@ -45,6 +46,9 @@ from api.db.kodewaves_models import (
     ClientInstallationModel,
     ClientInstallationNonceModel,
     ClientIntegrityAlertModel,
+    ClientReleaseCatalogModel,
+    ClientReleaseRolloutModel,
+    ClientReleaseRolloutTargetModel,
 )
 from api.db.user_client import UserClient
 from api.db.client_user_management import list_workspace_users, set_workspace_user_active
@@ -57,6 +61,7 @@ from api.routes.admin import client_installation_check
 from api.routes.admin import client_installations as admin_client_installations
 from api.services.installation_identity import sign_binding_request, sign_enrollment, sign_owner_check
 from api.services.installation_license import issue_license_token, verify_installation_status_claims
+from api.services import client_update_protocol
 from api.tests.owner_signer_test_utils import mock_owner_signer
 
 
@@ -774,6 +779,350 @@ async def test_signed_client_license_bootstraps_first_admin_and_workspace_in_pos
             await bootstrap_client_admin.bootstrap_client_admin(
                 "second@customer.example", "long-enough-password-123",
             )
+    finally:
+        await engine.dispose()
+        if schema_created:
+            async with admin_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await admin_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_signed_client_release_rollout_progress_replay_and_rollback_in_postgres(monkeypatch):
+    """Exercise persisted release publication and report guards in isolated PG."""
+    database_url = _disposable_database_url()
+    schema = f"client_rollout_{uuid.uuid4().hex}"
+    admin_engine = create_async_engine(database_url)
+    engine = create_async_engine(
+        database_url, connect_args={"server_settings": {"search_path": schema}}
+    )
+    schema_created = False
+    try:
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        async with engine.begin() as conn:
+            await conn.execute(text("CREATE TABLE users (id INTEGER PRIMARY KEY)"))
+            await conn.execute(text("INSERT INTO users (id) VALUES (1)"))
+            for model in (
+                ClientInstallationModel,
+                ClientInstallationNonceModel,
+                ClientIntegrityAlertModel,
+                ClientReleaseCatalogModel,
+                ClientReleaseRolloutModel,
+                ClientReleaseRolloutTargetModel,
+            ):
+                await conn.run_sync(lambda sync_conn, table=model.__table__: table.create(sync_conn))
+
+        monkeypatch.setattr(kodewaves_db_client, "async_session", async_sessionmaker(engine))
+        monkeypatch.delenv("KODEWAVES_OWNER_TRUSTED_PROXY_CIDRS", raising=False)
+        owner = Ed25519PrivateKey.generate()
+        release_signer = Ed25519PrivateKey.generate()
+
+        def private_bytes(key):
+            return key.private_bytes(
+                serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                serialization.NoEncryption(),
+            )
+
+        def public_string(key):
+            public = key.public_key().public_bytes(
+                serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+            )
+            return base64.urlsafe_b64encode(public).rstrip(b"=").decode("ascii")
+
+        owner_private, owner_public = private_bytes(owner), public_string(owner)
+        release_public = public_string(release_signer)
+        monkeypatch.setattr(client_update_protocol, "trusted_release_public_key", lambda: release_public)
+        mock_owner_signer(monkeypatch, client_installation_check, (owner_private, owner_public))
+
+        now = int(time.time())
+        installs = {}
+        for suffix in ("a", "b", "c"):
+            installation_id = f"rollout-client-{suffix}"
+            client_key = Ed25519PrivateKey.generate()
+            client_private, client_public = private_bytes(client_key), public_string(client_key)
+            token = issue_license_token({
+                "iat": now - 1, "exp": now + 3600, "edition": "client",
+                "installation_id": installation_id, "customer_id": f"buyer-{suffix}",
+                "domains": ["customer.example"], "features": ["voice"],
+                "limits": {"max_concurrent_calls": 2},
+            }, owner_private)
+            await create_client_installation_record(
+                installation_id=installation_id, customer_id=f"buyer-{suffix}",
+                domains=["customer.example"], ip_ranges=[], features=["voice"],
+                limits={"max_concurrent_calls": 2},
+                expires_at=datetime.fromtimestamp(now + 3600, UTC),
+                token_fingerprint=hashlib.sha256(token.encode("ascii")).hexdigest(),
+                installation_public_key=client_public,
+                enrolled_at=datetime.now(UTC),
+                issued_by_user_id=1,
+            )
+            installs[suffix] = (installation_id, token, client_private)
+
+        app = FastAPI()
+        app.include_router(client_installation_check.router)
+        app.include_router(admin_client_installations.router, prefix="/admin")
+        app.dependency_overrides[admin_client_installations.get_superuser] = (
+            lambda: SimpleNamespace(id=1, is_superuser=True)
+        )
+        transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 4321))
+
+        def make_envelope(version: str, release_id: str, minimum: str) -> dict:
+            fields = client_update_protocol.release_signature_payload(
+                release_id=release_id,
+                version=version,
+                archive_url=f"https://updates.example.com/kodewaves-{version}.tar.zst",
+                archive_sha256=hashlib.sha256(version.encode("ascii")).hexdigest(),
+                min_current_version=minimum,
+                notes=f"Release {version}",
+            )
+            signature = release_signer.sign(client_update_protocol.canonical_json(fields))
+            return {
+                **fields,
+                "archive_signature": base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii"),
+            }
+
+        async with httpx.AsyncClient(transport=transport, base_url="http://owner") as http:
+            first_release = make_envelope("2.1.0", "release-2.1.0", "2.0.0")
+            created_release = await http.post("/admin/client-installations/releases", json=first_release)
+            assert created_release.status_code == 201, created_release.text
+            assert (await http.post(
+                "/admin/client-installations/releases/release-2.1.0/publish"
+            )).status_code == 200
+
+            rollout_ids = {}
+            for suffix in ("a", "b"):
+                installation_id, _, _ = installs[suffix]
+                key = f"integration-rollout-{suffix}-0001"
+                stage_response = await http.post(
+                    "/admin/client-installations/rollouts",
+                    headers={"Idempotency-Key": key},
+                    json={"release_id": "release-2.1.0", "installation_ids": [installation_id]},
+                )
+                assert stage_response.status_code == 201, stage_response.text
+                rollout_id = stage_response.json()["rollout_id"]
+                rollout_ids[suffix] = rollout_id
+                duplicate = await http.post(
+                    "/admin/client-installations/rollouts",
+                    headers={"Idempotency-Key": key},
+                    json={"release_id": "release-2.1.0", "installation_ids": [installation_id]},
+                )
+                assert duplicate.status_code == 201 and duplicate.json()["rollout_id"] == rollout_id
+                assert (await http.post(
+                    f"/admin/client-installations/rollouts/{rollout_id}/activate"
+                )).status_code == 200
+
+            async def check_version(suffix: str, current_version: str):
+                installation_id, token, client_private = installs[suffix]
+                check_nonce = secrets.token_urlsafe(32)
+                check_time = int(time.time())
+                check_body = {
+                    "nonce": check_nonce,
+                    "integrity_ok": True,
+                    "current_version": current_version,
+                    "proof_issued_at": check_time,
+                    "proof_signature": sign_owner_check(
+                        client_private,
+                        installation_id=installation_id,
+                        license_token=token,
+                        nonce=check_nonce,
+                        issued_at=check_time,
+                        integrity_ok=True,
+                        integrity_finding=None,
+                        current_version=current_version,
+                    ),
+                }
+                response = await http.post(
+                    "/client-installations/check",
+                    json=check_body,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                assert response.status_code == 200, response.text
+                return verify_installation_status_claims(
+                    response.json()["signed_status"],
+                    public_key=owner_public,
+                    installation_id=installation_id,
+                    license_token=token,
+                    nonce=check_nonce,
+                )
+
+            signed_claims = await check_version("a", "2.0.0")
+            assert signed_claims["update"]["version"] == "2.1.0"
+            assert signed_claims["update"]["rollout_id"] == rollout_ids["a"]
+            assert signed_claims["update"]["target_status"] == "staged"
+
+            async def report(
+                suffix, status, nonce=None, *, rollout_id=None,
+                release_id="release-2.1.0", version="2.1.0",
+            ):
+                installation_id, token, client_private = installs[suffix]
+                nonce = nonce or secrets.token_urlsafe(32)
+                issued_at = int(time.time())
+                fields = {
+                    "installation_id": installation_id,
+                    "license_token": token,
+                    "rollout_id": rollout_id or rollout_ids[suffix],
+                    "release_id": release_id,
+                    "version": version,
+                    "nonce": nonce,
+                    "issued_at": issued_at,
+                    "status": status,
+                    "detail": "integration test",
+                }
+                signature = base64.urlsafe_b64encode(
+                    client_private.sign(client_update_protocol.update_report_message(**fields))
+                ).rstrip(b"=").decode("ascii")
+                return await http.post(
+                    "/client-installations/update-status",
+                    headers={"Authorization": f"Bearer {token}"},
+                    json={
+                        **{key: value for key, value in fields.items() if key != "installation_id" and key != "license_token"},
+                        "proof_signature": signature,
+                    },
+                ), nonce
+
+            downloading, replay_nonce = await report("a", "downloading")
+            assert downloading.status_code == 200, downloading.text
+            assert "update" not in await check_version("a", "2.1.0")
+            replayed_as_applying, _ = await report("a", "applying", replay_nonce)
+            assert replayed_as_applying.status_code == 409
+            for status in ("applying", "applied"):
+                response, _ = await report("a", status)
+                assert response.status_code == 200, response.text
+                if status == "applying":
+                    retry_claims = await check_version("a", "2.1.0")
+                    assert retry_claims["update"]["target_status"] == "applying"
+                else:
+                    assert "update" not in await check_version("a", "2.1.0")
+            completed = await get_rollout(rollout_ids["a"])
+            assert completed["state"] == "completed"
+            rolled_back, _ = await report("a", "rolled_back")
+            assert rolled_back.status_code == 200, rolled_back.text
+            assert (await get_rollout(rollout_ids["a"]))["targets"][0]["status"] == "rolled_back"
+
+            for status in ("downloading", "applying", "applied"):
+                response, _ = await report("b", status)
+                assert response.status_code == 200, response.text
+            newer_release = make_envelope("2.2.0", "release-2.2.0", "2.0.0")
+            assert (await http.post("/admin/client-installations/releases", json=newer_release)).status_code == 201
+            assert (await http.post(
+                "/admin/client-installations/releases/release-2.2.0/publish"
+            )).status_code == 200
+            newer = await http.post(
+                "/admin/client-installations/rollouts",
+                headers={"Idempotency-Key": "integration-newer-rollout-b-0001"},
+                json={"release_id": "release-2.2.0", "installation_ids": [installs["b"][0]]},
+            )
+            assert newer.status_code == 201, newer.text
+            stale_rollback, _ = await report("b", "rolled_back")
+            assert stale_rollback.status_code == 409
+
+            pause_rollout = await http.post(
+                "/admin/client-installations/rollouts",
+                headers={"Idempotency-Key": "integration-pause-rollout-a-0001"},
+                json={"release_id": "release-2.2.0", "installation_ids": [installs["a"][0]]},
+            )
+            assert pause_rollout.status_code == 201, pause_rollout.text
+            pause_id = pause_rollout.json()["rollout_id"]
+            assert (await http.post(
+                f"/admin/client-installations/rollouts/{pause_id}/activate"
+            )).status_code == 200
+            for state in ("downloading", "applying"):
+                progressed, _ = await report(
+                    "a", state, rollout_id=pause_id,
+                    release_id="release-2.2.0", version="2.2.0",
+                )
+                assert progressed.status_code == 200, progressed.text
+            assert (await http.post(
+                f"/admin/client-installations/rollouts/{pause_id}/pause"
+            )).status_code == 200
+
+            stop_id = newer.json()["rollout_id"]
+            assert (await http.post(
+                f"/admin/client-installations/rollouts/{stop_id}/activate"
+            )).status_code == 200
+            for state in ("downloading", "applying"):
+                progressed, _ = await report(
+                    "b", state, rollout_id=stop_id,
+                    release_id="release-2.2.0", version="2.2.0",
+                )
+                assert progressed.status_code == 200, progressed.text
+            assert (await http.post(
+                f"/admin/client-installations/rollouts/{stop_id}/stop"
+            )).status_code == 200
+
+            paused_claims = await check_version("a", "2.0.0")
+            assert paused_claims["update"]["rollout_id"] == pause_id
+            assert paused_claims["update"]["target_status"] == "applying"
+            assert paused_claims["update"]["rollout_state"] == "paused"
+            stopped_claims = await check_version("b", "2.1.0")
+            assert stopped_claims["update"]["rollout_id"] == stop_id
+            assert stopped_claims["update"]["target_status"] == "applying"
+            assert stopped_claims["update"]["rollout_state"] == "stopped"
+
+            no_new_update = await http.post(
+                "/admin/client-installations/rollouts",
+                headers={"Idempotency-Key": "integration-paused-before-apply-c-0001"},
+                json={"release_id": "release-2.2.0", "installation_ids": [installs["c"][0]]},
+            )
+            assert no_new_update.status_code == 201, no_new_update.text
+            no_new_update_id = no_new_update.json()["rollout_id"]
+            assert (await http.post(
+                f"/admin/client-installations/rollouts/{no_new_update_id}/activate"
+            )).status_code == 200
+            assert (await http.post(
+                f"/admin/client-installations/rollouts/{no_new_update_id}/pause"
+            )).status_code == 200
+            paused_before_apply = await check_version("c", "2.0.0")
+            assert "update" not in paused_before_apply
+            denied_apply, _ = await report(
+                "c", "applying", rollout_id=no_new_update_id,
+                release_id="release-2.2.0", version="2.2.0",
+            )
+            assert denied_apply.status_code == 409
+
+            applied_after_pause, _ = await report(
+                "a", "applied", rollout_id=pause_id,
+                release_id="release-2.2.0", version="2.2.0",
+            )
+            assert applied_after_pause.status_code == 200, applied_after_pause.text
+
+            followup_release = make_envelope("2.3.0", "release-2.3.0", "2.0.0")
+            assert (await http.post(
+                "/admin/client-installations/releases", json=followup_release
+            )).status_code == 201
+            assert (await http.post(
+                "/admin/client-installations/releases/release-2.3.0/publish"
+            )).status_code == 200
+            blocked_by_stopped_apply = await http.post(
+                "/admin/client-installations/rollouts",
+                headers={"Idempotency-Key": "integration-after-stop-rollout-b-0001"},
+                json={"release_id": "release-2.3.0", "installation_ids": [installs["b"][0]]},
+            )
+            assert blocked_by_stopped_apply.status_code == 409
+
+            rolled_back_after_stop, _ = await report(
+                "b", "rolled_back", rollout_id=stop_id,
+                release_id="release-2.2.0", version="2.2.0",
+            )
+            assert rolled_back_after_stop.status_code == 200, rolled_back_after_stop.text
+            assert (await get_rollout(pause_id))["targets"][0]["status"] == "applied"
+            assert (await get_rollout(pause_id))["state"] == "completed"
+            assert (await get_rollout(stop_id))["targets"][0]["status"] == "rolled_back"
+
+            followup_rollout = await http.post(
+                "/admin/client-installations/rollouts",
+                headers={"Idempotency-Key": "integration-after-paused-rollout-a-0001"},
+                json={"release_id": "release-2.3.0", "installation_ids": [installs["a"][0]]},
+            )
+            assert followup_rollout.status_code == 201, followup_rollout.text
+            followup_after_stop = await http.post(
+                "/admin/client-installations/rollouts",
+                headers={"Idempotency-Key": "integration-after-stop-rollout-b-0001"},
+                json={"release_id": "release-2.3.0", "installation_ids": [installs["b"][0]]},
+            )
+            assert followup_after_stop.status_code == 201, followup_after_stop.text
     finally:
         await engine.dispose()
         if schema_created:

@@ -114,6 +114,64 @@ def test_helper_uses_network_isolation_and_stdin_for_secrets(monkeypatch):
     assert json.loads(captured["options"]["input"])["private_key"] == secret
 
 
+def test_helper_exposes_only_safe_exception_class_from_nonzero_image(monkeypatch):
+    def fake_run(_command, **_kwargs):
+        return type("Result", (), {
+            "returncode": 1,
+            "stdout": "must not be shown",
+            "stderr": "Enrollment helper failed: licensed_domain_binding:ValueError",
+        })()
+
+    monkeypatch.setattr(enroll_identity.subprocess, "run", fake_run)
+    with pytest.raises(
+        enroll_identity.EnrollmentError,
+        match=r"helper failed at licensed_domain_binding \(ValueError\)",
+    ) as error:
+        enroll_identity._image_helper("registry.example.com/a/b@sha256:" + "a" * 64, {
+            "private_key": "never-print-this-seed",
+            "license_token": "never-print-this-token",
+        })
+    message = str(error.value)
+    assert "never-print-this-seed" not in message
+    assert "never-print-this-token" not in message
+    assert "must not be shown" not in message
+
+
+def test_enrollment_cli_failure_reports_safe_stage(monkeypatch):
+    from types import SimpleNamespace
+
+    from api.services import installation_enrollment_cli as helper
+
+    monkeypatch.setattr(helper, "trusted_license_public_keys", lambda: ("test-key",))
+    monkeypatch.setattr(
+        helper, "load_license", lambda _token, _keys: SimpleNamespace(installation_id="expected-installation")
+    )
+    with pytest.raises(helper._EnrollmentHelperFailure) as error:
+        helper.execute({
+            "license_token": "must-not-be-printed",
+            "installation_id": "different-installation",
+            "public_host": "customer.example",
+            "action": "prepare_enrollment",
+        })
+    assert error.value.stage == "installation_id_binding"
+    assert error.value.error_type == "ValueError"
+    assert "must-not-be-printed" not in str(error.value)
+
+
+def test_helper_does_not_surface_unstructured_stderr(monkeypatch):
+    def fake_run(_command, **_kwargs):
+        return type("Result", (), {
+            "returncode": 1,
+            "stdout": "",
+            "stderr": "raw error may contain credentials",
+        })()
+
+    monkeypatch.setattr(enroll_identity.subprocess, "run", fake_run)
+    with pytest.raises(enroll_identity.EnrollmentError, match="exited unsuccessfully") as error:
+        enroll_identity._image_helper("registry.example.com/a/b@sha256:" + "a" * 64, {})
+    assert "credentials" not in str(error.value)
+
+
 def test_owner_endpoint_must_be_pinned_https_check_url():
     with pytest.raises(enroll_identity.EnrollmentError):
         enroll_identity._enrollment_url("https://attacker.example/check?redirect=1")

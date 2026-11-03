@@ -744,6 +744,25 @@ def test_api_image_verifier_requires_the_signed_runtime_docs_index(monkeypatch):
     assert "Legacy installation persistence path must not be a symlink" in legacy_code
 
 
+def test_image_verifier_surfaces_container_failure_without_echoing_command(monkeypatch):
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.syspath_prepend(str(root / "deploy/client"))
+    import verify_images
+
+    def fail(*args, **kwargs):
+        raise subprocess.CalledProcessError(
+            1,
+            ["docker", "run", "-e", "DATABASE_URL=private"],
+            output="route boundary check failed",
+            stderr="AssertionError: Hosted SaaS billing/payment routes shipped",
+        )
+
+    monkeypatch.setattr(verify_images.subprocess, "run", fail)
+    with pytest.raises(RuntimeError, match="Hosted SaaS billing/payment routes shipped") as exc:
+        verify_images._run("docker", "run", "-e", "DATABASE_URL=private")
+    assert "DATABASE_URL=private" not in str(exc.value)
+
+
 def test_release_verifier_checks_caddyfile_with_the_approved_digest(tmp_path, monkeypatch):
     root = Path(__file__).resolve().parents[2]
     monkeypatch.syspath_prepend(str(root / "deploy/client"))

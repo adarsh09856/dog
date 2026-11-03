@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 import time
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 
@@ -343,12 +345,14 @@ async def test_owner_records_integrity_alert_and_does_not_clear_it(monkeypatch):
         },
     )
     assert first["integrity_failed_at"] is not None
+    assert first["integrity_alert_notification"] is True
     second = await installation_records.record_client_installation_check(
         "client-1", "fingerprint", integrity_ok=True,
         expected_public_key="A" * 43, nonce_fingerprint="2" * 64,
         nonce_expires_at=now + timedelta(seconds=91),
     )
     assert second["integrity_failed_at"] == first["integrity_failed_at"]
+    assert second["integrity_alert_notification"] is False
     assert session.commit.await_count == 2
     assert session.execute.await_count == 7  # Two select/delete/nonce groups plus the alert upsert.
     upsert = session.execute.await_args_list[3].args[0]
@@ -423,9 +427,12 @@ async def test_owner_records_bounded_component_finding(monkeypatch):
     )
     stored = AsyncMock(return_value={
         "revoked_at": None, "integrity_failed_at": datetime.now(UTC).isoformat(),
+        "integrity_alert_notification": True, "integrity_alert_notification_id": 17,
         "expires_at": now + 3600,
     })
     monkeypatch.setattr(client_installation_check, "record_client_installation_check", stored)
+    enqueue = AsyncMock()
+    monkeypatch.setattr(client_installation_check, "enqueue_client_integrity_alert_email", enqueue)
     finding = client_installation_check.IntegrityFinding(
         reason="modified_file", component="api/app.py",
         expected_sha256="a" * 64, observed_sha256="b" * 64,
@@ -444,8 +451,11 @@ async def test_owner_records_bounded_component_finding(monkeypatch):
         f"Bearer {token}",
     )
     assert stored.await_args.kwargs["integrity_finding"] == finding.model_dump()
+    assert isinstance(result, JSONResponse)
+    await result.background()
+    enqueue.assert_awaited_once_with(alert_id=17, attempt=1)
     assert verify_installation_status(
-        result["signed_status"], public_key=public, installation_id="client-1",
+        json.loads(result.body)["signed_status"], public_key=public, installation_id="client-1",
         license_token=token, nonce=nonce,
     ) is True
 
