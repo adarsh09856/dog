@@ -61,7 +61,9 @@ async def test_selecting_default_serializes_and_clears_prior_defaults(monkeypatc
         yield session
 
     monkeypatch.setattr(saas_plan_catalog.kodewaves_db_client, "get_session", get_session)
-    payload = plans.PlanItem(name="Default", code="stable-code", is_default=True)
+    payload = plans.PlanItem(
+        name="Default", code="stable-code", monthly_price_cents=100, is_default=True
+    )
     await plans.update_plan(record.id, payload, _user=SimpleNamespace(id=1))
 
     calls = session.execute.await_args_list
@@ -107,6 +109,23 @@ async def test_new_plan_cannot_be_activated_or_published_without_an_explicit_pri
         ))
     assert rejected.value.status_code == 422
     get_session.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_active_plan_update_cannot_overwrite_a_paid_price_with_implicit_zero(monkeypatch):
+    save_plan = AsyncMock(side_effect=AssertionError("Unpriced plan update reached the catalog"))
+    monkeypatch.setattr(saas_plan_catalog, "save_plan", save_plan)
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as rejected:
+        await plans.update_plan(
+            "paid-plan",
+            plans.PlanItem(name="Paid plan renamed", code="paid", is_active=True, is_public=True),
+            _user=SimpleNamespace(id=1),
+        )
+
+    assert rejected.value.status_code == 422
+    save_plan.assert_not_awaited()
 
 
 @pytest.mark.asyncio
