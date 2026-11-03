@@ -1087,7 +1087,7 @@ def create_tts_service(
                 skip_aggregator_types=["recording_router", "recording"],
                 **cache_kwargs,
             )
-            if selected_model.casefold() == "indic-vits-rasa-13":
+            if selected_model.casefold() in {"indic-vits-rasa-13", "indic-mio-tts"}:
                 # Use only a recent /v1/models snapshot already fetched by
                 # catalog/configuration code. Runtime call setup never probes
                 # the local TTS endpoint or initializes an inference model.
@@ -1096,9 +1096,13 @@ def create_tts_service(
                         local_tts_api_base,
                     )
 
+                    endpoint_setting = (
+                        "indic_mio_tts_endpoint"
+                        if selected_model.casefold() == "indic-mio-tts"
+                        else "indic_vits_tts_endpoint"
+                    )
                     inventory_base = local_tts_api_base(
-                        {"indic_vits_tts_endpoint": speaches_url},
-                        selected_model,
+                        {endpoint_setting: speaches_url}, selected_model,
                     )
                     tts_service._caller_language_tts_capability_inventory_endpoint = (
                         inventory_base

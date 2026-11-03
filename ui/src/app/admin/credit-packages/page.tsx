@@ -51,6 +51,7 @@ function formatMoney(amount: number, currency: string) {
 export default function AdminCreditPackagesPage() {
   const [packages, setPackages] = useState<CreditPackage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false);
@@ -60,10 +61,12 @@ export default function AdminCreditPackagesPage() {
 
   const fetchPackages = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const data = await adminApi.getCreditPackages();
       setPackages(data);
     } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load credit bundles. Please retry.");
       console.error("Failed to load credit packages:", err);
     } finally {
       setLoading(false);
@@ -121,6 +124,7 @@ export default function AdminCreditPackagesPage() {
           <Button
             size="sm"
             className="gap-2"
+            disabled={loading || Boolean(loadError)}
             onClick={() => {
               setFreePackageConfirmed(false);
               setEditingPackage({
@@ -157,6 +161,7 @@ export default function AdminCreditPackagesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {loadError && <p role="alert" className="mb-4 text-sm text-destructive">{loadError}</p>}
           <div className="overflow-x-auto rounded-xl border border-border/60">
             <Table>
               <TableHeader className="bg-muted/40">
@@ -172,7 +177,11 @@ export default function AdminCreditPackagesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {packages.length === 0 ? (
+                {loading || loadError ? (
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-sm text-muted-foreground">
+                    {loading ? "Loading inventory…" : "Inventory unavailable. Use Refresh to retry."}
+                  </TableCell></TableRow>
+                ) : packages.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8 text-sm text-muted-foreground">
                       No top-up bundles created yet. Click &quot;Create Bundle&quot; to add your first.
@@ -218,6 +227,7 @@ export default function AdminCreditPackagesPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7"
+                            aria-label={`Edit ${pkg.name}`}
                             onClick={() => {
                               setEditingPackage(pkg);
                               setModalOpen(true);
@@ -229,6 +239,7 @@ export default function AdminCreditPackagesPage() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-destructive hover:text-destructive"
+                            aria-label={`Delete ${pkg.name}`}
                             onClick={() => handleDelete(pkg.id)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />

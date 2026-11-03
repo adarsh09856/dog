@@ -186,6 +186,10 @@ class AgentRuntimeFactory:
             )
 
             llm._caller_language_supported_codes = caller_language_tts_capabilities(tts)
+            if self._caller_language_source is not None:
+                self._caller_language_source._caller_language_supported_codes = (
+                    llm._caller_language_supported_codes
+                )
         if self._caller_language_source is not None:
             for service in (llm, tts):
                 if service is not None:

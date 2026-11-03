@@ -111,6 +111,7 @@ async def upsert_plan(plan: PlanItem, _user=Depends(get_superuser)):
 
 @router.put("/{plan_id}", response_model=Dict[str, Any])
 async def update_plan(plan_id: str, plan: PlanItem, _user=Depends(get_superuser)):
+    _validate_new_plan_price(plan)
     try:
         record = await saas_plan_catalog.save_plan(_plan_values(plan), identifier=plan_id)
     except ValueError as error:

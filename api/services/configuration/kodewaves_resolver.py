@@ -466,8 +466,8 @@ async def apply_kodewaves_sovereign_resolution(
     # =========================================================================
     # 3. STT Layer Resolution
     # =========================================================================
-    if not effective.is_realtime:
-        if effective.stt is None:
+    if not effective.is_realtime or effective.tts is not None:
+        if not effective.is_realtime and effective.stt is None:
             resolved = await _resolve_master_stt(effective)
             if resolved:
                 metadata.stt = resolved
@@ -482,7 +482,7 @@ async def apply_kodewaves_sovereign_resolution(
                     status_code=400,
                     detail="No active STT credentials configured. Please configure Deepgram, Groq, or Google in Admin Master Keys.",
                 )
-        else:
+        elif not effective.is_realtime and effective.stt is not None:
             provider = getattr(effective.stt, "provider", "deepgram")
             provider_name = str(getattr(provider, "value", provider)).lower()
             user_key = getattr(effective.stt, "api_key", None)

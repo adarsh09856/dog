@@ -88,6 +88,11 @@ export interface KodewavesFormState {
     is_realtime?: boolean;
     realtime_provider?: string;
     realtime_model?: string;
+    script_tts_engine_type?: "cloud" | "local_cpu";
+    script_tts_model?: string;
+    script_tts_voice?: string;
+    script_tts_speed?: number;
+    script_tts_language?: string;
 }
 export type DograhFormState = KodewavesFormState;
 
@@ -167,6 +172,7 @@ function byokConfigToLegacyShape(config: Record<string, unknown> | null): Record
             is_realtime: true,
             realtime: realtime?.realtime,
             llm: realtime?.llm,
+            tts: realtime?.script_tts,
             embeddings: realtime?.embeddings,
         };
     }
@@ -271,6 +277,7 @@ function buildKodewavesState(
         const isRealtime = Boolean(configuredKodewaves.is_realtime);
         const realtimeProvider = configuredKodewaves.realtime_provider ? String(configuredKodewaves.realtime_provider) : "google";
         const realtimeModel = configuredKodewaves.realtime_model ? String(configuredKodewaves.realtime_model) : "";
+        const scriptTtsEngineType = configuredKodewaves.script_tts_engine_type === "local_cpu" ? "local_cpu" : "cloud";
 
         return {
             api_key: apiKey,
@@ -287,6 +294,11 @@ function buildKodewavesState(
             is_realtime: isRealtime,
             realtime_provider: realtimeProvider,
             realtime_model: realtimeModel,
+            script_tts_engine_type: scriptTtsEngineType,
+            script_tts_model: configuredKodewaves.script_tts_model ? String(configuredKodewaves.script_tts_model) : undefined,
+            script_tts_voice: configuredKodewaves.script_tts_voice ? String(configuredKodewaves.script_tts_voice) : "",
+            script_tts_speed: numberOrDefault(configuredKodewaves.script_tts_speed, 1),
+            script_tts_language: configuredKodewaves.script_tts_language ? String(configuredKodewaves.script_tts_language) : MULTILINGUAL_LANGUAGE_CODE,
         };
     }
 
@@ -324,6 +336,11 @@ function buildKodewavesState(
             is_realtime: false,
             realtime_provider: "google",
             realtime_model: "",
+            script_tts_engine_type: "local_cpu",
+            script_tts_model: undefined,
+            script_tts_voice: "",
+            script_tts_speed: 1,
+            script_tts_language: MULTILINGUAL_LANGUAGE_CODE,
         };
     }
 
@@ -342,6 +359,11 @@ function buildKodewavesState(
         is_realtime: false,
         realtime_provider: "google",
         realtime_model: "",
+        script_tts_engine_type: "local_cpu",
+        script_tts_model: undefined,
+        script_tts_voice: "",
+        script_tts_speed: 1,
+        script_tts_language: MULTILINGUAL_LANGUAGE_CODE,
     };
 }
 
@@ -735,6 +757,37 @@ export function AIModelConfigurationV2Editor({
         return selectedProvider && selectedProvider !== "auto" ? selectedProvider : "all";
     }, [kodewaves.tts_engine_type, kodewaves.tts_model, effectiveTtsModels]);
 
+    const effectiveScriptTtsModels = useMemo(() => {
+        if (kodewaves.script_tts_engine_type === "local_cpu") {
+            return catalogManifest?.local_tts_models || [];
+        }
+        let list = catalogManifest?.cloud_tts_models || [];
+        const activeProvs = catalogManifest?.active_providers;
+        if (activeProvs?.length) {
+            const allowed = new Set(activeProvs.map((provider) => provider.toLowerCase()));
+            if (allowed.has("gemini")) allowed.add("google");
+            if (allowed.has("google")) allowed.add("gemini");
+            list = list.filter((model) => {
+                const provider = (model.provider || "").toLowerCase();
+                return provider === "auto" || allowed.has(provider) || model.has_master_key;
+            });
+        }
+        return list;
+    }, [catalogManifest, kodewaves.script_tts_engine_type]);
+
+    const effectiveScriptTtsProvider = useMemo(() => {
+        const model = effectiveScriptTtsModels.find((entry) => entry.value === kodewaves.script_tts_model);
+        return model?.provider && model.provider !== "auto" ? model.provider : "all";
+    }, [effectiveScriptTtsModels, kodewaves.script_tts_model]);
+
+    const scriptTtsLanguageOptions = useMemo(() => {
+        const selectedModel = effectiveScriptTtsModels.find((entry) => entry.value === kodewaves.script_tts_model);
+        if (kodewaves.script_tts_engine_type === "local_cpu" && selectedModel?.languages?.length) {
+            return selectedModel.languages;
+        }
+        return kodewavesDefaults.languages.filter((language) => language !== MULTILINGUAL_LANGUAGE_CODE);
+    }, [effectiveScriptTtsModels, kodewaves.script_tts_engine_type, kodewaves.script_tts_model, kodewavesDefaults.languages]);
+
     const effectiveS2sModels = useMemo(() => {
         let list = catalogManifest?.cloud_s2s_models || [];
         const activeProvs = catalogManifest?.active_providers;
@@ -786,6 +839,32 @@ export function AIModelConfigurationV2Editor({
             const apiKey = isAllLocal ? "sovereign-local-cpu" : "sovereign-managed";
             const isRt = overrideRealtime !== undefined ? overrideRealtime : Boolean(kodewaves.is_realtime);
             if (!catalogManifest || catalogError) throw new Error("Refresh the model catalog before saving.");
+            const scriptTtsRequested = Boolean(kodewaves.script_tts_model || kodewaves.script_tts_voice);
+            if (isRt && scriptTtsRequested) {
+                if (!kodewaves.script_tts_model || !kodewaves.script_tts_voice) {
+                    throw new Error("Choose both a workflow script TTS model and voice, or clear both selections.");
+                }
+                if (!effectiveScriptTtsModels.some((model) => model.value === kodewaves.script_tts_model)) {
+                    throw new Error("Choose an available model for workflow script speech.");
+                }
+                if (!Number.isFinite(kodewaves.script_tts_speed) || Number(kodewaves.script_tts_speed) < 0.5 || Number(kodewaves.script_tts_speed) > 2) {
+                    throw new Error("Workflow script voice speed must be between 0.5 and 2.0.");
+                }
+                const scriptVoiceCheck = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
+                    path: { provider: effectiveScriptTtsProvider },
+                    query: {
+                        model: kodewaves.script_tts_model,
+                        q: kodewaves.script_tts_voice,
+                        language: kodewaves.script_tts_engine_type === "local_cpu" || kodewaves.script_tts_language === MULTILINGUAL_LANGUAGE_CODE
+                            ? undefined
+                            : kodewaves.script_tts_language,
+                    },
+                });
+                if (scriptVoiceCheck.error) throw new Error(detailFromError(scriptVoiceCheck.error, "Unable to verify workflow script voice."));
+                if (!scriptVoiceCheck.data?.voices.some((voice) => voice.voice_id === kodewaves.script_tts_voice)) {
+                    throw new Error("Choose an available voice for the selected workflow script TTS model.");
+                }
+            }
             if (!isRt) {
                 if (kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && !supportsRecognitionAutoDetect) {
                     throw new Error("The selected STT model does not support automatic language detection. Choose a supported language or select an STT model that supports auto-detection.");
@@ -838,6 +917,13 @@ export function AIModelConfigurationV2Editor({
                 is_realtime: isRt,
                 realtime_provider: kodewaves.realtime_provider || (effectiveS2sModels[0]?.provider || "google"),
                 realtime_model: kodewaves.realtime_model || (effectiveS2sModels[0]?.value || undefined),
+                ...(isRt && scriptTtsRequested ? {
+                    script_tts_engine_type: kodewaves.script_tts_engine_type || "local_cpu",
+                    script_tts_model: kodewaves.script_tts_model,
+                    script_tts_voice: kodewaves.script_tts_voice,
+                    script_tts_speed: Number(kodewaves.script_tts_speed || 1),
+                    script_tts_language: kodewaves.script_tts_language || MULTILINGUAL_LANGUAGE_CODE,
+                } : {}),
             };
             await onSave({
                 version: 2,
@@ -855,6 +941,7 @@ export function AIModelConfigurationV2Editor({
         setError(null);
         const isRealtime = Boolean(config.is_realtime);
         const llm = requireByokService(config, "llm", defaultsForByok);
+        const tts = isRealtime ? optionalByokService(config, "tts") : null;
         const embeddings = optionalByokService(config, "embeddings");
         const body: OrganizationAiModelConfigurationV2 = {
             version: 2,
@@ -865,6 +952,7 @@ export function AIModelConfigurationV2Editor({
                     realtime: {
                         realtime: requireByokService(config, "realtime", defaultsForByok) as never,
                         llm: llm as never,
+                        ...(tts ? { script_tts: tts as never } : {}),
                         ...(embeddings ? { embeddings: embeddings as never } : {}),
                     },
                 }
@@ -1008,6 +1096,92 @@ export function AIModelConfigurationV2Editor({
                                             ))}
                                         </SelectContent>
                                     </Select>
+                                </div>
+
+                                <div className="space-y-2 sm:col-span-2 rounded-xl border p-4">
+                                    <div>
+                                        <Label className="font-semibold">Workflow Script Voice (optional)</Label>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            Used only for configured greetings and workflow-authored messages. Dynamic conversation stays on the selected realtime voice. Choose this separately to keep the voice consistent for scripted messages.
+                                        </p>
+                                    </div>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <div className="space-y-2">
+                                            <Label>Script TTS engine</Label>
+                                            <Select
+                                                value={kodewaves.script_tts_engine_type || "local_cpu"}
+                                                onValueChange={(value: "cloud" | "local_cpu") => setKodewaves({
+                                                    ...kodewaves,
+                                                    script_tts_engine_type: value,
+                                                    script_tts_model: undefined,
+                                                    script_tts_voice: "",
+                                                })}
+                                            >
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="local_cpu">Self-hosted CPU</SelectItem>
+                                                    <SelectItem value="cloud">Cloud</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Script TTS model</Label>
+                                            <Select
+                                                disabled={effectiveScriptTtsModels.length === 0}
+                                                value={kodewaves.script_tts_model && effectiveScriptTtsModels.some((model) => model.value === kodewaves.script_tts_model) ? kodewaves.script_tts_model : "none"}
+                                                onValueChange={(value) => setKodewaves({ ...kodewaves, script_tts_model: value === "none" ? undefined : value, script_tts_voice: "" })}
+                                            >
+                                                <SelectTrigger><SelectValue placeholder="Select script TTS model" /></SelectTrigger>
+                                                <SelectContent>
+                                                    {effectiveScriptTtsModels.length ? effectiveScriptTtsModels.map((model) => (
+                                                        <SelectItem key={model.value} value={model.value}>{model.label}</SelectItem>
+                                                    )) : <SelectItem value="none" disabled>No available TTS models</SelectItem>}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2 sm:col-span-2">
+                                            <Label>Script TTS voice</Label>
+                                            {!kodewaves.script_tts_model || effectiveScriptTtsProvider === "all" ? (
+                                                <p className="text-xs text-muted-foreground">Select a script TTS model to choose its voice.</p>
+                                            ) : (
+                                                <VoiceSelectorModal
+                                                    provider={effectiveScriptTtsProvider}
+                                                    model={kodewaves.script_tts_model}
+                                                    source={kodewaves.script_tts_engine_type === "local_cpu" ? "local" : "cloud"}
+                                                    outputLanguage={kodewaves.script_tts_engine_type === "local_cpu" ? undefined : kodewaves.script_tts_language}
+                                                    value={kodewaves.script_tts_voice || ""}
+                                                    onChange={(voice) => setKodewaves({ ...kodewaves, script_tts_voice: voice })}
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label>Script TTS language</Label>
+                                            <Select
+                                                value={kodewaves.script_tts_language || MULTILINGUAL_LANGUAGE_CODE}
+                                                onValueChange={(script_tts_language) => setKodewaves({ ...kodewaves, script_tts_language })}
+                                            >
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value={MULTILINGUAL_LANGUAGE_CODE}>Automatic / multilingual</SelectItem>
+                                                    {scriptTtsLanguageOptions.map((language) => (
+                                                        <SelectItem key={language} value={language}>{LANGUAGE_DISPLAY_NAMES[language] || language}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="script-tts-speed">Script TTS speed</Label>
+                                            <Input
+                                                id="script-tts-speed"
+                                                type="number"
+                                                min="0.5"
+                                                max="2"
+                                                step="0.1"
+                                                value={kodewaves.script_tts_speed ?? 1}
+                                                onChange={(event) => setKodewaves({ ...kodewaves, script_tts_speed: Number(event.target.value) })}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Language Selector */}

@@ -207,14 +207,15 @@ def build_realtime_pipeline(
     agent_generation_processor,
     pipeline_metrics_aggregator,
     termination_funnel,
+    script_tts=None,
 ):
     """Build a pipeline for realtime (speech-to-speech) LLM services.
 
-    Realtime services (e.g. OpenAI Realtime, Gemini Live) handle STT+LLM+TTS
-    internally, so no separate STT or TTS processors are needed. There is no
-    generation stage to lift out either: the one service consumes the caller's
-    audio directly, so a realtime call has no agent worker and its generation
-    processor runs here alongside the call's clock.
+    Realtime services (e.g. OpenAI Realtime, Gemini Live) handle caller STT and
+    dynamic LLM/TTS replies internally. An optional configured TTS processor
+    handles only app-authored scripts. There is no separate STT stage or agent
+    worker: the one realtime service consumes caller audio directly, and the
+    generation observer runs here alongside the call's clock.
     """
     processors = [
         transport.input(),
@@ -224,9 +225,18 @@ def build_realtime_pipeline(
         realtime_llm,
     ]
 
+    processors.append(agent_generation_processor)
+
+    # Realtime providers keep ownership of dynamic speech-to-speech replies.
+    # This optional TTS stage only receives explicitly marked workflow scripts
+    # forwarded by RealtimeConversationMixin; it never consumes microphone
+    # input or synthesizes provider-generated replies. Keep generation tracking
+    # before TTS so it can capture the authored TTSSpeakFrame text.
+    if script_tts is not None:
+        processors.append(script_tts)
+
     processors.extend(
         [
-            agent_generation_processor,
             transport.output(),
             audio_buffer,
             assistant_context_aggregator,

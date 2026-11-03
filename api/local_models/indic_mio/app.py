@@ -19,7 +19,7 @@ from huggingface_hub import snapshot_download
 from pydantic import BaseModel, Field
 
 MODEL_ID = "indic-mio-tts"
-MODEL_NAME = "Indic-Mio 0.6B — 22 Indian languages + English (CPU, buffered)"
+MODEL_NAME = "Indic-Mio 0.6B — 22 Indian languages + English (CPU streaming)"
 MODEL_REPO = "soniqo/Indic-Mio-LiteRT"
 MODEL_REVISION = "8c9c7589872ad637a5ee725cd20d4b63e0f86e24"
 MODEL_DIR = Path(os.environ.get("INDIC_MIO_MODEL_DIR", "/models/indic-mio"))
@@ -115,7 +115,9 @@ async def models():
             "object": "model",
             "task": "text-to-speech",
             "installed": HANDLE is not None,
-            "streaming": False,
+            # The PCM endpoint forwards LiteRT callback chunks as they arrive;
+            # only WAV/non-default-speed responses are buffered.
+            "streaming": True,
             "languages": SUPPORTED_LANGUAGES,
             "voices": [{
                 "id": "default",

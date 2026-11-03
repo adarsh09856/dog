@@ -2,12 +2,12 @@ export type SttEngineType = "cloud" | "local_cpu";
 
 export type SttModelOption = { value: string };
 
-// Keep the local selector aligned with the deployed self-hosted speech
-// inventory. The recognizer may have additional LID classes, but these are
-// intentionally not offered as selectable or auto-detectable languages.
+// Keep the local selector aligned with the pinned IndicConformer decoder
+// inventory: all 22 scheduled Indian languages plus Indian English.
 const LOCAL_STT_LANGUAGES = new Set([
-    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
-    "ne", "pa", "sa", "ta", "te",
+    "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok",
+    "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd",
+    "ta", "te", "ur",
 ]);
 
 const baseLanguageCode = (language: string) =>

@@ -1032,6 +1032,8 @@ export type ByokRealtimeAiModelConfiguration = {
     } & DograhEmbeddingsConfiguration) | ({
         provider: 'gemini';
     } & GoogleGeminiEmbeddingsConfiguration) | null;
+    /** Optional standalone TTS for workflow-authored realtime messages. */
+    script_tts?: ByokPipelineAiModelConfiguration["tts"] | null;
 };
 
 /**
@@ -4775,6 +4777,11 @@ export type KodewavesManagedAiModelConfiguration = {
      * Realtime Model
      */
     realtime_model?: string | null;
+    script_tts_engine_type?: string | null;
+    script_tts_model?: string | null;
+    script_tts_voice?: string | null;
+    script_tts_speed?: number | null;
+    script_tts_language?: string | null;
 };
 
 /**
@@ -4827,6 +4834,8 @@ export type KodewavesTtsService = {
      * Voice preset.
      */
     voice?: string;
+    /** Script synthesis language; use 'multi' only for multilingual models. */
+    language?: string | null;
     /**
      * Speed
      *

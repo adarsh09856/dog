@@ -175,6 +175,31 @@ def _uses_local_indic_phone_capture(stt, user_config, *, is_realtime: bool) -> b
     )
 
 
+def create_optional_realtime_script_tts(
+    user_config,
+    audio_config,
+    *,
+    correlation_id: str | None = None,
+    organization_id: int | None = None,
+    tts_cache_enabled: bool = False,
+):
+    """Create auxiliary TTS only when realtime config explicitly selected it.
+
+    Legacy S2S configurations contain a provider-native realtime voice, not a
+    standalone TTS config. Treating that voice as a TTS provider config crashes
+    startup and can route authored speech to an unintended voice.
+    """
+    if user_config.tts is None:
+        return None
+    return create_tts_service(
+        user_config,
+        audio_config,
+        correlation_id=correlation_id,
+        organization_id=organization_id,
+        tts_cache_enabled=tts_cache_enabled,
+    )
+
+
 def _schedule_pre_call_fetch(
     *,
     workflow_run_id: int,
@@ -964,7 +989,17 @@ async def _run_pipeline_impl(
     if is_realtime:
         llm = create_realtime_llm_service(user_config, audio_config)
         stt = None
-        tts = None
+        # Realtime models synthesize dynamic replies themselves. An explicitly
+        # configured script TTS is optional and must remain independent of the
+        # realtime provider's native voice. Older S2S configs have no standalone
+        # TTS setting, so keep their existing native-voice path working.
+        tts = create_optional_realtime_script_tts(
+            user_config,
+            audio_config,
+            correlation_id=mps_correlation_id,
+            organization_id=workflow.organization_id,
+            tts_cache_enabled=run_configs.get("tts_cache_enabled") is True,
+        )
         # Realtime services don't implement run_inference, so create a
         # separate text LLM for variable extraction and other out-of-band
         # inference calls.
@@ -1002,6 +1037,8 @@ async def _run_pipeline_impl(
             )
 
             llm._caller_language_supported_codes = caller_language_tts_capabilities(tts)
+            if stt is not None:
+                stt._caller_language_supported_codes = llm._caller_language_supported_codes
         # The recognizer's detected language is call-scoped and changes on
         # every utterance. The LLM adapter reads it only for the outgoing
         # request, without adding diagnostic text to transcript history.
@@ -1375,9 +1412,11 @@ async def _run_pipeline_impl(
             AgentGenerationProcessor(
                 generation_started_callback=engine.create_generation_started_callback(),
                 llm_text_frame_callback=engine.handle_llm_text_frame,
+                skip_tts_text=True,
             ),
             pipeline_metrics_aggregator,
             termination_funnel,
+            script_tts=tts,
         )
     else:
         pipeline = build_pipeline(
@@ -1426,6 +1465,10 @@ async def _run_pipeline_impl(
     # Now set the task and transport output on the engine
     engine.call_worker = task
     engine.set_transport_output(transport.output())
+    if is_realtime:
+        engine.active_agent.tts = tts
+        engine.active_agent.user_config = user_config
+        engine.active_agent.runtime_configuration = runtime_configuration
 
     from api.services.observability.call_events.runtime import create_session
 
