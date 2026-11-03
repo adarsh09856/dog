@@ -61,10 +61,6 @@ from api.tasks.campaign_tasks import (
     process_campaign_batch,
     sync_campaign_source,
 )
-from api.tasks.client_integrity_email import (
-    deliver_client_integrity_alert_email,
-    sweep_client_integrity_alert_emails,
-)
 from api.tasks.knowledge_base_processing import process_knowledge_base_document
 from api.tasks.run_integrations import run_integrations_post_workflow_run
 from api.tasks.text_chat_inactivity import (
@@ -73,45 +69,63 @@ from api.tasks.text_chat_inactivity import (
 )
 from api.tasks.webhook_delivery import deliver_webhook, sweep_webhook_deliveries
 from api.tasks.workflow_completion import process_workflow_completion
+from api.services.deployment_edition import runtime_edition
 
-
-class WorkerSettings:
-    functions = [
-        run_integrations_post_workflow_run,
-        process_workflow_completion,
-        sync_campaign_source,
-        process_campaign_batch,
-        process_knowledge_base_document,
-        deliver_webhook,
+# Owner integrity alerts are persisted in the hosted control-plane database.
+# The licensed client image intentionally omits that owner-only DB module, so
+# keep its task imports and worker registration out of client runtimes.
+_OWNER_INTEGRITY_TASKS_ENABLED = runtime_edition() == "saas"
+if _OWNER_INTEGRITY_TASKS_ENABLED:
+    from api.tasks.client_integrity_email import (
         deliver_client_integrity_alert_email,
-        complete_inactive_text_chat_session,
-    ]
-    cron_jobs = [
-        # Safety net for webhook deliveries whose ARQ job was lost (worker
-        # restart / Redis flush): re-enqueue any pending delivery that is overdue.
-        cron(
-            sweep_webhook_deliveries,
-            minute=set(range(0, 60, 5)),
-            second=0,
-            run_at_startup=True,
-        ),
-        # Persisted owner integrity notifications survive Redis loss and worker
-        # crashes; expired sending leases are reclaimed by this sweep.
+        sweep_client_integrity_alert_emails,
+    )
+
+
+_worker_functions = [
+    run_integrations_post_workflow_run,
+    process_workflow_completion,
+    sync_campaign_source,
+    process_campaign_batch,
+    process_knowledge_base_document,
+    deliver_webhook,
+    complete_inactive_text_chat_session,
+]
+_worker_cron_jobs = [
+    # Safety net for webhook deliveries whose ARQ job was lost (worker
+    # restart / Redis flush): re-enqueue any pending delivery that is overdue.
+    cron(
+        sweep_webhook_deliveries,
+        minute=set(range(0, 60, 5)),
+        second=0,
+        run_at_startup=True,
+    ),
+    # Text chats do not have a transport disconnect callback. Close stale
+    # sessions so their transcript and completion integrations are finalized.
+    cron(
+        sweep_inactive_text_chat_sessions,
+        minute=set(range(0, 60, TEXT_CHAT_INACTIVITY_SWEEP_INTERVAL_MINUTES)),
+        second=30,
+        run_at_startup=True,
+    ),
+]
+if _OWNER_INTEGRITY_TASKS_ENABLED:
+    _worker_functions.append(deliver_client_integrity_alert_email)
+    # Persisted owner integrity notifications survive Redis loss and worker
+    # crashes; expired sending leases are reclaimed by this sweep.
+    _worker_cron_jobs.append(
         cron(
             sweep_client_integrity_alert_emails,
             minute=set(range(0, 60, 1)),
             second=15,
             run_at_startup=True,
-        ),
-        # Text chats do not have a transport disconnect callback. Close stale
-        # sessions so their transcript and completion integrations are finalized.
-        cron(
-            sweep_inactive_text_chat_sessions,
-            minute=set(range(0, 60, TEXT_CHAT_INACTIVITY_SWEEP_INTERVAL_MINUTES)),
-            second=30,
-            run_at_startup=True,
-        ),
-    ]
+        )
+    )
+
+
+class WorkerSettings:
+    functions = _worker_functions
+    cron_jobs = _worker_cron_jobs
     redis_settings = REDIS_SETTINGS
     max_jobs = 10
 
