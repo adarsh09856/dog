@@ -1566,7 +1566,7 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         return None
     users = [m for m in messages if isinstance(m, dict) and m.get("role") == "user"
              and isinstance(m.get("content"), str)]
-    if len(users) < 2 or not any(new_booking_requested(m["content"]) for m in users[:-1]):
+    if not users:
         return None
     latest = users[-1]["content"].strip()
     if not latest:
@@ -1601,10 +1601,27 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
     previous = next((m.get("content") for m in reversed(messages[:latest_index])
                      if isinstance(m, dict) and m.get("role") == "assistant"), None)
     asked_for_time = isinstance(previous, str) and bool(re.search(
-        r"किस समय|कौन सा समय|समय\s+क्या|किस तारीख|किस तारीख और समय|what time|what date|date and time",
+        r"किस समय|कौन सा समय|समय\s+क्या|किस तारीख|किस तारीख और समय|कितने बजे|"
+        r"समय बताइ|कौन\s+से?\s+समय|"
+        r"what time|at what time|which time|time works|time would|time do you want|"
+        r"what date|date and time|what day and time|"
+        r"kis samay|kis time|kitne baje|kaun se time",
         previous, re.I,
     ))
     if not asked_for_time:
+        return None
+    # The live conversation window can omit an earlier booking request after
+    # several name/phone/date turns. A staged date plus the assistant's
+    # explicit time question is itself a call-scoped capture state, so accept
+    # a short answer such as "8 AM" without sending it to the slow LLM.
+    staged_date = state.get("booking_time_question_date")
+    staged_date_is_valid = isinstance(staged_date, str) and bool(
+        re.fullmatch(r"\d{4}-\d{2}-\d{2}", staged_date)
+    )
+    has_prior_booking = len(users) >= 2 and any(
+        new_booking_requested(m["content"]) for m in users[:-1]
+    )
+    if not (has_prior_booking or staged_date_is_valid):
         return None
     normalized = latest.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
 
@@ -1622,7 +1639,8 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         normalized,
     )
     english = re.search(
-        r"(?:\bat\s+)?(\d{1,2}|[a-z]+)(?::([0-5]\d))?\s*(am|pm)\b",
+        r"(?:\bat\s+)?(\d{1,2}|[a-z]+)(?::([0-5]\d))?\s*"
+        r"(am|pm|[ap]\s*\.?\s*m\.?|ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?)\b",
         normalized, re.I,
     )
     if hindi:
@@ -1639,7 +1657,8 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
             return None
         if not 1 <= hour <= 12:
             return None
-        hour24 = hour % 12 + (12 if english.group(3).lower() == "pm" else 0)
+        period = english.group(3).lower().replace(" ", "").replace(".", "")
+        hour24 = hour % 12 + (12 if period.startswith(("p", "पी")) else 0)
     else:
         # A recognized date plus a short number/time-like answer is an
         # incomplete time, not permission for the LLM to supply a default.
@@ -1671,7 +1690,12 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
     if date_was_in_latest:
         state["booking_time_question_date"] = stated_date
     state["booking_confirmation_slot"] = slot
-    if state.get("reply_language") == "English" or english:
+    reply_language = state.get("reply_language")
+    use_english = reply_language == "English" or (
+        reply_language is None and english is not None
+        and not re.search(r"[\u0900-\u097f]", latest)
+    )
+    if use_english:
         return (f"I have {parsed_date.day} {parsed_date.strftime('%B')} {parsed_date.year} "
                 f"at {hour24 % 12 or 12}:{minute:02d} {'PM' if hour24 >= 12 else 'AM'} IST. "
                 "Should I book the appointment for that time?")
