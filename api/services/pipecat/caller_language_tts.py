@@ -85,11 +85,12 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
             )
 
             inventory = get_cached_local_tts_model(inventory_endpoint, model)
-            contract = (
-                local_tts_capability_contract(inventory)
-                if inventory is not None
-                else None
-            )
+            if inventory is not None:
+                contract = local_tts_capability_contract(inventory)
+                service._caller_language_tts_capability_contract = contract
+                service._caller_language_tts_snapshot_verified = True
+            elif not getattr(service, "_caller_language_tts_snapshot_verified", False):
+                contract = None
         if (
             voice in {"default", "indic-mio-default"}
             and isinstance(contract, dict)
@@ -125,13 +126,12 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
             inventory = get_cached_local_tts_model(
                 inventory_endpoint, "indic-vits-rasa-13"
             )
-            # If the cache snapshot expired, discard any prior snapshot from
-            # service construction instead of advertising stale voices.
-            contract = (
-                local_tts_capability_contract(inventory)
-                if inventory is not None
-                else None
-            )
+            if inventory is not None:
+                contract = local_tts_capability_contract(inventory)
+                service._caller_language_tts_capability_contract = contract
+                service._caller_language_tts_snapshot_verified = True
+            elif not getattr(service, "_caller_language_tts_snapshot_verified", False):
+                contract = None
         if isinstance(contract, dict) and contract.get("model") == model:
             installed_voices = contract.get("voices")
             languages = contract.get("languages")
