@@ -283,12 +283,69 @@ def voice_for_text(text: str, preferred_voice: str, context_language: str | None
     return gender_matched[0]
 
 
-def speech_segments(text: str, preferred_voice: str, context_language: str | None = None):
-    """Route script changes inside one reply, retaining numbers and punctuation.
+def _response_voice(preferred_voice: str, context_language: str | None) -> str | None:
+    """Choose one loaded speaker for a caller-language-locked reply.
 
-    Shared scripts still need verified language context. This is text routing,
-    not spoken-language identification or translation.
+    The STT/TTS language hint is held constant for one LLM response and sent
+    with every phrase request. Honor any installed-language hint so words in
+    another script cannot switch the speaker mid-reply.
+    If the target language has no loaded voice, keep the configured speaker as
+    the stable fallback rather than alternating voices or failing a phrase.
     """
+    target = (context_language or "").lower().replace("_", "-").split("-", 1)[0]
+    if not target:
+        return None
+
+    active = get_active_speakers()
+    preferred = active.get(preferred_voice)
+    if preferred is None:
+        raise ValueError("Selected voice is not loaded")
+    if preferred[1] == target:
+        return preferred_voice
+
+    # The loaded inventory is the actual capability intersection. Never infer
+    # that a configured/STT language has a voice merely because a model family
+    # advertises it elsewhere.
+    candidates = [
+        voice for voice, spec in active.items()
+        if str(spec[1]).lower().replace("_", "-").split("-", 1)[0] == target
+    ]
+    if not candidates:
+        return preferred_voice
+
+    preferred_gender = preferred[3]
+    matching = [voice for voice in candidates if active[voice][3] == preferred_gender]
+    if matching:
+        return matching[0]
+    unspecified = [voice for voice in candidates if active[voice][3] == "unspecified"]
+    if unspecified:
+        return unspecified[0]
+    # The configured gender is unavailable in this language. Use its first
+    # loaded voice for the entire response instead of switching on script.
+    return candidates[0]
+
+
+def speech_segments(text: str, preferred_voice: str, context_language: str | None = None):
+    """Keep a caller-language-locked reply on one speaker across scripts.
+
+    A local speech request is one phrase of an assistant response, but every
+    phrase carries the same call-scoped language hint. When that language has
+    a loaded voice, choosing its speaker keeps code-switches stable across
+    phrase boundaries as well as within a phrase. If the language is not in
+    the loaded inventory, the configured voice is the stable fallback. This
+    is voice routing, not translation.
+    """
+    stable_voice = _response_voice(preferred_voice, context_language)
+    if stable_voice:
+        stable_segments: list[tuple[str, str]] = []
+        for match in re.finditer(r"\S+\s*", text):
+            part = match.group()
+            if stable_segments and len(stable_segments[-1][1]) + len(part) <= 120:
+                stable_segments[-1] = (stable_voice, stable_segments[-1][1] + part)
+            else:
+                stable_segments.append((stable_voice, part))
+        return stable_segments
+
     segments: list[tuple[str, str]] = []
     for match in re.finditer(r"\S+\s*", text):
         part = match.group()
