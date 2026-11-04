@@ -858,6 +858,11 @@ class PipecatEngine:
         if not hasattr(self, "_contact_conversation_state"):
             self._contact_conversation_state = {}
         agent.llm._contact_conversation_state = self._contact_conversation_state
+        if not hasattr(self, "_caller_language_context"):
+            from api.services.pipecat.caller_language_context import CallerLanguageContext
+
+            self._caller_language_context = CallerLanguageContext()
+        agent.llm._caller_language_context = self._caller_language_context
         manager = (
             self._custom_tool_manager
             if agent is self.active_agent
@@ -901,7 +906,11 @@ class PipecatEngine:
                 # Local voice-persona lookup has just refreshed the cached
                 # /v1/models inventory. Recompute language switching from that
                 # snapshot without adding another request to call setup.
-                refresh_caller_language_tts_capabilities(agent.llm, agent.tts)
+                refresh_caller_language_tts_capabilities(
+                    agent.llm,
+                    agent.tts,
+                    update_source=agent is self.active_agent,
+                )
         client_identity = installed_client_identity_instruction(
             self._call_context_vars
         )
@@ -1827,6 +1836,14 @@ class PipecatEngine:
         self.context.set_otel_span_name(f"llm-{runtime.current_node.name}")
         runtime.entered_at = time.time()
         self.install_agent(runtime, previous=self.active_agent)
+        if runtime.llm is not None and runtime.tts is not None:
+            from api.services.pipecat.caller_language_tts import (
+                refresh_caller_language_tts_capabilities,
+            )
+
+            refresh_caller_language_tts_capabilities(
+                runtime.llm, runtime.tts, update_source=True
+            )
         self._custom_tool_manager = CustomToolManager(self, runtime)
         self._agent_on_hold = False
         nodes = self._gathered_context.setdefault("nodes_visited", [])

@@ -236,8 +236,9 @@ class CallerLanguageContext:
         The STT source describes only its latest recognition. Remember the
         associated hint while that utterance remains in the context, rather
         than stripping it on the following turn and invalidating the model's
-        cached prefix. This state belongs to one LLM service, never a global
-        cache, and does not modify the transcript or supplied dictionaries.
+        cached prefix. The engine shares this state across LLM services within
+        one call so an agent handoff does not forget the caller's choice. It is
+        never a process-global cache and does not modify supplied dictionaries.
         """
         supported_languages = reply_language_switch_capabilities(
             supported_languages, source
@@ -252,6 +253,18 @@ class CallerLanguageContext:
         keys = {(ordinal, text) for ordinal, (_, text) in enumerate(users)}
         self._hints = {key: hint for key, hint in self._hints.items() if key in keys}
         if not users:
+            self._explicit_preference = None
+            self._explicit_source_language = None
+            self._explicit_target_language = None
+
+        # A new agent may use a TTS model with a narrower verified inventory.
+        # Drop an inherited preference the active voice cannot produce so the
+        # LLM text and synthesized language do not diverge after a handoff.
+        supported_codes = _supported_language_codes(supported_languages)
+        if (
+            self._explicit_preference
+            and normalize_language_code(self._explicit_preference) not in supported_codes
+        ):
             self._explicit_preference = None
             self._explicit_source_language = None
             self._explicit_target_language = None

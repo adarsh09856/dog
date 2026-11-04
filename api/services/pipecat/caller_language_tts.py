@@ -188,8 +188,10 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
     return frozenset()
 
 
-def refresh_caller_language_tts_capabilities(llm: Any, tts: Any) -> frozenset[str]:
-    """Refresh LLM and shared recognizer routing after voice discovery."""
+def refresh_caller_language_tts_capabilities(
+    llm: Any, tts: Any, *, update_source: bool = True
+) -> frozenset[str]:
+    """Refresh LLM and, when active, shared recognizer routing after discovery."""
     capabilities = caller_language_tts_capabilities(tts)
     if llm is not None:
         llm._caller_language_supported_codes = capabilities
@@ -197,7 +199,7 @@ def refresh_caller_language_tts_capabilities(llm: Any, tts: Any) -> frozenset[st
         # service was constructed. Keep its filter aligned with the active
         # agent's verified TTS inventory instead of the prior agent's cache.
         source = getattr(llm, "_caller_language_source", None)
-        if source is not None:
+        if source is not None and update_source:
             source._caller_language_supported_codes = capabilities
     return capabilities
 
