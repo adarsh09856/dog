@@ -483,6 +483,9 @@ def _detect_language(waveform: np.ndarray, sample_rate: int) -> tuple[str, float
     mean_log_probabilities = weighted_log_probabilities / total_weight
     probabilities = np.exp(mean_log_probabilities - float(np.max(mean_log_probabilities)))
     probabilities /= float(np.sum(probabilities))
+    # Preserve the actual 23-class LID result. Filtering the argmax here would
+    # relabel a confidently detected but disabled language (for example Urdu)
+    # as Hindi and feed the wrong transcript to the workflow.
     index = int(np.argmax(probabilities))
     detected = LID_LANGUAGE_CODES[index]
     # Anuvani often classifies Indian-accented English as Hindi or Telugu.
