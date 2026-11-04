@@ -349,13 +349,13 @@
   font-weight: 500;
   color: var(--muted-foreground);
 }
-/* Ghost placeholders: present on every field, but barely-there. */
+/* Keep placeholder guidance readable while distinguishing it from entered text. */
 .lead-form-underline :is(input, textarea)::placeholder {
-  color: var(--muted-foreground);
-  opacity: 0.82;
+  color: var(--foreground);
+  opacity: 0.62;
 }
 .lead-form-underline [data-slot="select-trigger"][data-placeholder] {
-  color: var(--muted-foreground);
+  color: var(--foreground);
 }
 /* Underline-only fields: transparent box, hairline bottom border, amber
    underline on the focused control. Compact heights keep rows tight. */

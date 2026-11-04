@@ -18,8 +18,9 @@ import styles from "../PublicPages.module.css";
 
 export const metadata: Metadata = {
   title: "Deployment",
-  description:
-    "Compare hosted Kodewaves workspaces and licensed client installations, including model capacity, domains, data and operating responsibilities.",
+  description: process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client"
+    ? "Understand the licensed voice-agent installation, provider capacity, domain controls, data boundaries and operating responsibilities in your environment."
+    : "Compare hosted workspaces and licensed client installations, including model capacity, domains, data and operating responsibilities.",
 };
 
 const deploymentOptions = [
@@ -62,6 +63,11 @@ const planningSteps = [
 ];
 
 export default function DeploymentPage() {
+  const isClientEdition = process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client";
+  const visibleOptions = isClientEdition
+    ? deploymentOptions.filter((option) => option.title === "Client installation")
+    : deploymentOptions;
+
   return (
     <div className="public-site public-deployment min-h-screen bg-background text-foreground">
       <PublicHeader />
@@ -70,16 +76,18 @@ export default function DeploymentPage() {
           <div className={`${styles.pageFrame} ${styles.heroGrid}`}>
             <div className={styles.heroCopy}>
               <p className={styles.eyebrow}>Deployment / Operating model</p>
-              <h1 className={styles.headline}>Choose where your voice operations run.</h1>
+              <h1 className={styles.headline}>{isClientEdition ? "Your voice operations environment." : "Choose where your voice operations run."}</h1>
               <p className={styles.lede}>
-                Use a managed workspace or discuss a licensed client installation. The right fit depends on control, providers, capacity and support requirements.
+                {isClientEdition
+                  ? "Review the installation, provider, capacity and support boundaries configured for your environment."
+                  : "Use a managed workspace or discuss a licensed client installation. The right fit depends on control, providers, capacity and support requirements."}
               </p>
               <div className={styles.actions}>
-                <PublicEnterpriseLeadCTA
+                {!isClientEdition && <PublicEnterpriseLeadCTA
                   label="Discuss a client installation"
                   className={styles.primaryAction}
-                />
-                <Link href="/pricing" className={styles.secondaryAction}>Review plans and costs <ArrowRight aria-hidden className="size-4" /></Link>
+                />}
+                {!isClientEdition && <Link href="/pricing" className={styles.secondaryAction}>Review plans and costs <ArrowRight aria-hidden className="size-4" /></Link>}
                 <Link href="/platform" className={styles.secondaryAction}>Explore the platform</Link>
               </div>
             </div>
@@ -117,7 +125,7 @@ export default function DeploymentPage() {
               </p>
             </div>
             <div className={styles.comparison}>
-              {deploymentOptions.map(({ label, title, description, icon: Icon, details }) => (
+              {visibleOptions.map(({ label, title, description, icon: Icon, details }) => (
                 <article key={title} className={styles.comparisonItem}>
                   <span className={styles.comparisonLabel}>{label}</span>
                   <h3><Icon aria-hidden className="mr-2 inline size-5 text-primary" />{title}</h3>
@@ -136,7 +144,7 @@ export default function DeploymentPage() {
                 Client installation data and license checks
               </h3>
               <p className="mt-2 max-w-5xl text-sm leading-7 text-muted-foreground">
-                During periodic license checks, the Kodewaves owner service receives the installation identity, the requester&apos;s observed IP address, and the integrity-check result or finding, then returns signed license status. The check payload sent to the owner service does not include call audio or conversation transcripts. The location of the database and recordings depends on the services and storage provisioned for the customer&apos;s installation. Connected telephony, speech, model and business providers may process call data to provide their configured services; review each provider&apos;s data handling terms.
+                During periodic license checks, the platform owner service receives the installation identity, the requester&apos;s observed IP address, and the integrity-check result or finding, then returns signed license status. The check payload sent to the owner service does not include call audio or conversation transcripts. The location of the database and recordings depends on the services and storage provisioned for the customer&apos;s installation. Connected telephony, speech, model and business providers may process call data to provide their configured services; review each provider&apos;s data handling terms.
               </p>
             </aside>
           </div>
@@ -189,13 +197,15 @@ export default function DeploymentPage() {
           <div className={`${styles.pageFrame} ${styles.closing}`}>
             <p className={styles.eyebrow}>Next step</p>
             <h2>Find the right operating model.</h2>
-            <p>Review configured hosted plans or sign in to see the capabilities and provider settings available to your workspace.</p>
+            <p>{isClientEdition
+              ? "Sign in to manage the capabilities and provider settings available to this installation."
+              : "Review configured hosted plans or sign in to see the capabilities and provider settings available to your workspace."}</p>
             <div className={styles.actions}>
-              <PublicEnterpriseLeadCTA
+              {!isClientEdition && <PublicEnterpriseLeadCTA
                 label="Request a deployment consultation"
                 className={styles.primaryAction}
-              />
-              <Link href="/pricing" className={styles.secondaryAction}>View plans <ArrowRight aria-hidden className="size-4" /></Link>
+              />}
+              {!isClientEdition && <Link href="/pricing" className={styles.secondaryAction}>View plans <ArrowRight aria-hidden className="size-4" /></Link>}
               <Link href="/auth/login" className={styles.secondaryAction}>Sign in</Link>
             </div>
           </div>
