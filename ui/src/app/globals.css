@@ -507,5 +507,4 @@
 @keyframes console-enter { from { opacity: 0; transform: translateY(18px) rotate(0); } to { opacity: 1; transform: translateY(0) rotate(-1.5deg); } }
 @media (max-width: 639px) { .voice-console-body { padding: 14px; } .voice-console-top,.voice-console-bottom { padding-inline: 14px; font-size: 8px; } .voice-console-sources { grid-template-columns: 1fr; gap: 6px; } .voice-console-sources > div { gap: 8px; padding: 8px; } .voice-console-sources svg { width: 15px; height: 15px; } .voice-console-sources strong { font-size: 10px; } .voice-console-sources small { font-size: 9px; } .voice-route { grid-template-columns: 1fr; gap: 5px; padding: 9px; } .voice-route-step { min-height: 38px; } .voice-route-arrow { margin-left: 8px; transform: rotate(90deg); width: 13px; height: 13px; } .voice-console-outcomes { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .voice-console,.voice-wave i { animation: none; } .public-hero a { transition: none; } .public-hero a:hover { transform: none; } }
-.public-heading-accent,.dark .public-heading-accent { color: var(--primary); }
 .workspace-topbar { min-height: 48px; }

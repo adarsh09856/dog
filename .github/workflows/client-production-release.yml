@@ -1,0 +1,274 @@
+name: Signed client production release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: Type RELEASE to authorize a customer client release
+        required: true
+        type: string
+      api_tag:
+        description: New client API release tag; the tag must not already exist
+        required: true
+        type: string
+      ui_tag:
+        description: New client UI release tag; the tag must not already exist
+        required: true
+        type: string
+      caddy_image:
+        description: Approved Caddy image pinned by sha256 digest
+        required: true
+        type: string
+      postgres_image:
+        description: Approved PostgreSQL image pinned by sha256 digest
+        required: true
+        type: string
+      redis_image:
+        description: Approved Redis image pinned by sha256 digest
+        required: true
+        type: string
+      minio_image:
+        description: Approved MinIO image pinned by sha256 digest
+        required: true
+        type: string
+      coturn_image:
+        description: Approved Coturn image pinned by sha256 digest
+        required: true
+        type: string
+      owner_status_url:
+        description: HTTPS owner installation-status endpoint for released clients
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: client-production-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    environment: client-production
+    runs-on: [self-hosted, linux, client-release]
+    timeout-minutes: 180
+    steps:
+      - name: Require explicit release confirmation and trusted main ref
+        shell: bash
+        env:
+          CONFIRM_RELEASE: ${{ inputs.confirm_release }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRM_RELEASE" = "RELEASE"
+          command -v docker >/dev/null
+          docker buildx version
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validate release inputs
+        shell: bash
+        env:
+          REGISTRY_HOST: ghcr.io
+          API_TAG: ${{ inputs.api_tag }}
+          UI_TAG: ${{ inputs.ui_tag }}
+          CADDY_IMAGE: ${{ inputs.caddy_image }}
+          POSTGRES_IMAGE: ${{ inputs.postgres_image }}
+          REDIS_IMAGE: ${{ inputs.redis_image }}
+          MINIO_IMAGE: ${{ inputs.minio_image }}
+          COTURN_IMAGE: ${{ inputs.coturn_image }}
+          OWNER_STATUS_URL: ${{ inputs.owner_status_url }}
+        run: |
+          set -euo pipefail
+          for value in "$REGISTRY_HOST" "$API_TAG" "$UI_TAG" "$CADDY_IMAGE" \
+            "$POSTGRES_IMAGE" "$REDIS_IMAGE" "$MINIO_IMAGE" "$COTURN_IMAGE" "$OWNER_STATUS_URL"; do
+            test -n "$value"
+          done
+          python - <<'PY'
+          import os
+          import re
+          from urllib.parse import urlsplit
+
+          registry = os.environ["REGISTRY_HOST"]
+          if not re.fullmatch(r"[a-z0-9.-]+(?::[0-9]{1,5})?", registry):
+              raise SystemExit("registry_host must be a hostname with an optional port")
+          owner = os.environ["GITHUB_REPOSITORY"].split("/", 1)[0].lower()
+          image_paths = {
+              "API_TAG": f"{registry}/{owner}/kodewaves-api:",
+              "UI_TAG": f"{registry}/{owner}/kodewaves-ui:",
+          }
+          for name, expected_prefix in image_paths.items():
+              ref = os.environ[name]
+              if not ref.startswith(expected_prefix) or ref.count("/") != 2:
+                  raise SystemExit(f"{name} must use the repository's approved GHCR image path")
+              tag = ref[len(expected_prefix):]
+              if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag):
+                  raise SystemExit(f"{name} must include a valid, new release tag")
+          for name in ("CADDY_IMAGE", "POSTGRES_IMAGE", "REDIS_IMAGE", "MINIO_IMAGE", "COTURN_IMAGE"):
+              if not re.fullmatch(
+                  r"[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?"
+                  r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}",
+                  os.environ[name],
+              ):
+                  raise SystemExit(f"{name} must be an immutable sha256 image reference")
+          owner = urlsplit(os.environ["OWNER_STATUS_URL"])
+          if owner.scheme != "https" or not owner.hostname or owner.username or owner.password or owner.fragment:
+              raise SystemExit("owner_status_url must be an HTTPS URL without credentials or fragment")
+          PY
+
+      - name: Require protected release secrets
+        shell: bash
+        env:
+          LICENSE_PUBLIC_KEY_B64: ${{ secrets.CLIENT_LICENSE_PUBLIC_KEY_B64 }}
+          RELEASE_PUBLIC_KEY_B64: ${{ secrets.CLIENT_RELEASE_PUBLIC_KEY_B64 }}
+          RELEASE_PRIVATE_KEY_B64: ${{ secrets.CLIENT_RELEASE_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          for value in "$LICENSE_PUBLIC_KEY_B64" "$RELEASE_PUBLIC_KEY_B64" \
+            "$RELEASE_PRIVATE_KEY_B64"; do
+            test -n "$value"
+            case "$value" in *$'\n'*|*$'\r'*) exit 1 ;; esac
+          done
+
+      - name: Prepare ephemeral release signing keys
+        shell: bash
+        env:
+          DOCKER_CONFIG: /dev/shm/kodewaves-client-docker-${{ github.run_id }}-${{ github.run_attempt }}
+          LICENSE_PUBLIC_KEY_B64: ${{ secrets.CLIENT_LICENSE_PUBLIC_KEY_B64 }}
+          RELEASE_PUBLIC_KEY_B64: ${{ secrets.CLIENT_RELEASE_PUBLIC_KEY_B64 }}
+          RELEASE_PRIVATE_KEY_B64: ${{ secrets.CLIENT_RELEASE_PRIVATE_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          key_dir="/dev/shm/kodewaves-client-release-keys-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -m 0700 "$key_dir"
+          umask 077
+          printf '%s\n' "$LICENSE_PUBLIC_KEY_B64" > "$key_dir/license-public.key"
+          printf '%s\n' "$RELEASE_PUBLIC_KEY_B64" > "$key_dir/release-public.key"
+          printf '%s\n' "$RELEASE_PRIVATE_KEY_B64" > "$key_dir/release-private.key"
+          mkdir -m 0700 "$DOCKER_CONFIG"
+
+      - name: Log in to the release registry
+        uses: docker/login-action@v3
+        env:
+          DOCKER_CONFIG: /dev/shm/kodewaves-client-docker-${{ github.run_id }}-${{ github.run_attempt }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          logout: true
+
+      - name: Build, verify, sign and package the client release
+        shell: bash
+        env:
+          API_TAG: ${{ inputs.api_tag }}
+          UI_TAG: ${{ inputs.ui_tag }}
+          CADDY_IMAGE: ${{ inputs.caddy_image }}
+          OWNER_STATUS_URL: ${{ inputs.owner_status_url }}
+          CLIENT_POSTGRES_IMAGE: ${{ inputs.postgres_image }}
+          CLIENT_REDIS_IMAGE: ${{ inputs.redis_image }}
+          CLIENT_MINIO_IMAGE: ${{ inputs.minio_image }}
+          CLIENT_COTURN_IMAGE: ${{ inputs.coturn_image }}
+          CLIENT_CADDY_IMAGE: ${{ inputs.caddy_image }}
+          CLIENT_RELEASE_WORK_DIR: ${{ runner.temp }}/client-release-${{ github.run_id }}-${{ github.run_attempt }}
+          CLIENT_RELEASE_KEY_DIR: /dev/shm/kodewaves-client-release-keys-${{ github.run_id }}-${{ github.run_attempt }}
+          DOCKER_CONFIG: /dev/shm/kodewaves-client-docker-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          work_dir="$CLIENT_RELEASE_WORK_DIR"
+          key_dir="$CLIENT_RELEASE_KEY_DIR"
+          mkdir -m 0700 "$work_dir"
+          trap 'rm -rf "$work_dir" "$key_dir" "$DOCKER_CONFIG"' EXIT
+          python -m pip install --disable-pip-version-check cryptography 'sqlalchemy==2.0.43' 'PyYAML==6.0.2'
+          python deploy/client/build_and_verify.py \
+            --api-tag "$API_TAG" \
+            --ui-tag "$UI_TAG" \
+            --caddy-image "$CADDY_IMAGE" \
+            --license-public-key-file "$key_dir/license-public.key" \
+            --release-public-key-file "$key_dir/release-public.key" \
+            --owner-status-url "$OWNER_STATUS_URL" \
+            --owner-private-key "$key_dir/release-private.key" \
+            --manifest-output "$work_dir/client-release-manifest.json" \
+            --public-key-output "$work_dir/release-public.key.out" \
+            --push \
+            --release-env-output "$work_dir/release-images.env"
+          cmp "$key_dir/release-public.key" "$work_dir/release-public.key.out"
+
+          CLIENT_RELEASE_WORK_DIR="$work_dir" python - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path.cwd() / "deploy" / "client"))
+          from validate_install import IMAGE_KEYS, PINNED_IMAGE, parse_env
+
+          work_dir = Path(os.environ["CLIENT_RELEASE_WORK_DIR"])
+          images = parse_env(work_dir / "release-images.env")
+          inputs = {
+              "CLIENT_POSTGRES_IMAGE": os.environ["CLIENT_POSTGRES_IMAGE"],
+              "CLIENT_REDIS_IMAGE": os.environ["CLIENT_REDIS_IMAGE"],
+              "CLIENT_MINIO_IMAGE": os.environ["CLIENT_MINIO_IMAGE"],
+              "CLIENT_COTURN_IMAGE": os.environ["CLIENT_COTURN_IMAGE"],
+              "CLIENT_CADDY_IMAGE": os.environ["CLIENT_CADDY_IMAGE"],
+          }
+          if set(images) != {"CLIENT_API_IMAGE", "CLIENT_UI_IMAGE"}:
+              raise SystemExit("image builder did not return exactly the signed API/UI images")
+          images.update(inputs)
+          if set(images) != IMAGE_KEYS:
+              raise SystemExit("installer image inventory does not match the seven approved services")
+          for name, value in images.items():
+              if not PINNED_IMAGE.fullmatch(value):
+                  raise SystemExit(f"{name} is not an immutable sha256 image reference")
+          (work_dir / "customer-images.env").write_text(
+              "".join(f"{name}={images[name]}\n" for name in sorted(images)),
+              encoding="utf-8",
+          )
+          PY
+
+          python owner-tools/package_client_installer.py \
+            --images-env "$work_dir/customer-images.env" \
+            --manifest "$work_dir/client-release-manifest.json" \
+            --release-public-key "$key_dir/release-public.key" \
+            --release-private-key "$key_dir/release-private.key" \
+            --output "$work_dir/kodewaves-client-installer.tar.gz"
+          python deploy/client/verify_installer.py \
+            --archive "$work_dir/kodewaves-client-installer.tar.gz" \
+            --signature "$work_dir/kodewaves-client-installer.tar.gz.sig" \
+            --trusted-public-key "$key_dir/release-public.key"
+          artifact_dir="$RUNNER_TEMP/client-release-artifacts-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -m 0700 "$artifact_dir"
+          printf '%s\n' "$GITHUB_SHA" > "$artifact_dir/source-commit.txt"
+          cp "$work_dir/client-release-manifest.json" "$artifact_dir/"
+          cp "$key_dir/release-public.key" "$artifact_dir/"
+          cp "$work_dir/customer-images.env" "$artifact_dir/"
+          cp "$work_dir/kodewaves-client-installer.tar.gz" "$artifact_dir/"
+          cp "$work_dir/kodewaves-client-installer.tar.gz.sig" "$artifact_dir/"
+
+      - name: Publish signed installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kodewaves-client-release-${{ github.sha }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/client-release-artifacts-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove release material from the runner
+        if: always()
+        shell: bash
+        run: |
+          rm -rf \
+            "/dev/shm/kodewaves-client-release-keys-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "/dev/shm/kodewaves-client-docker-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "$RUNNER_TEMP/client-release-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "$RUNNER_TEMP/client-release-artifacts-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"

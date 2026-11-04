@@ -98,7 +98,7 @@ const NAV_SECTIONS: SidebarNavSection[] = [
     ],
   },
   {
-    label: "BUILD",
+    label: "Build",
     items: [
       {
         title: "Voice Agents",
@@ -136,11 +136,6 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         icon: Sparkles,
         feature: "voice",
       },
-    ],
-  },
-  {
-    label: "CHANNELS",
-    items: [
       {
         title: "Telephony",
         url: "/telephony-configurations",
@@ -154,17 +149,17 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         icon: Megaphone,
         feature: "campaigns",
       },
+    ],
+  },
+  {
+    label: "Growth & Leads",
+    items: [
       {
         title: "Web Widgets",
         url: "/widgets",
         icon: Globe,
         feature: "widgets",
       },
-    ],
-  },
-  {
-    label: "CUSTOMER JOURNEYS",
-    items: [
       {
         title: "CRM Leads",
         url: "/crm",
@@ -186,7 +181,7 @@ const NAV_SECTIONS: SidebarNavSection[] = [
     ],
   },
   {
-    label: "OPERATIONS",
+    label: "Manage & Observability",
     items: [
       {
         title: "Usage & Runs",
