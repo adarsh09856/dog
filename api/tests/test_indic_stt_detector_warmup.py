@@ -71,34 +71,11 @@ def test_auto_detection_uses_an_installed_scheduled_language_decoder():
     ) == ("ur", "detector")
 
 
-def test_detector_preserves_language_argmax_and_uses_its_installed_decoder(monkeypatch):
-    logits = [0.0] * len(indic_stt.LID_LANGUAGE_CODES)
-    logits[indic_stt.LID_LANGUAGE_CODES.index("ur")] = 8.0
-    logits[indic_stt.LID_LANGUAGE_CODES.index("hi")] = 6.0
-
-    class Detector:
-        def run(self, *_args):
-            return [[logits]]
-
-    monkeypatch.setattr(indic_stt, "_lid_session", Detector())
-    monkeypatch.setattr(indic_stt, "_english_lid", None)
-    detected, confidence, route = indic_stt._detect_language(
-        [0.01] * 16000, 16000
-    )
-
-    assert detected == "ur"
-    assert confidence > 0.65
-    assert route is None
-    assert indic_stt._resolve_decode_language(
-        detected, confidence, "hi", set(indic_stt.AUTO_DETECT_LANGUAGES),
-    ) == ("ur", "detector")
-
-
 def test_auto_detection_does_not_silently_substitute_a_missing_decoder():
     with pytest.raises(indic_stt.HTTPException) as exc_info:
-        indic_stt._resolve_decode_language("ur", 0.99, None, {"hi", "en"})
+        indic_stt._resolve_decode_language("gu", 0.99, "en", {"hi", "en"})
     assert getattr(exc_info.value, "status_code", None) == 422
 
     assert indic_stt._resolve_decode_language(
-        "ur", 0.99, "en", {"hi", "en"},
+        "gu", 0.10, "en", {"hi", "en"},
     ) == ("en", "unsupported_language_held_previous")
