@@ -52,7 +52,10 @@ jobs:
   release:
     if: github.ref == 'refs/heads/main'
     environment: client-production
-    runs-on: [self-hosted, linux, client-release]
+    # GitHub-hosted VMs are discarded after each job. Keep the protected
+    # environment/reviewer gate and expose release secrets only to this job;
+    # a persistent self-hosted signing runner is not required.
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
       - name: Require explicit release confirmation and trusted main ref
