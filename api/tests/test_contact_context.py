@@ -207,6 +207,52 @@ def test_ambiguous_hindi_time_is_clarified_without_inventing_a_day_period():
     assert "booking_confirmation_slot" not in state
 
 
+def test_spoken_english_dayparts_capture_the_exact_hour_without_llm_guessing():
+    base = [
+        {"role": "user", "content": "I want to book an appointment."},
+        {"role": "assistant", "content": "What date and time would you prefer?"},
+    ]
+    for phrase, expected_hour in (
+        ("eight in the morning", 8),
+        ("8 in the morning", 8),
+        ("eight in the evening", 20),
+        ("12 at night", 0),
+    ):
+        state = {"booking_time_question_date": "2026-11-05", "reply_language": "English"}
+        reply = booking_time_confirmation_question(
+            base + [{"role": "user", "content": phrase}], state
+        )
+        assert f"at {expected_hour % 12 or 12}:00" in reply
+        assert ("AM" if expected_hour < 12 else "PM") in reply
+        assert state["booking_confirmation_slot"] == f"2026-11-05T{expected_hour:02d}:00"
+
+
+def test_asr_meridian_fragment_uses_pending_hour_or_asks_for_the_hour():
+    base = [
+        {"role": "user", "content": "I want to book an appointment."},
+        {"role": "assistant", "content": "What date and time would you prefer?"},
+    ]
+    pending_state = {
+        "booking_time_question_date": "2026-11-05",
+        "booking_pending_time_hour": 8,
+        "reply_language": "English",
+    }
+    reply = booking_time_confirmation_question(
+        base + [{"role": "user", "content": "It a.m."}], pending_state
+    )
+    assert "at 8:00 AM" in reply
+    assert pending_state["booking_confirmation_slot"] == "2026-11-05T08:00"
+
+    missing_hour_state = {
+        "booking_time_question_date": "2026-11-05",
+        "reply_language": "English",
+    }
+    assert booking_time_confirmation_question(
+        base + [{"role": "user", "content": "It a.m."}], missing_hour_state
+    ) == "I heard AM/PM, but missed the hour. What hour should I use?"
+    assert "booking_confirmation_slot" not in missing_hour_state
+
+
 def test_room_reservation_does_not_enter_appointment_slot_collection():
     messages = [
         {"role": "user", "content": "मुझे एक कमरा बुक करना है।"},
