@@ -84,6 +84,9 @@
   --cta: oklch(0.72 0.12 82);
   --cta-text: oklch(0.35 0.045 170);
   --cta-foreground: oklch(0.2 0.025 175);
+  /* Secondary decorative accents stay in the product palette even when a
+     workspace chooses a different primary brand color. */
+  --brand-forest-accent: #426b57;
   /* Giant faded "kodewaves" wordmark (authentic letterforms traced
      from the brand logo PNG). Theme-switched here; consumed by .app-surface and .auth-imprint. */
   --brand-imprint: none;
@@ -125,6 +128,7 @@
   --cta: oklch(0.78 0.12 84);
   --cta-text: oklch(0.86 0.06 150);
   --cta-foreground: oklch(0.19 0.022 175);
+  --brand-forest-accent: #b7d3b3;
   --brand-imprint: none;
 }
 

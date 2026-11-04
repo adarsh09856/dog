@@ -10,6 +10,8 @@
 .actions { display:flex;max-width:520px;flex-wrap:wrap;justify-content:flex-end;gap:9px; }
 .actions > * { min-width:0; }
 .actions > :global(button[data-slot="button"]) { min-height:44px; }
+.actions > :global(button[data-hero-action]) { display:inline-flex;align-items:center;justify-content:center;gap:.5rem;line-height:1.2;-webkit-text-fill-color:currentColor; }
+.actions > :global(button[data-hero-action]) > svg { display:block;flex:none;color:inherit!important;opacity:1!important; }
 .actions [data-hero-label] { display:inline-block!important;visibility:visible!important;opacity:1!important;font-size:13px!important;line-height:1.2!important; }
 .actions [data-hero-action="upload"] [data-hero-label] { color:#17271f!important;-webkit-text-fill-color:#17271f!important; }
 .actions [data-hero-action="folder"] [data-hero-label] { color:#edf2e9!important;-webkit-text-fill-color:#edf2e9!important; }

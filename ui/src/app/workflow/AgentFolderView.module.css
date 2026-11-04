@@ -1,7 +1,7 @@
 .library { min-width:0; }
 .summary { grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; overflow:visible; margin:0 0 27px; color:var(--foreground); background:transparent; }
 .metric { min-height:170px; display:flex!important; flex-direction:column; align-items:flex-start!important; padding:20px 22px!important; border:1px solid var(--border)!important; border-radius:14px; color:var(--foreground); background:linear-gradient(150deg,var(--card),color-mix(in srgb,var(--secondary) 20%,var(--card))); box-shadow:0 12px 34px -32px var(--foreground); }
-.metricIcon { width:34px;height:34px;display:grid;place-items:center;margin-bottom:18px;border:1px solid color-mix(in srgb,var(--primary) 18%,var(--border));border-radius:10px;color:var(--primary);background:color-mix(in srgb,var(--primary) 9%,var(--card)); }
+.metricIcon { width:34px;height:34px;display:grid;place-items:center;margin-bottom:18px;border:1px solid color-mix(in srgb,var(--brand-forest-accent) 18%,var(--border));border-radius:10px;color:var(--brand-forest-accent);background:color-mix(in srgb,var(--brand-forest-accent) 9%,var(--card)); }
 .metric > span:not(.metricNote) { color:var(--muted-foreground);font:600 9px/1.4 var(--font-geist-mono),monospace;letter-spacing:.11em; }
 .metric > strong { display:flex!important;align-items:baseline;gap:9px;margin-top:6px!important;color:var(--foreground);font-size:34px!important;font-weight:560!important;letter-spacing:-.055em;line-height:1.15; }
 .metric > strong small { color:var(--muted-foreground);font:400 10px/1.4 var(--font-geist-sans),sans-serif;letter-spacing:0; }
