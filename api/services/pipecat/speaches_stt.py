@@ -35,6 +35,7 @@ _CONFIRMED_LANGUAGE_ROUTES = frozenset({
     "urdu_routed_to_hindi",
     "competitive_indian_english",
     "whisper_english_rescue",
+    "initial_voice_fallback_low_confidence",
 })
 _AUTO_LANGUAGE_SWITCH_CONFIRMATIONS = 2
 
@@ -214,6 +215,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
     recognition_timeout_seconds = 45.0
 
     def __init__(self, *args, **kwargs):
+        initial_language_fallback = kwargs.pop("initial_language_fallback", None)
         kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=self.recognition_timeout_seconds))
         super().__init__(*args, **kwargs)
         # The SDK otherwise retries timeouts, multiplying the per-request wait.
@@ -229,6 +231,12 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
         self.latest_tts_language: str | None = None
         self.latest_detected_text: str | None = None
         self._stable_detected_language: str | None = None
+        initial_language_fallback = str(initial_language_fallback or "").strip().lower().replace("_", "-").split("-", 1)[0]
+        self._initial_language_fallback = (
+            initial_language_fallback
+            if initial_language_fallback in LOCAL_INDIC_STT_LANGUAGES
+            else None
+        )
         self._pending_detected_language: str | None = None
         self._pending_detected_language_count = 0
         self._latest_language_confidence: float | None = None
@@ -405,8 +413,12 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 kwargs["temperature"] = settings.temperature
             extra_body = {}
             stable_detected_language = getattr(self, "_stable_detected_language", None)
-            if local_indic and auto_language and stable_detected_language:
-                extra_body["fallback_language"] = stable_detected_language
+            if local_indic and auto_language:
+                fallback_language = stable_detected_language or getattr(
+                    self, "_initial_language_fallback", None
+                )
+                if fallback_language:
+                    extra_body["fallback_language"] = fallback_language
             if local_indic and phone_capture:
                 extra_body["phone_capture"] = True
             if extra_body:
@@ -435,6 +447,17 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                         language_confidence,
                         getattr(self, "_stable_detected_language", None),
                     )
+                    if (
+                        language_route == "held_previous_low_confidence"
+                        and not getattr(self, "_stable_detected_language", None)
+                        and self.latest_decoder_language in LOCAL_REPLY_TTS_LANGUAGES
+                    ):
+                        # On the first turn there is no prior detector state.
+                        # If LID is weak, the selected voice's native language
+                        # is the only grounded fallback; use the decoder that
+                        # actually produced the transcript for the reply route.
+                        self.latest_detected_language = self.latest_decoder_language
+                        resolved_route = "initial_voice_fallback_low_confidence"
                     # Preserve detector/decode rescue routes unless language
                     # normalization or confidence hysteresis deliberately
                     # changed the selected language.

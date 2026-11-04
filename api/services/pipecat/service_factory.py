@@ -187,6 +187,31 @@ def _report_service_factory_failures(
     return decorator
 
 
+def _initial_local_stt_language_fallback(user_config) -> str | None:
+    """Use the configured reply voice only when first-turn auto LID is weak.
+
+    Once STT establishes a stable caller language, that language takes priority.
+    This value is not sent as a pinned decoder and does not disable auto-detection.
+    """
+    tts = getattr(user_config, "tts", None)
+    selected_language = str(getattr(tts, "language", None) or "").strip().lower()
+    if selected_language not in {"", "auto", "multi", "multilingual", "default", "unknown", "none"}:
+        from api.services.configuration.language_normalizer import normalize_language_code
+        from api.services.pipecat.speaches_stt import LOCAL_INDIC_STT_LANGUAGES
+
+        normalized = normalize_language_code(selected_language)
+        if normalized in LOCAL_INDIC_STT_LANGUAGES:
+            return normalized
+
+    voice = str(getattr(tts, "voice", None) or "").strip().lower().replace("-", "_")
+    voice_prefix = voice.split("_", 1)[0]
+    from api.services.pipecat.caller_language_tts import LOCAL_RASA_VOICE_NATIVE_LANGUAGES
+    from api.services.pipecat.speaches_stt import LOCAL_INDIC_STT_LANGUAGES
+
+    language = LOCAL_RASA_VOICE_NATIVE_LANGUAGES.get(voice_prefix)
+    return language if language in LOCAL_INDIC_STT_LANGUAGES else None
+
+
 DEEPGRAM_FLUX_LANGUAGE_HINTS = {
     "de": Language.DE,
     "en": Language.EN,
@@ -580,6 +605,11 @@ def create_stt_service(
                     temperature=0.0,
                 ),
                 sample_rate=audio_config.transport_in_sample_rate,
+                initial_language_fallback=(
+                    _initial_local_stt_language_fallback(user_config)
+                    if auto_detect
+                    else None
+                ),
             )
 
         # Direct cloud STT from master credentials or environment
@@ -679,6 +709,13 @@ def create_stt_service(
                 temperature=0.0,
             ),
             sample_rate=audio_config.transport_in_sample_rate,
+            initial_language_fallback=(
+                _initial_local_stt_language_fallback(user_config)
+                if local_cpu
+                and stt_model == "indicconformer-ctc-int8"
+                and str(lang_str or "").strip().lower() in {"", "auto", "multi", "multilingual", "default", "unknown", "none"}
+                else None
+            ),
         )
     elif user_config.stt.provider == ServiceProviders.HUGGINGFACE.value:
         base_url = (

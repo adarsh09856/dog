@@ -936,6 +936,7 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
         affirmative = re.fullmatch(
             r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|"
             r"(?:yes|yeah|yep|okay|ok|sure)[,\s]+(?:(?:that|it|this)(?:\s+is|'s)?\s+)?(?:correct|right|true)|"
+            r"(?:(?:that|it|this)(?:\s+is|'s)\s+(?:correct|right|true))|"
             r"haan|han|ji|हाँ|हां|जी|ठीक है|"
             r"(?:हाँ|हां|जी)[,\s]+(?:(?:ये|यह)[,\s]+)?सही\s+है|"
             r"(?:haan|han|ha|haanji|hanji)[,\s]+(?:(?:ye|yeh|yah)[,\s]+)?"
@@ -1000,10 +1001,9 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
             state["caller_phone_digits"] = ""
             state["replace_phone_digits_on_next_turn"] = True
         else:
-            suffix = pending_confirmation[-4:]
             if reply_in_english:
-                return f"I heard a number ending in {suffix}. Is that right? Say yes, or repeat the number."
-            return f"मैंने {suffix} पर समाप्त होने वाला नंबर सुना। क्या यह सही है? हाँ कहें या नंबर दोहराएँ।"
+                return "Please say yes to confirm, no to replace it, or repeat the full number."
+            return "कृपया पुष्टि के लिए हाँ, बदलने के लिए नहीं कहें, या पूरा नंबर दोहराएँ।"
 
     # Prefer an upstream stable ID. The fallback uses the immediately
     # preceding assistant turn and the utterance itself, so dropping older
