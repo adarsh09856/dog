@@ -33,8 +33,13 @@ NO_ACTION_TOOLS_INSTRUCTION = (
 
 ACTION_GROUNDING_INSTRUCTIONS = (
     "Answer the caller’s latest request in their language. Stay on topic and do not "
-    "repeat greetings or known details; do not route unless the caller asks or a "
-    "configured transfer requires it. Use a configured tool for actions and claim "
+    "repeat greetings or known details. Invoke a workflow transition only when the "
+    "caller’s latest request clearly satisfies its exact listed condition; a similar "
+    "topic is not enough. Do not route unless the caller asks or a configured transfer "
+    "requires it. When a configured action tool directly supports the request, use it "
+    "instead of handing the caller to an unrelated step. Do not describe a step change "
+    "as a completed caller-facing action unless it actually occurred. Use a configured "
+    "tool for actions and claim "
     "success only from their results. Never invent facts, names, availability, "
     "records, outcomes, or completed actions; use caller-provided or configured "
     "information. If speech is unclear, naturally pause and ask them to repeat "
