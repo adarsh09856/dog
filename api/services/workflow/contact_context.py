@@ -1649,19 +1649,41 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         r"(am|pm|[ap]\s*\.?\s*m\.?|ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?)\b",
         normalized, re.I,
     )
+    english_daypart = re.search(
+        r"(?:\bat\s+)?(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
+        r"(?::([0-5]\d))?\s*(?:o['’]?clock\s*)?"
+        r"(?:(?:in\s+)?the\s+|in\s+|at\s+)?"
+        r"(morning|afternoon|evening|night)\b",
+        normalized, re.I,
+    )
     period_only = re.fullmatch(
         r"\s*(am|a\s*\.?\s*m\.?|pm|p\s*\.?\s*m\.?|"
         r"ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?|"
         r"morning|afternoon|evening|night|सुबह|दोपहर|शाम|रात)[.!?।\s]*",
         normalized, re.I,
     )
+    # Small CPU recognizers sometimes transcribe a standalone "A.M." as
+    # "it A.M.". Accept that only when the previous turn already supplied an
+    # hour; otherwise ask for the missing hour instead of guessing one.
+    meridian_only = re.fullmatch(
+        r"\s*(?:it\s+)?([ap])\s*\.?\s*m\.?[.!?।\s]*",
+        normalized, re.I,
+    )
     pending_hour = state.get("booking_pending_time_hour")
-    if isinstance(pending_hour, int) and 1 <= pending_hour <= 12 and period_only:
+    if (
+        isinstance(pending_hour, int)
+        and 1 <= pending_hour <= 12
+        and (period_only or meridian_only)
+    ):
         hour, minute = pending_hour, 0
-        period = period_only.group(1).casefold().replace(" ", "").replace(".", "")
-        hour24 = hour % 12 + (12 if period in {
-            "pm", "पीएम", "afternoon", "evening", "night", "दोपहर", "शाम", "रात"
-        } else 0)
+        if meridian_only:
+            is_pm = meridian_only.group(1).casefold() == "p"
+        else:
+            period = period_only.group(1).casefold().replace(" ", "").replace(".", "")
+            is_pm = period in {
+                "pm", "पीएम", "afternoon", "evening", "night", "दोपहर", "शाम", "रात"
+            }
+        hour24 = hour % 12 + (12 if is_pm else 0)
         state.pop("booking_pending_time_hour", None)
     elif hindi:
         period_match = re.search(r"सुबह|दोपहर|शाम", normalized)
@@ -1671,6 +1693,12 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         if not 1 <= hour <= 12:
             return None
         hour24 = hour % 12 + (12 if period in ("दोपहर", "शाम") else 0)
+    elif meridian_only:
+        if state.get("reply_language") == "English" or not re.search(
+            r"[\u0900-\u097f]", latest
+        ):
+            return "I heard AM/PM, but missed the hour. What hour should I use?"
+        return "AM/PM सुनाई दिया, लेकिन घंटा साफ़ नहीं मिला। कितने बजे चाहिए?"
     elif english:
         hour, minute = spoken_hour(english.group(1)), int(english.group(2) or 0)
         if hour is None:
@@ -1679,6 +1707,19 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
             return None
         period = english.group(3).lower().replace(" ", "").replace(".", "")
         hour24 = hour % 12 + (12 if period.startswith(("p", "पी")) else 0)
+        state.pop("booking_pending_time_hour", None)
+    elif english_daypart:
+        hour = spoken_hour(english_daypart.group(1))
+        minute = int(english_daypart.group(2) or 0)
+        if hour is None or not 1 <= hour <= 12:
+            return None
+        period = english_daypart.group(3).casefold()
+        if period == "night":
+            hour24 = 0 if hour == 12 else hour + 12
+        elif period in {"afternoon", "evening"}:
+            hour24 = hour % 12 + 12
+        else:
+            hour24 = hour % 12
         state.pop("booking_pending_time_hour", None)
     else:
         partial_hour = re.fullmatch(
