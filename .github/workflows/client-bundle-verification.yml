@@ -218,6 +218,7 @@ jobs:
           src/components/BrandTagline.test.tsx
           src/components/telephony/SipConnectivityCard.test.tsx
           src/components/layout/AppLayout.test.tsx
+          src/app/api/config/version/route.test.ts
           'src/app/workflow/[workflowId]/run/[runId]/components/ConnectionStatus.test.tsx'
           'src/app/workflow/[workflowId]/components/workflow-tester/EmbeddedVoiceTester.test.tsx'
           src/lib/brandingTheme.test.ts

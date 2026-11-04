@@ -62,6 +62,10 @@ from api.tasks.campaign_tasks import (
     sync_campaign_source,
 )
 from api.tasks.knowledge_base_processing import process_knowledge_base_document
+from api.tasks.website_knowledge import (
+    refresh_knowledge_base_website,
+    sweep_website_knowledge_sources,
+)
 from api.tasks.run_integrations import run_integrations_post_workflow_run
 from api.tasks.text_chat_inactivity import (
     complete_inactive_text_chat_session,
@@ -88,6 +92,7 @@ _worker_functions = [
     sync_campaign_source,
     process_campaign_batch,
     process_knowledge_base_document,
+    refresh_knowledge_base_website,
     deliver_webhook,
     complete_inactive_text_chat_session,
 ]
@@ -106,6 +111,12 @@ _worker_cron_jobs = [
         sweep_inactive_text_chat_sessions,
         minute=set(range(0, 60, TEXT_CHAT_INACTIVITY_SWEEP_INTERVAL_MINUTES)),
         second=30,
+        run_at_startup=True,
+    ),
+    cron(
+        sweep_website_knowledge_sources,
+        minute=set(range(0, 60, 15)),
+        second=45,
         run_at_startup=True,
     ),
 ]

@@ -1,19 +1,360 @@
 """Database client for managing knowledge base documents and chunks."""
 
 import hashlib
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
 from loguru import logger
-from sqlalchemy import delete, desc, func, select, update
+from sqlalchemy import delete, desc, func, select, text, update
 from sqlalchemy.orm import selectinload
 
 from api.db.base_client import BaseDBClient
-from api.db.models import KnowledgeBaseChunkModel, KnowledgeBaseDocumentModel
+from api.db.models import (
+    KnowledgeBaseChunkModel,
+    KnowledgeBaseDocumentModel,
+    KnowledgeBaseWebsiteSourceModel,
+    UserModel,
+)
+
+
+WEBSITE_SOURCE_LIMIT_PER_ORG = 5
+WEBSITE_SOURCE_ORG_LOCK_KEY = 1263941715
+
+
+class WebsiteSourceLimitError(Exception):
+    """Raised when an organization already has the maximum active sources."""
 
 
 class KnowledgeBaseClient(BaseDBClient):
     """Client for managing knowledge base documents and vector embeddings."""
+
+    async def create_website_source(self, **values) -> KnowledgeBaseWebsiteSourceModel:
+        async with self.async_session() as session:
+            # Serialize source creation per organization so concurrent API calls
+            # cannot exceed the retrieval scan ceiling.
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(:organization_id, :lock_key)"),
+                {
+                    "organization_id": values["organization_id"],
+                    "lock_key": WEBSITE_SOURCE_ORG_LOCK_KEY,
+                },
+            )
+            active_count = await session.scalar(
+                select(func.count(KnowledgeBaseWebsiteSourceModel.id)).where(
+                    KnowledgeBaseWebsiteSourceModel.organization_id == values["organization_id"],
+                    KnowledgeBaseWebsiteSourceModel.is_active.is_(True),
+                )
+            )
+            if active_count >= WEBSITE_SOURCE_LIMIT_PER_ORG:
+                raise WebsiteSourceLimitError
+            source = KnowledgeBaseWebsiteSourceModel(**values)
+            session.add(source)
+            await session.commit()
+            await session.refresh(source)
+            return source
+
+    async def list_website_sources(self, organization_id: int):
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel)
+                .where(KnowledgeBaseWebsiteSourceModel.organization_id == organization_id)
+                .order_by(desc(KnowledgeBaseWebsiteSourceModel.created_at))
+            )
+            return list(result.scalars().all())
+
+    async def get_website_source(self, source_uuid: str, organization_id: int):
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel).where(
+                    KnowledgeBaseWebsiteSourceModel.source_uuid == source_uuid,
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                )
+            )
+            return result.scalar_one_or_none()
+
+    async def update_website_source(self, source_uuid: str, organization_id: int, **values):
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel).where(
+                    KnowledgeBaseWebsiteSourceModel.source_uuid == source_uuid,
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                )
+            )
+            source = result.scalar_one_or_none()
+            if source is None:
+                return None
+            for key, value in values.items():
+                setattr(source, key, value)
+            await session.commit()
+            await session.refresh(source)
+            return source
+
+    async def update_website_source_for_document(self, document_id: int, *, succeeded: bool, error: str | None = None):
+        """Complete/fail the source refresh after the KB document processor exits."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel).where(
+                    KnowledgeBaseWebsiteSourceModel.document_id == document_id,
+                )
+            )
+            source = result.scalar_one_or_none()
+            if source is None:
+                return
+            now = func.now()
+            if not source.is_active or source.status in ("paused", "deleted"):
+                source.status = "deleted" if source.status == "deleted" else "paused"
+                source.pending_etag = None
+                source.pending_content_hash = None
+                await session.commit()
+                return
+            source.status = "ready" if succeeded else "error"
+            source.last_error = None if succeeded else (error or "Website content could not be indexed")[:500]
+            if succeeded:
+                completed_at = datetime.now(UTC)
+                source.last_refreshed_at = completed_at
+                source.next_refresh_at = completed_at + timedelta(hours=source.refresh_interval_hours)
+                source.etag = source.pending_etag or source.etag
+                source.content_hash = source.pending_content_hash or source.content_hash
+                source.version = source.version + 1
+            elif source.is_active:
+                source.next_refresh_at = datetime.now(UTC) + timedelta(minutes=15)
+            source.pending_etag = None
+            source.pending_content_hash = None
+            await session.commit()
+
+    async def get_website_document_uuids_for_organization(self, organization_id: int) -> list[str]:
+        """Return live website knowledge made available to every org agent."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseDocumentModel.document_uuid)
+                .join(
+                    KnowledgeBaseWebsiteSourceModel,
+                    KnowledgeBaseWebsiteSourceModel.document_id == KnowledgeBaseDocumentModel.id,
+                )
+                .where(
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                    KnowledgeBaseWebsiteSourceModel.status != "deleted",
+                    KnowledgeBaseWebsiteSourceModel.available_to_all_agents.is_(True),
+                    KnowledgeBaseDocumentModel.organization_id == organization_id,
+                    KnowledgeBaseDocumentModel.is_active.is_(True),
+                    KnowledgeBaseDocumentModel.full_text.is_not(None),
+                )
+                .order_by(desc(KnowledgeBaseWebsiteSourceModel.created_at))
+                .limit(WEBSITE_SOURCE_LIMIT_PER_ORG)
+            )
+            return list(result.scalars().all())
+
+    async def update_website_document_content_if_active(
+        self, document_id: int, organization_id: int, full_text: str
+    ) -> bool:
+        """Atomically publish refreshed text only while its source remains active."""
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel)
+                .where(
+                    KnowledgeBaseWebsiteSourceModel.document_id == document_id,
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                    KnowledgeBaseWebsiteSourceModel.is_active.is_(True),
+                    KnowledgeBaseWebsiteSourceModel.status != "paused",
+                )
+                .with_for_update()
+            )
+            source = result.scalar_one_or_none()
+            if source is None:
+                return False
+            document = await session.get(KnowledgeBaseDocumentModel, document_id)
+            if document is None or document.organization_id != organization_id or not document.is_active:
+                return False
+            document.full_text = full_text
+            await session.commit()
+            return True
+
+    async def claim_website_source_refresh(self, source_uuid: str, organization_id: int):
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel)
+                .where(
+                    KnowledgeBaseWebsiteSourceModel.source_uuid == source_uuid,
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                    KnowledgeBaseWebsiteSourceModel.is_active.is_(True),
+                    KnowledgeBaseWebsiteSourceModel.status != "paused",
+                )
+                .with_for_update()
+            )
+            source = result.scalar_one_or_none()
+            if source is None:
+                return None
+            stale_before = datetime.now(UTC) - timedelta(minutes=15)
+            if source.status in ("crawling", "indexing") and source.last_refresh_started_at and source.last_refresh_started_at > stale_before:
+                return False
+            source.status = "crawling"
+            source.last_refresh_started_at = datetime.now(UTC)
+            source.last_error = None
+            await session.commit()
+            await session.refresh(source)
+            return source
+
+    async def get_due_website_sources(self, limit: int = 100):
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel)
+                .where(
+                    KnowledgeBaseWebsiteSourceModel.is_active.is_(True),
+                    KnowledgeBaseWebsiteSourceModel.next_refresh_at <= func.now(),
+                    KnowledgeBaseWebsiteSourceModel.status.notin_(("crawling", "indexing")),
+                    KnowledgeBaseWebsiteSourceModel.status != "paused",
+                )
+                .order_by(KnowledgeBaseWebsiteSourceModel.next_refresh_at)
+                .limit(limit)
+            )
+            return list(result.scalars().all())
+
+    async def get_user_provider_id(self, user_id: int) -> str | None:
+        async with self.async_session() as session:
+            return await session.scalar(select(UserModel.provider_id).where(UserModel.id == user_id))
+
+    async def update_website_document_snapshot(self, document_id: int, organization_id: int, *, file_size_bytes: int, file_hash: str):
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseDocumentModel).where(
+                    KnowledgeBaseDocumentModel.id == document_id,
+                    KnowledgeBaseDocumentModel.organization_id == organization_id,
+                    KnowledgeBaseDocumentModel.is_active.is_(True),
+                )
+            )
+            document = result.scalar_one_or_none()
+            if document is None:
+                return None
+            document.file_size_bytes = file_size_bytes
+            document.file_hash = file_hash
+            document.mime_type = "text/markdown"
+            document.processing_status = "pending"
+            document.processing_error = None
+            await session.commit()
+            await session.refresh(document)
+            return document
+
+    async def deactivate_website_source(self, source_uuid: str, organization_id: int):
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel).where(
+                    KnowledgeBaseWebsiteSourceModel.source_uuid == source_uuid,
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                ).with_for_update()
+            )
+            source = result.scalar_one_or_none()
+            if source is None:
+                return None
+            source.is_active = False
+            source.status = "deleted"
+            source.next_refresh_at = None
+            if source.document_id:
+                document = await session.get(KnowledgeBaseDocumentModel, source.document_id)
+                if document:
+                    document.is_active = False
+                    document.archived_at = datetime.now(UTC)
+            await session.commit()
+            await session.refresh(source)
+            return source
+
+    async def pause_website_source(self, source_uuid: str, organization_id: int):
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel)
+                .where(
+                    KnowledgeBaseWebsiteSourceModel.source_uuid == source_uuid,
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                    KnowledgeBaseWebsiteSourceModel.is_active.is_(True),
+                    KnowledgeBaseWebsiteSourceModel.status != "deleted",
+                )
+                .with_for_update()
+            )
+            source = result.scalar_one_or_none()
+            if source is None:
+                return None
+            source.status = "paused"
+            source.next_refresh_at = None
+            await session.commit()
+            await session.refresh(source)
+            return source
+
+    async def resume_website_source(self, source_uuid: str, organization_id: int):
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel)
+                .where(
+                    KnowledgeBaseWebsiteSourceModel.source_uuid == source_uuid,
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                    KnowledgeBaseWebsiteSourceModel.is_active.is_(True),
+                    KnowledgeBaseWebsiteSourceModel.status != "deleted",
+                )
+                .with_for_update()
+            )
+            source = result.scalar_one_or_none()
+            if source is None:
+                return None
+            if source.document_id:
+                document = await session.get(KnowledgeBaseDocumentModel, source.document_id)
+                if document is None or not document.is_active or document.organization_id != organization_id:
+                    return None
+            source.status = "pending"
+            source.next_refresh_at = None
+            await session.commit()
+            await session.refresh(source)
+            return source
+
+    async def begin_website_source_indexing(
+        self, source_uuid: str, organization_id: int, *, etag: str | None, content_hash: str
+    ) -> bool:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel)
+                .where(
+                    KnowledgeBaseWebsiteSourceModel.source_uuid == source_uuid,
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                    KnowledgeBaseWebsiteSourceModel.is_active.is_(True),
+                    KnowledgeBaseWebsiteSourceModel.status != "paused",
+                    KnowledgeBaseWebsiteSourceModel.status != "deleted",
+                )
+                .with_for_update()
+            )
+            source = result.scalar_one_or_none()
+            if source is None:
+                return False
+            source.status = "indexing"
+            source.pending_etag = etag
+            source.pending_content_hash = content_hash
+            source.last_error = None
+            await session.commit()
+            return True
+
+    async def finish_website_source_unchanged(
+        self, source_uuid: str, organization_id: int, *, etag: str | None
+    ) -> bool:
+        async with self.async_session() as session:
+            result = await session.execute(
+                select(KnowledgeBaseWebsiteSourceModel)
+                .where(
+                    KnowledgeBaseWebsiteSourceModel.source_uuid == source_uuid,
+                    KnowledgeBaseWebsiteSourceModel.organization_id == organization_id,
+                    KnowledgeBaseWebsiteSourceModel.is_active.is_(True),
+                    KnowledgeBaseWebsiteSourceModel.status != "paused",
+                    KnowledgeBaseWebsiteSourceModel.status != "deleted",
+                )
+                .with_for_update()
+            )
+            source = result.scalar_one_or_none()
+            if source is None:
+                return False
+            now = datetime.now(UTC)
+            source.status = "ready"
+            source.last_error = None
+            source.last_refreshed_at = now
+            source.next_refresh_at = now + timedelta(hours=source.refresh_interval_hours)
+            source.etag = etag or source.etag
+            await session.commit()
+            return True
 
     async def create_document(
         self,

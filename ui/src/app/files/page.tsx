@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth";
 import DocumentList from "./DocumentList";
 import DocumentUpload from "./DocumentUpload";
 import styles from "./FilesWorkspace.module.css";
+import WebsiteSources from "./WebsiteSources";
 
 export default function FilesPage() {
     const { user, redirectToLogin, loading } = useAuth();
@@ -72,6 +73,8 @@ export default function FilesPage() {
                     <div><h2>Reuse across agents</h2><p>Share approved reference files across your workflows.</p></div>
                 </div>
             </section>
+
+            <WebsiteSources />
 
             <Card className={styles.documentsPanel}>
                 <CardHeader className={styles.panelHeader}>

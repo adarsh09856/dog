@@ -134,6 +134,17 @@ jobs:
           fi
           echo "names=${names}" >> "$GITHUB_OUTPUT"
 
+      - name: Set UI source provenance build arguments
+        id: ui_provenance
+        if: matrix.service.dockerfile == 'ui/Dockerfile'
+        run: |
+          {
+            echo "build_args<<EOF"
+            echo "KODEWAVES_BUILD_SHA=$GITHUB_SHA"
+            echo "KODEWAVES_BUILD_REQUIRE_SHA=true"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v7
@@ -141,6 +152,7 @@ jobs:
           context: ${{ matrix.service.context }}
           file: ${{ matrix.service.dockerfile }}
           platforms: ${{ matrix.platform.name }}
+          build-args: ${{ steps.ui_provenance.outputs.build_args }}
           outputs: 'type=image,"name=${{ steps.image_names.outputs.names }}",push-by-digest=true,name-canonical=true,push=true'
           cache-from: type=gha,scope=${{ matrix.service.name }}-${{ matrix.platform.short }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}-${{ matrix.platform.short }}

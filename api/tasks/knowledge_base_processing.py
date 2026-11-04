@@ -113,7 +113,8 @@ async def process_knowledge_base_document(
 
         # Reject duplicates (same hash already ingested for this org).
         existing_doc = await db_client.get_document_by_hash(file_hash, organization_id)
-        if existing_doc and existing_doc.id != document_id:
+        is_website_source = bool((document.custom_metadata or {}).get("website_source_uuid"))
+        if existing_doc and existing_doc.id != document_id and not is_website_source:
             error_message = (
                 f"This content is identical to '{existing_doc.filename}'. "
                 f"Keep only one copy of it in the knowledge base."
@@ -154,11 +155,32 @@ async def process_knowledge_base_document(
                 raise ValueError("Save this text document as UTF-8 before uploading") from exc
             if not full_text.strip():
                 raise ValueError("The document contains no readable text")
-            await db_client.update_document_full_text(document_id, full_text)
+            website_source_uuid = (document.custom_metadata or {}).get("website_source_uuid")
+            if website_source_uuid:
+                published = await db_client.update_website_document_content_if_active(
+                    document_id, organization_id, full_text
+                )
+                if not published:
+                    # The source was paused/deleted during this indexing job.
+                    # Keep prior content; soft-deletion remains enforced by the
+                    # document's active flag in retrieval queries.
+                    await db_client.update_document_status(
+                        document_id, "completed", total_chunks=0
+                    )
+                    await db_client.update_website_source_for_document(
+                        document_id, succeeded=False, error="Website source is paused or deleted"
+                    )
+                    return
+            else:
+                await db_client.update_document_full_text(document_id, full_text)
             await db_client.update_document_status(
                 document_id, "completed", total_chunks=0,
                 docling_metadata={"processor": "local_text", "mime_type": mime_type},
             )
+            try:
+                await db_client.update_website_source_for_document(document_id, succeeded=True)
+            except Exception:
+                logger.exception("Could not finalize website source refresh")
             return
 
         embeddings_provider = None
@@ -300,6 +322,10 @@ async def process_knowledge_base_document(
             total_chunks=len(chunk_records),
             docling_metadata=docling_metadata,
         )
+        try:
+            await db_client.update_website_source_for_document(document_id, succeeded=True)
+        except Exception:
+            logger.exception("Could not finalize website source refresh")
 
         logger.info(
             f"Successfully processed knowledge base document {document_id}. "
@@ -313,6 +339,12 @@ async def process_knowledge_base_document(
         await db_client.update_document_status(
             document_id, "failed", error_message=str(e)
         )
+        try:
+            await db_client.update_website_source_for_document(
+                document_id, succeeded=False, error="Website content indexing failed"
+            )
+        except Exception:
+            logger.exception("Could not mark website source indexing failure")
         raise
 
     finally:

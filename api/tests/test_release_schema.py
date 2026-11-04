@@ -69,6 +69,24 @@ def test_release_schema_rejects_missing_parent(tmp_path):
         migration_compatibility(migrations)
 
 
+def test_repository_migration_graph_has_single_head_and_joins_both_release_lines():
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    repo_root = Path(__file__).resolve().parents[2]
+    config = Config(str(repo_root / "api" / "alembic.ini"))
+    config.set_main_option("script_location", str(repo_root / "api" / "alembic"))
+    script = ScriptDirectory.from_config(config)
+
+    assert script.get_heads() == ["0a6b9f2e3c41"]
+    website_sources = script.get_revision("0a6b9f2e3c41")
+    assert website_sources.down_revision == "c9d84f2a1b70"
+    alert_delivery = script.get_revision("c9d84f2a1b70")
+    assert alert_delivery.down_revision == "8b31d04f2a77"
+    release_merge = script.get_revision("8b31d04f2a77")
+    assert set(release_merge.down_revision) == {"f2a3b4c5d6e7", "3a7b91c5d402"}
+
+
 def test_database_upgrade_allows_fresh_and_signed_ancestor_revisions():
     schema = {"head": "head", "upgrade_from": ["head", "middle", "root"], "rollback_to": []}
 

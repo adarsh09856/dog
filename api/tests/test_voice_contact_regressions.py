@@ -74,6 +74,83 @@ def test_confirmed_ambiguous_phone_advances_booking_without_reasking_number():
     assert "caller_phone_confirmation_pending" not in state
 
 
+def test_romanized_hindi_phone_confirmation_advances_after_readback():
+    state = {
+        "awaiting_phone": True,
+        "reply_language": "Hindi",
+        "caller_phone_confirmation_pending": "9538300941",
+    }
+    messages = [
+        {"role": "assistant", "content": "मैंने नंबर एक-एक अंक करके सुना। क्या यह सही है?"},
+        {"role": "user", "content": "haan ye sahi hai"},
+    ]
+
+    reply = contacts.caller_phone_fragment_reply(messages, state)
+
+    assert reply is not None
+    assert "caller_phone" not in reply
+    assert state["caller_phone"] == "9538300941"
+    assert "caller_phone_confirmation_pending" not in state
+
+
+def test_natural_english_phone_confirmation_advances_after_readback():
+    for confirmation in ("Yes, that is correct", "Yeah, that's right", "Yes it is correct"):
+        state = {
+            "awaiting_phone": True,
+            "reply_language": "English",
+            "caller_phone_confirmation_pending": "9538300941",
+        }
+        messages = [
+            {"role": "user", "content": "I want to book an appointment."},
+            {"role": "assistant", "content": "I heard a number ending in 0941. Is that right? Say yes, or repeat the number."},
+            {"role": "user", "content": confirmation},
+        ]
+
+        reply = contacts.caller_phone_fragment_reply(messages, state)
+
+        assert reply == "Thanks. What date and time would you prefer for the booking?"
+        assert state["caller_phone"] == "9538300941"
+        assert "caller_phone_confirmation_pending" not in state
+
+
+def test_clean_booking_phone_is_read_back_before_it_can_be_used():
+    state = {"awaiting_phone": True, "reply_language": "English"}
+    messages = [
+        {"role": "user", "content": "I want to book an appointment"},
+        {"role": "assistant", "content": "Please tell me your phone number."},
+        {"role": "user", "content": "nine five three eight three double zero nine four one"},
+    ]
+
+    readback = contacts.caller_phone_fragment_reply(messages, state)
+
+    assert readback == "I heard: nine, five, three, eight, three, zero, zero, nine, four, one. Is that correct? Say yes, or repeat the number."
+    assert "caller_phone" not in state
+    assert state["caller_phone_confirmation_pending"] == "9538300941"
+
+    messages.extend([
+        {"role": "assistant", "content": readback},
+        {"role": "user", "content": "yes, that is correct"},
+    ])
+    next_prompt = contacts.caller_phone_fragment_reply(messages, state)
+
+    assert next_prompt == "Thanks. What date and time would you prefer for the booking?"
+    assert state["caller_phone"] == "9538300941"
+
+
+def test_clean_non_booking_phone_does_not_add_a_booking_confirmation_turn():
+    state = {"awaiting_phone": True, "reply_language": "English"}
+    messages = [
+        {"role": "assistant", "content": "Please tell me your phone number."},
+        {"role": "user", "content": "nine five three eight three double zero nine four one"},
+    ]
+
+    reply = contacts.caller_phone_fragment_reply(messages, state)
+
+    assert reply is None
+    assert state["caller_phone"] == "9538300941"
+    assert "caller_phone_confirmation_pending" not in state
+
+
 def test_phone_prompt_does_not_consume_other_intent_containing_on():
     state = {"awaiting_phone": True}
     messages = [{"role": "user", "content": "Can I book on October nine?"}]
@@ -152,6 +229,32 @@ def test_booking_date_uses_india_today_and_reads_back_corrections(monkeypatch):
     assert contacts._explicit_caller_booking_date(["30 October"], reference_date=date(2026, 11, 1)) is None
     assert contacts._explicit_caller_booking_date(["first March 2099"]) == "2099-03-01"
     assert contacts._explicit_caller_booking_date(["27th October 2099"]) == "2099-10-27"
+
+
+def test_booking_date_fragments_are_joined_across_more_than_three_user_turns():
+    messages = [
+        {"role": "user", "content": "I want to book an appointment"},
+        {"role": "assistant", "content": "What name should I use?"},
+        {"role": "user", "content": "Adarsh"},
+        {"role": "assistant", "content": "What is your phone number?"},
+        {"role": "user", "content": "9538300941"},
+        {"role": "assistant", "content": "What date and time would you prefer?"},
+        {"role": "user", "content": "Please book for the"},
+        {"role": "user", "content": "30th"},
+        {"role": "user", "content": "of"},
+        {"role": "user", "content": "November"},
+        {"role": "user", "content": "2026"},
+    ]
+    state = {
+        "caller_name": "Adarsh",
+        "caller_phone": "9538300941",
+        "reply_language": "English",
+    }
+
+    reply = contacts.booking_date_time_question(messages, state)
+
+    assert reply == "Okay, 30 November 2026. What time works for you?"
+    assert state["booking_time_question_date"] == "2026-11-30"
 
 
 def test_booking_combined_tomorrow_and_time_is_confirmed_without_reasking(monkeypatch):

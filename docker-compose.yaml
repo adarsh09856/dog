@@ -318,6 +318,8 @@ services:
       dockerfile: ui/Dockerfile
       args:
         KODEWAVES_EDITION: "${KODEWAVES_EDITION:-saas}"
+        KODEWAVES_BUILD_SHA: "${KODEWAVES_BUILD_SHA:-dev}"
+        KODEWAVES_BUILD_REQUIRE_SHA: "${KODEWAVES_BUILD_REQUIRE_SHA:-false}"
         NEXT_PUBLIC_ONBOARDING_API_URL: "${NEXT_PUBLIC_ONBOARDING_API_URL:-}"
     image: ${REGISTRY:-kodewaves}/kodewaves-ui:${VERSION:-v2.0.0}
     restart: unless-stopped

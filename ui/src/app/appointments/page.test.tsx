@@ -16,6 +16,7 @@ import Page from "./page";
 const appointments = [
   { id: 1, title: "Product demo", customer_name: "Asha Rao", customer_phone: "+919876543210", customer_email: "asha@example.com", start_time: "2027-01-10T10:00:00+05:30", end_time: "2027-01-10T10:30:00+05:30", status: "confirmed", notes: "Interested in onboarding" },
   { id: 2, title: "Callback", customer_name: "Kabir Shah", customer_phone: "+919876543211", customer_email: "", start_time: "2027-01-11T11:00:00+05:30", end_time: "2027-01-11T11:30:00+05:30", status: "pending", notes: "" },
+  { id: 3, title: "Follow-up", customer_name: "Mira Sen", customer_phone: "+919876543212", customer_email: "", start_time: "2027-01-12T12:00:00+05:30", end_time: "2027-01-12T12:30:00+05:30", status: "completed", notes: "" },
 ];
 
 beforeEach(() => {
@@ -33,6 +34,12 @@ describe("Appointments workspace", () => {
     render(<Page />);
     expect((await screen.findAllByText("Asha Rao")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Kabir Shah").length).toBeGreaterThan(0);
+    const completedStatuses = screen.getAllByText("completed");
+    expect(completedStatuses.length).toBeGreaterThan(0);
+    for (const completedStatus of completedStatuses) {
+      expect(completedStatus.className).toContain("text-primary");
+      expect(completedStatus.className).toContain("bg-primary/10");
+    }
 
     fireEvent.change(screen.getByRole("textbox", { name: "Search appointments" }), { target: { value: "asha" } });
     expect(screen.getAllByText("Asha Rao").length).toBeGreaterThan(0);

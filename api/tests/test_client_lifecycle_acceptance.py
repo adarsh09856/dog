@@ -131,6 +131,7 @@ def test_release_build_sets_failing_image_verification_phase(monkeypatch, tmp_pa
     license_public.write_text("license-key", encoding="ascii")
     release_public.write_text("release-key", encoding="ascii")
     phases = []
+    docker_commands = []
 
     legacy_flags = []
 
@@ -138,13 +139,18 @@ def test_release_build_sets_failing_image_verification_phase(monkeypatch, tmp_pa
         legacy_flags.append(allow_legacy_owner_persistence)
         raise lifecycle_acceptance.subprocess.CalledProcessError(1, ["docker", "run"])
 
-    monkeypatch.setattr(lifecycle_acceptance, "_run", lambda *args, **kwargs: "")
+    def fake_run(command, **kwargs):
+        docker_commands.append(command)
+        return ""
+
+    monkeypatch.setattr(lifecycle_acceptance, "_run", fake_run)
     monkeypatch.setattr(lifecycle_acceptance, "verify_api", fail_api_verification)
 
     try:
         lifecycle_acceptance._build(
             tmp_path / "source", "lifecycle-prior", license_public, release_public,
-            "https://owner.invalid/check", tmp_path / "inventory", "prior", phases.append,
+            "https://owner.invalid/check", tmp_path / "inventory", "prior", "a" * 40,
+            phases.append,
         )
     except lifecycle_acceptance.subprocess.CalledProcessError:
         pass
@@ -153,12 +159,15 @@ def test_release_build_sets_failing_image_verification_phase(monkeypatch, tmp_pa
 
     assert phases[-1] == "verify_prior_api_image"
     assert legacy_flags == [True]
+    assert "KODEWAVES_BUILD_SHA=" + "a" * 40 in docker_commands[1]
+    assert "KODEWAVES_BUILD_REQUIRE_SHA=true" in docker_commands[1]
 
     phases.clear()
     try:
         lifecycle_acceptance._build(
             tmp_path / "source", "lifecycle-candidate", license_public, release_public,
-            "https://owner.invalid/check", tmp_path / "candidate-inventory", "candidate", phases.append,
+            "https://owner.invalid/check", tmp_path / "candidate-inventory", "candidate", "b" * 40,
+            phases.append,
         )
     except lifecycle_acceptance.subprocess.CalledProcessError:
         pass
@@ -167,6 +176,7 @@ def test_release_build_sets_failing_image_verification_phase(monkeypatch, tmp_pa
 
     assert phases[-1] == "verify_candidate_api_image"
     assert legacy_flags == [True, False]
+    assert "KODEWAVES_BUILD_SHA=" + "b" * 40 in docker_commands[3]
 
 
 def test_failure_diagnostics_keep_phase_and_type_without_exception_text():

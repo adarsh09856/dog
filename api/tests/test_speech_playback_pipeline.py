@@ -34,7 +34,10 @@ from pipecat.turns.user_stop import ExternalUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
 from api.services.pipecat.speech_playback import PlaybackOutcome
-from api.services.pipecat.worker_runner import run_pipeline_worker
+from api.services.pipecat.worker_runner import (
+    run_pipeline_worker,
+    wait_for_pipeline_worker_started,
+)
 from api.services.workflow.pipecat_engine import PipecatEngine
 
 
@@ -139,15 +142,11 @@ class PlaybackHarness:
 @pytest.fixture
 async def playback(request):
     harness = PlaybackHarness(**getattr(request, "param", {}))
-    ready = asyncio.Event()
-
-    @harness.worker.event_handler("on_pipeline_started")
-    async def started(*_):
-        ready.set()
-
     runner = asyncio.create_task(run_pipeline_worker(harness.worker))
     try:
-        await asyncio.wait_for(ready.wait(), 3)
+        await wait_for_pipeline_worker_started(
+            harness.worker, timeout=10, run_task=runner
+        )
         yield harness
     finally:
         harness.output.release.set()
@@ -364,11 +363,11 @@ async def test_generation_cancelled_before_start_does_not_need_a_bot_event(playb
 
 
 @pytest.mark.asyncio
-async def test_realtime_configured_text_is_skipped_without_taking_a_mute(playback):
+async def test_realtime_configured_text_without_llm_fails_without_taking_a_mute(playback):
     playback.engine._is_realtime = True
     speech = await playback.queue()
     assert not await asyncio.wait_for(speech.wait(), 1)
-    assert speech.outcome is PlaybackOutcome.SKIPPED
+    assert speech.outcome is PlaybackOutcome.FAILED
     assert not await playback.muted()
 
 

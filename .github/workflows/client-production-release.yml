@@ -192,6 +192,7 @@ jobs:
           trap 'rm -rf "$work_dir" "$key_dir" "$DOCKER_CONFIG"' EXIT
           python -m pip install --disable-pip-version-check cryptography 'sqlalchemy==2.0.43' 'PyYAML==6.0.2'
           python deploy/client/build_and_verify.py \
+            --source-commit "$GITHUB_SHA" \
             --api-tag "$API_TAG" \
             --ui-tag "$UI_TAG" \
             --caddy-image "$CADDY_IMAGE" \

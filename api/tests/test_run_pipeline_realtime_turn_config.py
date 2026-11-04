@@ -1,3 +1,5 @@
+import pytest
+
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.turns.user_start import (
     ExternalUserTurnStartStrategy,
@@ -22,8 +24,63 @@ from api.services.pipecat.run_pipeline import (
     _create_non_realtime_user_turn_start_strategies,
     _create_non_realtime_user_turn_stop_strategies,
     _create_realtime_user_turn_config,
+    _is_local_segmented_stt,
     _resolve_user_turn_stop_timeout,
+    _uses_local_indic_phone_capture,
 )
+
+
+def _stt_config(provider, api_key, model="indicconformer-ctc-int8"):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(stt=SimpleNamespace(
+        provider=provider,
+        api_key=api_key,
+        model=model,
+    ))
+
+
+@pytest.mark.parametrize(
+    "provider,api_key,expected",
+    [
+        ("speaches", None, True),
+        ("speaches", "none", True),
+        ("speaches", " None ", True),
+        ("speaches", "   ", True),
+        ("speaches", "local-cpu-token", True),
+        ("kodewaves", "sovereign-local-cpu", True),
+        # Blank managed-provider credentials can resolve to cloud STT, so they
+        # must never activate local segmentation or phone rescue.
+        ("kodewaves", None, False),
+        ("kodewaves", "none", False),
+        ("deepgram", None, False),
+        ("deepgram", "local-cpu-token", False),
+    ],
+)
+def test_local_stt_and_phone_capture_share_provider_safe_config_gate(
+    provider, api_key, expected,
+):
+    user_config = _stt_config(provider, api_key)
+    stt = object()
+
+    assert _is_local_segmented_stt(user_config, is_realtime=False) is expected
+    assert _uses_local_indic_phone_capture(
+        stt, user_config, is_realtime=False
+    ) is expected
+
+
+def test_phone_capture_requires_local_indic_model_and_cascade_pipeline():
+    user_config = _stt_config("speaches", "none", model="other-model")
+
+    assert _is_local_segmented_stt(user_config, is_realtime=False)
+    assert not _uses_local_indic_phone_capture(
+        object(), user_config, is_realtime=False
+    )
+    user_config = _stt_config("speaches", "none")
+    assert not _is_local_segmented_stt(user_config, is_realtime=True)
+    assert not _uses_local_indic_phone_capture(
+        object(), user_config, is_realtime=True
+    )
 
 
 def test_gemini_realtime_uses_local_vad_without_local_interruptions():

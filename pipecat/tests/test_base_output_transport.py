@@ -25,6 +25,7 @@ from pipecat.frames.frames import (
     OutputAudioRawFrame,
     StartFrame,
     TTSAudioRawFrame,
+    TTSStartedFrame,
     TTSStoppedFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessorSetup
@@ -224,6 +225,77 @@ class TestBaseOutputTransportInterruptions(unittest.IsolatedAsyncioTestCase):
             # The queued bot audio was dropped by the reset.
             self.assertTrue(sender._audio_queue.empty())
             release_write.set()
+        finally:
+            await transport.cancel(CancelFrame())
+
+
+class TestBaseOutputTransportTTSBoundaries(unittest.IsolatedAsyncioTestCase):
+    async def _start_tts(self, *, idle_timeout: float):
+        transport = await _make_transport(
+            mixer=None,
+            bot_vad_stop_secs=0.01,
+            audio_out_end_silence_secs=0,
+        )
+        sender = transport._media_senders[None]
+        sender._tts_response_idle_timeout_secs = idle_timeout
+        audio = TTSAudioRawFrame(
+            audio=b"\x01\x02" * (sender.audio_chunk_size // 2),
+            sample_rate=sender.sample_rate,
+            num_channels=1,
+            context_id="tts-turn",
+        )
+        await transport.process_frame(TTSStartedFrame(context_id="tts-turn"), FrameDirection.DOWNSTREAM)
+        await transport.process_frame(audio, FrameDirection.DOWNSTREAM)
+        async with asyncio.timeout(1):
+            while not (sender._tts_response_active and sender._bot_speaking):
+                await asyncio.sleep(0.005)
+        return transport, sender
+
+    @staticmethod
+    def _bot_stopped_frames(transport):
+        return [
+            frame
+            for call in transport.push_frame.call_args_list
+            if isinstance((frame := call.args[0]), BotStoppedSpeakingFrame)
+        ]
+
+    async def test_idle_between_tts_segments_waits_for_explicit_stop(self):
+        transport, sender = await self._start_tts(idle_timeout=0.5)
+        try:
+            await asyncio.sleep(0.08)
+            self.assertTrue(sender._tts_response_active)
+            self.assertTrue(sender._bot_speaking)
+            self.assertEqual(self._bot_stopped_frames(transport), [])
+
+            await transport.process_frame(
+                TTSStoppedFrame(context_id="tts-turn"), FrameDirection.DOWNSTREAM
+            )
+            async with asyncio.timeout(1):
+                while sender._tts_response_active or sender._bot_speaking:
+                    await asyncio.sleep(0.005)
+            self.assertEqual(len(self._bot_stopped_frames(transport)), 2)
+        finally:
+            await transport.cancel(CancelFrame())
+
+    async def test_interruption_clears_active_tts_boundary(self):
+        transport, sender = await self._start_tts(idle_timeout=0.5)
+        try:
+            await transport.process_frame(InterruptionFrame(), FrameDirection.DOWNSTREAM)
+            self.assertFalse(sender._tts_response_active)
+            self.assertIsNone(sender._tts_response_last_activity)
+            self.assertFalse(sender._bot_speaking)
+            self.assertEqual(len(self._bot_stopped_frames(transport)), 2)
+        finally:
+            await transport.cancel(CancelFrame())
+
+    async def test_missing_tts_stop_marker_expires_after_bounded_idle(self):
+        transport, sender = await self._start_tts(idle_timeout=0.05)
+        try:
+            async with asyncio.timeout(1):
+                while sender._tts_response_active or sender._bot_speaking:
+                    await asyncio.sleep(0.005)
+            self.assertIsNone(sender._tts_response_last_activity)
+            self.assertEqual(len(self._bot_stopped_frames(transport)), 2)
         finally:
             await transport.cancel(CancelFrame())
 

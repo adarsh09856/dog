@@ -5,6 +5,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Enum,
@@ -1409,6 +1410,50 @@ class KnowledgeBaseDocumentModel(Base):
         Index("ix_kb_documents_uuid", "document_uuid"),
         Index("ix_kb_documents_status", "processing_status"),
         Index("ix_kb_documents_created_at", "created_at"),
+    )
+
+
+class KnowledgeBaseWebsiteSourceModel(Base):
+    """A tenant-owned website whose pages are kept in the knowledge base."""
+
+    __tablename__ = "knowledge_base_website_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_uuid = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()), index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    origin = Column(String(2048), nullable=False)
+    document_id = Column(Integer, ForeignKey("knowledge_base_documents.id", ondelete="SET NULL"), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    available_to_all_agents = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    status = Column(String(20), nullable=False, default="pending", server_default=text("'pending'"))
+    refresh_interval_hours = Column(Integer, nullable=False, default=24, server_default="24")
+    max_pages = Column(Integer, nullable=False, default=50, server_default="50")
+    last_refresh_started_at = Column(DateTime(timezone=True), nullable=True)
+    last_refreshed_at = Column(DateTime(timezone=True), nullable=True)
+    next_refresh_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(String(500), nullable=True)
+    etag = Column(String(256), nullable=True)
+    content_hash = Column(String(64), nullable=True)
+    pending_etag = Column(String(256), nullable=True)
+    pending_content_hash = Column(String(64), nullable=True)
+    version = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+
+    __table_args__ = (
+        CheckConstraint("status in ('pending', 'crawling', 'indexing', 'ready', 'paused', 'error', 'deleted')", name="ck_kb_website_sources_status"),
+        CheckConstraint("refresh_interval_hours between 1 and 720", name="ck_kb_website_sources_refresh_interval"),
+        CheckConstraint("max_pages between 1 and 100", name="ck_kb_website_sources_max_pages"),
+        Index("ix_kb_website_sources_due", "is_active", "next_refresh_at"),
+        Index("ix_kb_website_sources_org", "organization_id"),
+        Index(
+            "uq_kb_website_sources_org_origin_active",
+            "organization_id",
+            "origin",
+            unique=True,
+            postgresql_where=text("is_active = true"),
+        ),
     )
 
 

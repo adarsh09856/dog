@@ -21,8 +21,14 @@ import json
 import unittest
 
 from loguru import logger
+from starlette.websockets import WebSocketState
 
+from pipecat.frames.frames import InterruptionFrame
 from pipecat.serializers.asterisk import AsteriskFrameSerializer, _parse_control_message
+from pipecat.transports.websocket.fastapi import (
+    FastAPIWebsocketClient,
+    FastAPIWebsocketOutputTransport,
+)
 from tests.frame_processor_helpers import frame_processor_setup
 
 SAMPLE_RATE = 8000
@@ -134,3 +140,56 @@ class TestAsteriskDeserializeControlMessages(unittest.IsolatedAsyncioTestCase):
 
     async def test_unrecognised_message_is_reported(self):
         assert "Unrecognised" in await self._warnings_from("!!! not a control message")
+
+
+class TestAsteriskInterruptionFlush(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.serializer = AsteriskFrameSerializer(
+            channel_id="test-channel",
+            ari_endpoint="http://asterisk:8088",
+            app_name="dograh",
+            app_password="secret",
+        )
+
+    async def test_plain_control_mode_flushes_media_on_interruption(self):
+        await self.serializer.deserialize(MEDIA_START_PLAIN)
+
+        payload = await self.serializer.serialize(InterruptionFrame())
+
+        assert payload == "FLUSH_MEDIA"
+
+    async def test_json_control_mode_flushes_media_on_interruption(self):
+        await self.serializer.deserialize(json.dumps({"event": "MEDIA_START"}))
+
+        payload = await self.serializer.serialize(InterruptionFrame())
+
+        assert json.loads(payload) == {"command": "FLUSH_MEDIA"}
+
+    async def test_unknown_control_mode_does_not_guess_protocol(self):
+        payload = await self.serializer.serialize(InterruptionFrame())
+
+        assert payload is None
+
+    async def test_fastapi_output_transport_sends_flush_as_websocket_text(self):
+        await self.serializer.deserialize(MEDIA_START_PLAIN)
+        websocket = type("WebSocketStub", (), {})()
+        websocket.client_state = WebSocketState.CONNECTED
+        websocket.application_state = WebSocketState.CONNECTED
+        from unittest.mock import AsyncMock
+
+        websocket.send_text = AsyncMock()
+        websocket.send_bytes = AsyncMock()
+        client = object.__new__(FastAPIWebsocketClient)
+        client._websocket = websocket
+        client._closing = False
+
+        output = object.__new__(FastAPIWebsocketOutputTransport)
+        output._client = client
+        output._params = type("Params", (), {
+            "serializer": self.serializer,
+            "fixed_audio_packet_size": None,
+        })()
+
+        assert await output._write_frame(InterruptionFrame())
+        websocket.send_text.assert_awaited_once_with("FLUSH_MEDIA")
+        websocket.send_bytes.assert_not_awaited()

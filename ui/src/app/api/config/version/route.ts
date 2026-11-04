@@ -92,6 +92,7 @@ export async function GET() {
 
   return NextResponse.json({
     ui: uiVersion,
+    ui_build_sha: process.env.KODEWAVES_BUILD_SHA?.trim() || "dev",
     api: apiVersion,
     deploymentMode,
     authProvider,

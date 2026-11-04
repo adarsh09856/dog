@@ -21,6 +21,8 @@ WORKDIR /app
 # Build a client installation without compiling owner-only admin pages into the
 # distributable UI image. The API applies its own route gate separately.
 ARG KODEWAVES_EDITION=saas
+ARG KODEWAVES_BUILD_SHA=dev
+ARG KODEWAVES_BUILD_REQUIRE_SHA=false
 ARG KODEWAVES_RELEASE_PUBLIC_KEY=
 ARG KODEWAVES_OWNER_STATUS_URL=
 ARG NEXT_PUBLIC_ONBOARDING_API_URL=
@@ -56,6 +58,10 @@ ENV NEXT_PUBLIC_ONBOARDING_API_URL=${NEXT_PUBLIC_ONBOARDING_API_URL}
 ENV NEXT_TELEMETRY_DISABLED="1"
 ENV BACKEND_URL="http://api:8000"
 ENV KODEWAVES_EDITION=${KODEWAVES_EDITION}
+RUN if [ "$KODEWAVES_BUILD_REQUIRE_SHA" = "true" ] || [ "$KODEWAVES_EDITION" = "client" ]; then \
+      printf '%s' "$KODEWAVES_BUILD_SHA" | grep -Eq '^([0-9a-f]{40}|[0-9a-f]{64})$' || \
+        { echo "Production UI builds require a full source commit SHA" >&2; exit 1; }; \
+    fi
 RUN if [ "$KODEWAVES_EDITION" = "client" ]; then \
       test -n "$KODEWAVES_RELEASE_PUBLIC_KEY" && test -n "$KODEWAVES_OWNER_STATUS_URL" || \
         { echo "Client UI build requires the owner release key and status URL" >&2; exit 1; }; \
@@ -75,9 +81,11 @@ WORKDIR /app
 
 # Environment variables will be provided by docker-compose
 ARG KODEWAVES_EDITION=saas
+ARG KODEWAVES_BUILD_SHA=dev
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV KODEWAVES_EDITION=${KODEWAVES_EDITION}
+ENV KODEWAVES_BUILD_SHA=${KODEWAVES_BUILD_SHA}
 
 # Create a non-root user
 RUN addgroup --system --gid 1001 nodejs && \

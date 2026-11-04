@@ -108,6 +108,7 @@ def compose_system_prompt_for_node(
     format_prompt: Callable[[str], str],
     has_recordings: bool,
     speech_instructions: str = "",
+    has_website_knowledge: bool = False,
 ) -> ComposedNodePrompt:
     """Compose the full system prompt text for a workflow node.
 
@@ -131,7 +132,7 @@ def compose_system_prompt_for_node(
     formatted_node_prompt = format_prompt(node.prompt)
 
     has_action_tools = bool(
-        getattr(node, "tool_uuids", None) or getattr(node, "document_uuids", None)
+        getattr(node, "tool_uuids", None) or getattr(node, "document_uuids", None) or has_website_knowledge
     )
     parts = [
         p for p in (
@@ -140,7 +141,7 @@ def compose_system_prompt_for_node(
             ACTION_GROUNDING_INSTRUCTIONS,
             (
                 KNOWLEDGE_BASE_INSTRUCTIONS
-                if getattr(node, "document_uuids", None)
+                if getattr(node, "document_uuids", None) or has_website_knowledge
                 else None
             ),
             None if has_action_tools else NO_ACTION_TOOLS_INSTRUCTION,
@@ -206,6 +207,7 @@ async def compose_functions_for_node(
     *,
     node: "Node",
     custom_tool_manager: Optional["CustomToolManager"],
+    additional_document_uuids: Optional[list[str]] = None,
 ) -> list[dict]:
     """Compose the function/tool schemas for a workflow node.
 
@@ -223,8 +225,9 @@ async def compose_functions_for_node(
     functions: list[dict] = []
 
     # Knowledge base retrieval tool
-    if node.document_uuids:
-        kb_tool_def = get_knowledge_base_tool(node.document_uuids)
+    document_uuids = list(dict.fromkeys([*(node.document_uuids or []), *(additional_document_uuids or [])]))
+    if document_uuids:
+        kb_tool_def = get_knowledge_base_tool(document_uuids)
         kb_schema = get_function_schema(
             kb_tool_def["function"]["name"],
             kb_tool_def["function"]["description"],

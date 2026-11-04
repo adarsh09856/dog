@@ -246,7 +246,10 @@ def _validate_source_checkout(source: Path, expected_commit: str) -> None:
 
 def _build(source: Path, tag_prefix: str, license_public: Path, release_public: Path,
            owner_status_url: str, inventory_dir: Path, release_label: str,
+           source_commit: str,
            set_phase: Callable[[str], None]) -> tuple[dict[str, str], dict[str, str]]:
+    if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", source_commit):
+        raise ValueError("Client UI lifecycle builds require a full source commit SHA")
     tags = {"api": f"{tag_prefix}-api:acceptance", "ui": f"{tag_prefix}-ui:acceptance"}
     for component in ("api", "ui"):
         set_phase(f"build_{release_label}_{component}_image")
@@ -259,6 +262,8 @@ def _build(source: Path, tag_prefix: str, license_public: Path, release_public: 
             ])
         else:
             command.extend([
+                "--build-arg", f"KODEWAVES_BUILD_SHA={source_commit}",
+                "--build-arg", "KODEWAVES_BUILD_REQUIRE_SHA=true",
                 "--build-arg", f"KODEWAVES_RELEASE_PUBLIC_KEY={release_public.read_text(encoding='ascii').strip()}",
                 "--build-arg", f"KODEWAVES_OWNER_STATUS_URL={owner_status_url}",
             ])
@@ -564,11 +569,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
         prior_ids, prior_artifacts = _build(
             args.prior_source, prior_tag_prefix, license_public, release_public,
-            owner_status_url, temp_root / "prior-inventory", "prior", set_release_phase,
+            owner_status_url, temp_root / "prior-inventory", "prior", args.prior_commit,
+            set_release_phase,
         )
         candidate_ids, candidate_artifacts = _build(
             ROOT, candidate_tag_prefix, license_public, release_public,
-            owner_status_url, temp_root / "candidate-inventory", "candidate", set_release_phase,
+            owner_status_url, temp_root / "candidate-inventory", "candidate", head,
+            set_release_phase,
         )
         images_to_remove.update(prior_artifacts[name] for name in ("api", "ui"))
         images_to_remove.update(candidate_artifacts[name] for name in ("api", "ui"))

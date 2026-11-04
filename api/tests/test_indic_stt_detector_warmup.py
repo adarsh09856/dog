@@ -57,20 +57,25 @@ def test_detector_startup_warmup_fails_if_primary_lid_is_unavailable(monkeypatch
         indic_stt._warm_language_identifiers()
 
 
-def test_local_stt_inventory_keeps_requested_languages_and_excludes_urdu_and_unwanted_languages():
-    assert indic_stt.AUTO_DETECT_LANGUAGES == frozenset({
-        "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
-        "ne", "pa", "sa", "ta", "te",
-    })
-    assert not indic_stt.AUTO_DETECT_LANGUAGES.intersection({
-        "gu", "ks", "kok", "mni", "or", "sat", "sd", "ur",
-    })
+def test_local_stt_inventory_exposes_all_22_scheduled_languages_and_english():
+    assert indic_stt.AUTO_DETECT_LANGUAGES == frozenset(indic_stt.LID_LANGUAGE_CODES)
+    assert indic_stt.SCHEDULED_INDIAN_LANGUAGES == (
+        indic_stt.AUTO_DETECT_LANGUAGES - {"en"}
+    )
+    assert len(indic_stt.SCHEDULED_INDIAN_LANGUAGES) == 22
 
 
-def test_excluded_auto_detection_falls_back_to_supported_language_without_urdu_transcript():
+def test_auto_detection_uses_an_installed_scheduled_language_decoder():
     assert indic_stt._resolve_decode_language(
-        "ur", 0.99, None, {"hi", "en"},
-    ) == ("hi", "excluded_language_to_hindi")
+        "ur", 0.99, None, set(indic_stt.AUTO_DETECT_LANGUAGES),
+    ) == ("ur", "detector")
+
+
+def test_auto_detection_does_not_silently_substitute_a_missing_decoder():
+    with pytest.raises(indic_stt.HTTPException) as exc_info:
+        indic_stt._resolve_decode_language("gu", 0.99, "en", {"hi", "en"})
+    assert getattr(exc_info.value, "status_code", None) == 422
+
     assert indic_stt._resolve_decode_language(
-        "gu", 0.99, "en", {"hi", "en"},
-    ) == ("en", "excluded_language_to_previous_supported")
+        "gu", 0.10, "en", {"hi", "en"},
+    ) == ("en", "unsupported_language_held_previous")

@@ -112,6 +112,7 @@
 }
 
 .headlineAccent { color: #426c58; }
+:global(.dark .public-site) .headlineAccent { color: var(--primary); }
 
 .lede {
   max-width: 39rem;
@@ -239,6 +240,7 @@
 .quadItem h3 { margin-top: 1.7rem; font-size: .9rem; font-weight: 720; letter-spacing: -.025em; }
 .quadItem p { margin-top: .5rem; color: var(--muted-foreground); font-size: .76rem; line-height: 1.65; }
 .capabilityIcon { display: inline-grid; width: 2.65rem; height: 2.65rem; place-items: center; border: 1px solid color-mix(in srgb, #426c58 25%, var(--border)); border-radius: .72rem; background: color-mix(in srgb, #426c58 7%, var(--background)); color: #426c58; }
+:global(.dark .public-site) .capabilityIcon { border-color: color-mix(in srgb, var(--primary) 36%, var(--border)); background: color-mix(in srgb, var(--primary) 12%, var(--background)); color: var(--primary); }
 .capability h3 { margin-top: 1.3rem; font-size: .98rem; font-weight: 720; letter-spacing: -.025em; }
 .capability p { margin-top: .5rem; color: var(--muted-foreground); font-size: .8rem; line-height: 1.7; }
 

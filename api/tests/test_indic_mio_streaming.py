@@ -10,6 +10,16 @@ import pytest
 from api.local_models.indic_mio import app as mio
 
 
+def test_inventory_reports_all_scheduled_languages_and_pcm_streaming():
+    inventory = asyncio.run(mio.models())["data"][0]
+
+    assert inventory["streaming"] is True
+    assert len(inventory["languages"]) == 23
+    assert "hi-IN" in inventory["languages"]
+    assert "en-IN" in inventory["languages"]
+    assert inventory["voices"][0]["gender"] == "unknown"
+
+
 @pytest.mark.asyncio
 async def test_pcm_stream_releases_native_callback_before_generation_finishes(monkeypatch):
     release = threading.Event()

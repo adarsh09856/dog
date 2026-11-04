@@ -25,6 +25,8 @@ it('filters campaign cards by name, workflow, and state', async () => {
     render(<Page />);
     expect(await screen.findByText('Spring launch')).toBeTruthy();
     expect(screen.getByText('Winback')).toBeTruthy();
+    expect(screen.getByText('completed').className).toContain('text-primary');
+    expect(screen.getByText('completed').className).toContain('bg-primary/10');
     fireEvent.change(screen.getByRole('textbox', {name: 'Search campaigns'}), {target: {value: 'welcome'}});
     expect(screen.getByText('Spring launch')).toBeTruthy();
     expect(screen.queryByText('Winback')).toBeNull();

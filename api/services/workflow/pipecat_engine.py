@@ -94,6 +94,7 @@ from api.services.workflow.pipecat_engine_variable_extractor import (
     VariableExtractionManager,
 )
 from api.services.workflow.tools.knowledge_base import (
+    get_agent_knowledge_document_uuids,
     retrieve_from_knowledge_base,
 )
 from api.utils.template_renderer import render_template
@@ -251,6 +252,7 @@ class PipecatEngine:
 
         # Cached organization ID (resolved lazily from workflow run)
         self._organization_id: Optional[int] = None
+        self._website_knowledge_document_uuids: Optional[list[str]] = None
 
         # The organization's disposition mapping, loaded once in initialize().
         # Held on the engine rather than fetched where it is used because the
@@ -884,9 +886,23 @@ class PipecatEngine:
                 node.tool_uuids,
                 mcp_tool_filters=getattr(node, "mcp_tool_filters", None),
             )
-        if node.document_uuids:
+        organization_id = await self._get_organization_id()
+        if self._website_knowledge_document_uuids is None and organization_id:
+            self._website_knowledge_document_uuids = (
+                await db_client.get_website_document_uuids_for_organization(organization_id)
+            )
+        knowledge_document_uuids = (
+            await get_agent_knowledge_document_uuids(
+                organization_id,
+                node.document_uuids,
+                self._website_knowledge_document_uuids or [],
+            )
+            if organization_id
+            else list(dict.fromkeys(node.document_uuids or []))
+        )
+        if knowledge_document_uuids:
             await self._register_knowledge_base_function(
-                node.document_uuids, agent=agent
+                knowledge_document_uuids, agent=agent
             )
         speech_instructions = []
         if not agent.is_realtime:
@@ -925,10 +941,13 @@ class PipecatEngine:
             format_prompt=self._format_prompt,
             has_recordings=self._has_recordings,
             speech_instructions="\n\n".join(speech_instructions),
+            has_website_knowledge=bool(self._website_knowledge_document_uuids),
         )
         system_prompt = prompt.text
         functions = await compose_functions_for_node(
-            node=node, custom_tool_manager=manager
+            node=node,
+            custom_tool_manager=manager,
+            additional_document_uuids=self._website_knowledge_document_uuids or [],
         )
         agent.tools = ToolsSchema(standard_tools=functions)
         agent.system_prompt = system_prompt

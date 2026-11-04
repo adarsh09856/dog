@@ -223,6 +223,10 @@ def validate_owner_private_key_path(path: Path, repository_root: Path) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--source-commit",
+        help="Full Git commit SHA embedded in the client UI image (defaults to the checked-out HEAD)",
+    )
     parser.add_argument("--api-tag", default="kodewaves-client-api:local")
     parser.add_argument("--ui-tag", default="kodewaves-client-ui:local")
     parser.add_argument("--caddy-image", required=True, help="Approved immutable Caddy image digest used by client ingress")
@@ -257,6 +261,18 @@ def main() -> int:
         migration_compatibility(root / "api" / "alembic" / "versions", args.approved_upgrade_from)
         if args.owner_private_key else None
     )
+    try:
+        checked_out_commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=root, check=True,
+            capture_output=True, text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        parser.error(f"Could not determine the source commit for the client UI image: {exc}")
+    source_commit = args.source_commit or checked_out_commit
+    if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", source_commit):
+        parser.error("--source-commit must be a full 40- or 64-character lowercase Git SHA")
+    if source_commit != checked_out_commit:
+        parser.error("--source-commit must match the checked-out source tree")
     if args.owner_private_key:
         try:
             args.owner_private_key = validate_owner_private_key_path(args.owner_private_key, root)
@@ -289,6 +305,8 @@ def main() -> int:
             ])
         else:
             command.extend([
+                "--build-arg", f"KODEWAVES_BUILD_SHA={source_commit}",
+                "--build-arg", "KODEWAVES_BUILD_REQUIRE_SHA=true",
                 "--build-arg", f"KODEWAVES_RELEASE_PUBLIC_KEY={release_public_key}",
                 "--build-arg", f"KODEWAVES_OWNER_STATUS_URL={args.owner_status_url}",
             ])

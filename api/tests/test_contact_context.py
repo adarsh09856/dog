@@ -1,6 +1,7 @@
 from api.services.workflow.contact_context import (
     booking_contact_question,
     booking_phone_date_question,
+    booking_time_confirmation_question,
     caller_state_instruction,
     caller_name_followup_reply,
     caller_phone_fragment_reply,
@@ -135,15 +136,75 @@ def test_completed_booking_phone_advances_to_date_without_repeating_digits():
         {"role": "user", "content": "मेरा नंबर 9999999999 है।"},
     ]
     state = {"caller_name": "आदर्श"}
-    assert caller_phone_fragment_reply(messages, state) is None
-    assert state["caller_phone"] == "9999999999"
-    reply = booking_phone_date_question(messages, state)
+    readback = caller_phone_fragment_reply(messages, state)
+    assert readback == (
+        "मैंने नंबर एक-एक अंक करके सुना: नौ, नौ, नौ, नौ, नौ, नौ, नौ, नौ, नौ, नौ। "
+        "क्या यह सही है? हाँ कहें या नंबर दोहराएँ।"
+    )
+    assert "caller_phone" not in state
+    assert state["caller_phone_confirmation_pending"] == "9999999999"
+
+    messages.extend([
+        {"role": "assistant", "content": readback},
+        {"role": "user", "content": "हाँ"},
+    ])
+    reply = caller_phone_fragment_reply(messages, state)
     assert reply == "धन्यवाद। किस तारीख और समय के लिए बुक करना चाहेंगे?"
+    assert state["caller_phone"] == "9999999999"
     assert "9999999999" not in reply
     assert booking_phone_date_question(messages, state) is None
     assert booking_phone_date_question(messages[2:], {
         "caller_phone": "9999999999", "phone_just_completed": "9999999999"
     }) is None
+
+
+def test_completed_phone_advances_after_fragment_prompt_without_phone_wording():
+    messages = [
+        {"role": "user", "content": "I want to book an appointment."},
+        {"role": "assistant", "content": "Which digit comes after double?"},
+        {"role": "user", "content": "zero nine four one"},
+    ]
+    state = {
+        "caller_phone": "9538300941",
+        "phone_just_completed": "9538300941",
+        "reply_language": "English",
+    }
+
+    assert booking_phone_date_question(messages, state) == (
+        "Thanks. What date and time would you prefer for the booking?"
+    )
+    assert "phone_just_completed" not in state
+
+
+def test_ambiguous_spoken_time_is_clarified_instead_of_left_for_llm_to_guess():
+    messages = [
+        {"role": "user", "content": "I want to book an appointment."},
+        {"role": "user", "content": "tomorrow"},
+        {"role": "assistant", "content": "What time works for you?"},
+        {"role": "user", "content": "ten thirty"},
+    ]
+    state = {"booking_time_question_date": "2026-11-01", "reply_language": "English"}
+
+    reply = booking_time_confirmation_question(messages, state)
+
+    assert reply == "Please give the time with AM or PM, for example, 5 PM."
+    assert state["booking_time_question_date"] == "2026-11-01"
+    assert "booking_confirmation_slot" not in state
+
+
+def test_ambiguous_hindi_time_is_clarified_without_inventing_a_day_period():
+    messages = [
+        {"role": "user", "content": "मुझे अपॉइंटमेंट बुक करना है"},
+        {"role": "user", "content": "कल"},
+        {"role": "assistant", "content": "आपको किस समय चाहिए?"},
+        {"role": "user", "content": "दस बजे"},
+    ]
+    state = {"booking_time_question_date": "2026-11-01", "reply_language": "Hindi"}
+
+    reply = booking_time_confirmation_question(messages, state)
+
+    assert reply == "कृपया समय सुबह, दोपहर या शाम के साथ बताइए।"
+    assert "booking_confirmation_slot" not in state
 
 
 def test_room_reservation_does_not_enter_appointment_slot_collection():
@@ -580,6 +641,7 @@ def test_regional_spoken_digits_are_captured_as_ascii():
         "ഒൻപത് എട്ട് ഏഴ് ആറ് അഞ്ച് നാല് മൂന്ന് രണ്ട് ഒന്ന് പൂജ്യം",
         "ਨੌਂ ਅੱਠ ਸੱਤ ਛੇ ਪੰਜ ਚਾਰ ਤਿੰਨ ਦੋ ਇੱਕ ਸਿਫ਼ਰ",
         "नऊ आठ सात सहा पाच चार तीन दोन एक शून्य",
+        "नौ आठ सात छ पाँच चार तिन दुई एक शुन्य",
     )
     for text in examples:
         state = {}
@@ -661,3 +723,80 @@ def test_caller_provided_phone_is_reused_without_asking_for_known_phone_again():
     contact = {"customer_name": "Adarsh", "customer_phone": "+919876543210"}
     state = {"caller_name": "Adarsh", "caller_phone": "9876543210"}
     assert booking_contact_question(messages, contact, state) is None
+
+
+def test_prior_booking_anchor_survives_more_than_eight_compacted_user_turns():
+    state = {}
+    turns = [
+        "I want to book an appointment.",
+        "My name is Adarsh.",
+        "Nine five three.",
+        "Eight three.",
+        "Double zero.",
+        "Nine four one.",
+        "Yes, that number is right.",
+        "Tomorrow.",
+        "What time works?",
+        "Twenty seven October twenty twenty six.",
+        "Five PM.",
+    ]
+    for text in turns:
+        remember_recent_caller_statements([{"role": "user", "content": text}], state)
+
+    reminder = caller_state_instruction(
+        state, [{"role": "user", "content": turns[-1]}]
+    )
+
+    assert state["prior_booking_request"] == turns[0]
+    assert len(state["recent_caller_statements"]) <= 8
+    assert '"prior_booking_request": "I want to book an appointment."' in reminder
+    assert "historical context only" in reminder
+    assert '"caller_stated_booking_date": "2026-10-27"' in reminder
+
+
+def test_changed_task_keeps_booking_anchor_historical_and_latest_intent_primary():
+    state = {}
+    remember_recent_caller_statements(
+        [{"role": "user", "content": "I want to book an appointment."}], state
+    )
+    for index in range(9):
+        remember_recent_caller_statements(
+            [{"role": "user", "content": f"Phone fragment {index}"}], state
+        )
+    date_statement = "Twenty seven October twenty twenty six."
+    remember_recent_caller_statements(
+        [{"role": "user", "content": date_statement}], state
+    )
+    latest_task = "I don't want to book an appointment. Tell me your opening hours."
+    remember_recent_caller_statements(
+        [{"role": "user", "content": latest_task}], state
+    )
+
+    reminder = caller_state_instruction(
+        state, [{"role": "user", "content": latest_task}]
+    )
+
+    assert state["prior_booking_request"] == "I want to book an appointment."
+    assert state["recent_caller_statements"][-1] == latest_task
+    assert '"prior_booking_request"' in reminder
+    assert '"caller_stated_booking_date": "2026-10-27"' in reminder
+    assert "Always follow the latest caller intent" in reminder
+    assert "use it as the current task only when the latest caller turn clearly continues that booking" in reminder
+    assert "Do not apply a prior booking date or time to a different task or a new booking" in reminder
+    assert "active_booking_request" not in reminder
+
+
+def test_rephrased_booking_request_does_not_drop_valid_date_fragment():
+    state = {}
+    messages = [
+        {"role": "user", "content": "I want to book an appointment."},
+        {"role": "user", "content": "Twenty seven October twenty twenty six."},
+    ]
+    remember_recent_caller_statements(messages, state)
+    messages.append({"role": "user", "content": "Can you schedule an appointment for me?"})
+
+    remember_recent_caller_statements(messages, state)
+    reminder = caller_state_instruction(state)
+
+    assert "Twenty seven October twenty twenty six." in state["recent_caller_statements"]
+    assert '"caller_stated_booking_date": "2026-10-27"' in reminder
