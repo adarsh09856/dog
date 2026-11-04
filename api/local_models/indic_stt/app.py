@@ -57,9 +57,9 @@ LID_LANGUAGE_CODES = (
     "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai",
     "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 )
-# The pinned detector and decoder repositories include all 22 scheduled
-# Indian languages plus Indian English. Keep the runtime inventory derived
-# from the detector codes so no installed decoder is hidden by another list.
+# Speech recognition advertises the languages this service can decode. Reply
+# language/voice routing is separately constrained by the active TTS voice's
+# installed capability contract in the API pipeline.
 AUTO_DETECT_LANGUAGES = frozenset(LID_LANGUAGE_CODES)
 SCHEDULED_INDIAN_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
@@ -445,7 +445,7 @@ def _calibrated_log_probabilities(logits: np.ndarray) -> np.ndarray:
 
 
 def _detect_language(waveform: np.ndarray, sample_rate: int) -> tuple[str, float, str | None]:
-    """Return the dominant supported language and its calibrated model score."""
+    """Return the detected language and its calibrated model score."""
     session = _lid_session
     if session is None:
         raise RuntimeError("The local language identifier is not available")
@@ -517,6 +517,8 @@ def _resolve_decode_language(
     supported = installed & AUTO_DETECT_LANGUAGES
     if detected not in supported:
         threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
+        if detected in LID_LANGUAGE_CODES and fallback in supported:
+            return fallback, "unsupported_language_held_previous"
         if confidence >= threshold:
             raise HTTPException(
                 status_code=422,
