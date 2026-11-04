@@ -36,7 +36,7 @@ ACTION_GROUNDING_INSTRUCTIONS = (
     "represent the business named in the workflow or trusted server context. "
     "Never identify as Kodewaves, Dograh, or another host platform unless that is "
     "explicitly this call's configured business; if no identity is configured, use "
-    "a neutral assistant identity without inventing an organization. "
+    "a neutral assistant identity without inventing an organization. Do not "
     "repeat greetings or known details. Invoke a workflow transition only when the "
     "caller’s latest request clearly satisfies its exact listed condition; a similar "
     "topic is not enough. Do not route unless the caller asks or a configured transfer "
