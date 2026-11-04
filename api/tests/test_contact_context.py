@@ -253,6 +253,68 @@ def test_asr_meridian_fragment_uses_pending_hour_or_asks_for_the_hour():
     assert "booking_confirmation_slot" not in missing_hour_state
 
 
+def test_english_night_dayparts_keep_after_midnight_hours_in_the_morning():
+    base = [
+        {"role": "user", "content": "I want to book an appointment."},
+        {"role": "assistant", "content": "What date and time would you prefer?"},
+    ]
+    for phrase, expected_hour in (
+        ("1 at night", 1),
+        ("5 at night", 5),
+        ("6 at night", 18),
+        ("8 at night", 20),
+    ):
+        state = {"booking_time_question_date": "2026-11-05", "reply_language": "English"}
+        reply = booking_time_confirmation_question(
+            base + [{"role": "user", "content": phrase}], state
+        )
+        assert f"at {expected_hour % 12 or 12}:00" in reply
+        assert ("AM" if expected_hour < 12 else "PM") in reply
+        assert state["booking_confirmation_slot"] == f"2026-11-05T{expected_hour:02d}:00"
+
+    hindi_state = {"booking_time_question_date": "2026-11-05", "reply_language": "Hindi"}
+    hindi_reply = booking_time_confirmation_question(
+        base + [{"role": "user", "content": "1 at night"}], hindi_state
+    )
+    assert "सुबह 1:00 बजे" in hindi_reply
+    assert hindi_state["booking_confirmation_slot"] == "2026-11-05T01:00"
+
+
+def test_conflicting_or_negated_daypart_times_require_clarification():
+    base = [
+        {"role": "user", "content": "I want to book an appointment."},
+        {"role": "assistant", "content": "What date and time would you prefer?"},
+    ]
+    for phrase in (
+        "not 8 in the morning",
+        "not 8 in the morning, 9 in the evening",
+        "8 AM, actually 9 in the evening",
+    ):
+        state = {"booking_time_question_date": "2026-11-05", "reply_language": "English"}
+        reply = booking_time_confirmation_question(
+            base + [{"role": "user", "content": phrase}], state
+        )
+        assert reply == "I couldn't tell which time you meant. What exact time should I use?"
+        assert "booking_confirmation_slot" not in state
+
+
+def test_single_explicit_daypart_correction_replaces_the_previous_candidate():
+    base = [
+        {"role": "user", "content": "I want to book an appointment."},
+        {"role": "assistant", "content": "What date and time would you prefer?"},
+    ]
+    state = {
+        "booking_time_question_date": "2026-11-05",
+        "booking_confirmation_slot": "2026-11-05T08:00",
+        "reply_language": "English",
+    }
+    reply = booking_time_confirmation_question(
+        base + [{"role": "user", "content": "Actually 9 in the evening"}], state
+    )
+    assert "at 9:00 PM" in reply
+    assert state["booking_confirmation_slot"] == "2026-11-05T21:00"
+
+
 def test_room_reservation_does_not_enter_appointment_slot_collection():
     messages = [
         {"role": "user", "content": "मुझे एक कमरा बुक करना है।"},

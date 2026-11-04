@@ -1643,19 +1643,46 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         r"(?:सुबह|दोपहर|शाम)\s*(\d{1,2}|[^\s:]+)(?::([0-5]\d))?\s*बजे",
         normalized,
     )
-    english = re.search(
+    english_pattern = (
         r"(?:\bat\s+)?(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
         r"(?::([0-5]\d))?\s*(?:बजे\s*)?"
-        r"(am|pm|[ap]\s*\.?\s*m\.?|ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?)\b",
-        normalized, re.I,
+        r"(am|pm|[ap]\s*\.?\s*m\.?|ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?)\b"
     )
-    english_daypart = re.search(
+    english_matches = list(re.finditer(english_pattern, normalized, re.I))
+    english = english_matches[0] if english_matches else None
+    english_daypart_pattern = (
         r"(?:\bat\s+)?(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
         r"(?::([0-5]\d))?\s*(?:o['’]?clock\s*)?"
         r"(?:(?:in\s+)?the\s+|in\s+|at\s+)?"
-        r"(morning|afternoon|evening|night)\b",
-        normalized, re.I,
+        r"(morning|afternoon|evening|night)\b"
     )
+    english_daypart_matches = list(
+        re.finditer(english_daypart_pattern, normalized, re.I)
+    )
+    english_daypart = english_daypart_matches[0] if english_daypart_matches else None
+    if len(english_matches) + len(english_daypart_matches) > 1:
+        if state.get("reply_language") == "English" or not re.search(
+            r"[\u0900-\u097f]", latest
+        ):
+            return "I couldn't tell which time you meant. What exact time should I use?"
+        return "कौन-सा समय चाहिए, यह स्पष्ट नहीं हुआ। कृपया सही समय बताइए।"
+    if english or english_daypart:
+        time_match = english or english_daypart
+        prior_clause = re.split(
+            r"[,;.!?।]|\b(?:but|however)\b",
+            normalized[:time_match.start()],
+            flags=re.I,
+        )[-1]
+        if re.search(
+            r"\b(?:not|no|never|don't|do not|didn't|did not|can't|cannot|won't)\b",
+            prior_clause,
+            re.I,
+        ):
+            if state.get("reply_language") == "English" or not re.search(
+                r"[\u0900-\u097f]", latest
+            ):
+                return "I couldn't tell which time you meant. What exact time should I use?"
+            return "कौन-सा समय चाहिए, यह स्पष्ट नहीं हुआ। कृपया सही समय बताइए।"
     period_only = re.fullmatch(
         r"\s*(am|a\s*\.?\s*m\.?|pm|p\s*\.?\s*m\.?|"
         r"ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?|"
@@ -1715,7 +1742,7 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
             return None
         period = english_daypart.group(3).casefold()
         if period == "night":
-            hour24 = 0 if hour == 12 else hour + 12
+            hour24 = 0 if hour == 12 else hour if hour <= 5 else hour + 12
         elif period in {"afternoon", "evening"}:
             hour24 = hour % 12 + 12
         else:
