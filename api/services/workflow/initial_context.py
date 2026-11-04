@@ -13,6 +13,7 @@ RESERVED_INITIAL_CONTEXT_KEYS = frozenset(
         "call_id",
         "provider",
         "runtime_configuration",
+        "client_business_name",
         MPS_CORRELATION_ID_CONTEXT_KEY,
     }
 )

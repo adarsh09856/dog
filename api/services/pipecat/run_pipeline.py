@@ -93,6 +93,9 @@ from api.services.workflow.answer_classification_service import (
 )
 from api.services.workflow.dto import ReactFlowDTO
 from api.services.workflow.initial_context import merge_external_initial_context
+from api.services.workflow.client_brand_context import (
+    inject_installed_client_business_name,
+)
 from api.services.workflow.pipecat_engine import PipecatEngine
 from api.services.workflow.workflow_graph import WorkflowGraph
 from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
@@ -882,6 +885,9 @@ async def _run_pipeline_impl(
 
     # Use the actual run ID even if persisted context contains a stale value.
     merged_call_context_vars["workflow_run_id"] = workflow_run_id
+    # Inject trusted installed-client identity after caller/pre-call context
+    # merges so those external values cannot impersonate or replace the brand.
+    await inject_installed_client_business_name(merged_call_context_vars)
 
     # Only telephony passes an authenticated provider call identifier. Make it
     # available to workflow prompts and tools, overriding any stale or

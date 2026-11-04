@@ -63,6 +63,9 @@ from api.services.workflow.dto import ReactFlowDTO
 from api.services.workflow.booking_response_guard import guard_booking_reply
 from api.services.workflow.confirmed_booking import confirmed_booking_arguments
 from api.services.workflow.initial_context import merge_external_initial_context
+from api.services.workflow.client_brand_context import (
+    inject_installed_client_business_name,
+)
 from api.services.workflow.pipecat_engine import (
     ENGINE_OWNED_CONTEXT_KEYS,
     FINAL_EXTRACTION_TIMEOUT_SECONDS,
@@ -641,6 +644,9 @@ async def execute_text_chat_pending_turn(
             initial_context = merge_external_initial_context(
                 initial_context, fetch_result
             )
+
+    if "client_business_name" not in initial_context or is_initial_node_opening:
+        await inject_installed_client_business_name(initial_context)
 
     await db_client.update_workflow_run(
         workflow_run_id,

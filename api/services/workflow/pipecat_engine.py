@@ -76,6 +76,9 @@ from api.services.workflow.disposition_mapping import (
     get_disposition_mapping,
 )
 from api.services.workflow.initial_context import GREETING_OVERRIDE_CONTEXT_KEY
+from api.services.workflow.client_brand_context import (
+    installed_client_identity_instruction,
+)
 from api.services.workflow.mcp_tool_session import McpToolSession
 from api.services.workflow.pipecat_engine_context_composer import (
     compose_functions_for_node,
@@ -899,6 +902,11 @@ class PipecatEngine:
                 # /v1/models inventory. Recompute language switching from that
                 # snapshot without adding another request to call setup.
                 refresh_caller_language_tts_capabilities(agent.llm, agent.tts)
+        client_identity = installed_client_identity_instruction(
+            self._call_context_vars
+        )
+        if client_identity:
+            speech_instructions.append(client_identity)
         # Keep caller-specific values after the stable language and voice rules
         # so changing contacts does not invalidate that reusable model prefix.
         speech_instructions.append(contact_context_instruction(self._call_context_vars))
