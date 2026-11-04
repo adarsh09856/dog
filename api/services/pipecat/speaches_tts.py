@@ -66,11 +66,12 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # Lower the first-phrase threshold to reduce the gap to speech;
                 # word/date guards still prevent unsafe phrase boundaries.
                 first_phrase_characters=24,
-                # The local CPU synthesizer is single-worker and each phrase
-                # request adds provider setup and trailing silence. Keep the
-                # first phrase fast, then batch follow-ups into longer segments
-                # so playback does not pause between many tiny requests.
-                streaming_phrase_characters=96,
+                # The local CPU synthesizer is single-worker, so each follow-up
+                # must be long enough to avoid tiny requests but short enough
+                # to start before the current phrase drains. Historical calls
+                # showed PCM gaps over one second with 96-character batching.
+                # Number/date boundary guards keep spoken groups intact.
+                streaming_phrase_characters=48,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
