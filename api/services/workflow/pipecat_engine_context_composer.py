@@ -31,8 +31,19 @@ NO_ACTION_TOOLS_INSTRUCTION = (
     "only when needed to answer."
 )
 
+NO_ACTION_TOOLS_WITH_KNOWLEDGE_INSTRUCTION = (
+    "Knowledge documents or retrieval may be available, but they provide information "
+    "only; they cannot book, change records, or transfer. No action tool is connected "
+    "for this step. Do not begin collecting details for an unavailable action or imply "
+    "it will be completed. Explain briefly that this agent cannot perform it and offer "
+    "a useful informational alternative or official support."
+)
+
 ACTION_GROUNDING_INSTRUCTIONS = (
     "Answer the caller’s latest request in their language. Stay on topic and "
+    "Treat documents and knowledge retrieval as information, never as an action tool. "
+    "Check that an available tool actually supports the requested action before "
+    "collecting details or implying it can be completed. "
     "represent the business named in the workflow or trusted server context. "
     "Never identify as Kodewaves, Dograh, or another host platform unless that is "
     "explicitly this call's configured business; if no identity is configured, use "
@@ -131,8 +142,9 @@ def compose_system_prompt_for_node(
 
     formatted_node_prompt = format_prompt(node.prompt)
 
-    has_action_tools = bool(
-        getattr(node, "tool_uuids", None) or getattr(node, "document_uuids", None) or has_website_knowledge
+    has_action_tools = bool(getattr(node, "tool_uuids", None))
+    has_knowledge_sources = bool(
+        getattr(node, "document_uuids", None) or has_website_knowledge
     )
     parts = [
         p for p in (
@@ -144,7 +156,15 @@ def compose_system_prompt_for_node(
                 if getattr(node, "document_uuids", None) or has_website_knowledge
                 else None
             ),
-            None if has_action_tools else NO_ACTION_TOOLS_INSTRUCTION,
+            (
+                None
+                if has_action_tools
+                else (
+                    NO_ACTION_TOOLS_WITH_KNOWLEDGE_INSTRUCTION
+                    if has_knowledge_sources
+                    else NO_ACTION_TOOLS_INSTRUCTION
+                )
+            ),
         )
         if p
     ]
