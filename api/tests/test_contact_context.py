@@ -215,6 +215,7 @@ def test_spoken_english_dayparts_capture_the_exact_hour_without_llm_guessing():
     for phrase, expected_hour in (
         ("eight in the morning", 8),
         ("8 in the morning", 8),
+        ("8 AM in the morning", 8),
         ("eight in the evening", 20),
         ("12 at night", 0),
     ):
@@ -260,8 +261,8 @@ def test_english_night_dayparts_keep_after_midnight_hours_in_the_morning():
     ]
     for phrase, expected_hour in (
         ("1 at night", 1),
-        ("5 at night", 5),
-        ("6 at night", 18),
+        ("4 at night", 4),
+        ("7 at night", 19),
         ("8 at night", 20),
     ):
         state = {"booking_time_question_date": "2026-11-05", "reply_language": "English"}
@@ -271,6 +272,14 @@ def test_english_night_dayparts_keep_after_midnight_hours_in_the_morning():
         assert f"at {expected_hour % 12 or 12}:00" in reply
         assert ("AM" if expected_hour < 12 else "PM") in reply
         assert state["booking_confirmation_slot"] == f"2026-11-05T{expected_hour:02d}:00"
+
+    for phrase, hour in (("5 at night", 5), ("6 at night", 6)):
+        state = {"booking_time_question_date": "2026-11-05", "reply_language": "English"}
+        reply = booking_time_confirmation_question(
+            base + [{"role": "user", "content": phrase}], state
+        )
+        assert reply == f"Did you mean {hour}:00 AM or {hour}:00 PM?"
+        assert "booking_confirmation_slot" not in state
 
     hindi_state = {"booking_time_question_date": "2026-11-05", "reply_language": "Hindi"}
     hindi_reply = booking_time_confirmation_question(
@@ -285,16 +294,38 @@ def test_conflicting_or_negated_daypart_times_require_clarification():
         {"role": "user", "content": "I want to book an appointment."},
         {"role": "assistant", "content": "What date and time would you prefer?"},
     ]
-    for phrase in (
-        "not 8 in the morning",
-        "not 8 in the morning, 9 in the evening",
-        "8 AM, actually 9 in the evening",
+    for phrase, language, expected_reply in (
+        (
+            "not 8 in the morning",
+            "English",
+            "I couldn't tell which time you meant. What exact time should I use?",
+        ),
+        (
+            "not 8 in the morning, 9 in the evening",
+            "English",
+            "I couldn't tell which time you meant. What exact time should I use?",
+        ),
+        (
+            "8 AM, actually 9 in the evening",
+            "English",
+            "I couldn't tell which time you meant. What exact time should I use?",
+        ),
+        (
+            "8 in the morning is not okay",
+            "English",
+            "I couldn't tell which time you meant. What exact time should I use?",
+        ),
+        (
+            "नहीं 8 in the morning",
+            "Hindi",
+            "कौन-सा समय चाहिए, यह स्पष्ट नहीं हुआ। कृपया सही समय बताइए।",
+        ),
     ):
-        state = {"booking_time_question_date": "2026-11-05", "reply_language": "English"}
+        state = {"booking_time_question_date": "2026-11-05", "reply_language": language}
         reply = booking_time_confirmation_question(
             base + [{"role": "user", "content": phrase}], state
         )
-        assert reply == "I couldn't tell which time you meant. What exact time should I use?"
+        assert reply == expected_reply
         assert "booking_confirmation_slot" not in state
 
 

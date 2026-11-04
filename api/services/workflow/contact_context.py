@@ -1656,9 +1656,16 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
         r"(?:(?:in\s+)?the\s+|in\s+|at\s+)?"
         r"(morning|afternoon|evening|night)\b"
     )
-    english_daypart_matches = list(
-        re.finditer(english_daypart_pattern, normalized, re.I)
-    )
+    raw_daypart_matches = list(re.finditer(english_daypart_pattern, normalized, re.I))
+    english_daypart_matches = [
+        daypart_match
+        for daypart_match in raw_daypart_matches
+        if not any(
+            daypart_match.start() < english_match.end()
+            and english_match.start() < daypart_match.end()
+            for english_match in english_matches
+        )
+    ]
     english_daypart = english_daypart_matches[0] if english_daypart_matches else None
     if len(english_matches) + len(english_daypart_matches) > 1:
         if state.get("reply_language") == "English" or not re.search(
@@ -1669,14 +1676,21 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
     if english or english_daypart:
         time_match = english or english_daypart
         prior_clause = re.split(
-            r"[,;.!?।]|\b(?:but|however)\b",
+            r"[.!?।]|\b(?:but|however)\b",
             normalized[:time_match.start()],
             flags=re.I,
         )[-1]
-        if re.search(
-            r"\b(?:not|no|never|don't|do not|didn't|did not|can't|cannot|won't)\b",
-            prior_clause,
-            re.I,
+        following_clause = re.split(
+            r"[.!?।]|\b(?:but|however)\b",
+            normalized[time_match.end():],
+            flags=re.I,
+        )[0]
+        negation_pattern = (
+            r"\b(?:not|no|never|don't|do not|didn't|did not|can't|cannot|won't)\b"
+            r"|नहीं|ना|मत|\b(?:nahi|nahin|mat)\b"
+        )
+        if re.search(negation_pattern, prior_clause[-60:], re.I) or re.search(
+            negation_pattern, following_clause[:60], re.I
         ):
             if state.get("reply_language") == "English" or not re.search(
                 r"[\u0900-\u097f]", latest
@@ -1742,7 +1756,18 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
             return None
         period = english_daypart.group(3).casefold()
         if period == "night":
-            hour24 = 0 if hour == 12 else hour if hour <= 5 else hour + 12
+            if hour == 12:
+                hour24 = 0
+            elif 1 <= hour <= 4:
+                hour24 = hour
+            elif hour in {5, 6}:
+                if state.get("reply_language") == "English" or not re.search(
+                    r"[\u0900-\u097f]", latest
+                ):
+                    return f"Did you mean {hour}:00 AM or {hour}:00 PM?"
+                return f"आपका मतलब सुबह {hour}:00 बजे या शाम {hour}:00 बजे है?"
+            else:
+                hour24 = hour + 12
         elif period in {"afternoon", "evening"}:
             hour24 = hour % 12 + 12
         else:
