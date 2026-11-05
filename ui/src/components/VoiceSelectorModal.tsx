@@ -3,13 +3,9 @@
 import { Check, ChevronDown, Loader2, Pencil, Play, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { client } from "@/client/client.gen";
 import { getVoicesApiV1UserConfigurationsVoicesProviderGet } from "@/client/sdk.gen";
 import { VoiceInfo as ApiVoiceInfo } from "@/client/types.gen";
-import { client } from "@/client/client.gen";
-import { detailFromError } from "@/lib/apiError";
-import { useAuth } from "@/lib/auth";
-
-type VoiceInfo = ApiVoiceInfo;
 import { Button } from "@/components/ui/button";
 import {
     Dialog,
@@ -22,7 +18,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ACCENT_DISPLAY_NAMES } from "@/constants/accents";
 import { LANGUAGE_DISPLAY_NAMES } from "@/constants/languages";
+import { detailFromError } from "@/lib/apiError";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+
+type VoiceInfo = ApiVoiceInfo;
 
 const ALL_FILTER_VALUE = "__all__";
 
@@ -57,8 +57,6 @@ const PROVIDER_TABS = [
     { id: "lmnt", label: "LMNT" },
     { id: "rime", label: "Rime" },
 ];
-
-
 
 function resolveTargetProvider(prov: string, filter?: string): string {
     const norm = (prov || "").toLowerCase().trim();
@@ -147,7 +145,9 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
         }
         const activeProvList = facets.providers || [];
         if (activeProvList.length === 0) {
-            const detected = Array.from(new Set(voices.map((v) => (v as any).provider).filter(Boolean)));
+            const detected = Array.from(
+                new Set(voices.map((voice) => voice.provider).filter((provider): provider is string => Boolean(provider))),
+            );
             if (detected.length > 0) {
                 const uniqueDetected = Array.from(new Set(detected.map((p) => p === "azure_speech" ? "azure" : p === "gemini" ? "google" : p)));
                 return [
@@ -247,7 +247,7 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
             const target = resolveTargetProvider(provider, providerFilter);
             const query: Record<string, string> = {};
             if (model) query.model = model;
-            if (target === "all" && providerFilter !== "__all__") (query as any).provider_filter = providerFilter;
+            if (target === "all" && providerFilter !== "__all__") query.provider_filter = providerFilter;
             if (gender !== ALL_FILTER_VALUE) query.gender = gender;
             if (accent !== ALL_FILTER_VALUE) query.accent = accent;
             if (effectiveLanguage !== ALL_FILTER_VALUE) query.language = effectiveLanguage;
@@ -277,7 +277,9 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                             genders: response.data.facets.genders ?? [],
                             accents: response.data.facets.accents ?? [],
                             languages: response.data.facets.languages ?? [],
-                            providers: source ? Array.from(new Set(available.map(voice => (voice as VoiceInfo).provider).filter((provider): provider is string => Boolean(provider)))) : (response.data.facets as any).providers ?? [],
+                            providers: source
+                                ? Array.from(new Set(available.map((voice) => voice.provider).filter((provider): provider is string => Boolean(provider))))
+                                : response.data.facets.providers ?? [],
                         });
                     }
                 }
@@ -599,9 +601,9 @@ export const VoiceSelectorModal: React.FC<VoiceSelectorModalProps> = ({
                                             <span className="flex min-w-0 flex-1 flex-col">
                                                 <span className="flex items-center gap-2">
                                                     <span className="truncate text-sm font-medium">{voice.name}</span>
-                                                    {((voice as any).provider) && (
+                                                    {voice.provider && (
                                                         <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                                            {(voice as any).provider}
+                                                            {voice.provider}
                                                         </span>
                                                     )}
                                                     {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
