@@ -1886,6 +1886,20 @@ def booking_time_confirmation_question(
             ):
                 return "Please give the time with AM or PM, for example, 5 PM."
             return "कृपया समय सुबह, दोपहर या शाम के साथ बताइए।"
+        if stated_date and asked_for_time:
+            # The caller has already supplied the booking date and is
+            # answering an explicit time question. Keep an unclear answer on
+            # this deterministic path instead of letting a small model revive
+            # an old phone/name prompt or invent a time.
+            reply_language = state.get("reply_language")
+            reply_language_code = normalize_language_code(str(reply_language or ""))
+            use_english = reply_language_code == "en" or (
+                reply_language_code not in {"en", "hi"}
+                and not re.search(r"[\u0900-\u097f]", latest)
+            )
+            if use_english:
+                return "I didn't catch the time. Please say the hour with AM or PM, for example, 8 AM."
+            return "समय स्पष्ट नहीं सुनाई दिया। कृपया घंटा और सुबह या शाम बताइए, जैसे सुबह 8 बजे।"
         return None
     slot = f"{stated_date}T{hour24:02d}:{minute:02d}"
     if date_was_in_latest:
