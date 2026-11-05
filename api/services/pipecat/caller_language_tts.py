@@ -71,6 +71,23 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
     model = str(getattr(settings, "model", "") or "").casefold()
     voice = str(getattr(settings, "voice", "") or "").casefold()
 
+    def inventory_languages(contract: dict, fallback_languages) -> frozenset[str]:
+        per_voice = contract.get("voice_languages")
+        if isinstance(per_voice, dict) and per_voice:
+            selected = per_voice.get(voice)
+            if not isinstance(selected, (set, frozenset, list, tuple)):
+                return frozenset()
+            return frozenset(
+                str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
+                for item in selected
+                if isinstance(item, str) and str(item).strip()
+            )
+        return frozenset(
+            str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
+            for item in fallback_languages
+            if isinstance(item, str) and str(item).strip()
+        )
+
     if model == "indic-mio-tts":
         contract = getattr(service, "_caller_language_tts_capability_contract", None)
         inventory_endpoint = getattr(
@@ -103,11 +120,7 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
                 and voice in {str(item).casefold() for item in installed_voices}
                 and isinstance(languages, (set, frozenset, list, tuple))
             ):
-                return frozenset(
-                    str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
-                    for item in languages
-                    if isinstance(item, str) and str(item).strip()
-                )
+                return inventory_languages(contract, languages)
         return frozenset()
 
     if model == "indic-vits-rasa-13":
@@ -142,11 +155,9 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
             if not isinstance(languages, (set, frozenset, list, tuple)):
                 return frozenset()
             return frozenset(
-                str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
-                for item in languages
-                if isinstance(item, str)
-                and str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
-                in LOCAL_RASA_REPLY_LANGUAGE_CODES
+                code
+                for code in inventory_languages(contract, languages)
+                if code in LOCAL_RASA_REPLY_LANGUAGE_CODES
             )
 
         # A cold cache can safely promise only the configured regional voice's
