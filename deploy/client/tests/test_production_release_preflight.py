@@ -1,4 +1,5 @@
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -32,6 +33,19 @@ def test_preflight_returns_prior_head_only_for_complete_exact_commit_lifecycle()
         prior_commit=PRIOR_COMMIT,
         candidate_commit=CANDIDATE_COMMIT,
     ) == "previous_head"
+
+
+def test_production_workflow_uses_the_lifecycle_head_for_both_signed_schema_gates():
+    workflow = (
+        Path(__file__).resolve().parents[3]
+        / ".github/workflows/client-production-release.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "id: lifecycle_acceptance" in workflow
+    assert "production_release_preflight.py" in workflow
+    assert "steps.lifecycle_acceptance.outputs.prior_schema_head" in workflow
+    assert '--approved-upgrade-from "$PRIOR_SCHEMA_HEAD"' in workflow
+    assert '--approved-rollback-to "$PRIOR_SCHEMA_HEAD"' in workflow
 
 
 @pytest.mark.parametrize(
