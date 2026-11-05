@@ -18,7 +18,7 @@ import styles from "../PublicPages.module.css";
 export const metadata: Metadata = {
   title: "Platform",
   description:
-    "Build voice-agent workflows, connect supported calling channels and business tools, and review conversations in Kodewaves.",
+    "Build voice-agent workflows, connect supported calling channels and business tools, and review conversations in your workspace.",
 };
 
 const lifecycle = [

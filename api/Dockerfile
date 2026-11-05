@@ -144,8 +144,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl tzdata tzd
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 kodewaves \
  && useradd --uid 10001 --gid 10001 --no-create-home --no-log-init --home-dir /app --shell /usr/sbin/nologin kodewaves \
- && mkdir -p /app/kodewaves_pcm_cache \
- && chown kodewaves:kodewaves /app /app/kodewaves_pcm_cache
+ && mkdir -p /app/kodewaves_pcm_cache /var/lib/kodewaves/integrity-outbox \
+ && chown kodewaves:kodewaves /app /app/kodewaves_pcm_cache /var/lib/kodewaves /var/lib/kodewaves/integrity-outbox
 
 # Static ffmpeg + ffprobe (used by audio_converter, audio_file_cache, etc.)
 COPY --from=ffmpeg-static /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg

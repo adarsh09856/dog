@@ -234,13 +234,32 @@ def verify_configured_release(root: Path | None = None) -> dict[str, object] | N
     return payload
 
 
+def _persist_startup_integrity_finding(
+    finding: dict[str, str | None], *, installation_id: str
+) -> None:
+    """Queue the startup finding on the API's mounted persistent volume."""
+    from api.services.client_integrity_outbox import persist_integrity_finding
+
+    persist_integrity_finding(finding, installation_id=installation_id)
+
+
 def report_startup_integrity_failure(error: ReleaseIntegrityError) -> None:
     """Best-effort owner alert before a failed client process exits."""
     runtime_image_edition = IMAGE_EDITION or os.getenv("KODEWAVES_EDITION", "saas").strip().lower()
     if runtime_image_edition != "client":
         return
     token = os.getenv("KODEWAVES_LICENSE_TOKEN", "")
-    if not token:
+    installation_id = os.getenv("KODEWAVES_INSTALLATION_ID", "")
+    finding = error.finding()
+    if installation_id:
+        try:
+            _persist_startup_integrity_finding(finding, installation_id=installation_id)
+        except Exception as exc:  # noqa: BLE001 - integrity enforcement must remain fail-closed
+            print(
+                f"Owner integrity alert persistence failed: {type(exc).__name__}",
+                file=sys.stderr,
+            )
+    if not token or not installation_id:
         return
     try:
         import httpx
@@ -249,8 +268,8 @@ def report_startup_integrity_failure(error: ReleaseIntegrityError) -> None:
         response = httpx.post(
             trusted_owner_status_url(),
             json=owner_check_payload(
-                installation_id=os.getenv("KODEWAVES_INSTALLATION_ID", ""), license_token=token,
-                nonce=secrets.token_urlsafe(32), integrity_ok=False, integrity_finding=error.finding(),
+                installation_id=installation_id, license_token=token,
+                nonce=secrets.token_urlsafe(32), integrity_ok=False, integrity_finding=finding,
                 private_key_path=os.getenv("KODEWAVES_INSTALLATION_KEY_FILE", ""),
             ),
             headers={"Authorization": f"Bearer {token}"},

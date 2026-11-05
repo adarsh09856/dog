@@ -21,6 +21,7 @@ import { OnboardingProvider } from "@/context/OnboardingContext";
 import { OrgConfigProvider } from "@/context/OrgConfigContext";
 import { TelephonyConfigWarningsProvider } from "@/context/TelephonyConfigWarningsContext";
 import { AuthProvider } from "@/lib/auth";
+import { defaultBrandingForEdition } from "@/lib/branding";
 import { brandingCssVariables } from "@/lib/brandingTheme";
 import { getServerBranding } from "@/lib/serverBranding";
 
@@ -44,7 +45,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { default: branding.company_name, template: `%s | ${branding.company_name}` },
     description: branding.tagline,
-    icons: { icon: branding.favicon_url || "/kodewaves-mark.svg" },
+    icons: { icon: branding.favicon_url || defaultBrandingForEdition().favicon_url },
   };
 }
 

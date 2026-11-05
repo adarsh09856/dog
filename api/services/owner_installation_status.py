@@ -24,6 +24,10 @@ from api.services.installation_license import (
     verify_installation_status_claims,
 )
 from api.services.installation_identity import owner_check_payload
+from api.services.client_integrity_outbox import (
+    acknowledge_integrity_finding,
+    pending_integrity_findings,
+)
 from api.services.owner_trust import (
     OwnerTrustError,
     trusted_license_public_keys,
@@ -132,7 +136,25 @@ async def poll_owner_status_once(
                 "Owner status release integrity scan finished in {:.2f}s",
                 integrity_scan_seconds,
             )
-    fields = await redis_client.hgetall(_status_key(license_data.installation_id))
+    status_key = _status_key(license_data.installation_id)
+    # A failed startup cannot keep this API process alive to retry its alert.
+    # Rehydrate the durable volume outbox before selecting a finding to send.
+    # The Redis entry also preserves the existing latch and owner-response path.
+    try:
+        for queued_finding in pending_integrity_findings(
+            installation_id=license_data.installation_id
+        ):
+            queued_field, queued_value = _finding_field(queued_finding)
+            await redis_client.hset(
+                status_key,
+                mapping={
+                    "integrity_failed_latched": "1",
+                    queued_field: queued_value,
+                },
+            )
+    except OSError as exc:
+        logger.warning("Could not read startup integrity alert outbox: {}", type(exc).__name__)
+    fields = await redis_client.hgetall(status_key)
     pending_findings = sorted(
         (field, value) for field, value in fields.items()
         if field == b"pending_integrity_finding" or field.startswith(b"pending_integrity_finding:")
@@ -177,7 +199,7 @@ async def poll_owner_status_once(
             "pending_integrity_finding:", "acknowledged_integrity_finding:"
         )
         # Do not erase a newer finding written by another polling process.
-        await redis_client.eval(
+        acknowledged = await redis_client.eval(
             "if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then "
             "redis.call('HSET', KEYS[1], ARGV[3], '1'); "
             "return redis.call('HDEL', KEYS[1], ARGV[1]) end return 0",
@@ -187,6 +209,13 @@ async def poll_owner_status_once(
             pending,
             acknowledged_field,
         )
+        if acknowledged:
+            try:
+                acknowledge_integrity_finding(
+                    json.loads(pending), installation_id=license_data.installation_id
+                )
+            except OSError as exc:
+                logger.warning("Could not acknowledge startup integrity alert outbox: {}", type(exc).__name__)
     if status["revoked"]:
         # A slower active response from another worker must not undo a
         # revocation already observed by this installation.

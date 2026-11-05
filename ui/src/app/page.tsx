@@ -103,16 +103,34 @@ export default function HomePage() {
                 Answer inbound calls, run outbound campaigns, qualify leads and book appointments. Configure browser and phone agents, speech and language models, routing, tools and knowledge in one workspace.
               </p>
               <div className={styles.actions}>
-                <PublicEnterpriseLeadCTA
-                  label="Talk to our team"
-                  className={styles.primaryAction}
-                />
-                <Link href="/platform" className={styles.secondaryAction}>
-                  Explore the platform
-                </Link>
-                <Link href="/auth/login" className={styles.secondaryAction}>
-                  Open your workspace
-                </Link>
+                {isClientEdition ? (
+                  <>
+                    <Link href="/auth/login" className={styles.primaryAction}>
+                      Open your workspace <ArrowRight aria-hidden className="size-4" />
+                    </Link>
+                    {branding.support_email && (
+                      <a href={`mailto:${branding.support_email}`} className={styles.secondaryAction}>
+                        Contact support
+                      </a>
+                    )}
+                    <Link href="/platform" className={styles.secondaryAction}>
+                      Explore the platform
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <PublicEnterpriseLeadCTA
+                      label="Talk to our team"
+                      className={styles.primaryAction}
+                    />
+                    <Link href="/platform" className={styles.secondaryAction}>
+                      Explore the platform
+                    </Link>
+                    <Link href="/auth/login" className={styles.secondaryAction}>
+                      Open your workspace
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
             <div className={styles.heroVisual}>

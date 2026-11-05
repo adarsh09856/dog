@@ -120,7 +120,7 @@ export default function PricingPage() {
                   Installation pricing is managed <span className={pageStyles.headlineAccent}>separately.</span>
                 </h1>
                 <p className={pageStyles.lede}>
-                  This self-hosted platform is licensed to its operator. Use the installation inquiry below to discuss the applicable license, usage, support, and maintenance terms. Hosted Kodewaves plans and checkout are not available here.
+                  This self-hosted installation is licensed to its operator. Contact the installation administrator for applicable license, usage, support, and maintenance terms. Hosted platform plans and checkout are not available from this installation.
                 </p>
                 <p className="mt-3 text-sm text-muted-foreground">
                   Ask your installation administrator for the active license, usage limits, support, and renewal details.

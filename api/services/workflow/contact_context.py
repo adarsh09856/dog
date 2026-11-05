@@ -187,8 +187,15 @@ def remember_explicit_caller_name(messages: list, state: dict) -> str | None:
 def contact_context_instruction(context: dict | None) -> str:
     contact = known_contact(context)
     return (
-        "Remember the caller's name and request across steps; ask one missing detail at a time. "
-        "Never repeat answered questions or greetings. Latest caller corrections override stored data. "
+        "Keep the conversation state across turns: retain the caller's latest intent and every "
+        "usable detail they already gave, including names, phone digits, dates, and times. "
+        "Ask only for the next missing or genuinely unclear detail, one concise question at a time; "
+        "do not restart the flow, repeat answered questions, or repeat a greeting. "
+        "Latest caller corrections override earlier details. Preserve the caller's exact number, "
+        "date, and time meaning when normalizing spoken words; never invent or silently change them. "
+        "Reply in the language required by the active speech-language settings and the caller's "
+        "latest clear language choice. Do not switch languages because of isolated recognition "
+        "noise, and do not translate unless asked. "
         "A phone number is never a name: never address it with ji/जी. "
         "'This is my number' refers to the known phone, not a name. "
         "Ask permission once before reusing the known phone for an appointment; "
@@ -671,6 +678,7 @@ def booking_date_time_question(
     if state.get("booking_time_question_date") != stated_date:
         state.pop("booking_slot_candidate", None)
     state["booking_time_question_date"] = stated_date
+    state["booking_time_pending"] = True
     parsed = date.fromisoformat(stated_date)
     hindi = state.get("reply_language") == "Hindi" or bool(
         re.search(r"[\u0900-\u097f]", latest)
@@ -1492,6 +1500,7 @@ def booking_confirmation_decline_reply(messages: list, state: dict) -> str | Non
     state.pop("booking_confirmation_slot", None)
     state.pop("booking_slot_candidate", None)
     state.pop("booking_time_question_date", None)
+    state.pop("booking_time_pending", None)
     state.pop("booking_pending_time_hour", None)
     if state.get("reply_language") == "English" or re.fullmatch(r"\s*(?:no|nope|not now)[.!\s]*", latest, re.I):
         return "Okay, I won't book that time. Tell me if you would prefer another date and time."
@@ -1527,6 +1536,7 @@ def clear_completed_booking_state(
         "booking_confirmation_slot",
         "booking_slot_candidate",
         "booking_time_question_date",
+        "booking_time_pending",
         "booking_pending_time_hour",
         "prior_booking_request",
         "active_booking_request",
@@ -1698,8 +1708,6 @@ def booking_time_confirmation_question(
         re.fullmatch(r"\d{4}-\d{2}-\d{2}", staged_date)
     )
     initial_booking_with_date = new_booking_requested(latest) and date_was_in_latest
-    if not asked_for_time and not staged_date_is_valid and not initial_booking_with_date:
-        return None
     has_prior_booking = len(users) >= 2 and any(
         new_booking_requested(m["content"]) for m in users[:-1]
     )
@@ -1878,6 +1886,17 @@ def booking_time_confirmation_question(
                 1 <= len(words) <= 3
                 and any(word in _DATE_SMALL_NUMBERS for word in words)
             )
+        # A date-only answer belongs to the booking date/time path. Stage it
+        # here as well so it survives even when the caller has not finished
+        # giving contact details and the date question cannot run yet.
+        if stated_date and date_was_in_latest and not time_signal:
+            if state.get("booking_time_question_date") != stated_date:
+                state.pop("booking_confirmation_slot", None)
+                state.pop("booking_slot_candidate", None)
+                state.pop("booking_pending_time_hour", None)
+            state["booking_time_question_date"] = stated_date
+            state["booking_time_pending"] = True
+            return None
         if stated_date and time_signal:
             if date_was_in_latest:
                 state["booking_time_question_date"] = stated_date
@@ -1886,8 +1905,46 @@ def booking_time_confirmation_question(
             ):
                 return "Please give the time with AM or PM, for example, 5 PM."
             return "कृपया समय सुबह, दोपहर या शाम के साथ बताइए।"
+        explicit_topic_change = bool(re.search(
+            r"\b(?:cancel|stop|forget|never mind|don't|do not|help|support|"
+            r"why|what|how|where|who|price|cost|address|service|services|"
+            r"tell me|switch|speak|language|question|actually)\b"
+            r"|रद्द|रोक|छोड़|मदद|सहायता|क्यों|क्या|कैसे|कहाँ|कितना|"
+            r"पता|सेवा|अंग्रेज़ी|अंग्रेजी|बदलना|बदलें|पूछना|सवाल",
+            latest,
+            re.IGNORECASE,
+        ))
+        if re.search(r"\btime\b|समय|बजे", latest, re.IGNORECASE):
+            explicit_topic_change = False
+        time_question_active = asked_for_time or (
+            state.get("booking_time_pending") is True
+            and not isinstance(previous, str)
+        )
+        if (
+            stated_date
+            and time_question_active
+            and not date_was_in_latest
+            and not explicit_topic_change
+            and not new_booking_requested(latest)
+        ):
+            # The caller has already supplied the booking date and is
+            # in the persisted time-collection step. The preceding assistant
+            # message may be missing from the compacted LLM window, so the
+            # call-scoped date is also evidence that an unclear answer belongs
+            # to this slot. Keep it deterministic instead of letting a small
+            # model revive an old phone/name prompt or invent a time.
+            reply_language = state.get("reply_language")
+            reply_language_code = normalize_language_code(str(reply_language or ""))
+            use_english = reply_language_code == "en" or (
+                reply_language_code not in {"en", "hi"}
+                and not re.search(r"[\u0900-\u097f]", latest)
+            )
+            if use_english:
+                return "I didn't catch the time. Please say the hour with AM or PM, for example, 8 AM."
+            return "समय स्पष्ट नहीं सुनाई दिया। कृपया घंटा और सुबह या शाम बताइए, जैसे सुबह 8 बजे।"
         return None
     slot = f"{stated_date}T{hour24:02d}:{minute:02d}"
+    state.pop("booking_time_pending", None)
     if date_was_in_latest:
         state["booking_time_question_date"] = stated_date
     if not allow_readback:

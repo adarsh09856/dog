@@ -51,7 +51,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             # full model answer. Larger fixed thresholds delay first audio;
             # downstream PCM/history ordering is handled by the base service.
             self._text_aggregator = LocalSpeechAggregator(
-                min_characters=24,
+                min_characters=48,
                 # A 12-character opening fragment regularly became its own
                 # short VITS request (under a second of speech), which then
                 # drained before the next CPU synthesis request was ready.
@@ -66,12 +66,12 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # Lower the first-phrase threshold to reduce the gap to speech;
                 # word/date guards still prevent unsafe phrase boundaries.
                 first_phrase_characters=24,
-                # Live traces still showed 1.1–1.4s gaps after 48-character
-                # follow-up phrases. Release the next natural word boundary
-                # sooner so the serial CPU synthesizer has more playback time
-                # to produce it before the current phrase drains. Number/date
-                # boundary guards keep spoken groups intact.
-                streaming_phrase_characters=32,
+                # Keep the first phrase at 24 characters for quick audible
+                # response, then use longer follow-up phrases. Live Workflow
+                # 22 traces showed 1.58–1.61s PCM gaps when each short phrase
+                # required a new serial CPU synthesis request. Number/date
+                # boundary guards still keep spoken groups intact.
+                streaming_phrase_characters=72,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
