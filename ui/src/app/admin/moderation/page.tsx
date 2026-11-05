@@ -1,17 +1,12 @@
 "use client";
 
-import admin from "../AdminWorkspace.module.css";
-
 import {
   AlertOctagon,
-  AlertTriangle,
   Ban,
   CheckCircle2,
-  Edit,
   Loader2,
   Plus,
   RefreshCw,
-  ShieldAlert,
   Trash2,
 } from "lucide-react";
 import React, { useEffect, useState } from "react";
@@ -46,6 +41,8 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { adminApi, BannedWord, FlaggedViolation } from "@/lib/kodewavesApi";
+
+import admin from "../AdminWorkspace.module.css";
 
 export default function AdminModerationPage() {
   const [bannedWords, setBannedWords] = useState<BannedWord[]>([]);
@@ -94,8 +91,8 @@ export default function AdminModerationPage() {
       setModalOpen(false);
       setKeyword("");
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to add keyword");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to add keyword");
     } finally {
       setSaving(false);
     }
@@ -106,8 +103,8 @@ export default function AdminModerationPage() {
     try {
       await adminApi.deleteBannedWord(id);
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete keyword");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete keyword");
     }
   };
 
@@ -115,8 +112,8 @@ export default function AdminModerationPage() {
     try {
       await adminApi.resolveViolation(id, isReviewed);
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to update violation status");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to update violation status");
     }
   };
 
@@ -125,8 +122,8 @@ export default function AdminModerationPage() {
     try {
       await adminApi.deleteViolation(id);
       await fetchData();
-    } catch (err: any) {
-      alert(err.message || "Failed to delete violation");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete violation");
     }
   };
 
@@ -381,7 +378,7 @@ export default function AdminModerationPage() {
 
             <div className="space-y-1">
               <Label className="text-xs">Severity</Label>
-              <Select value={severity} onValueChange={(val: any) => setSeverity(val)}>
+              <Select value={severity} onValueChange={(val) => setSeverity(val as typeof severity)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -396,7 +393,7 @@ export default function AdminModerationPage() {
 
             <div className="space-y-1">
               <Label className="text-xs">Action on Detection</Label>
-              <Select value={action} onValueChange={(val: any) => setAction(val)}>
+              <Select value={action} onValueChange={(val) => setAction(val as typeof action)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>

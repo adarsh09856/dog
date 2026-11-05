@@ -97,11 +97,6 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
     const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(null);
 
     // Check if provider has voice endpoint
-    const hasMPSVoiceEndpoint = useCallback((providerName: string): boolean => {
-        if (!providerName) return false;
-        return true;
-    }, []);
-
     // Map provider names to API-compatible provider names
     const getProviderKey = useCallback((providerName: string): TTSProviderWithVoices | null => {
         if (!providerName) return null;
@@ -129,8 +124,13 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
             xai: "xai",
             dograh: "kodewaves",
         };
-        return providerMap[normalized] || (normalized as TTSProviderWithVoices);
+        const providerKey = providerMap[normalized];
+        return providerKey && MPS_VOICE_PROVIDERS.includes(providerKey) ? providerKey : null;
     }, []);
+
+    const hasMPSVoiceEndpoint = useCallback((providerName: string): boolean => {
+        return getProviderKey(providerName) !== null;
+    }, [getProviderKey]);
 
     const fetchVoices = useCallback(async () => {
         const providerKey = getProviderKey(provider);
@@ -147,7 +147,7 @@ export const VoiceSelector: React.FC<VoiceSelectorProps> = ({
             if (model) query.model = model;
             if (language) query.language = language;
             const response = await getVoicesApiV1UserConfigurationsVoicesProviderGet({
-                path: { provider: providerKey as any },
+                path: { provider: providerKey },
                 query: Object.keys(query).length > 0 ? query : undefined,
             });
 
