@@ -12,23 +12,10 @@ function trimTrailingSlash(url: string) {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
 
-function getHealthcheckFailureMessage(error: unknown, backendUrl: string) {
-  const errorName =
-    error && typeof error === "object" && "name" in error
-      ? String((error as { name?: unknown }).name)
-      : "";
-
-  if (errorName === "AbortError" || errorName === "TimeoutError") {
-    return `Backend health check timed out after ${HEALTHCHECK_TIMEOUT_MS}ms while trying to reach ${backendUrl}.`;
-  }
-
-  return `Backend is not reachable at ${backendUrl}.`;
-}
-
 export async function GET() {
   const uiVersion = packageJson.version || "dev";
   const primaryBackendUrl = trimTrailingSlash(getServerBackendUrl());
-  
+
   const candidateUrls = Array.from(
     new Set(
       [
@@ -80,7 +67,7 @@ export async function GET() {
         backendMessage = null;
         break;
       }
-    } catch (error) {
+    } catch {
       // Continue to next candidate
     }
   }

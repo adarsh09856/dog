@@ -1,6 +1,4 @@
 "use client";
-import panel from "@/components/layout/PanelWorkspace.module.css";
-
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Download, Globe } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
@@ -12,6 +10,7 @@ import type { DailyUsageBreakdownResponse, OrganizationPreferences, UsageHistory
 import { CallTypeCell } from '@/components/CallTypeCell';
 import { DailyUsageTable } from '@/components/DailyUsageTable';
 import { FilterBuilder } from '@/components/filters/FilterBuilder';
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { MediaPreviewButton, MediaPreviewDialog } from '@/components/MediaPreviewDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -670,7 +669,7 @@ export default function UsagePage() {
                                     <div className="mt-4 p-3 bg-muted rounded-md">
                                         <p className="text-sm text-muted-foreground">
                                             Total for filtered period: <span className="font-semibold text-foreground">
-                                                {((usageHistory as any).total_kodewaves_tokens ?? usageHistory.total_dograh_tokens)?.toLocaleString()} Platform Tokens
+                                                {(usageHistory.total_kodewaves_tokens ?? usageHistory.total_dograh_tokens)?.toLocaleString()} Platform Tokens
                                             </span>
                                             {' • '}
                                             <span className="font-semibold text-foreground">
