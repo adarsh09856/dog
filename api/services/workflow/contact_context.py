@@ -1698,8 +1698,6 @@ def booking_time_confirmation_question(
         re.fullmatch(r"\d{4}-\d{2}-\d{2}", staged_date)
     )
     initial_booking_with_date = new_booking_requested(latest) and date_was_in_latest
-    if not asked_for_time and not staged_date_is_valid and not initial_booking_with_date:
-        return None
     has_prior_booking = len(users) >= 2 and any(
         new_booking_requested(m["content"]) for m in users[:-1]
     )
