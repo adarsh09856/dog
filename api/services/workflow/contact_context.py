@@ -671,6 +671,7 @@ def booking_date_time_question(
     if state.get("booking_time_question_date") != stated_date:
         state.pop("booking_slot_candidate", None)
     state["booking_time_question_date"] = stated_date
+    state["booking_time_pending"] = True
     parsed = date.fromisoformat(stated_date)
     hindi = state.get("reply_language") == "Hindi" or bool(
         re.search(r"[\u0900-\u097f]", latest)
@@ -1489,6 +1490,7 @@ def booking_confirmation_decline_reply(messages: list, state: dict) -> str | Non
     state.pop("booking_confirmation_slot", None)
     state.pop("booking_slot_candidate", None)
     state.pop("booking_time_question_date", None)
+    state.pop("booking_time_pending", None)
     state.pop("booking_pending_time_hour", None)
     if state.get("reply_language") == "English" or re.fullmatch(r"\s*(?:no|nope|not now)[.!\s]*", latest, re.I):
         return "Okay, I won't book that time. Tell me if you would prefer another date and time."
@@ -1524,6 +1526,7 @@ def clear_completed_booking_state(
         "booking_confirmation_slot",
         "booking_slot_candidate",
         "booking_time_question_date",
+        "booking_time_pending",
         "booking_pending_time_hour",
         "prior_booking_request",
         "active_booking_request",
@@ -1831,8 +1834,39 @@ def booking_time_confirmation_question(
             ):
                 return "Please give the time with AM or PM, for example, 5 PM."
             return "कृपया समय सुबह, दोपहर या शाम के साथ बताइए।"
+        # When the previous assistant explicitly asked for a booking time, an
+        # ASR fragment can be unrelated to any recognized time word (for
+        # example, "Inning, viping"). Letting that return None sends the turn
+        # to the small LLM, which can repeat an old phone prompt or invent a
+        # default time. Clarify while the caller is answering this slot, but
+        # leave clear topic changes and a repeated date on the normal path.
+        explicit_topic_change = bool(re.search(
+            r"\b(?:cancel|stop|forget|never mind|don't|do not|help|support|"
+            r"why|what|how|where|who|price|cost|address|service|services|"
+            r"tell me|switch|speak|language|actually)\b"
+            r"|रद्द|रोक|छोड़|मदद|सहायता|क्यों|क्या|कैसे|कहाँ|कितना|"
+            r"पता|सेवा|अंग्रेज़ी|अंग्रेजी|बदलना|बदलें",
+            latest,
+            re.IGNORECASE,
+        ))
+        time_question_active = asked_for_time or (
+            state.get("booking_time_pending") is True
+            and not isinstance(previous, str)
+        )
+        if (
+            time_question_active
+            and not date_was_in_latest
+            and not explicit_topic_change
+            and not new_booking_requested(latest)
+        ):
+            if state.get("reply_language") == "English" or not re.search(
+                r"[\u0900-\u097f]", latest
+            ):
+                return "I didn't catch the time. What hour and AM or PM should I use?"
+            return "समय साफ़ नहीं सुनाई दिया। कौन-सा घंटा और सुबह या शाम बताइए?"
         return None
     slot = f"{stated_date}T{hour24:02d}:{minute:02d}"
+    state.pop("booking_time_pending", None)
     if date_was_in_latest:
         state["booking_time_question_date"] = stated_date
     if not allow_readback:
