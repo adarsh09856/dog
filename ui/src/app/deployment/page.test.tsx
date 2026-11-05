@@ -35,4 +35,16 @@ describe("public deployment page", () => {
     expect(screen.getByText(/location of the database and recordings depends on the services and storage provisioned for the customer.s installation/)).toBeTruthy();
     expect(screen.getByText(/Connected telephony, speech, model and business providers may process call data/)).toBeTruthy();
   });
+
+  it("keeps client-edition deployment content scoped to the customer's installation", () => {
+    vi.stubEnv("NEXT_PUBLIC_KODEWAVES_EDITION", "client");
+    render(<DeploymentPage />);
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Your voice operations environment");
+    expect(screen.getByRole("heading", { name: "Client installation" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Managed workspace" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Discuss a client installation" })).toBeNull();
+    expect(screen.queryByText(/Kodewaves/i)).toBeNull();
+    expect(screen.getByText(/platform owner service receives the installation identity/)).toBeTruthy();
+  });
 });

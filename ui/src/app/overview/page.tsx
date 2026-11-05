@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useClientBranding } from "@/context/ClientBrandingContext";
+import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
 import { useAuth } from "@/lib/auth";
 import { overviewApi, OverviewStatsResponse } from "@/lib/kodewavesApi";
 
@@ -40,7 +41,14 @@ import dashboard from "./OverviewWorkspace.module.css";
 
 export default function OverviewPage() {
   const branding = useClientBranding();
+  const {
+    isClientEdition,
+    hasFeature,
+    features: licensedFeatures,
+    loading: entitlementsLoading,
+  } = useClientEntitlements();
   const { user, loading: authLoading } = useAuth();
+  const canUseBilling = !isClientEdition || hasFeature("billing");
   const [stats, setStats] = useState<OverviewStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -155,7 +163,9 @@ export default function OverviewPage() {
     },
     {
       category: "MANAGE AND OBSERVABILITY",
-      description: "Monitor call executions, review analytics, and manage minute balances",
+      description: canUseBilling
+        ? "Monitor call executions, review analytics, and manage minute balances"
+        : "Monitor call executions and review analytics",
       items: [
         {
           title: "Agent Runs",
@@ -164,13 +174,13 @@ export default function OverviewPage() {
           badge: stats?.calls.calls_today ? `${stats.calls.calls_today} Today` : "Live",
           desc: "Real-time call logs, execution graphs, step-by-step latency, and transcript details.",
         },
-        {
+        ...(canUseBilling ? [{
           title: "Sovereign Wallet",
           href: "/billing-sovereign",
           icon: Wallet,
           badge: stats?.wallet.total_minutes ? `${stats.wallet.total_minutes}m` : "Minutes",
           desc: "Monitor organization minutes, view ledger deductions, and manage top-up packages.",
-        },
+        }] : []),
         {
           title: "Reports & Analytics",
           href: "/reports",
@@ -193,7 +203,7 @@ export default function OverviewPage() {
             <div className={dashboard.mastheadActions}>
               <Button asChild><Link href="/workflow/create"><Plus className="h-4 w-4" /> Create Agent</Link></Button>
               <Button asChild variant="outline"><Link href="/usage">Review call activity <ArrowRight className="h-4 w-4" /></Link></Button>
-              <Button asChild variant="ghost"><Link href="/billing-sovereign"><Wallet className="h-4 w-4 text-primary" /> Top Up</Link></Button>
+              {canUseBilling && <Button asChild variant="ghost"><Link href="/billing-sovereign"><Wallet className="h-4 w-4 text-primary" /> Top Up</Link></Button>}
             </div>
           </div>
           <div className={dashboard.workspaceCard}>
@@ -205,29 +215,50 @@ export default function OverviewPage() {
         </header>
         {/* Real Dynamic Stat Tiles */}
         <div className={`${panel.metricRail} ${dashboard.metrics}`} aria-label="Workspace performance">
-          {/* Wallet Minutes */}
-          <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Voice Minutes
-              </span>
-              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                <Wallet className="h-4 w-4" />
+          {canUseBilling ? (
+            <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Voice Minutes
+                </span>
+                <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Wallet className="h-4 w-4" />
+                </div>
               </div>
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold tracking-tight text-foreground">
-                {stats ? stats.wallet.total_minutes.toLocaleString() : "--"}
-              </span>
-              <span className="text-xs text-muted-foreground">mins left</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-              <span>{stats ? `${stats.wallet.bonus_minutes}m bonus` : ""}</span>
-              <Link href="/billing-sovereign" className="text-primary hover:underline font-medium flex items-center gap-1">
-                Refill <ArrowRight className="h-3 w-3" />
-              </Link>
-            </div>
-          </Card>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-3xl font-bold tracking-tight text-foreground">
+                  {stats ? stats.wallet.total_minutes.toLocaleString() : "--"}
+                </span>
+                <span className="text-xs text-muted-foreground">mins left</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                <span>{stats ? `${stats.wallet.bonus_minutes}m bonus` : ""}</span>
+                <Link href="/billing-sovereign" className="text-primary hover:underline font-medium flex items-center gap-1">
+                  Refill <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            </Card>
+          ) : (
+            <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Licensed modules
+                </span>
+                <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-3xl font-bold tracking-tight text-foreground">
+                  {entitlementsLoading ? "--" : licensedFeatures.length}
+                </span>
+                <span className="text-xs text-muted-foreground">enabled</span>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Managed by your Kodewaves license
+              </div>
+            </Card>
+          )}
 
           {/* Calls Today & Week */}
           <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">

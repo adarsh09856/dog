@@ -74,4 +74,15 @@ describe("public home branding", () => {
     const description = screen.getByText(/Answer inbound calls, run outbound campaigns/);
     expect(description.className).toContain("heroDescription");
   });
+
+  it("shows only the customer's installation in a client edition", () => {
+    vi.stubEnv("NEXT_PUBLIC_KODEWAVES_EDITION", "client");
+    render(<HomePage />);
+
+    expect(screen.getByRole("heading", { name: "Voice operations in your environment." })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Client installation" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Managed platform" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Compare deployment options" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "See configured plans" })).toBeNull();
+  });
 });
