@@ -287,6 +287,56 @@ def test_booking_combined_tomorrow_and_time_is_confirmed_without_reasking(monkey
     assert state["booking_confirmation_slot"] == "2026-10-29T17:00"
 
 
+def test_initial_booking_slot_survives_name_and_phone_collection(monkeypatch):
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 4, 10, 0, tzinfo=tz or timezone(timedelta(hours=5, minutes=30)))
+
+    monkeypatch.setattr(contacts, "datetime", FrozenDatetime)
+    state = {"reply_language": "English"}
+    history = [
+        {"role": "user", "content": "I want to book an appointment for tomorrow at eight AM."},
+    ]
+
+    first = contacts.booking_contact_question(history, {}, state)
+    assert first == "Sure. What name should I use for the appointment?"
+    assert state["booking_slot_candidate"] == "2026-11-05T08:00"
+    assert "booking_confirmation_slot" not in state
+
+    history.extend([
+        {"role": "assistant", "content": first},
+        {"role": "user", "content": "My name is Adarsh."},
+    ])
+    name_prompt = contacts.caller_name_followup_reply(
+        history, state, booking_available=True
+    )
+    assert name_prompt == "Thanks, Adarsh. What's your mobile number?"
+
+    history.extend([
+        {"role": "assistant", "content": name_prompt},
+        {"role": "user", "content": "nine five three eight three double zero nine four one"},
+    ])
+    phone_readback = contacts.caller_phone_fragment_reply(history, state)
+    assert phone_readback == (
+        "I heard: nine, five, three, eight, three, zero, zero, nine, four, one. "
+        "Is that correct? Say yes, or repeat the number."
+    )
+    history.extend([
+        {"role": "assistant", "content": phone_readback},
+        {"role": "user", "content": "Yes, that is correct."},
+    ])
+    assert contacts.caller_phone_fragment_reply(history, state) is None
+    reply = contacts.booking_contact_question(history, {}, state)
+
+    assert reply == (
+        "I have 5 November 2026 at 8:00 AM IST. "
+        "Should I book the appointment for that time?"
+    )
+    assert state["booking_confirmation_slot"] == "2026-11-05T08:00"
+    assert "booking_slot_candidate" not in state
+
+
 def test_combined_explicit_date_and_time_replaces_previous_date(monkeypatch):
     class FrozenDatetime(datetime):
         @classmethod

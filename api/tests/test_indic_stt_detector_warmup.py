@@ -1,5 +1,6 @@
 import sys
 import types
+import io
 
 import pytest
 
@@ -57,8 +58,11 @@ def test_detector_startup_warmup_fails_if_primary_lid_is_unavailable(monkeypatch
         indic_stt._warm_language_identifiers()
 
 
-def test_local_stt_inventory_exposes_all_22_scheduled_languages_and_english():
+def test_local_stt_inventory_exposes_all_scheduled_languages_and_english():
     assert indic_stt.AUTO_DETECT_LANGUAGES == frozenset(indic_stt.LID_LANGUAGE_CODES)
+    # Keep all detector labels in their released order for correct logit mapping.
+    assert len(indic_stt.LID_LANGUAGE_CODES) == 23
+    assert indic_stt.LID_LANGUAGE_CODES[-1] == "ur"
     assert indic_stt.SCHEDULED_INDIAN_LANGUAGES == (
         indic_stt.AUTO_DETECT_LANGUAGES - {"en"}
     )
@@ -67,15 +71,83 @@ def test_local_stt_inventory_exposes_all_22_scheduled_languages_and_english():
 
 def test_auto_detection_uses_an_installed_scheduled_language_decoder():
     assert indic_stt._resolve_decode_language(
-        "ur", 0.99, None, set(indic_stt.AUTO_DETECT_LANGUAGES),
-    ) == ("ur", "detector")
+        "as", 0.99, None, set(indic_stt.AUTO_DETECT_LANGUAGES),
+    ) == ("as", "detector")
+
+
+def test_detector_preserves_language_argmax_and_uses_its_installed_decoder(monkeypatch):
+    logits = [0.0] * len(indic_stt.LID_LANGUAGE_CODES)
+    logits[indic_stt.LID_LANGUAGE_CODES.index("ur")] = 8.0
+    logits[indic_stt.LID_LANGUAGE_CODES.index("hi")] = 6.0
+
+    class Detector:
+        def run(self, *_args):
+            return [[logits]]
+
+    monkeypatch.setattr(indic_stt, "_lid_session", Detector())
+    monkeypatch.setattr(indic_stt, "_english_lid", None)
+    detected, confidence, route = indic_stt._detect_language(
+        [0.01] * 16000, 16000
+    )
+
+    assert detected == "ur"
+    assert confidence > 0.65
+    assert route is None
+    assert indic_stt._resolve_decode_language(
+        detected, confidence, "hi", set(indic_stt.AUTO_DETECT_LANGUAGES),
+    ) == ("hi", "urdu_routed_to_hindi")
 
 
 def test_auto_detection_does_not_silently_substitute_a_missing_decoder():
     with pytest.raises(indic_stt.HTTPException) as exc_info:
-        indic_stt._resolve_decode_language("gu", 0.99, "en", {"hi", "en"})
+        indic_stt._resolve_decode_language("gu", 0.99, None, {"hi", "en"})
     assert getattr(exc_info.value, "status_code", None) == 422
 
     assert indic_stt._resolve_decode_language(
-        "gu", 0.10, "en", {"hi", "en"},
+        "gu", 0.99, "en", {"hi", "en"},
     ) == ("en", "unsupported_language_held_previous")
+
+
+def test_urdu_detection_uses_the_installed_hindi_decoder():
+    assert indic_stt._resolve_decode_language(
+        "ur", 0.99, None, {"hi", "en"},
+    ) == ("hi", "urdu_routed_to_hindi")
+
+
+def test_urdu_detection_uses_hindi_only_when_the_active_voice_enables_it():
+    assert indic_stt._resolve_decode_language(
+        "ur", 0.99, "en", {"hi", "en"}, allowed_languages={"en"},
+    ) == ("en", "unsupported_language_held_previous")
+
+    with pytest.raises(indic_stt.HTTPException) as exc_info:
+        indic_stt._resolve_decode_language(
+            "ur", 0.99, None, {"hi", "en"}, allowed_languages={"en"},
+        )
+    assert exc_info.value.status_code == 422
+
+
+def test_auto_detection_falls_back_only_to_a_voice_enabled_decoder():
+    assert indic_stt._resolve_decode_language(
+        "gu", 0.99, "hi", {"hi", "en", "gu"}, allowed_languages={"hi", "en"},
+    ) == ("hi", "unsupported_language_held_previous")
+
+    with pytest.raises(indic_stt.HTTPException) as exc_info:
+        indic_stt._resolve_decode_language(
+            "gu", 0.99, None, {"hi", "en", "gu"}, allowed_languages={"hi", "en"},
+        )
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_auto_transcription_rejects_an_allowlist_with_no_enabled_tts_language(monkeypatch):
+    monkeypatch.setattr(indic_stt, "_installed_languages", lambda: ["hi", "en", "gu"])
+    with pytest.raises(indic_stt.HTTPException) as exc_info:
+        await indic_stt.transcribe(
+            file=indic_stt.UploadFile(filename="speech.wav", file=io.BytesIO(b"")),
+            model=indic_stt.MODEL_ID,
+            language="auto",
+            phone_capture=False,
+            allowed_languages="ur",
+        )
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail["code"] == "no_enabled_tts_languages"
