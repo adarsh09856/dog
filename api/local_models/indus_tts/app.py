@@ -18,7 +18,6 @@ from typing import Any
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from huggingface_hub import snapshot_download
 from pydantic import BaseModel, Field
 
 MODEL_ID = "indus-pocket-tts"
@@ -51,6 +50,10 @@ def _prepare_speech_text(text: str) -> str:
 
 def _load_model() -> None:
     global MODEL, VOICE
+    # The download client is required only by this sidecar at model startup;
+    # API tests import this module without the sidecar's extra dependencies.
+    from huggingface_hub import snapshot_download
+
     model_dir = Path(
         snapshot_download(repo_id=MODEL_REPO, revision=MODEL_REVISION, local_dir=str(MODEL_DIR))
     )

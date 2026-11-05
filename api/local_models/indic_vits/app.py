@@ -22,7 +22,6 @@ except ImportError:
     sherpa_onnx = None
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from huggingface_hub import hf_hub_download
 from pydantic import BaseModel, Field
 
 MODEL_ID = "indic-vits-rasa-13"
@@ -552,6 +551,10 @@ async def stream_pcm(request, context_language: str | None = None, indus_only: b
 
 def _load() -> None:
     global RASA_MODEL, PIPER_MODELS, MELO_MODEL, INDUS_READY
+    # Model downloads are performed only by the standalone TTS sidecar.
+    # Keep inventory and helper imports usable in the API test environment.
+    from huggingface_hub import hf_hub_download
+
     if INDUS_ENDPOINT:
         with urllib.request.urlopen(f"{INDUS_ENDPOINT}/models", timeout=5) as response:
             inventory = json.load(response)
