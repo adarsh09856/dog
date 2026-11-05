@@ -445,7 +445,7 @@ def _calibrated_log_probabilities(logits: np.ndarray) -> np.ndarray:
 
 
 def _detect_language(waveform: np.ndarray, sample_rate: int) -> tuple[str, float, str | None]:
-    """Return the detected language and its calibrated model score."""
+    """Return the dominant supported language and its calibrated model score."""
     session = _lid_session
     if session is None:
         raise RuntimeError("The local language identifier is not available")

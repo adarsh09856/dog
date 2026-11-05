@@ -1367,8 +1367,11 @@ def booking_contact_question(messages: list, contact: dict, state: dict) -> str 
     # the next required question is still the caller's name or phone number.
     # The slot is not read back or considered confirmed until those details
     # have been collected and the caller explicitly approves the final readback.
-    booking_time_confirmation_question(messages, state, allow_readback=False)
-
+    slot_capture_reply = booking_time_confirmation_question(
+        messages, state, allow_readback=False
+    )
+    if slot_capture_reply:
+        return slot_capture_reply
     known_name = state.get("caller_name") or contact.get("customer_name")
     known_phone = state.get("caller_phone") or state.get("approved_phone")
     phone_digits = re.sub(r"\D", "", str(known_phone or ""))
@@ -1620,31 +1623,31 @@ def booking_time_confirmation_question(
                     return None
                 state["booking_confirmation_slot"] = candidate
                 state.pop("booking_slot_candidate", None)
-                use_english = state.get("reply_language") == "English" or (
-                    state.get("reply_language") is None
+                reply_language = state.get("reply_language")
+                use_english = reply_language == "English" or (
+                    reply_language is None
                     and not re.search(r"[\u0900-\u097f]", latest)
                 )
-                parsed_candidate = candidate_time
                 if use_english:
                     return (
-                        f"I have {parsed_candidate.day} {parsed_candidate.strftime('%B')} "
-                        f"{parsed_candidate.year} at "
-                        f"{parsed_candidate.hour % 12 or 12}:{parsed_candidate.minute:02d} "
-                        f"{'PM' if parsed_candidate.hour >= 12 else 'AM'} IST. "
+                        f"I have {candidate_time.day} {candidate_time.strftime('%B')} "
+                        f"{candidate_time.year} at "
+                        f"{candidate_time.hour % 12 or 12}:{candidate_time.minute:02d} "
+                        f"{'PM' if candidate_time.hour >= 12 else 'AM'} IST. "
                         "Should I book the appointment for that time?"
                     )
                 month = ("जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून",
                          "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर")[
-                    parsed_candidate.month - 1
+                    candidate_time.month - 1
                 ]
                 hindi_period = (
-                    "सुबह" if parsed_candidate.hour < 12
-                    else "दोपहर" if parsed_candidate.hour < 17 else "शाम"
+                    "सुबह" if candidate_time.hour < 12
+                    else "दोपहर" if candidate_time.hour < 17 else "शाम"
                 )
                 return (
-                    f"{parsed_candidate.day} {month} {parsed_candidate.year} को "
-                    f"{hindi_period} {parsed_candidate.hour % 12 or 12}:"
-                    f"{parsed_candidate.minute:02d} बजे भारतीय समय। "
+                    f"{candidate_time.day} {month} {candidate_time.year} को "
+                    f"{hindi_period} {candidate_time.hour % 12 or 12}:"
+                    f"{candidate_time.minute:02d} बजे भारतीय समय। "
                     "क्या इस समय के लिए बुकिंग कर दूँ?"
                 )
     today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
