@@ -24,7 +24,9 @@ vi.mock("@/context/ClientBrandingContext", () => ({
 vi.mock("@/context/ClientEntitlementsContext", () => ({
   useClientEntitlements: () => ({
     isClientEdition: mocks.clientEdition,
-    hasFeature: () => mocks.billingFeature,
+    hasFeature: (feature: string) => feature === "billing"
+      ? mocks.billingFeature
+      : mocks.features.includes(feature),
     features: mocks.features,
     loading: mocks.entitlementsLoading,
   }),
@@ -122,7 +124,12 @@ describe("workspace overview", () => {
     expect(screen.queryByRole("link", { name: "Top Up" })).toBeNull();
     expect(screen.queryByRole("link", { name: /Refill/ })).toBeNull();
     expect(screen.queryByRole("link", { name: /Sovereign Wallet/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Campaigns/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Telephony/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Voice Forms/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /CRM Leads/ })).toBeTruthy();
     expect(screen.getByText("2", { exact: true })).toBeTruthy();
     expect(screen.getByText("enabled", { exact: true })).toBeTruthy();
+    expect(screen.getByText("Managed by your Acme Voice license")).toBeTruthy();
   });
 });

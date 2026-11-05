@@ -9,6 +9,7 @@ from api.constants import (
     DEFAULT_CAMPAIGN_RETRY_CONFIG,
     DEFAULT_ORG_CONCURRENCY_LIMIT,
     DEPLOYMENT_MODE,
+    KODEWAVES_EDITION,
 )
 from api.db import db_client
 from api.db.models import UserModel
@@ -21,6 +22,7 @@ from api.db.telephony_trunk_client import TelephonyTrunkConflictError
 from api.enums import OrganizationConfigurationKey, PostHogEvent
 from api.errors.failure import ErrorSource, classify_exception, log_failure
 from api.errors.mps import MPSUnavailableError
+from api.services.installation_license import InstallationLicenseError, load_license
 from api.schemas.ai_model_configuration import (
     KODEWAVES_DEFAULT_LANGUAGE,
     KODEWAVES_DEFAULT_VOICE,
@@ -264,6 +266,18 @@ async def get_current_organization_context(user: UserModel = Depends(get_user)):
     return await get_organization_context(user)
 
 
+def _overview_billing_enabled() -> bool:
+    """Avoid exposing wallet balances to client installations without billing."""
+    if KODEWAVES_EDITION != "client":
+        return True
+    try:
+        return "billing" in load_license().features
+    except InstallationLicenseError:
+        # Middleware validates the license before this handler; keep this
+        # secondary data-access check fail-closed if the license changes.
+        return False
+
+
 @router.get("/overview/stats")
 async def get_organization_overview_stats(user: UserModel = Depends(get_user)):
     """Return aggregated platform metrics, wallet balance, active agents, and model health for Overview."""
@@ -275,10 +289,17 @@ async def get_organization_overview_stats(user: UserModel = Depends(get_user)):
     from api.services.catalog.catalog_service import catalog_service
     from datetime import datetime, UTC, timedelta
 
-    # 1. Wallet Balance
-    wallet = await kodewaves_db_client.get_or_create_wallet(org_id)
-    credit_mins = float(wallet.credit_balance_minutes) if wallet else 60.0
-    bonus_mins = float(wallet.bonus_minutes) if wallet else 0.0
+    # 1. Wallet Balance. Do not read/create a wallet for a client without billing.
+    wallet_summary = None
+    if _overview_billing_enabled():
+        wallet = await kodewaves_db_client.get_or_create_wallet(org_id)
+        credit_mins = float(wallet.credit_balance_minutes) if wallet else 60.0
+        bonus_mins = float(wallet.bonus_minutes) if wallet else 0.0
+        wallet_summary = {
+            "credit_balance_minutes": credit_mins,
+            "bonus_minutes": bonus_mins,
+            "total_minutes": round(credit_mins + bonus_mins, 1),
+        }
 
     # 2. Concurrent Calls
     active_calls = 0
@@ -366,11 +387,7 @@ async def get_organization_overview_stats(user: UserModel = Depends(get_user)):
         })
 
     return {
-        "wallet": {
-            "credit_balance_minutes": credit_mins,
-            "bonus_minutes": bonus_mins,
-            "total_minutes": round(credit_mins + bonus_mins, 1),
-        },
+        "wallet": wallet_summary,
         "calls": {
             "active_calls": active_calls,
             "calls_today": calls_today,

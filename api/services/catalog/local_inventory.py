@@ -80,11 +80,9 @@ def local_tts_capability_contract(model: dict) -> dict[str, object]:
         for language in languages
         if isinstance(language, str) and language.strip()
     }
-    # A model-level language list is only the union of its loaded voices. If
-    # the caller selected a specific voice, using that union can advertise an
-    # auto-detected language which is silently synthesized by a different
-    # speaker (or an unsupported one). Retain per-voice declarations when the
-    # provider exposes them; older providers keep the model-level fallback.
+    # Keep both the model-level union and per-voice declarations. Automatic
+    # routers may switch speakers by reply language; fixed-voice providers must
+    # be constrained to the selected voice.
     voice_languages: dict[str, set[str]] = {}
     voices = model.get("voices") or []
     voice_language_metadata_present = False

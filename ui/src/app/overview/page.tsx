@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useClientBranding } from "@/context/ClientBrandingContext";
 import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
+import type { ClientFeature } from "@/lib/clientEntitlements";
 import { useAuth } from "@/lib/auth";
 import { overviewApi, OverviewStatsResponse } from "@/lib/kodewavesApi";
 
@@ -80,6 +81,7 @@ export default function OverviewPage() {
         {
           title: "Voice Agents",
           href: "/workflow",
+          feature: "voice",
           icon: Bot,
           badge: stats?.agents.total_agents_count ? `${stats.agents.total_agents_count} Agents` : "Core",
           desc: "Build agents with prompts, workflow branches, speech settings and channel connections.",
@@ -87,12 +89,14 @@ export default function OverviewPage() {
         {
           title: "Campaigns",
           href: "/campaigns",
+          feature: "campaigns",
           icon: Megaphone,
           desc: "Schedule outbound calls and review campaign progress and outcomes.",
         },
         {
           title: "Models & Engines",
           href: "/model-configurations",
+          feature: "voice",
           icon: Brain,
           badge: stats?.model_health.total_models ? `${stats.model_health.total_models} Models` : "BYOK + Cloud",
           desc: "Choose configured cloud or self-hosted LLM, STT and TTS providers.",
@@ -100,24 +104,28 @@ export default function OverviewPage() {
         {
           title: "Telephony",
           href: "/telephony-configurations",
+          feature: "telephony",
           icon: Phone,
           desc: "Manage SIP trunks, Twilio, Exotel, Plivo, Telnyx, and WebRTC carrier lines.",
         },
         {
           title: "Tools & Functions",
           href: "/tools",
+          feature: "voice",
           icon: Wrench,
           desc: "Connect webhook tools, CRM lookups, and custom API functions to your agents.",
         },
         {
           title: "Knowledge Base",
           href: "/files",
+          feature: "knowledge_base",
           icon: Database,
           desc: "Upload and manage documents used by agents during conversations.",
         },
         {
           title: "Recordings & Cache",
           href: "/recordings",
+          feature: "voice",
           icon: AudioLines,
           desc: "Access recorded conversations, audio transcripts, and cached speech assets.",
         },
@@ -130,6 +138,7 @@ export default function OverviewPage() {
         {
           title: "CRM Leads",
           href: "/crm",
+          feature: "crm",
           icon: UserCheck,
           badge: "Leads",
           desc: "Track caller contact details, qualification stages, and conversation summaries.",
@@ -137,18 +146,21 @@ export default function OverviewPage() {
         {
           title: "Appointments",
           href: "/appointments",
+          feature: "appointments",
           icon: Calendar,
           desc: "Automate calendar bookings, callback schedules, and reminder calls.",
         },
         {
           title: "Voice Forms",
           href: "/forms",
+          feature: "forms",
           icon: LayoutList,
           desc: "Create dynamic voice questionnaires and structured data intake surveys.",
         },
         {
           title: "Web Widgets",
           href: "/widgets",
+          feature: "widgets",
           icon: Globe,
           badge: "WebRTC",
           desc: "Embed an instant browser-based voice assistant on your public websites.",
@@ -156,6 +168,7 @@ export default function OverviewPage() {
         {
           title: "Prompt Templates",
           href: "/prompt-templates",
+          feature: "voice",
           icon: FileText,
           desc: "Curate reusable agent personas, compliance guardrails, and greeting scripts.",
         },
@@ -170,6 +183,7 @@ export default function OverviewPage() {
         {
           title: "Agent Runs",
           href: "/usage",
+          feature: "voice",
           icon: Activity,
           badge: stats?.calls.calls_today ? `${stats.calls.calls_today} Today` : "Live",
           desc: "Real-time call logs, execution graphs, step-by-step latency, and transcript details.",
@@ -177,19 +191,29 @@ export default function OverviewPage() {
         ...(canUseBilling ? [{
           title: "Sovereign Wallet",
           href: "/billing-sovereign",
+          feature: "billing",
           icon: Wallet,
-          badge: stats?.wallet.total_minutes ? `${stats.wallet.total_minutes}m` : "Minutes",
+          badge: stats?.wallet?.total_minutes ? `${stats.wallet.total_minutes}m` : "Minutes",
           desc: "Monitor organization minutes, view ledger deductions, and manage top-up packages.",
         }] : []),
         {
           title: "Reports & Analytics",
           href: "/reports",
+          feature: "voice",
           icon: BarChart3,
           desc: "Inspect call disposition breakdowns, duration distributions, and export CSV reports.",
         },
       ],
     },
   ];
+  const visibleSections = sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => !isClientEdition || hasFeature(item.feature as ClientFeature),
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
   return (
     <div className={dashboard.dashboard}>
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
@@ -227,12 +251,12 @@ export default function OverviewPage() {
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-3xl font-bold tracking-tight text-foreground">
-                  {stats ? stats.wallet.total_minutes.toLocaleString() : "--"}
+                  {stats?.wallet ? stats.wallet.total_minutes.toLocaleString() : "--"}
                 </span>
                 <span className="text-xs text-muted-foreground">mins left</span>
               </div>
               <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                <span>{stats ? `${stats.wallet.bonus_minutes}m bonus` : ""}</span>
+                <span>{stats?.wallet ? `${stats.wallet.bonus_minutes}m bonus` : ""}</span>
                 <Link href="/billing-sovereign" className="text-primary hover:underline font-medium flex items-center gap-1">
                   Refill <ArrowRight className="h-3 w-3" />
                 </Link>
@@ -255,7 +279,7 @@ export default function OverviewPage() {
                 <span className="text-xs text-muted-foreground">enabled</span>
               </div>
               <div className="mt-2 text-xs text-muted-foreground">
-                Managed by your Kodewaves license
+                Managed by your {branding.company_name} license
               </div>
             </Card>
           )}
@@ -429,7 +453,7 @@ export default function OverviewPage() {
         )}
 
         <section aria-label="Workspace tools" className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}>
-          {sections.map((section, index) => (
+          {visibleSections.map((section, index) => (
             <section key={section.category} className={panel.toolGroup} aria-label={section.category}>
               <div className={panel.groupHeading}><span>0{index + 1}</span><h2>{section.category}</h2></div>
               <p className={panel.groupDescription}>{section.description}</p>

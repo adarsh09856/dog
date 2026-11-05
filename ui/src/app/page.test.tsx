@@ -84,5 +84,8 @@ describe("public home branding", () => {
     expect(screen.queryByRole("heading", { name: "Managed platform" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Compare deployment options" })).toBeNull();
     expect(screen.queryByRole("link", { name: "See configured plans" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Plans and pricing" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Deployment details" }).getAttribute("href")).toBe("/deployment");
+    expect(screen.getByRole("main").textContent).not.toContain("compare plans");
   });
 });
