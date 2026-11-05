@@ -335,6 +335,11 @@ def speech_segments(text: str, preferred_voice: str, context_language: str | Non
     is voice routing, not translation.
     """
     stable_voice = _response_voice(preferred_voice, context_language)
+    if stable_voice is None:
+        # When automatic language detection has no trusted result, resolve the
+        # dominant language from the whole response once. Per-word routing can
+        # otherwise change speaker on every Hindi/English script boundary.
+        stable_voice = voice_for_text(text, preferred_voice, context_language)
     if stable_voice:
         stable_segments: list[tuple[str, str]] = []
         for match in re.finditer(r"\S+\s*", text):
