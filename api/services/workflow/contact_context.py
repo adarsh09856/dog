@@ -1876,6 +1876,12 @@ def booking_time_confirmation_question(
                 1 <= len(words) <= 3
                 and any(word in _DATE_SMALL_NUMBERS for word in words)
             )
+        # A date-only answer belongs to booking_date_time_question(), which
+        # stores the date in call-scoped state before asking for the missing
+        # time. Do not let the time parser return an unclear-time reply here:
+        # that would leave no staged date for the caller's next turn.
+        if stated_date and date_was_in_latest and not time_signal:
+            return None
         if stated_date and time_signal:
             if date_was_in_latest:
                 state["booking_time_question_date"] = stated_date
