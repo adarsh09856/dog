@@ -38,6 +38,23 @@ def test_release_schema_only_signs_explicitly_approved_upgrade_origins(tmp_path)
         migration_compatibility(migrations, ["unrelated"])
 
 
+def test_release_schema_authorizes_only_explicitly_tested_rollback_origins(tmp_path):
+    migrations = tmp_path / "versions"
+    _write_revision(migrations, "001.py", "root", None)
+    _write_revision(migrations, "002.py", "middle", "root")
+    _write_revision(migrations, "003.py", "head", "middle")
+
+    assert migration_compatibility(migrations, ["root", "middle"], ["middle"]) == {
+        "head": "head",
+        "upgrade_from": ["head", "middle", "root"],
+        "rollback_to": ["middle"],
+    }
+    with pytest.raises(ValueError, match="not ancestors"):
+        migration_compatibility(migrations, ["root"], ["unrelated"])
+    with pytest.raises(ValueError, match="also be explicitly approved upgrade origins"):
+        migration_compatibility(migrations, ["root"], ["middle"])
+
+
 def test_release_schema_rejects_multiple_heads(tmp_path):
     migrations = tmp_path / "versions"
     _write_revision(migrations, "001.py", "root", None)
