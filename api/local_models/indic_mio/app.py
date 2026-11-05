@@ -15,7 +15,6 @@ from pathlib import Path
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from huggingface_hub import snapshot_download
 from pydantic import BaseModel, Field
 
 MODEL_ID = "indic-mio-tts"
@@ -43,6 +42,11 @@ ChunkCallback = ctypes.CFUNCTYPE(
 
 def _load_model() -> None:
     global MODEL, HANDLE, MAX_TEXT_TOKENS
+    # This optional CPU sidecar has its own model-download dependency. Keep
+    # inventory and streaming helpers importable in the API test environment;
+    # the production sidecar image installs huggingface_hub for model loading.
+    from huggingface_hub import snapshot_download
+
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     bundle = Path(snapshot_download(
         repo_id=MODEL_REPO,
