@@ -61,6 +61,47 @@ def test_indic_mio_capabilities_require_a_fresh_installed_multilingual_voice():
         local_inventory._tts_model_cache.clear()
 
 
+def test_local_rasa_auto_voice_router_uses_installed_model_language_union():
+    from api.services.catalog.local_inventory import local_tts_capability_contract
+
+    contract = local_tts_capability_contract({
+        "id": "indic-vits-rasa-13",
+        "languages": ["hi-IN", "en-IN"],
+        "automatic_voice_routing": "reply-script-with-language-context",
+        "voices": [
+            {"id": "HIN_M", "languages": ["hi-IN"], "gender": "male"},
+            {"id": "ENG_IN", "languages": ["en-IN"], "gender": "unspecified"},
+        ],
+    })
+    service = NS(
+        _settings=NS(model="indic-vits-rasa-13", voice="HIN_M"),
+        _caller_language_tts_capability_contract=contract,
+    )
+
+    assert caller_language_tts_capabilities(service) == frozenset({"hi", "en"})
+
+    service._settings.voice = "ENG_IN"
+    assert caller_language_tts_capabilities(service) == frozenset({"hi", "en"})
+
+
+def test_fixed_multilingual_tts_respects_empty_selected_voice_language_list():
+    from api.services.catalog.local_inventory import local_tts_capability_contract
+
+    contract = local_tts_capability_contract({
+        "id": "indic-mio-tts",
+        "languages": ["hi-IN", "en-IN"],
+        "voices": [
+            {"id": "default", "languages": []},
+        ],
+    })
+    service = NS(
+        _settings=NS(model="indic-mio-tts", voice="default"),
+        _caller_language_tts_capability_contract=contract,
+    )
+
+    assert caller_language_tts_capabilities(service) == frozenset()
+
+
 def test_sarvam_capabilities_require_the_dynamic_model_and_verified_voice():
     service = NS(
         _caller_language_routing_enabled=True,

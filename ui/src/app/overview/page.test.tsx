@@ -1,7 +1,13 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getStats: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getStats: vi.fn(),
+  clientEdition: false as boolean,
+  billingFeature: true as boolean,
+  features: [] as string[],
+  entitlementsLoading: false as boolean,
+}));
 
 vi.mock("@/lib/kodewavesApi", () => ({
   overviewApi: { getStats: mocks.getStats },
@@ -14,6 +20,16 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/context/ClientBrandingContext", () => ({
   useClientBranding: () => ({ company_name: "Acme Voice" }),
+}));
+vi.mock("@/context/ClientEntitlementsContext", () => ({
+  useClientEntitlements: () => ({
+    isClientEdition: mocks.clientEdition,
+    hasFeature: (feature: string) => feature === "billing"
+      ? mocks.billingFeature
+      : mocks.features.includes(feature),
+    features: mocks.features,
+    loading: mocks.entitlementsLoading,
+  }),
 }));
 
 import OverviewPage from "./page";
@@ -34,7 +50,13 @@ const emptyStats = {
 };
 
 describe("workspace overview", () => {
-  beforeEach(() => mocks.getStats.mockReset());
+  beforeEach(() => {
+    mocks.getStats.mockReset();
+    mocks.clientEdition = false;
+    mocks.billingFeature = true;
+    mocks.features = [];
+    mocks.entitlementsLoading = false;
+  });
 
   it("does not present an empty call history as a 100 percent success rate", async () => {
     mocks.getStats.mockResolvedValue(emptyStats);
@@ -89,5 +111,25 @@ describe("workspace overview", () => {
     const walletIcon = voiceMinutes?.querySelector(".h-8.w-8");
     expect(walletIcon?.classList.contains("bg-primary/10")).toBe(true);
     expect(walletIcon?.classList.contains("text-primary")).toBe(true);
+  });
+
+  it("shows licensed modules instead of hosted billing for client installations", async () => {
+    mocks.clientEdition = true;
+    mocks.billingFeature = false;
+    mocks.features = ["voice", "crm"];
+    mocks.getStats.mockResolvedValue(emptyStats);
+    render(<OverviewPage />);
+
+    expect(await screen.findByText("Licensed modules")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Top Up" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Refill/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Sovereign Wallet/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Campaigns/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Telephony/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Voice Forms/ })).toBeNull();
+    expect(screen.getByRole("link", { name: /CRM Leads/ })).toBeTruthy();
+    expect(screen.getByText("2", { exact: true })).toBeTruthy();
+    expect(screen.getByText("enabled", { exact: true })).toBeTruthy();
+    expect(screen.getByText("Managed by your Acme Voice license")).toBeTruthy();
   });
 });

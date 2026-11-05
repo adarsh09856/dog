@@ -85,12 +85,32 @@ def test_legacy_stt_sources_keep_their_language_route():
     tts = SpeachesLiveTTSService.__new__(SpeachesLiveTTSService)
     tts._speech_turn_open = False
     tts._speech_language = None
+    tts._settings = SimpleNamespace(model="fixed-voice", voice="ta-IN-voice", language="ta")
     tts._caller_language_source = SimpleNamespace(
         latest_detected_language="ta",
         _settings=SimpleNamespace(language=None),
     )
 
     assert tts._resolve_speech_language() == "ta"
+
+
+def test_tts_does_not_route_a_detected_language_outside_its_verified_inventory():
+    tts = SpeachesLiveTTSService.__new__(SpeachesLiveTTSService)
+    tts._speech_turn_open = False
+    tts._speech_language = "auto"
+    tts._settings = SimpleNamespace(model="indic-vits-rasa-13", voice="hin_f", language="auto")
+    tts._caller_language_tts_capability_contract = {
+        "model": "indic-vits-rasa-13",
+        "languages": {"hi", "en"},
+        "voices": {"hin_f", "eng_in"},
+    }
+    tts._caller_language_source = SimpleNamespace(
+        latest_detected_language="ur",
+        latest_tts_language="ur",
+        _settings=SimpleNamespace(language="auto"),
+    )
+
+    assert tts._resolve_speech_language() is None
 
 
 def test_explicit_reply_language_overrides_the_previous_stt_language_for_tts():

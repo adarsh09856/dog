@@ -160,3 +160,21 @@ def test_prepare_update_report_signs_domain_separated_claims(monkeypatch):
     assert set(response) == {"proof_signature"}
     assert "private_key" not in str(response)
     assert token not in str(response)
+
+    rollback_fields = {
+        **fields,
+        "status": "rolled_back",
+        "installed_version": "1.2.0",
+    }
+    rollback_response = helper.execute({
+        "action": "prepare_update_report",
+        "license_token": token,
+        "installation_id": "client-1",
+        "public_host": "customer.example",
+        "private_key": _key_text(identity_key),
+        **rollback_fields,
+    })
+    verify_update_report(
+        _public_text(identity_key), rollback_response["proof_signature"],
+        installation_id="client-1", license_token=token, **rollback_fields,
+    )

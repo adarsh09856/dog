@@ -195,9 +195,9 @@ export default function HomePage() {
                 <p className={styles.eyebrow}>Tools around each conversation</p>
                 <h2>Use calls to support real business workflows.</h2>
               </div>
-              <p>
-                Available tools depend on the workspace plan, enabled integrations and deployment configuration.
-              </p>
+              <p>{isClientEdition
+                ? "Available tools depend on this installation's license, enabled integrations and configuration."
+                : "Available tools depend on the workspace plan, enabled integrations and deployment configuration."}</p>
             </div>
             <div className={styles.capabilityGrid}>
               {platformAreas.map(({ title, text, icon: Icon }) => (
@@ -259,10 +259,14 @@ export default function HomePage() {
           <div className={`${styles.pageFrame} ${styles.closing}`}>
             <p className={styles.eyebrow}>{branding.company_name} voice agent workspace</p>
             <h2>Start with the work your callers need done.</h2>
-            <p>Sign in to configure an agent and test its workflow, or compare plans and deployment choices with your team.</p>
+            <p>{isClientEdition
+              ? "Sign in to configure an agent and test its workflow, or review the features available in this installation."
+              : "Sign in to configure an agent and test its workflow, or compare plans and deployment choices with your team."}</p>
             <div className={styles.actions}>
               <Link href="/auth/login" className={styles.primaryAction}>Open your workspace <ArrowRight aria-hidden className="size-4" /></Link>
-              <Link href="/pricing" className={styles.secondaryAction}>Plans and pricing</Link>
+              {isClientEdition
+                ? <Link href="/deployment" className={styles.secondaryAction}>Deployment details</Link>
+                : <Link href="/pricing" className={styles.secondaryAction}>Plans and pricing</Link>}
             </div>
           </div>
         </section>

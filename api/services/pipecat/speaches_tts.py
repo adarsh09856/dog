@@ -191,29 +191,27 @@ class SpeachesLiveTTSService(SpeachesTTSService):
 
     def _resolve_speech_language(self):
         source = getattr(self, "_caller_language_source", None)
-        # An explicit caller preference is shared with the STT/LLM language
-        # context. Prefer it over the previous utterance's detected language
-        # so text and audio stay in the same language after a switch request.
-        preferred = getattr(source, "reply_language_override", None)
-        if preferred is not None:
-            raw_preferred = getattr(preferred, "value", preferred)
-            preferred_code = normalize_language_code(raw_preferred)
-            from api.services.pipecat.caller_language_tts import (
-                caller_language_tts_capabilities,
-            )
+        from api.services.pipecat.caller_language_tts import (
+            caller_language_tts_capabilities,
+            caller_reply_language,
+        )
 
-            if preferred_code in caller_language_tts_capabilities(self):
-                return preferred_code
-        # Auto STT may expose a best-effort language to the LLM even when the
-        # detector confidence is too weak to choose a regional voice. In that
-        # case let the gateway route unambiguous output scripts or retain the
-        # configured bilingual voice instead of cold-loading a guessed voice.
-        if source is not None and hasattr(source, "latest_tts_language"):
-            detected_for_tts = source.latest_tts_language
-        else:
-            detected_for_tts = getattr(source, "latest_detected_language", None)
+        supported_codes = caller_language_tts_capabilities(self)
+        # Use the same verified capability filter as the LLM language policy.
+        # Some STT providers expose a detected language without checking whether
+        # the active voice can synthesize it; never route that unsupported code
+        # into the local TTS gateway.
+        detected = caller_reply_language(
+            source,
+            supported_codes=supported_codes,
+        )
+        if detected:
+            return detected
+
+        # Keep a pinned STT or TTS locale when it is part of the active voice's
+        # verified inventory. Auto/multilingual sentinels intentionally fall
+        # through so the gateway can use its own script-aware default.
         for value in (
-            detected_for_tts,
             getattr(getattr(source, "_settings", None), "language", None),
             self._speech_language,
         ):
@@ -225,7 +223,7 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             }:
                 continue
             code = normalize_language_code(raw_value)
-            if code not in {"", "auto", "multi", "multilingual", "unknown", "default", "none"}:
+            if code in supported_codes:
                 return code
         return None
 

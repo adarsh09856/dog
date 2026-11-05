@@ -54,7 +54,7 @@ async def test_first_phrase_starts_early_and_followups_batch_to_a_coherent_segme
     )
     aggregator = service._text_aggregator
     try:
-        assert aggregator._streaming_phrase_characters == 96
+        assert aggregator._streaming_phrase_characters == 32
         first = [part async for part in aggregator.aggregate("I can help you today, ")]
         assert first == []
 
@@ -63,14 +63,20 @@ async def test_first_phrase_starts_early_and_followups_batch_to_a_coherent_segme
         ]
         assert [part.text for part in followup] == ["I can help you today, please "]
         assert len(followup[0].text.strip()) >= 24
+        first_followup = followup
 
         followup = [
             part async for part in aggregator.aggregate("so I can find the right appointment for you ")
         ]
-        assert followup == []
+        assert [part.text for part in followup] == [
+            "tell me your name and number so I "
+        ]
         tail = await aggregator.flush()
         assert tail is not None
-        assert tail.text == "tell me your name and number so I can find the right appointment for you"
+        assert tail.text == "can find the right appointment for you"
+        assert "".join([*(part.text for part in first_followup), *(part.text for part in followup), tail.text]).strip() == (
+            "I can help you today, please tell me your name and number so I can find the right appointment for you"
+        )
     finally:
         await service._client.close()
 
@@ -97,7 +103,7 @@ async def test_streamed_numbers_and_dates_stay_in_one_synthesis_phrase():
         aggregator = LocalSpeechAggregator(
             min_characters=24, first_chunk_characters=12,
             first_clause_characters=24, first_phrase_characters=16,
-            streaming_phrase_characters=48,
+            streaming_phrase_characters=32,
         )
         phrases = []
         for word in text.split(" "):
@@ -119,7 +125,7 @@ async def test_number_group_survives_character_stream_and_later_phrase():
     aggregator = LocalSpeechAggregator(
         min_characters=24, first_chunk_characters=12,
         first_clause_characters=24, first_phrase_characters=16,
-        streaming_phrase_characters=48,
+        streaming_phrase_characters=32,
     )
     phrases = []
     for character in text:
@@ -159,7 +165,7 @@ async def test_hindi_spoken_day_month_and_year_are_not_split_between_requests():
             aggregator = LocalSpeechAggregator(
                 min_characters=24, first_chunk_characters=12,
                 first_clause_characters=24, first_phrase_characters=16,
-                streaming_phrase_characters=48,
+                streaming_phrase_characters=32,
             )
             phrases = []
             for index in range(0, len(text), width):

@@ -75,6 +75,40 @@ def test_status_endpoint_accepts_only_pinned_owner_check_path():
             update_agent._status_endpoint(url)
 
 
+def test_rollback_report_includes_restored_installed_version(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(update_agent, "_read_identity_key", lambda *_args: b"i" * 32)
+    monkeypatch.setattr(update_agent, "_current_version", lambda image: "1.2.0")
+    def helper_request(_image, request):
+        calls["signed"] = request
+        return {"proof_signature": "p" * 86}
+
+    monkeypatch.setattr(update_agent, "_helper_request", helper_request)
+    monkeypatch.setattr(
+        update_agent,
+        "_owner_post",
+        lambda url, token, body: calls.update({"url": url, "token": token, "body": body}),
+    )
+    env = {
+        "CLIENT_API_IMAGE": "registry.example/api@sha256:" + "a" * 64,
+        "CLIENT_IDENTITY_KEY_FILE": "identity.key",
+        "CLIENT_IDENTITY_GID": "10003",
+        "KODEWAVES_LICENSE_TOKEN": "license.payload",
+        "KODEWAVES_INSTALLATION_ID": "client-1",
+        "PUBLIC_HOST": "client.example",
+    }
+    update = {
+        "rollout_id": "13dbb634-9dc2-4a59-a3d8-44ff5c03a1c2",
+        "release_id": "release-1",
+        "version": "1.3.0",
+    }
+
+    update_agent._report(env, "https://owner.example/update-status", update, "rolled_back")
+
+    assert calls["signed"]["installed_version"] == "1.2.0"
+    assert calls["body"]["installed_version"] == "1.2.0"
+
+
 def test_archive_extractor_requires_exact_safe_checksum_covered_files(tmp_path: Path):
     contents = {name: b"fixture" for name in update_agent._PACKAGE_FILES if name != "SHA256SUMS"}
     contents["client-release-manifest.json"] = json.dumps({"payload": {"edition": "client"}}).encode()

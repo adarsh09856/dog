@@ -976,6 +976,12 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
             # their date instead of triggering another generic date question.
             state.pop("phone_just_completed", None)
             if booking_requested:
+                # A caller can give a preferred date/time before we finish
+                # collecting their name and number. Preserve that slot and
+                # let the shared booking flow read it back once contact
+                # details are ready instead of asking for it a second time.
+                if state.get("booking_slot_candidate"):
+                    return None
                 if reply_in_english:
                     return "Thanks. What date and time would you prefer for the booking?"
                 return "धन्यवाद। किस तारीख और समय के लिए बुक करना चाहेंगे?"
@@ -1357,6 +1363,10 @@ def booking_contact_question(messages: list, contact: dict, state: dict) -> str 
     ):
         return None
 
+    # Capture a date/time supplied in the initial booking request even when
+    # the next required question is still the caller's name or phone number.
+    # The slot is not read back or considered confirmed until those details
+    # have been collected and the caller explicitly approves the final readback.
     slot_capture_reply = booking_time_confirmation_question(
         messages, state, allow_readback=False
     )
@@ -1878,13 +1888,13 @@ def booking_time_confirmation_question(
             return "कृपया समय सुबह, दोपहर या शाम के साथ बताइए।"
         return None
     slot = f"{stated_date}T{hour24:02d}:{minute:02d}"
+    if date_was_in_latest:
+        state["booking_time_question_date"] = stated_date
     if not allow_readback:
         state["booking_slot_candidate"] = slot
         return None
     if state.get("booking_confirmation_slot") == slot:
         return None
-    if date_was_in_latest:
-        state["booking_time_question_date"] = stated_date
     state["booking_confirmation_slot"] = slot
     reply_language = state.get("reply_language")
     use_english = reply_language == "English" or (
@@ -1913,6 +1923,8 @@ def booking_phone_date_question(messages: list, state: dict) -> str | None:
     if not isinstance(phone, str) or state.get("phone_just_completed") != phone:
         return None
     if state.get("booking_slot_candidate"):
+        # The caller already supplied a complete date/time with the initial
+        # request. Read it back after contact capture instead of asking again.
         return None
     latest_user_index = next((
         index for index in range(len(messages) - 1, -1, -1)

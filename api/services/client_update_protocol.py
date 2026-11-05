@@ -210,6 +210,7 @@ def update_report_transition_allowed(
 def update_report_message(
     *, installation_id: str, license_token: str, rollout_id: str, release_id: str,
     version: str, nonce: str, issued_at: int, status: str, detail: str = "",
+    installed_version: str | None = None,
 ) -> bytes:
     if not isinstance(installation_id, str) or not _RELEASE_ID_RE.fullmatch(installation_id):
         raise ClientUpdateProtocolError("Installation ID is invalid")
@@ -231,6 +232,8 @@ def update_report_message(
         raise ClientUpdateProtocolError("Update report status is invalid")
     if not isinstance(detail, str) or len(detail) > 1000:
         raise ClientUpdateProtocolError("Update report detail is invalid")
+    if installed_version is not None:
+        validate_current_version(installed_version)
     payload = {
         "installation_id": installation_id,
         "license_sha256": hashlib.sha256(license_token.encode("ascii")).hexdigest(),
@@ -242,6 +245,10 @@ def update_report_message(
         "status": status,
         "detail": detail.strip(),
     }
+    # Keep v1 signature payloads byte-compatible with older installation
+    # agents. New agents include this only for rollback reports.
+    if installed_version is not None:
+        payload["installed_version"] = installed_version
     return _STATUS_DOMAIN + canonical_json(payload)
 
 

@@ -957,6 +957,7 @@ async def test_signed_client_release_rollout_progress_replay_and_rollback_in_pos
             async def report(
                 suffix, status, nonce=None, *, rollout_id=None,
                 release_id="release-2.1.0", version="2.1.0",
+                installed_version=None,
             ):
                 installation_id, token, client_private = installs[suffix]
                 nonce = nonce or secrets.token_urlsafe(32)
@@ -972,6 +973,8 @@ async def test_signed_client_release_rollout_progress_replay_and_rollback_in_pos
                     "status": status,
                     "detail": "integration test",
                 }
+                if installed_version is not None:
+                    fields["installed_version"] = installed_version
                 signature = base64.urlsafe_b64encode(
                     Ed25519PrivateKey.from_private_bytes(client_private).sign(
                         client_update_protocol.update_report_message(**fields)
@@ -1001,9 +1004,11 @@ async def test_signed_client_release_rollout_progress_replay_and_rollback_in_pos
                     assert "update" not in await check_version("a", "2.1.0")
             completed = await get_rollout(rollout_ids["a"])
             assert completed["state"] == "completed"
-            rolled_back, _ = await report("a", "rolled_back")
+            rolled_back, _ = await report("a", "rolled_back", installed_version="2.0.0")
             assert rolled_back.status_code == 200, rolled_back.text
-            assert (await get_rollout(rollout_ids["a"]))["targets"][0]["status"] == "rolled_back"
+            rolled_back_target = (await get_rollout(rollout_ids["a"]))["targets"][0]
+            assert rolled_back_target["status"] == "rolled_back"
+            assert rolled_back_target["current_version"] == "2.0.0"
 
             for status in ("downloading", "applying", "applied"):
                 response, _ = await report("b", status)

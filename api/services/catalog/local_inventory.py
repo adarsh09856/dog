@@ -85,6 +85,8 @@ def local_tts_capability_contract(model: dict) -> dict[str, object]:
     # auto-detected language which is silently synthesized by a different
     # speaker (or an unsupported one). Retain per-voice declarations when the
     # provider exposes them; older providers keep the model-level fallback.
+    # Automatic routers may switch speakers by reply language; fixed-voice
+    # providers must remain constrained to the selected voice.
     voice_languages: dict[str, set[str]] = {}
     voices = model.get("voices") or []
     voice_language_metadata_present = False

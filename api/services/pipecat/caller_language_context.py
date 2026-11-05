@@ -240,6 +240,7 @@ class CallerLanguageContext:
         one call so an agent handoff does not forget the caller's choice. It is
         never a process-global cache and does not modify supplied dictionaries.
         """
+        has_supported_language_inventory = supported_languages is not None
         supported_languages = reply_language_switch_capabilities(
             supported_languages, source
         )
@@ -321,7 +322,11 @@ class CallerLanguageContext:
             code = detected.strip().lower().replace("_", "-").split("-", 1)[0]
             language = SPEECH_LANGUAGE_NAMES.get(code)
             key = (len(users) - 1, users[-1][1])
-            if language and key not in self._hints:
+            if (
+                language
+                and (not has_supported_language_inventory or code in supported_codes)
+                and key not in self._hints
+            ):
                 requested = explicit_language or _requested_language(
                     users[-1][1], supported_languages
                 )

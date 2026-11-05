@@ -300,7 +300,7 @@ def direct_caller_reply(
     # A generic lookup or appointment tool cannot book a room. Older callers
     # that do not provide an explicit room capability retain the previous
     # no-tools behavior; live call sites pass an exact capability result.
-    if room_request and not has_room_booking_tool:
+    if room_request and not has_room_booking_tool and not has_lookup_tools:
         roman_hindi = re.search(
             r"\b(?:mujhe|mere|kamra|kamre|karna|karni|chahiye|hai|tha)\b",
             text,

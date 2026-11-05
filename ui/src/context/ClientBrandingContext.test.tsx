@@ -1,5 +1,5 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), pathname: "/admin/settings" }));
 vi.mock("@/lib/kodewavesApi", () => ({ apiFetch: mocks.apiFetch }));
@@ -10,7 +10,7 @@ vi.mock("next-themes", () => ({
 
 import { AuthShell } from "@/components/auth/AuthShell";
 import { BrandLogo } from "@/components/BrandLogo";
-import { PublicFooter } from "@/components/PublicSiteChrome";
+import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { DEFAULT_BRANDING } from "@/lib/branding";
 
 import {
@@ -32,6 +32,8 @@ function contrastRatio(first: string, second: string): number {
 }
 
 describe("shared platform branding", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   beforeEach(() => {
     mocks.apiFetch.mockReset();
     mocks.pathname = "/admin/settings";
@@ -187,6 +189,22 @@ describe("shared platform branding", () => {
 
     act(() => { document.title = "Kodewaves"; });
     await waitFor(() => expect(document.title).toBe("Admin | Acme Voice"));
+  });
+
+  it("hides hosted pricing links from client-edition public navigation", () => {
+    vi.stubEnv("NEXT_PUBLIC_KODEWAVES_EDITION", "client");
+    mocks.apiFetch.mockReturnValue(new Promise(() => {}));
+    render(
+      <ClientBrandingProvider initialBranding={DEFAULT_BRANDING}>
+        <PublicHeader />
+        <PublicFooter />
+      </ClientBrandingProvider>,
+    );
+
+    expect(screen.queryAllByRole("link", { name: "Pricing" })).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(screen.queryAllByRole("link", { name: "Pricing" })).toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: "Deployment" }).length).toBeGreaterThan(0);
   });
 
 });

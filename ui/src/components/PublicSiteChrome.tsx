@@ -20,6 +20,10 @@ const links = [
 export function PublicHeader() {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
+  const isClientEdition = process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client";
+  const visibleLinks = isClientEdition
+    ? links.filter((link) => link.href !== "/pricing")
+    : links;
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -41,7 +45,7 @@ export function PublicHeader() {
           aria-label="Main navigation"
           className={`${styles.nav} hidden items-center gap-8 text-sm md:flex`}
         >
-          {links.map((link) => (
+          {visibleLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -97,7 +101,7 @@ export function PublicHeader() {
           aria-label="Mobile navigation"
           className={`${styles.mobileMenu} space-y-1 border-t border-border px-5 py-4 md:hidden`}
         >
-          {[...links, { href: "/auth/login", label: "Sign in" }].map((link) => (
+          {[...visibleLinks, { href: "/auth/login", label: "Sign in" }].map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -116,6 +120,7 @@ export function PublicHeader() {
 
 export function PublicFooter() {
   const branding = useClientBranding();
+  const isClientEdition = process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client";
   return (
     <footer className={`${styles.footer} border-t border-border`}>
       <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] gap-8 px-5 py-12 sm:px-8 md:grid-cols-[minmax(0,1fr)_auto]">
@@ -137,9 +142,11 @@ export function PublicFooter() {
           <Link href="/deployment" className="hover:text-foreground">
             Deployment
           </Link>
-          <Link href="/pricing" className="hover:text-foreground">
-            Pricing
-          </Link>
+          {!isClientEdition && (
+            <Link href="/pricing" className="hover:text-foreground">
+              Pricing
+            </Link>
+          )}
           <Link href="/auth/login" className="hover:text-foreground">
             Sign in
           </Link>
