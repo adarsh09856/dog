@@ -668,6 +668,8 @@ def booking_date_time_question(
     # LLM to reuse or invent a time from the stale confirmation.
     state.pop("booking_confirmation_slot", None)
     state.pop("booking_pending_time_hour", None)
+    if state.get("booking_time_question_date") != stated_date:
+        state.pop("booking_slot_candidate", None)
     state["booking_time_question_date"] = stated_date
     parsed = date.fromisoformat(stated_date)
     hindi = state.get("reply_language") == "Hindi" or bool(
@@ -1355,12 +1357,26 @@ def booking_contact_question(messages: list, contact: dict, state: dict) -> str 
     ):
         return None
 
+    slot_capture_reply = booking_time_confirmation_question(
+        messages, state, allow_readback=False
+    )
+    if slot_capture_reply:
+        return slot_capture_reply
+    known_name = state.get("caller_name") or contact.get("customer_name")
+    known_phone = state.get("caller_phone") or state.get("approved_phone")
+    phone_digits = re.sub(r"\D", "", str(known_phone or ""))
+    contact_ready = bool(known_name and _looks_like_name(str(known_name))) and (
+        10 <= len(phone_digits) <= 15
+    )
+
     return (
         booking_confirmation_decline_reply(messages, state)
         or booking_phone_question(messages, contact, state)
         or first_booking_question(messages, contact.get('customer_name'))
         or booking_phone_date_question(messages, state)
-        or booking_time_confirmation_question(messages, state)
+        or booking_time_confirmation_question(
+            messages, state, allow_readback=contact_ready
+        )
         or booking_date_time_question(messages, state, contact)
     )
 
@@ -1464,6 +1480,7 @@ def booking_confirmation_decline_reply(messages: list, state: dict) -> str | Non
     ):
         return None
     state.pop("booking_confirmation_slot", None)
+    state.pop("booking_slot_candidate", None)
     state.pop("booking_time_question_date", None)
     state.pop("booking_pending_time_hour", None)
     if state.get("reply_language") == "English" or re.fullmatch(r"\s*(?:no|nope|not now)[.!\s]*", latest, re.I):
@@ -1498,6 +1515,7 @@ def clear_completed_booking_state(
                 }
     for key in (
         "booking_confirmation_slot",
+        "booking_slot_candidate",
         "booking_time_question_date",
         "booking_pending_time_hour",
         "prior_booking_request",
@@ -1561,7 +1579,9 @@ def confirmed_staged_booking_arguments(
     }
 
 
-def booking_time_confirmation_question(messages: list, state: dict) -> str | None:
+def booking_time_confirmation_question(
+    messages: list, state: dict, *, allow_readback: bool = True
+) -> str | None:
     """Read back a complete date/time, including when the caller gives both together."""
     from api.services.workflow.confirmed_booking import new_booking_requested
 
@@ -1574,6 +1594,52 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
     latest = users[-1]["content"].strip()
     if not latest:
         return None
+    candidate = state.get("booking_slot_candidate")
+    if allow_readback and isinstance(candidate, str) and re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", candidate
+    ):
+        has_booking_request = any(new_booking_requested(m["content"]) for m in users)
+        try:
+            candidate_time = datetime.fromisoformat(candidate).replace(
+                tzinfo=timezone(timedelta(hours=5, minutes=30))
+            )
+        except ValueError:
+            state.pop("booking_slot_candidate", None)
+        else:
+            ist_now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
+            if has_booking_request and candidate_time > ist_now:
+                if state.get("booking_confirmation_slot") == candidate:
+                    state.pop("booking_slot_candidate", None)
+                    return None
+                state["booking_confirmation_slot"] = candidate
+                state.pop("booking_slot_candidate", None)
+                reply_language = state.get("reply_language")
+                use_english = reply_language == "English" or (
+                    reply_language is None
+                    and not re.search(r"[\u0900-\u097f]", latest)
+                )
+                if use_english:
+                    return (
+                        f"I have {candidate_time.day} {candidate_time.strftime('%B')} "
+                        f"{candidate_time.year} at "
+                        f"{candidate_time.hour % 12 or 12}:{candidate_time.minute:02d} "
+                        f"{'PM' if candidate_time.hour >= 12 else 'AM'} IST. "
+                        "Should I book the appointment for that time?"
+                    )
+                month = ("जनवरी", "फ़रवरी", "मार्च", "अप्रैल", "मई", "जून",
+                         "जुलाई", "अगस्त", "सितंबर", "अक्टूबर", "नवंबर", "दिसंबर")[
+                    candidate_time.month - 1
+                ]
+                hindi_period = (
+                    "सुबह" if candidate_time.hour < 12
+                    else "दोपहर" if candidate_time.hour < 17 else "शाम"
+                )
+                return (
+                    f"{candidate_time.day} {month} {candidate_time.year} को "
+                    f"{hindi_period} {candidate_time.hour % 12 or 12}:"
+                    f"{candidate_time.minute:02d} बजे भारतीय समय। "
+                    "क्या इस समय के लिए बुकिंग कर दूँ?"
+                )
     today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
     stated_date = None
     if re.search(r"\b(?:tomorrow|today|kal|aaj)\b|कल|आज", latest, re.I):
@@ -1621,12 +1687,13 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
     staged_date_is_valid = isinstance(staged_date, str) and bool(
         re.fullmatch(r"\d{4}-\d{2}-\d{2}", staged_date)
     )
-    if not asked_for_time and not staged_date_is_valid:
+    initial_booking_with_date = new_booking_requested(latest) and date_was_in_latest
+    if not asked_for_time and not staged_date_is_valid and not initial_booking_with_date:
         return None
     has_prior_booking = len(users) >= 2 and any(
         new_booking_requested(m["content"]) for m in users[:-1]
     )
-    if not (has_prior_booking or staged_date_is_valid):
+    if not (has_prior_booking or staged_date_is_valid or initial_booking_with_date):
         return None
     normalized = latest.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
 
@@ -1811,6 +1878,9 @@ def booking_time_confirmation_question(messages: list, state: dict) -> str | Non
             return "कृपया समय सुबह, दोपहर या शाम के साथ बताइए।"
         return None
     slot = f"{stated_date}T{hour24:02d}:{minute:02d}"
+    if not allow_readback:
+        state["booking_slot_candidate"] = slot
+        return None
     if state.get("booking_confirmation_slot") == slot:
         return None
     if date_was_in_latest:
@@ -1841,6 +1911,8 @@ def booking_phone_date_question(messages: list, state: dict) -> str | None:
         return None
     phone = state.get("caller_phone")
     if not isinstance(phone, str) or state.get("phone_just_completed") != phone:
+        return None
+    if state.get("booking_slot_candidate"):
         return None
     latest_user_index = next((
         index for index in range(len(messages) - 1, -1, -1)

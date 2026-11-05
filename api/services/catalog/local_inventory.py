@@ -80,7 +80,44 @@ def local_tts_capability_contract(model: dict) -> dict[str, object]:
         for language in languages
         if isinstance(language, str) and language.strip()
     }
-    return {"model": model.get("id"), "languages": language_codes, "voices": voice_ids}
+    # A model-level language list is only the union of its loaded voices. If
+    # the caller selected a specific voice, using that union can advertise an
+    # auto-detected language which is silently synthesized by a different
+    # speaker (or an unsupported one). Retain per-voice declarations when the
+    # provider exposes them; older providers keep the model-level fallback.
+    voice_languages: dict[str, set[str]] = {}
+    voices = model.get("voices") or []
+    voice_language_metadata_present = False
+    if isinstance(voices, list):
+        for item in voices:
+            if not isinstance(item, dict) or item.get("installed") is False:
+                continue
+            voice_id = item.get("id") or item.get("voice_id") or item.get("name")
+            voice_language_metadata_present |= (
+                "languages" in item or "language" in item
+            )
+            raw_languages = item.get("languages") or item.get("language") or []
+            if isinstance(raw_languages, str):
+                raw_languages = [raw_languages]
+            if not isinstance(voice_id, str) or not isinstance(
+                raw_languages, (list, tuple, set, frozenset)
+            ):
+                continue
+            codes = {
+                str(language).strip().casefold().replace("_", "-").split("-", 1)[0]
+                for language in raw_languages
+                if isinstance(language, str) and language.strip()
+            }
+            if codes:
+                voice_languages[voice_id.casefold()] = codes
+    return {
+        "model": model.get("id"),
+        "languages": language_codes,
+        "voices": voice_ids,
+        "voice_languages": voice_languages,
+        "voice_language_metadata_present": voice_language_metadata_present,
+        "automatic_voice_routing": model.get("automatic_voice_routing"),
+    }
 
 
 def piper_voice_inventory(payload: Any) -> dict[str, dict]:
