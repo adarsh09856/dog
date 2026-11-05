@@ -67,8 +67,23 @@ def persist_integrity_finding(finding: dict[str, Any], *, installation_id: str) 
 
 
 def pending_integrity_findings(*, installation_id: str) -> list[dict[str, Any]]:
-    """Read valid JSON entries in deterministic order; keep malformed files for inspection."""
-    directory = _outbox_dir(installation_id)
+    """Read pending entries without creating the optional outbox on poll."""
+    if not isinstance(installation_id, str) or not installation_id.strip():
+        raise OSError("Integrity outbox requires an installation identity")
+    root = Path(os.getenv(
+        "KODEWAVES_INTEGRITY_OUTBOX_DIR",
+        "/app/kodewaves_pcm_cache/integrity-outbox",
+    ))
+    if root.is_symlink():
+        raise OSError("Integrity outbox directory cannot be a symbolic link")
+    if not root.exists():
+        return []
+    namespace = hashlib.sha256(installation_id.encode("utf-8")).hexdigest()
+    directory = root / namespace
+    if directory.is_symlink():
+        raise OSError("Integrity outbox installation directory cannot be a symbolic link")
+    if not directory.exists():
+        return []
     findings = []
     for path in sorted(directory.glob("*.json")):
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 16_384:
