@@ -671,6 +671,7 @@ def booking_date_time_question(
     if state.get("booking_time_question_date") != stated_date:
         state.pop("booking_slot_candidate", None)
     state["booking_time_question_date"] = stated_date
+    state["booking_time_pending"] = True
     parsed = date.fromisoformat(stated_date)
     hindi = state.get("reply_language") == "Hindi" or bool(
         re.search(r"[\u0900-\u097f]", latest)
@@ -1492,6 +1493,7 @@ def booking_confirmation_decline_reply(messages: list, state: dict) -> str | Non
     state.pop("booking_confirmation_slot", None)
     state.pop("booking_slot_candidate", None)
     state.pop("booking_time_question_date", None)
+    state.pop("booking_time_pending", None)
     state.pop("booking_pending_time_hour", None)
     if state.get("reply_language") == "English" or re.fullmatch(r"\s*(?:no|nope|not now)[.!\s]*", latest, re.I):
         return "Okay, I won't book that time. Tell me if you would prefer another date and time."
@@ -1527,6 +1529,7 @@ def clear_completed_booking_state(
         "booking_confirmation_slot",
         "booking_slot_candidate",
         "booking_time_question_date",
+        "booking_time_pending",
         "booking_pending_time_hour",
         "prior_booking_request",
         "active_booking_request",
@@ -1885,6 +1888,7 @@ def booking_time_confirmation_question(
                 state.pop("booking_slot_candidate", None)
                 state.pop("booking_pending_time_hour", None)
             state["booking_time_question_date"] = stated_date
+            state["booking_time_pending"] = True
             return None
         if stated_date and time_signal:
             if date_was_in_latest:
@@ -1894,7 +1898,28 @@ def booking_time_confirmation_question(
             ):
                 return "Please give the time with AM or PM, for example, 5 PM."
             return "कृपया समय सुबह, दोपहर या शाम के साथ बताइए।"
-        if stated_date and (asked_for_time or staged_date_is_valid):
+        explicit_topic_change = bool(re.search(
+            r"\b(?:cancel|stop|forget|never mind|don't|do not|help|support|"
+            r"why|what|how|where|who|price|cost|address|service|services|"
+            r"tell me|switch|speak|language|question|actually)\b"
+            r"|रद्द|रोक|छोड़|मदद|सहायता|क्यों|क्या|कैसे|कहाँ|कितना|"
+            r"पता|सेवा|अंग्रेज़ी|अंग्रेजी|बदलना|बदलें|पूछना|सवाल",
+            latest,
+            re.IGNORECASE,
+        ))
+        if re.search(r"\btime\b|समय|बजे", latest, re.IGNORECASE):
+            explicit_topic_change = False
+        time_question_active = asked_for_time or (
+            state.get("booking_time_pending") is True
+            and not isinstance(previous, str)
+        )
+        if (
+            stated_date
+            and time_question_active
+            and not date_was_in_latest
+            and not explicit_topic_change
+            and not new_booking_requested(latest)
+        ):
             # The caller has already supplied the booking date and is
             # in the persisted time-collection step. The preceding assistant
             # message may be missing from the compacted LLM window, so the
@@ -1912,6 +1937,7 @@ def booking_time_confirmation_question(
             return "समय स्पष्ट नहीं सुनाई दिया। कृपया घंटा और सुबह या शाम बताइए, जैसे सुबह 8 बजे।"
         return None
     slot = f"{stated_date}T{hour24:02d}:{minute:02d}"
+    state.pop("booking_time_pending", None)
     if date_was_in_latest:
         state["booking_time_question_date"] = stated_date
     if not allow_readback:
