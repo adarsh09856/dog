@@ -210,6 +210,26 @@ def test_update_report_is_installation_signed_fresh_and_bound_to_all_fields():
         protocol.verify_update_report(public, signature, now=1_800_000_400, **fields)
 
 
+def test_rollback_installed_version_is_signed_and_legacy_reports_stay_compatible():
+    fields = {
+        "installation_id": "client-123",
+        "license_token": "signed-license-token",
+        "rollout_id": "12345678-1234-4234-8234-123456789abc",
+        "release_id": "release-2.1.0",
+        "version": "2.1.0",
+        "nonce": "a" * 43,
+        "issued_at": 1_800_000_000,
+        "status": "rolled_back",
+        "detail": "restored previous release",
+    }
+    legacy = protocol.update_report_message(**fields)
+    signed_rollback = protocol.update_report_message(**fields, installed_version="2.0.0")
+    assert legacy != signed_rollback
+    assert b'"installed_version":"2.0.0"' in signed_rollback
+    with pytest.raises(protocol.ClientUpdateProtocolError):
+        protocol.update_report_message(**fields, installed_version="v2.0.0")
+
+
 def test_completed_rollout_allows_last_rollback_only_before_newer_rollout():
     allowed = protocol.update_report_transition_allowed(
         rollout_state="completed", current_status="applied",

@@ -169,6 +169,8 @@ def _report(env: dict[str, str], status_url: str, update: dict, state: str, deta
         "version": update["version"], "nonce": nonce, "issued_at": issued_at,
         "status": state, "detail": detail[:1000],
     }
+    if state == "rolled_back":
+        fields["installed_version"] = _current_version(env["CLIENT_API_IMAGE"])
     key = _read_identity_key(Path(env["CLIENT_IDENTITY_KEY_FILE"]), int(env["CLIENT_IDENTITY_GID"]))
     proof = _helper_request(env["CLIENT_API_IMAGE"], {
         "action": "prepare_update_report",

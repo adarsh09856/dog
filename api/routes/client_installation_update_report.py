@@ -34,11 +34,22 @@ class InstallationUpdateReportRequest(BaseModel):
     issued_at: int = Field(strict=True, ge=0, le=2**53 - 1)
     status: Literal["staged", "downloading", "applying", "applied", "failed", "rolled_back"]
     detail: str = Field(default="", max_length=1000)
+    installed_version: str | None = None
     proof_signature: str = Field(pattern=r"^[A-Za-z0-9_-]{86}$")
 
     @field_validator("version")
     @classmethod
     def canonical_version(cls, value: str) -> str:
+        try:
+            return validate_current_version(value)
+        except ClientUpdateProtocolError as exc:
+            raise ValueError(str(exc)) from exc
+
+    @field_validator("installed_version")
+    @classmethod
+    def canonical_installed_version(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         try:
             return validate_current_version(value)
         except ClientUpdateProtocolError as exc:
@@ -91,6 +102,7 @@ async def report_client_update_status(
             issued_at=request.issued_at,
             status=request.status,
             detail=request.detail,
+            installed_version=request.installed_version,
         )
     except ClientUpdateProtocolError as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired installation update proof") from exc
@@ -106,6 +118,7 @@ async def report_client_update_status(
         nonce_expires_at=datetime.fromtimestamp(request.issued_at + 91, UTC),
         status=request.status,
         detail=request.detail.strip(),
+        installed_version=request.installed_version,
     )
     if result is None:
         raise HTTPException(status_code=409, detail="Update report is stale, replayed, or not valid for this rollout")

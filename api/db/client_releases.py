@@ -302,6 +302,7 @@ async def report_update_status(
     *, installation_id: str, license_fingerprint: str, public_key: str,
     rollout_id: str, release_id: str, version: str, nonce_fingerprint: str,
     nonce_expires_at: datetime, status: str, detail: str,
+    installed_version: str | None = None,
 ) -> dict | None:
     now = datetime.now(UTC)
     async with kodewaves_db_client.get_session() as session:
@@ -367,6 +368,10 @@ async def report_update_status(
         target.updated_at = now
         if status == "applied":
             target.current_version = release.version
+        elif status == "rolled_back":
+            # Older agents omit this field; clear the stale failed version
+            # rather than display it as the installed version.
+            target.current_version = installed_version
         if rollout.state in {"active", "paused"} and status in {"applied", "failed", "rolled_back"}:
             active_count = await session.scalar(select(func.count()).select_from(ClientReleaseRolloutTargetModel).where(
                 ClientReleaseRolloutTargetModel.rollout_id == rollout_id,
