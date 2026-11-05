@@ -513,11 +513,23 @@ def _resolve_decode_language(
     fallback_language: str | None,
     installed: set[str],
     detection_route: str | None = None,
+    allowed_languages: set[str] | frozenset[str] | None = None,
 ) -> tuple[str, str]:
     """Choose an installed decoder without silently relabeling clear speech."""
     detected = str(detected or "").lower().replace("_", "-").split("-", 1)[0]
     fallback = str(fallback_language or "").lower().replace("_", "-").split("-", 1)[0]
-    supported = installed & AUTO_DETECT_LANGUAGES
+    enabled = installed & AUTO_DETECT_LANGUAGES - {"ur"}
+    if allowed_languages is not None:
+        enabled &= {
+            str(code).strip().lower().replace("_", "-").split("-", 1)[0]
+            for code in allowed_languages
+            if isinstance(code, str) and str(code).strip()
+        }
+    # Urdu has no configured reply voice in this product. Use the Hindi
+    # decoder only when the active TTS model explicitly enables Hindi.
+    if detected == "ur" and "hi" in enabled:
+        return "hi", "urdu_routed_to_hindi"
+    supported = enabled
     if detected not in supported:
         threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
         if detected in LID_LANGUAGE_CODES and fallback in supported:
@@ -558,17 +570,37 @@ async def transcribe(
     language: str | None = Form(None),
     fallback_language: str | None = Form(None),
     phone_capture: bool = Form(False),
+    allowed_languages: str | None = Form(None),
 ) -> dict:
     if model != MODEL_ID:
         raise HTTPException(status_code=404, detail="Unknown local STT model")
     requested_language = (language or "auto").strip().lower().replace("_", "-").split("-", 1)[0]
     auto_detect = requested_language in {"", "auto", "multi", "default", "unknown"}
     installed = _installed_languages()
+    enabled_languages = None
+    if allowed_languages is not None:
+        enabled_languages = {
+            code.strip().lower().replace("_", "-").split("-", 1)[0]
+            for code in allowed_languages.split(",")
+            if code.strip()
+        } & (AUTO_DETECT_LANGUAGES - {"ur"})
+        enabled_languages &= set(installed)
+        if auto_detect and not enabled_languages:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "no_enabled_tts_languages",
+                    "message": "The selected voice has no installed language enabled for automatic speech routing.",
+                },
+            )
     if auto_detect and _lid_session is None:
         raise HTTPException(status_code=503, detail="Local automatic language detection is unavailable")
     lang = requested_language
     fallback = (fallback_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    if fallback not in installed:
+    available_auto_languages = set(installed) & AUTO_DETECT_LANGUAGES
+    if enabled_languages is not None:
+        available_auto_languages &= enabled_languages
+    if fallback not in available_auto_languages:
         fallback = ""
     if not auto_detect and lang not in installed:
         raise HTTPException(status_code=400, detail="Selected Indic STT language is not installed")
@@ -614,7 +646,12 @@ async def transcribe(
             except ValueError:
                 return {"text": "", "language": "", "duration_ms": 0}
             lang, language_route = _resolve_decode_language(
-                detected_language, language_confidence, fallback or None, set(installed), detection_route
+                detected_language,
+                language_confidence,
+                fallback or None,
+                set(installed),
+                detection_route,
+                enabled_languages,
             )
             if lang not in installed:
                 raise HTTPException(status_code=503, detail="Selected STT language is not installed on this engine")
@@ -626,7 +663,7 @@ async def transcribe(
         phone_rescue_language = _phone_rescue_language(
             lang,
             fallback,
-            installed=set(installed),
+            installed=available_auto_languages,
             resident=set(_loaded),
         ) if phone_capture else None
         if (
