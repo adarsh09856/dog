@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/PublicSiteChrome", () => ({
   PublicHeader: () => <header>Public navigation</header>,
@@ -12,6 +12,8 @@ vi.mock("@/components/lead-forms/PublicEnterpriseLeadCTA", () => ({
 import DeploymentPage, { metadata } from "./page";
 
 describe("public deployment page", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("sets a page-specific browser title and search description", () => {
     expect(metadata.title).toBe("Deployment");
     expect(metadata.description).toContain("licensed client installations");
@@ -46,5 +48,9 @@ describe("public deployment page", () => {
     expect(screen.queryByRole("button", { name: "Discuss a client installation" })).toBeNull();
     expect(screen.queryByText(/Kodewaves/i)).toBeNull();
     expect(screen.getByText(/platform owner service receives the installation identity/)).toBeTruthy();
+    expect(screen.queryByText("Two operating models")).toBeNull();
+    expect(screen.queryByText(/Both use the same workflow concepts/)).toBeNull();
+    expect(screen.queryByText(/Hosted workspace or customer-managed environment/)).toBeNull();
+    expect(screen.getByRole("heading", { name: "Your licensed installation." })).toBeTruthy();
   });
 });

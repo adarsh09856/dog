@@ -98,7 +98,7 @@ export default function DeploymentPage() {
                 <span className={styles.railPreview}>PLANNING</span>
               </div>
               {[
-                ["A", "Where it runs", "Hosted workspace or customer-managed environment."],
+                ["A", "Where it runs", isClientEdition ? "This licensed customer-managed environment." : "Hosted workspace or customer-managed environment."],
                 ["B", "What it connects", "Speech, LLM, carrier and business systems."],
                 ["C", "Who operates it", "Workspace roles, infrastructure and support boundaries."],
               ].map(([number, title, description]) => (
@@ -117,12 +117,12 @@ export default function DeploymentPage() {
           <div className={styles.pageFrame}>
             <div className={styles.sectionHead}>
               <div>
-                <p className={styles.eyebrow}>Two operating models</p>
-                <h2>Compare the environment before you configure the agent.</h2>
+                <p className={styles.eyebrow}>{isClientEdition ? "Your operating model" : "Two operating models"}</p>
+                <h2>{isClientEdition ? "Your licensed installation." : "Compare the environment before you configure the agent."}</h2>
               </div>
-              <p>
-                Both use the same workflow concepts. Infrastructure responsibility, license scope and provider availability differ by deployment.
-              </p>
+              <p>{isClientEdition
+                ? "This environment runs under its installation license. Available providers, capacity and support are configured for this deployment."
+                : "Both use the same workflow concepts. Infrastructure responsibility, license scope and provider availability differ by deployment."}</p>
             </div>
             <div className={styles.comparison}>
               {visibleOptions.map(({ label, title, description, icon: Icon, details }) => (
@@ -196,7 +196,7 @@ export default function DeploymentPage() {
         <section className={`${styles.section} pb-12`}>
           <div className={`${styles.pageFrame} ${styles.closing}`}>
             <p className={styles.eyebrow}>Next step</p>
-            <h2>Find the right operating model.</h2>
+            <h2>{isClientEdition ? "Manage your installation’s voice operations." : "Find the right operating model."}</h2>
             <p>{isClientEdition
               ? "Sign in to manage the capabilities and provider settings available to this installation."
               : "Review configured hosted plans or sign in to see the capabilities and provider settings available to your workspace."}</p>
