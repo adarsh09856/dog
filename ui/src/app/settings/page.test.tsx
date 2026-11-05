@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   apiFetch: vi.fn(),
   authLoading: false,
+  billingFeature: true,
   user: { id: 9, email: "client-admin@example.test", is_superuser: true, organizationId: 1 },
 }));
 
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: mocks.user, loading: mocks.authLoading }) }));
 vi.mock("@/context/ClientEntitlementsContext", () => ({
-  useClientEntitlements: () => ({ hasFeature: () => true, isClientEdition: true }),
+  useClientEntitlements: () => ({ hasFeature: (feature: string) => feature !== "billing" || mocks.billingFeature, isClientEdition: true }),
 }));
 vi.mock("@/lib/kodewavesApi", () => ({ apiFetch: mocks.apiFetch }));
 vi.mock("@/components/CallEventsSection", () => ({ CallEventsSection: () => null }));
@@ -25,6 +26,7 @@ import SettingsPage from "./page";
 describe("client installation binding change requests", () => {
   beforeEach(() => {
     mocks.authLoading = false;
+    mocks.billingFeature = true;
     mocks.apiFetch.mockReset();
     mocks.apiFetch.mockImplementation((endpoint: string) => {
       if (endpoint === "/installation/license") {
@@ -87,5 +89,24 @@ describe("client installation binding change requests", () => {
       }),
     });
     expect(screen.getByRole("status").textContent).toContain("Request #31");
+  });
+
+  it("describes licensed client usage instead of hosted subscription upgrades", async () => {
+    mocks.billingFeature = false;
+    render(<SettingsPage />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText("Review your licensed usage allowance and configure the provider keys enabled for this installation.")).toBeTruthy();
+    expect(screen.queryByText(/upgrade subscription plans/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /wallet/i })).toBeNull();
+  });
+
+  it("uses licensed usage wording when billing is included in the client license", async () => {
+    render(<SettingsPage />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText("Review your licensed usage allowance and configure the provider keys enabled for this installation.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open licensed usage wallet/i })).toBeTruthy();
+    expect(screen.queryByText(/subscription plans/i)).toBeNull();
   });
 });

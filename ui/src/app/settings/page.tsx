@@ -159,14 +159,16 @@ export default function SettingsPage() {
               Sovereign Voice & Minute Balance
             </CardTitle>
             <CardDescription>
-              Check your minute quota, upgrade subscription plans, or bring your own API keys.
+              {isClientEdition
+                ? "Review your licensed usage allowance and configure the provider keys enabled for this installation."
+                : "Check your minute quota, upgrade subscription plans, or bring your own API keys."}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2.5">
             {canUseBilling && <Link href="/billing-sovereign">
               <Button variant="default" size="sm" className="text-xs gap-1.5">
                 <Wallet className="h-3.5 w-3.5" />
-                Open Sovereign Wallet & Plans
+                {isClientEdition ? "Open licensed usage wallet" : "Open Sovereign Wallet & Plans"}
               </Button>
             </Link>}
             {canUseVoice && <Link href="/model-configurations">

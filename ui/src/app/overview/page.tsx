@@ -223,7 +223,7 @@ export default function OverviewPage() {
             <p className={dashboard.mastheadEyebrow}>{branding.company_name} / OPERATIONS DESK</p>
             <h1>{user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}.` : `Welcome to ${branding.company_name}`}</h1>
             <p className={dashboard.mastheadDescription}>Your voice operation, at a glance. Build the next conversation or review what happened in the last one.</p>
-            <span className={dashboard.trustLine}><ShieldCheck className="h-3.5 w-3.5 text-primary" />Hosted or customer-managed deployment</span>
+            <span className={dashboard.trustLine}><ShieldCheck className="h-3.5 w-3.5 text-primary" />{isClientEdition ? "Licensed customer-managed installation" : "Hosted or customer-managed deployment"}</span>
             <div className={dashboard.mastheadActions}>
               <Button asChild><Link href="/workflow/create"><Plus className="h-4 w-4" /> Create Agent</Link></Button>
               <Button asChild variant="outline"><Link href="/usage">Review call activity <ArrowRight className="h-4 w-4" /></Link></Button>
@@ -466,8 +466,8 @@ export default function OverviewPage() {
             </section>
           ))}
         </section>
-        {/* Platform administration is available only to backend superusers. */}
-        {user?.is_superuser === true && <Card className={`${dashboard.adminCard} border-border/70 bg-muted/20`}>
+        {/* Platform administration belongs to the hosted operator, not client installations. */}
+        {!isClientEdition && user?.is_superuser === true && <Card className={`${dashboard.adminCard} border-border/70 bg-muted/20`}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

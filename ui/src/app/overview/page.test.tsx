@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getStats: vi.fn(),
   clientEdition: false as boolean,
+  superuser: false as boolean,
   billingFeature: true as boolean,
   features: [] as string[],
   entitlementsLoading: false as boolean,
@@ -14,7 +15,7 @@ vi.mock("@/lib/kodewavesApi", () => ({
 }));
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
-    user: { displayName: "Alex Example", is_superuser: false },
+    user: { displayName: "Alex Example", is_superuser: mocks.superuser },
     loading: false,
   }),
 }));
@@ -53,6 +54,7 @@ describe("workspace overview", () => {
   beforeEach(() => {
     mocks.getStats.mockReset();
     mocks.clientEdition = false;
+    mocks.superuser = false;
     mocks.billingFeature = true;
     mocks.features = [];
     mocks.entitlementsLoading = false;
@@ -115,6 +117,7 @@ describe("workspace overview", () => {
 
   it("shows licensed modules instead of hosted billing for client installations", async () => {
     mocks.clientEdition = true;
+    mocks.superuser = true;
     mocks.billingFeature = false;
     mocks.features = ["voice", "crm"];
     mocks.getStats.mockResolvedValue(emptyStats);
@@ -131,5 +134,8 @@ describe("workspace overview", () => {
     expect(screen.getByText("2", { exact: true })).toBeTruthy();
     expect(screen.getByText("enabled", { exact: true })).toBeTruthy();
     expect(screen.getByText("Managed by your Acme Voice license")).toBeTruthy();
+    expect(screen.getByText("Licensed customer-managed installation")).toBeTruthy();
+    expect(screen.queryByText("Platform administration")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Open administration/ })).toBeNull();
   });
 });
