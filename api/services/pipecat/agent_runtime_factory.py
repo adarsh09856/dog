@@ -29,6 +29,7 @@ from api.services.pipecat.pipeline_builder import (
 )
 from api.services.pipecat.recording_router_processor import RecordingRouterProcessor
 from api.services.pipecat.service_factory import (
+    _initial_local_stt_language_fallback,
     create_llm_service,
     create_tts_service,
 )
@@ -186,6 +187,18 @@ class AgentRuntimeFactory:
             )
 
             llm._caller_language_supported_codes = caller_language_tts_capabilities(tts)
+            if self._caller_language_source is not None:
+                # The shared recognizer must apply this agent's selected TTS
+                # capability allowlist, not the allowlist from the prior agent.
+                self._caller_language_source._caller_language_supported_codes = (
+                    llm._caller_language_supported_codes
+                )
+                fallback_language = _initial_local_stt_language_fallback(user_config)
+                self._caller_language_source._initial_language_fallback = (
+                    fallback_language
+                    if fallback_language in llm._caller_language_supported_codes
+                    else None
+                )
         if self._caller_language_source is not None:
             for service in (llm, tts):
                 if service is not None:

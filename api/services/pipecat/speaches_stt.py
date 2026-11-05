@@ -81,25 +81,45 @@ def _is_auto_language(value: str | None) -> bool:
     }
 
 
+def _auto_stt_language_allowlist(
+    supported_codes: set[str] | frozenset[str] | None,
+) -> frozenset[str]:
+    """Limit local auto-STT decoding to the active voice's verified languages."""
+    # Live agent creation attaches the selected TTS capability set (including
+    # an explicit empty set). Use only the currently configured local voice
+    # inventory when this adapter is used without a capability snapshot.
+    source = LOCAL_REPLY_TTS_LANGUAGES if supported_codes is None else supported_codes
+    normalized = {
+        str(value).strip().lower().replace("_", "-").split("-", 1)[0]
+        for value in source
+        if isinstance(value, str) and str(value).strip()
+    }
+    # Urdu is an auxiliary LID label, not a scheduled product language or an
+    # enabled reply voice. It may only be normalized to Hindi when Hindi is
+    # enabled; never select a separate Urdu decoder/voice route.
+    return frozenset(normalized & LOCAL_INDIC_STT_LANGUAGES - {"ur"})
+
+
 def _resolve_auto_language(
     detected: str | None,
     confidence: float | None,
     previous_stable: str | None,
+    supported_codes: set[str] | frozenset[str] | None = None,
 ) -> tuple[str | None, str]:
-    """Keep uncertain fragments stable while retaining all scheduled STT codes."""
+    """Resolve detector output without routing replies to disabled TTS languages."""
     code = str(detected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    allowed = _auto_stt_language_allowlist(supported_codes)
+    if code == "ur" and "hi" in allowed:
+        return "hi", "urdu_routed_to_hindi"
     if not code:
-        return previous or None, "missing_detector_language"
-    if code not in LOCAL_INDIC_STT_LANGUAGES:
-        if previous in LOCAL_REPLY_TTS_LANGUAGES:
-            return previous, "unknown_language_to_previous_tts"
-        return (
-            "hi",
-            "unknown_language_to_hindi",
-        )
+        return (previous if previous in allowed else None), "missing_detector_language"
+    if code not in allowed:
+        if previous in allowed:
+            return previous, "disabled_language_held_previous"
+        return None, "disabled_language_no_voice_route"
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
-    if confidence is not None and confidence < threshold and previous:
+    if confidence is not None and confidence < threshold and previous in allowed:
         return previous, "held_previous_low_confidence"
     return code, "detector"
 
@@ -414,10 +434,19 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             extra_body = {}
             stable_detected_language = getattr(self, "_stable_detected_language", None)
             if local_indic and auto_language:
-                fallback_language = stable_detected_language or getattr(
-                    self, "_initial_language_fallback", None
+                allowed_languages = _auto_stt_language_allowlist(
+                    getattr(self, "_caller_language_supported_codes", None)
                 )
-                if fallback_language:
+                extra_body["allowed_languages"] = ",".join(sorted(allowed_languages))
+                fallback_candidates = (
+                    stable_detected_language,
+                    getattr(self, "_initial_language_fallback", None),
+                )
+                fallback_language = next(
+                    (code for code in fallback_candidates if code in allowed_languages),
+                    None,
+                )
+                if fallback_language in allowed_languages:
                     extra_body["fallback_language"] = fallback_language
             if local_indic and phone_capture:
                 extra_body["phone_capture"] = True
@@ -442,10 +471,26 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 if language_route in {"phone_hi_rescue", "phone_en_rescue"}:
                     self.latest_decoder_language = language_route.removeprefix("phone_").removesuffix("_rescue")
                 if auto_language:
+                    supported_codes = getattr(
+                        self, "_caller_language_supported_codes", None
+                    )
+                    # If the detector identified a disabled language, the STT
+                    # service may have decoded with an allowed fallback. Use
+                    # that actual decoder language for the reply route rather
+                    # than reintroducing the disabled raw LID label here.
+                    routing_language = detected_language
+                    if (
+                        language_route.startswith("unsupported_language")
+                        and self.latest_decoder_language in _auto_stt_language_allowlist(
+                            supported_codes
+                        )
+                    ):
+                        routing_language = self.latest_decoder_language
                     self.latest_detected_language, resolved_route = _resolve_auto_language(
-                        detected_language if isinstance(detected_language, str) else None,
+                        routing_language if isinstance(routing_language, str) else None,
                         language_confidence,
                         getattr(self, "_stable_detected_language", None),
+                        supported_codes,
                     )
                     if (
                         language_route == "held_previous_low_confidence"
@@ -489,6 +534,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                     detected_language if isinstance(detected_language, str) else None,
                     language_confidence,
                     getattr(self, "_stable_detected_language", None),
+                    getattr(self, "_caller_language_supported_codes", None),
                 )
             self._latest_language_confidence = language_confidence
             if self.latest_detected_language and hasattr(result, "model_copy"):
