@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { PublicEnterpriseLeadCTA } from "@/components/lead-forms/PublicEnterpriseLeadCTA";
 import { Button } from "@/components/ui/button";
-import { useClientBranding } from "@/context/ClientBrandingContext";
 import {
   publicApi,
   type PublicCreditPackage,
@@ -67,7 +66,6 @@ const faqs = [
 
 export default function PricingPage() {
   const isClientEdition = process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client";
-  const branding = useClientBranding();
   const [plans, setPlans] = useState<PublicSaaSPlan[]>([]);
   const [packages, setPackages] = useState<PublicCreditPackage[]>([]);
   const [planState, setPlanState] = useState("loading");
@@ -138,11 +136,10 @@ export default function PricingPage() {
               </aside>
             </div>
             <div className={pageStyles.actions}>
-              {branding.support_email && (
-                <a href={`mailto:${branding.support_email}`} className={pageStyles.primaryAction}>
-                  Contact installation support <ArrowRight aria-hidden className="size-4" />
-                </a>
-              )}
+              <PublicEnterpriseLeadCTA
+                label="Discuss this installation"
+                className={pageStyles.primaryAction}
+              />
               <Link href="/deployment" className={pageStyles.secondaryAction}>
                 Deployment details
               </Link>
