@@ -195,9 +195,9 @@ export default function HomePage() {
                 <p className={styles.eyebrow}>Tools around each conversation</p>
                 <h2>Use calls to support real business workflows.</h2>
               </div>
-              <p>
-                Available tools depend on the workspace plan, enabled integrations and deployment configuration.
-              </p>
+              <p>{isClientEdition
+                ? "Available tools depend on this installation's license, enabled integrations and configuration."
+                : "Available tools depend on the workspace plan, enabled integrations and deployment configuration."}</p>
             </div>
             <div className={styles.capabilityGrid}>
               {platformAreas.map(({ title, text, icon: Icon }) => (

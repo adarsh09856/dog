@@ -35,7 +35,7 @@ describe("public pricing", () => {
       expect(screen.getByText(/Ask your installation administrator/)).toBeTruthy();
       expect(screen.queryByText("Workspace plans")).toBeNull();
       expect(screen.getByRole("button", { name: "Discuss this installation" })).toBeTruthy();
-      expect(screen.getByRole("link", { name: "Compare deployment options" }).getAttribute("href")).toBe("/deployment");
+      expect(screen.getByRole("link", { name: "Deployment details" }).getAttribute("href")).toBe("/deployment");
       expect(mocks.getPublicPlans).not.toHaveBeenCalled();
       expect(mocks.getPublicCreditOffers).not.toHaveBeenCalled();
     } finally {

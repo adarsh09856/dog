@@ -141,7 +141,7 @@ export default function PricingPage() {
                 className={pageStyles.primaryAction}
               />
               <Link href="/deployment" className={pageStyles.secondaryAction}>
-                Compare deployment options
+                Deployment details
               </Link>
             </div>
           </section>

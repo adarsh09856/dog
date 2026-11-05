@@ -87,5 +87,6 @@ describe("public home branding", () => {
     expect(screen.queryByRole("link", { name: "Plans and pricing" })).toBeNull();
     expect(screen.getByRole("link", { name: "Deployment details" }).getAttribute("href")).toBe("/deployment");
     expect(screen.getByRole("main").textContent).not.toContain("compare plans");
+    expect(screen.getByRole("main").textContent).not.toContain("workspace plan");
   });
 });
