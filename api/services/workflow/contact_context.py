@@ -187,8 +187,15 @@ def remember_explicit_caller_name(messages: list, state: dict) -> str | None:
 def contact_context_instruction(context: dict | None) -> str:
     contact = known_contact(context)
     return (
-        "Remember the caller's name and request across steps; ask one missing detail at a time. "
-        "Never repeat answered questions or greetings. Latest caller corrections override stored data. "
+        "Keep the conversation state across turns: retain the caller's latest intent and every "
+        "usable detail they already gave, including names, phone digits, dates, and times. "
+        "Ask only for the next missing or genuinely unclear detail, one concise question at a time; "
+        "do not restart the flow, repeat answered questions, or repeat a greeting. "
+        "Latest caller corrections override earlier details. Preserve the caller's exact number, "
+        "date, and time meaning when normalizing spoken words; never invent or silently change them. "
+        "Reply in the language required by the active speech-language settings and the caller's "
+        "latest clear language choice. Do not switch languages because of isolated recognition "
+        "noise, and do not translate unless asked. "
         "A phone number is never a name: never address it with ji/जी. "
         "'This is my number' refers to the known phone, not a name. "
         "Ask permission once before reusing the known phone for an appointment; "
