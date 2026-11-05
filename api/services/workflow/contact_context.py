@@ -1886,11 +1886,13 @@ def booking_time_confirmation_question(
             ):
                 return "Please give the time with AM or PM, for example, 5 PM."
             return "कृपया समय सुबह, दोपहर या शाम के साथ बताइए।"
-        if stated_date and asked_for_time:
+        if stated_date and (asked_for_time or staged_date_is_valid):
             # The caller has already supplied the booking date and is
-            # answering an explicit time question. Keep an unclear answer on
-            # this deterministic path instead of letting a small model revive
-            # an old phone/name prompt or invent a time.
+            # in the persisted time-collection step. The preceding assistant
+            # message may be missing from the compacted LLM window, so the
+            # call-scoped date is also evidence that an unclear answer belongs
+            # to this slot. Keep it deterministic instead of letting a small
+            # model revive an old phone/name prompt or invent a time.
             reply_language = state.get("reply_language")
             reply_language_code = normalize_language_code(str(reply_language or ""))
             use_english = reply_language_code == "en" or (
