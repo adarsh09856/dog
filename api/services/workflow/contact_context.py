@@ -871,7 +871,9 @@ def _booking_was_requested(messages: list) -> bool:
     )
 
 
-def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
+def caller_phone_fragment_reply(
+    messages: list, state: dict, *, booking_available: bool = True,
+) -> str | None:
     """Collect a caller's explicitly introduced phone number across short turns.
 
     Speech recognition often splits dictated numbers across utterances. Keep
@@ -972,7 +974,7 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
             booking_requested = False
             from api.services.workflow.confirmed_booking import new_booking_requested
 
-            booking_requested = any(
+            booking_requested = booking_available and any(
                 isinstance(message, dict)
                 and message.get("role") == "user"
                 and isinstance(message.get("content"), str)

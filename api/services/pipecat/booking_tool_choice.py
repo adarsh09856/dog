@@ -498,6 +498,9 @@ class _BookingToolChoiceMixin:
         if not isinstance(contact_state, dict):
             contact_state = {}
             self._contact_conversation_state = contact_state
+        booking_tool_available = any(
+            getattr(tool, "name", None) == "book_appointment" for tool in tools
+        )
         known_name_reply = remember_explicit_caller_name(messages, contact_state)
         deferred_contact_followup = False
         if known_name_reply:
@@ -510,7 +513,9 @@ class _BookingToolChoiceMixin:
                 return
         phone_fragment_reply = (
             None if deferred_contact_followup
-            else caller_phone_fragment_reply(messages, contact_state)
+            else caller_phone_fragment_reply(
+                messages, contact_state, booking_available=booking_tool_available,
+            )
         )
         if phone_fragment_reply and not deferred_contact_followup:
             if self._defer_contact_followup_localization(
@@ -521,9 +526,6 @@ class _BookingToolChoiceMixin:
             else:
                 await self._emit_direct_reply(phone_fragment_reply)
                 return
-        booking_tool_available = any(
-            getattr(tool, "name", None) == "book_appointment" for tool in tools
-        )
         known_phone = (getattr(self, "_known_contact", {}) or {}).get("customer_phone")
         name_followup_reply = None if deferred_contact_followup else caller_name_followup_reply(
             messages, contact_state,
