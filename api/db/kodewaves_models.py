@@ -369,8 +369,6 @@ class LeadActivityModel(Base):
     call_id = Column(Integer, ForeignKey("workflow_runs.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
-    __table_args__ = (UniqueConstraint("call_id", name="uq_lead_activities_call_id"),)
-
     contact = relationship("ContactModel", back_populates="activities")
 
 

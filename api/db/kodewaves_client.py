@@ -33,6 +33,7 @@ from api.db.kodewaves_models import (
     WebsiteWidgetModel,
     GlobalPlatformSettingModel,
 )
+from api.db.models import WorkflowRunModel
 from api.utils.telephony_address import normalize_telephony_address
 
 
@@ -868,6 +869,24 @@ class KodewavesDBClient(BaseDBClient):
             return False
 
         async with self.get_session() as session:
+            # Both the pipeline completion hook and telephony callback may
+            # report the same terminal call. Lock the owning run row first so
+            # these writes serialize without introducing a schema migration.
+            workflow_run = (await session.execute(
+                select(WorkflowRunModel.id)
+                .where(WorkflowRunModel.id == workflow_run_id)
+                .with_for_update()
+            )).scalar_one_or_none()
+            if workflow_run is None:
+                return False
+            existing_activity = (await session.execute(
+                select(LeadActivityModel.id).where(
+                    LeadActivityModel.call_id == workflow_run_id
+                )
+            )).scalar_one_or_none()
+            if existing_activity is not None:
+                return False
+
             # Contact phone numbers have no indexed canonical form or country
             # field. Normalize a bounded tenant-scoped candidate set, and skip
             # the match if the organization exceeds that bound or has
@@ -914,21 +933,13 @@ class KodewavesDBClient(BaseDBClient):
                 return False
 
             now = datetime.now(UTC)
-            inserted_id = (await session.execute(
-                insert(LeadActivityModel)
-                .values(
-                    contact_id=contact.id,
-                    activity_type="call",
-                    summary=summary,
-                    call_id=workflow_run_id,
-                    created_at=now,
-                )
-                .on_conflict_do_nothing(index_elements=[LeadActivityModel.call_id])
-                .returning(LeadActivityModel.id)
-            )).scalar_one_or_none()
-            if inserted_id is None:
-                return False
-
+            session.add(LeadActivityModel(
+                contact_id=contact.id,
+                activity_type="call",
+                summary=summary,
+                call_id=workflow_run_id,
+                created_at=now,
+            ))
             contact.total_calls = (contact.total_calls or 0) + 1
             contact.last_contacted_at = now
             await session.commit()
