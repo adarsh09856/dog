@@ -22,7 +22,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deploy/client"))
 from build_and_verify import read_public_key, validate_owner_private_key_path
-from validate_install import IMAGE_KEYS, PINNED_IMAGE, parse_env
+from validate_install import IMAGE_KEYS, MODEL_IMAGE_KEYS, PINNED_IMAGE, parse_env, validate_model_images
 from verify_installer import MAX_INSTALLER_ARCHIVE_BYTES
 
 
@@ -54,9 +54,13 @@ def package_installer(
         raise ValueError("Installer archive already exists; choose a new output path")
     if private_key_file is not None:
         private_key_file = validate_owner_private_key_path(private_key_file, ROOT)
-    images = parse_env(images_env)
-    if set(images) != IMAGE_KEYS:
-        raise ValueError("Image input must contain exactly the seven CLIENT_*_IMAGE values and no secrets")
+    images = {
+        key: value for key, value in parse_env(images_env).items()
+        if key not in MODEL_IMAGE_KEYS or value.strip()
+    }
+    if set(images) not in (IMAGE_KEYS, IMAGE_KEYS | MODEL_IMAGE_KEYS):
+        raise ValueError("Image input must contain the seven infrastructure images, optionally all four local inference images, and no secrets")
+    validate_model_images(images)
     if any(not PINNED_IMAGE.fullmatch(value) for value in images.values()):
         raise ValueError("Every installer image must use an approved immutable sha256 digest")
     for value in images.values():
@@ -171,6 +175,11 @@ def package_installer(
         "client-release-manifest.json": manifest_bytes,
         "release-public-key.txt": (public_key + "\n").encode("ascii"),
     }
+    if MODEL_IMAGE_KEYS <= set(images):
+        files.update({
+            "docker-compose.models.yaml": (directory / "docker-compose.models.yaml").read_bytes(),
+            "warm_local_models.py": (directory / "warm_local_models.py").read_bytes(),
+        })
     if private_key is not None:
         files.update({
             "update_agent.py": (directory / "update_agent.py").read_bytes(),

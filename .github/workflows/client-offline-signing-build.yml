@@ -23,6 +23,26 @@ on:
         description: Approved immutable Caddy image, pinned with @sha256 digest
         required: true
         type: string
+      postgres_image:
+        description: Official pgvector PostgreSQL image, immutable digest
+        required: true
+        type: string
+      redis_image:
+        description: Official Redis image, immutable digest
+        required: true
+        type: string
+      minio_image:
+        description: Official MinIO image, immutable digest
+        required: true
+        type: string
+      coturn_image:
+        description: Official Coturn image, immutable digest
+        required: true
+        type: string
+      ollama_image:
+        description: Official Ollama image, immutable digest
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -54,6 +74,11 @@ jobs:
           RELEASE_PUBLIC_KEY: ${{ inputs.release_public_key }}
           OWNER_STATUS_URL: ${{ inputs.owner_status_url }}
           CADDY_IMAGE: ${{ inputs.caddy_image }}
+          POSTGRES_IMAGE: ${{ inputs.postgres_image }}
+          REDIS_IMAGE: ${{ inputs.redis_image }}
+          MINIO_IMAGE: ${{ inputs.minio_image }}
+          COTURN_IMAGE: ${{ inputs.coturn_image }}
+          OLLAMA_IMAGE: ${{ inputs.ollama_image }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/main"
@@ -91,11 +116,27 @@ jobs:
               os.environ["CADDY_IMAGE"],
           ):
               raise SystemExit("caddy_image must be an immutable official Caddy image reference")
+          approved_images = {
+              "POSTGRES_IMAGE": r"(?:pgvector/pgvector|docker\.io/pgvector/pgvector)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
+              "REDIS_IMAGE": r"(?:redis|docker\.io/library/redis)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
+              "MINIO_IMAGE": r"(?:minio/minio|docker\.io/minio/minio)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
+              "COTURN_IMAGE": r"(?:coturn/coturn|docker\.io/coturn/coturn)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
+              "OLLAMA_IMAGE": r"(?:ollama/ollama|docker\.io/ollama/ollama)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
+          }
+          for name, pattern in approved_images.items():
+              if not re.fullmatch(pattern, os.environ[name]):
+                  raise SystemExit(f"{name.lower()} must use its approved official repository and immutable sha256 digest")
           PY
           git merge-base --is-ancestor "$SOURCE_COMMIT" origin/main
           echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "api_tag=ghcr.io/adarsh09856/kodewaves-api:client-stage-${SOURCE_COMMIT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
           echo "ui_tag=ghcr.io/adarsh09856/kodewaves-ui:client-stage-${SOURCE_COMMIT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          echo "model_prefix=ghcr.io/adarsh09856/kodewaves-api:client-model-${SOURCE_COMMIT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          echo "postgres_image=$POSTGRES_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "redis_image=$REDIS_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "minio_image=$MINIO_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "coturn_image=$COTURN_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "ollama_image=$OLLAMA_IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Checkout exact source and submodules
         uses: actions/checkout@v4
@@ -139,6 +180,31 @@ jobs:
           printf '%s\n' "$OWNER_STATUS_URL" > "$ARTIFACT_DIR/owner-status-url.txt"
           printf '%s\n' "$CADDY_IMAGE" > "$ARTIFACT_DIR/caddy-image.txt"
 
+      - name: Build pinned Ollama, Indic STT and local TTS images
+        id: models
+        shell: bash
+        env:
+          MODEL_PREFIX: ${{ steps.inputs.outputs.model_prefix }}
+          OLLAMA_IMAGE: ${{ steps.inputs.outputs.ollama_image }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/release-source"
+          ollama_tag="${MODEL_PREFIX}-ollama"
+          stt_tag="${MODEL_PREFIX}-indic-stt"
+          indus_tag="${MODEL_PREFIX}-indus-tts"
+          vits_tag="${MODEL_PREFIX}-indic-vits-tts"
+          docker pull "$OLLAMA_IMAGE"
+          docker tag "$OLLAMA_IMAGE" "$ollama_tag"
+          docker build -f api/local_models/indic_stt/Dockerfile -t "$stt_tag" api/local_models/indic_stt
+          docker build -f api/local_models/indus_tts/Dockerfile -t "$indus_tag" api/local_models/indus_tts
+          docker build -f api/local_models/indic_vits/Dockerfile -t "$vits_tag" api/local_models/indic_vits
+          {
+            echo "ollama_tag=$ollama_tag"
+            echo "stt_tag=$stt_tag"
+            echo "indus_tag=$indus_tag"
+            echo "vits_tag=$vits_tag"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -152,10 +218,15 @@ jobs:
         env:
           API_TAG: ${{ steps.inputs.outputs.api_tag }}
           UI_TAG: ${{ steps.inputs.outputs.ui_tag }}
+          OLLAMA_TAG: ${{ steps.models.outputs.ollama_tag }}
+          STT_TAG: ${{ steps.models.outputs.stt_tag }}
+          INDUS_TAG: ${{ steps.models.outputs.indus_tag }}
+          VITS_TAG: ${{ steps.models.outputs.vits_tag }}
         run: |
           set -euo pipefail
-          docker push "$API_TAG"
-          docker push "$UI_TAG"
+          for tag in "$API_TAG" "$UI_TAG" "$OLLAMA_TAG" "$STT_TAG" "$INDUS_TAG" "$VITS_TAG"; do
+            docker push "$tag"
+          done
 
       - name: Export actual image inventories and schema metadata
         shell: bash
@@ -163,6 +234,15 @@ jobs:
           SOURCE_COMMIT: ${{ steps.inputs.outputs.source_commit }}
           API_TAG: ${{ steps.inputs.outputs.api_tag }}
           UI_TAG: ${{ steps.inputs.outputs.ui_tag }}
+          OLLAMA_TAG: ${{ steps.models.outputs.ollama_tag }}
+          STT_TAG: ${{ steps.models.outputs.stt_tag }}
+          INDUS_TAG: ${{ steps.models.outputs.indus_tag }}
+          VITS_TAG: ${{ steps.models.outputs.vits_tag }}
+          POSTGRES_IMAGE: ${{ steps.inputs.outputs.postgres_image }}
+          REDIS_IMAGE: ${{ steps.inputs.outputs.redis_image }}
+          MINIO_IMAGE: ${{ steps.inputs.outputs.minio_image }}
+          COTURN_IMAGE: ${{ steps.inputs.outputs.coturn_image }}
+          CADDY_IMAGE: ${{ inputs.caddy_image }}
           ARTIFACT_DIR: ${{ runner.temp }}/client-offline-signing-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
@@ -181,6 +261,12 @@ jobs:
 
           out = Path(os.environ["ARTIFACT_DIR"])
           tags = {"api": os.environ["API_TAG"], "ui": os.environ["UI_TAG"]}
+          model_tags = {
+              "ollama": os.environ["OLLAMA_TAG"],
+              "indic_stt": os.environ["STT_TAG"],
+              "indus_tts": os.environ["INDUS_TAG"],
+              "indic_vits_tts": os.environ["VITS_TAG"],
+          }
           images = {}
           for component, tag in tags.items():
               repo_digests = subprocess.run(
@@ -191,6 +277,17 @@ jobs:
               if not reference.startswith(tag.rsplit(":", 1)[0] + "@sha256:"):
                   raise SystemExit(f"{component} digest is not bound to its approved GHCR repository")
               images[component] = {"kind": "registry_digest", "reference": reference}
+
+          model_images = {}
+          for component, tag in model_tags.items():
+              repo_digests = subprocess.run(
+                  ["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", tag],
+                  check=True, capture_output=True, text=True,
+              ).stdout.strip()
+              reference = _pushed_digest(tag, repo_digests)
+              if not reference.startswith(tag.rsplit(":", 1)[0] + "@sha256:"):
+                  raise SystemExit(f"{component} digest is not bound to its approved GHCR repository")
+              model_images[component] = reference
 
           api_inventory = subprocess.run(
               ["docker", "run", "--rm", "--network", "none", "--entrypoint", "python",
@@ -210,16 +307,33 @@ jobs:
           for name, value in inventories.items():
               (out / name).write_text(json.dumps(value, sort_keys=True, indent=2) + "\n", encoding="utf-8")
           (out / "images.json").write_text(json.dumps(images, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          (out / "model-images.json").write_text(json.dumps(model_images, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          package_images = {
+              "CLIENT_API_IMAGE": images["api"]["reference"],
+              "CLIENT_UI_IMAGE": images["ui"]["reference"],
+              "CLIENT_POSTGRES_IMAGE": os.environ["POSTGRES_IMAGE"],
+              "CLIENT_REDIS_IMAGE": os.environ["REDIS_IMAGE"],
+              "CLIENT_MINIO_IMAGE": os.environ["MINIO_IMAGE"],
+              "CLIENT_COTURN_IMAGE": os.environ["COTURN_IMAGE"],
+              "CLIENT_CADDY_IMAGE": os.environ["CADDY_IMAGE"],
+              "CLIENT_OLLAMA_IMAGE": model_images["ollama"],
+              "CLIENT_INDIC_STT_IMAGE": model_images["indic_stt"],
+              "CLIENT_INDUS_TTS_IMAGE": model_images["indus_tts"],
+              "CLIENT_INDIC_VITS_TTS_IMAGE": model_images["indic_vits_tts"],
+          }
+          (out / "customer-images.env").write_text(
+              "".join(f"{key}={value}\n" for key, value in package_images.items()), encoding="utf-8"
+          )
           schema = migration_compatibility(root / "api" / "alembic" / "versions")
           (out / "schema-compatibility.json").write_text(json.dumps(schema, sort_keys=True, indent=2) + "\n", encoding="utf-8")
           (out / "artifact-README.md").write_text(
               "# Unsigned client image staging bundle\n\n"
               f"Source commit: `{os.environ['SOURCE_COMMIT']}`\n\n"
               "This bundle is not a customer release. The images are public, uniquely tagged staging images; "
-              "the artifact contains no owner private key and no signed license. The pinned Caddy image is "
-              "recorded in `caddy-image.txt`; keep that immutable reference in the customer package.\n\n"
-              "From a trusted offline owner machine, check out this exact source commit, verify the two public "
-              "keys and staging image digests, then sign the inventories with:\n\n"
+              "the artifact contains no owner private key and no signed license. `customer-images.env` pins "
+              "all seven infrastructure images and all four local inference images to immutable digests.\n\n"
+              "From a trusted owner machine, check out this exact source commit, verify the public keys and "
+              "image digests, then sign the API/UI inventories with:\n\n"
               "```bash\n"
               "python owner-tools/sign_client_release.py \\\n"
               "  --files-json api-inventory.json \\\n"
@@ -231,8 +345,16 @@ jobs:
               "  --public-key-output release-public.key\n"
               "```\n\n"
               "The signer must be run from the checked-out source because it imports the release verifier. "
-              "A separate owner-controlled packaging and lifecycle-acceptance step is still required before "
-              "customer distribution.\n",
+              "Then assemble and sign the full client package with the same trusted release key:\n\n"
+              "```bash\n"
+              "python owner-tools/package_client_installer.py \\\n"
+              "  --images-env customer-images.env \\\n"
+              "  --manifest client-release-manifest.json \\\n"
+              "  --release-public-key release-public.key \\\n"
+              "  --release-private-key /secure/offline/release-private.key \\\n"
+              "  --output customer-installer.tar.gz\n"
+              "```\n\n"
+              "Run the signed-package lifecycle acceptance before customer distribution.\n",
               encoding="utf-8",
           )
           PY

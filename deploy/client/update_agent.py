@@ -34,7 +34,7 @@ import compose_client
 import enroll_identity
 import recovery
 from recovery_lock import recovery_operation_lock
-from validate_install import parse_env, validate as validate_install
+from validate_install import MODEL_IMAGE_KEYS, parse_env, validate as validate_install, validate_model_images
 
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 128 * 1024 * 1024
@@ -48,6 +48,7 @@ HOST_TOOL_FILES = (
     "enroll_identity.py", "recovery.py", "compose_client.py",
     "recovery_lock.py", "verify_installer.py", "update_agent.py",
 )
+MODEL_HOST_FILES = ("docker-compose.models.yaml", "warm_local_models.py")
 SYSTEMD_UNIT_FILES = ("kodewaves-client-update.service", "kodewaves-client-update.timer")
 SYSTEMD_UNIT_DIR = Path("/etc/systemd/system")
 HOST_JOURNAL_NAME = ".host-update-transaction.json"
@@ -250,7 +251,7 @@ def _extract_verified_archive(archive_path: Path, destination: Path) -> dict[str
                 if len(data) != member.size:
                     raise UpdateError("Release archive entry size is invalid")
                 contents[member.name] = data
-            if names != _PACKAGE_FILES:
+            if names not in (_PACKAGE_FILES, _PACKAGE_FILES | set(MODEL_HOST_FILES)):
                 raise UpdateError("Release archive file inventory is incomplete or unexpected")
         checksums: dict[str, str] = {}
         for line in contents["SHA256SUMS"].decode("ascii").splitlines():
@@ -401,7 +402,7 @@ def _atomic_replace_bytes(path: Path, contents: bytes, mode: int, uid: int, gid:
 
 def _host_targets(directory: Path, systemd_dir: Path) -> dict[str, Path]:
     return {
-        **{name: directory / name for name in HOST_TOOL_FILES},
+        **{name: directory / name for name in (*HOST_TOOL_FILES, *MODEL_HOST_FILES)},
         **{name: systemd_dir / name for name in SYSTEMD_UNIT_FILES},
     }
 
@@ -500,6 +501,20 @@ def _download_verified_host_release(update: dict, work_dir: Path, public_key_fil
     return archive_path, extracted, payload
 
 
+def _model_update_values(env: dict[str, str], extracted: Path) -> dict[str, str]:
+    if "self-hosted" not in {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",")}:
+        return {}
+    if not all((extracted / name).is_file() for name in MODEL_HOST_FILES):
+        raise UpdateError("Self-hosted installation requires a signed local-inference package")
+    packaged = parse_env(extracted / ".env.example")
+    values = {key: packaged.get(key, "") for key in MODEL_IMAGE_KEYS}
+    try:
+        validate_model_images(values)
+    except ValueError as exc:
+        raise UpdateError("Signed local-inference image pins are incomplete or invalid") from exc
+    return values
+
+
 def _apply_host_maintenance(
     directory: Path, extracted: Path, work_dir: Path, *, systemd_dir: Path = SYSTEMD_UNIT_DIR,
 ) -> None:
@@ -512,7 +527,8 @@ def _apply_host_maintenance(
     entries: dict[str, dict] = {}
     sources: dict[str, bytes] = {}
     units_changed = False
-    for name in (*HOST_TOOL_FILES, *SYSTEMD_UNIT_FILES):
+    model_files = MODEL_HOST_FILES if all((extracted / name).is_file() for name in MODEL_HOST_FILES) else ()
+    for name in (*HOST_TOOL_FILES, *model_files, *SYSTEMD_UNIT_FILES):
         source = extracted / name
         if source.is_symlink() or not source.is_file() or source.resolve(strict=True).parent != extracted.resolve(strict=True):
             raise UpdateError("Verified archive host file is missing or unsafe")
@@ -532,7 +548,7 @@ def _apply_host_maintenance(
                 "gid": stat.st_gid,
             }
         else:
-            if name not in SYSTEMD_UNIT_FILES:
+            if name not in (*SYSTEMD_UNIT_FILES, *MODEL_HOST_FILES):
                 raise UpdateError("A required installed host control file is missing")
             entries[name] = {"existed": False}
     _write_host_journal(journal_path, {"state": "prepared", "files": entries})
@@ -862,6 +878,7 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             "CLIENT_UI_IMAGE": target_images["ui"],
             "CLIENT_RELEASE_MANIFEST_FILE": candidate_ref,
         }
+        new_values.update(_model_update_values(env, extracted))
         # Validate the whole candidate configuration before pulling images.
         old_env = _atomic_env(directory, new_values)
         env_was_switched = True
@@ -872,7 +889,8 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
         config = compose_client.build_command(directory, ["config", "--quiet"])
         subprocess.run(config, cwd=directory, env=controlled, timeout=60, check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        _compose(directory, ["pull", "api", "ui"])
+        model_services = ["ollama", "indic-stt", "indus-tts", "indic-vits-tts"] if new_values.keys() & MODEL_IMAGE_KEYS else []
+        _compose(directory, ["pull", "api", "ui", *model_services])
         # The fresh owner-signed status check also prevents applying a rollout
         # that the owner paused or stopped during the download.
         refreshed, refreshed_url = _owner_status(env, current_version)

@@ -12,8 +12,28 @@ production use. Packaging a release does not certify its deployment or rollback.
 
 Use a Linux server with Python 3, `cryptography` available to the recovery
 commands, Docker Engine and the Docker Compose plugin.
-Provide the server capacity and registry access agreed for your models and call
-volume. Point the licensed hostname at this server. Allow TCP 80/443, UDP 443,
+Plan server capacity for the selected inference setup and expected call volume.
+The default client Compose limits sum to about 4.75 CPU cores and 4.75 GiB of
+memory with bundled Caddy, or 4.5 CPU cores and 4.5 GiB without it. These are
+container ceilings, not reserved capacity, minimum hardware requirements, or a
+performance guarantee; leave additional capacity for the host OS, Docker and
+other services. On a 4-core host, busy containers can contend. The client bundle
+defaults to cloud or separately hosted inference. An owner-issued package with
+all four local-model image pins also includes the optional self-hosted profile:
+set `COMPOSE_PROFILES=direct-ingress,self-hosted` in `.env` and keep the approved
+image digests. It starts Ollama, multilingual STT and combined VITS/Indus TTS,
+keeps model downloads in named volumes, warms the selected LLM before API
+readiness, and connects the API to those internal services. Initial downloads
+can take several minutes. Configure agents' enabled models and voices in the
+normal model configuration panel; availability follows each engine's inventory.
+
+The self-hosted default budgets about 14.4 GiB in container memory ceilings and
+requires at least a 16 GiB host budget plus storage for model downloads. Use
+connected inference on an 8 GiB host. No 4-core or 16-GB latency/concurrency
+configuration is certified: CPU model loading and less frequently used
+languages can be slower. Load-test the intended models and concurrency before
+accepting customer traffic. Point the
+licensed hostname at this server. Allow TCP 80/443, UDP 443,
 TURN UDP/TCP 3478 and UDP 49152-49200 through its firewall. Back up an existing
 installation before changing images or credentials.
 

@@ -25,6 +25,23 @@ IMAGE_KEYS = {
     "CLIENT_CADDY_IMAGE",
 }
 PROFILE_IMAGE_KEYS = {"CLIENT_CADDY_IMAGE"}
+MODEL_IMAGE_KEYS = {
+    "CLIENT_OLLAMA_IMAGE", "CLIENT_INDIC_STT_IMAGE",
+    "CLIENT_INDUS_TTS_IMAGE", "CLIENT_INDIC_VITS_TTS_IMAGE",
+}
+
+
+def validate_model_images(images: dict[str, str]) -> None:
+    """Model pins are either absent or a complete, immutable inference stack."""
+    # The customer .env template carries blank optional pins for cloud-only
+    # installs. Treat blank as absent; any partial nonblank set is invalid.
+    supplied = {key for key in MODEL_IMAGE_KEYS if images.get(key, "").strip()}
+    if supplied and supplied != MODEL_IMAGE_KEYS:
+        raise ValueError("Local inference requires all four approved model image digests")
+    for key in supplied:
+        if not PINNED_IMAGE.fullmatch(images[key]):
+            raise ValueError(f"{key} must use an immutable sha256 image reference")
+
 DEFAULT_CLIENT_INTERNAL_SUBNET = "172.30.0.0/24"
 DEFAULT_CLIENT_CADDY_IPV4 = "172.30.0.2"
 SECRET_KEYS = {
@@ -115,6 +132,21 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
     required = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?", compose_text))
 
     profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()}
+    if "self-hosted" in profiles:
+        model_compose = compose_path.with_name("docker-compose.models.yaml")
+        if not model_compose.is_file() or model_compose.is_symlink():
+            errors.append("The approved docker-compose.models.yaml is required for self-hosted inference")
+        required.update(MODEL_IMAGE_KEYS)
+        try:
+            budget = int(env.get("CLIENT_SELF_HOSTED_MEMORY_GIB", "16"))
+            if budget < 16:
+                raise ValueError
+        except ValueError:
+            errors.append("Self-hosted inference requires a memory budget of at least 16 GiB; use connected inference on smaller hosts")
+        try:
+            validate_model_images({key: env.get(key, "") for key in MODEL_IMAGE_KEYS})
+        except ValueError as exc:
+            errors.append(str(exc))
     local_ports = {}
     for key, default in (("API_PORT", "8000"), ("UI_PORT", "3010"), ("MINIO_PORT", "9000")):
         value = env.get(key, "") or default
@@ -189,6 +221,8 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
             errors.append(f"{key} still contains a template placeholder")
 
     selected_images = IMAGE_KEYS - (PROFILE_IMAGE_KEYS if "direct-ingress" not in profiles else set())
+    if "self-hosted" in profiles:
+        selected_images |= MODEL_IMAGE_KEYS
     for key in sorted(selected_images):
         value = env.get(key, "")
         if value:

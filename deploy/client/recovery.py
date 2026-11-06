@@ -546,6 +546,8 @@ def _compose_context(compose_dir: Path, env_file: Path) -> tuple[list[str], dict
     env_file = env_file.resolve(strict=True)
     env = parse_env(env_file)
     compose_files = ["docker-compose.client.yaml"]
+    if "self-hosted" in {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",")}:
+        compose_files.append("docker-compose.models.yaml")
     if env.get("CLIENT_IDENTITY_KEY_FILE"):
         compose_files.append("docker-compose.identity.yaml")
     compose_files.append(RECOVERY_OVERRIDE)
