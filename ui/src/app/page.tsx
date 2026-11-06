@@ -157,6 +157,48 @@ export default function HomePage() {
           ))}
         </div>
 
+        <section id="scenarios" className={`${styles.sectionMuted} scroll-mt-24`}>
+          <div className={`${styles.pageFrame} ${styles.section}`}>
+            <div className={styles.sectionHead}>
+              <div>
+                <h2>One voice workspace. Different jobs to get done.</h2>
+              </div>
+              <p>
+                Configure each workflow, carrier and connected tool for your workspace. These examples describe supported ways to use the platform; exact options depend on deployment and setup.
+              </p>
+            </div>
+            <div className="divide-y divide-border border-y border-border">
+              <article className="grid gap-4 py-6 md:grid-cols-[minmax(13rem,.7fr)_minmax(0,1.3fr)] md:gap-10 md:py-7">
+                <div className="flex items-center gap-3">
+                  <span className={styles.capabilityIcon}><Phone aria-hidden className="size-5" /></span>
+                  <h3 className="text-base font-semibold tracking-tight">Handle inbound questions</h3>
+                </div>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
+                  Route an inbound number to an agent workflow. Use connected knowledge and configured branches to answer caller questions, then review the run, transcript and recording when available.
+                </p>
+              </article>
+              <article className="grid gap-4 py-6 md:grid-cols-[minmax(13rem,.7fr)_minmax(0,1.3fr)] md:gap-10 md:py-7">
+                <div className="flex items-center gap-3">
+                  <span className={styles.capabilityIcon}><AudioLines aria-hidden className="size-5" /></span>
+                  <h3 className="text-base font-semibold tracking-tight">Follow up with a contact list</h3>
+                </div>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
+                  Start an outbound campaign with a configured carrier and workflow that asks qualifying questions. Review campaign activity and call results in the workspace.
+                </p>
+              </article>
+              <article className="grid gap-4 py-6 md:grid-cols-[minmax(13rem,.7fr)_minmax(0,1.3fr)] md:gap-10 md:py-7">
+                <div className="flex items-center gap-3">
+                  <span className={styles.capabilityIcon}><Database aria-hidden className="size-5" /></span>
+                  <h3 className="text-base font-semibold tracking-tight">Manage appointment requests</h3>
+                </div>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
+                  Collect caller details through a voice workflow, then review lead and appointment activity in the CRM and appointments workspace.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
         <section id="platform" className={styles.section}>
           <div className={styles.pageFrame}>
             <div className={styles.sectionHead}>

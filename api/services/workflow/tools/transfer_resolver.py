@@ -11,6 +11,7 @@ import httpx
 from loguru import logger
 
 from api.db import db_client
+from api.services.client_worker_entitlements import require_client_worker_features
 from api.services.workflow.tools.custom_tool import _resolve_preset_parameters
 from api.utils.credential_auth import build_auth_header
 from api.utils.template_renderer import render_template
@@ -409,6 +410,11 @@ async def resolve_transfer_config(
     workflow_run_id: Optional[int],
 ) -> ResolvedTransferConfig:
     """Resolve transfer destination and options for a transfer tool call."""
+
+    # Transfer resolution can contact a customer-configured HTTP endpoint and
+    # produce a PSTN/SIP destination. Workflow execution itself only requires
+    # the voice grant, so enforce telephony here at the execution boundary too.
+    await require_client_worker_features("telephony")
 
     destination_source = config.get("destination_source", "static")
     if destination_source == "context_mapping":

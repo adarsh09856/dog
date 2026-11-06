@@ -4,7 +4,7 @@ import { ArrowRight, Menu, Moon, Sun, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { BrandLogo } from "@/components/BrandLogo";
 import { useClientBranding } from "@/context/ClientBrandingContext";
@@ -13,6 +13,7 @@ import styles from "./PublicSiteChrome.module.css";
 
 const links = [
   { href: "/platform", label: "Platform" },
+  { href: "/#scenarios", label: "Use cases" },
   { href: "/deployment", label: "Deployment" },
   { href: "/pricing", label: "Pricing" },
 ];
@@ -26,8 +27,19 @@ export function PublicHeader() {
     : links;
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => setMounted(true), []);
   useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
 
   return (
     <header className={`${styles.header} public-header sticky top-0 z-50`}>
@@ -43,7 +55,7 @@ export function PublicHeader() {
         </Link>
         <nav
           aria-label="Main navigation"
-          className={`${styles.nav} hidden items-center gap-8 text-sm md:flex`}
+          className={`${styles.nav} hidden items-center gap-8 text-sm lg:flex`}
         >
           {visibleLinks.map((link) => (
             <Link
@@ -73,23 +85,24 @@ export function PublicHeader() {
           </button>
           <Link
             href="/auth/login"
-            className="hidden text-sm font-medium sm:inline-flex"
+            className="hidden text-sm font-medium lg:inline-flex"
           >
             Sign in
           </Link>
           <Link
             href="/auth/login"
-            className={`${styles.consoleLink} hidden items-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90 sm:inline-flex`}
+            className={`${styles.consoleLink} hidden items-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-sm font-semibold text-cta-foreground hover:bg-cta/90 lg:inline-flex`}
           >
             Open console <ArrowRight className="size-4" />
           </Link>
           <button
+            ref={menuButtonRef}
             type="button"
             aria-label={open ? "Close navigation" : "Open navigation"}
             aria-expanded={open}
             aria-controls="public-mobile-navigation"
             onClick={() => setOpen(!open)}
-            className={`${styles.menuButton} rounded-lg p-2 md:hidden`}
+            className={`${styles.menuButton} rounded-lg p-2 lg:hidden`}
           >
             {open ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
@@ -99,9 +112,9 @@ export function PublicHeader() {
         <nav
           id="public-mobile-navigation"
           aria-label="Mobile navigation"
-          className={`${styles.mobileMenu} space-y-1 border-t border-border px-5 py-4 md:hidden`}
+          className={`${styles.mobileMenu} space-y-1 border-t border-border px-5 py-4 lg:hidden`}
         >
-          {[...visibleLinks, { href: "/auth/login", label: "Sign in" }].map((link) => (
+          {visibleLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -112,6 +125,13 @@ export function PublicHeader() {
               {link.label}
             </Link>
           ))}
+          <Link
+            href="/auth/login"
+            onClick={() => setOpen(false)}
+            className={`${styles.mobileWorkspaceLink} mt-3 flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold`}
+          >
+            Open workspace <ArrowRight aria-hidden className="size-4" />
+          </Link>
         </nav>
       )}
     </header>
@@ -138,6 +158,9 @@ export function PublicFooter() {
         >
           <Link href="/platform" className="hover:text-foreground">
             Platform
+          </Link>
+          <Link href="/#scenarios" className="hover:text-foreground">
+            Use cases
           </Link>
           <Link href="/deployment" className="hover:text-foreground">
             Deployment
