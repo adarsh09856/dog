@@ -234,7 +234,7 @@ async def test_managed_preprocess_creates_app_and_sets_domain_default():
             201,
             {
                 "id": 5278,
-                "name": "dograh-111111111111411181111111",
+                "name": "kodewaves-111111111111411181111111",
                 "uuid": app_uuid,
             },
         ),
@@ -269,7 +269,7 @@ async def test_managed_preprocess_creates_app_and_sets_domain_default():
     assert session.get_calls[0][0] == collection
     assert session.post_calls[0][0] == collection
     assert session.post_calls[0][1]["json"] == {
-        "name": "dograh-111111111111411181111111",
+        "name": "kodewaves-111111111111411181111111",
         "type": "cxml",
         "url": "https://api.example.com/api/v1/telephony/inbound/run",
         "method": "POST",
