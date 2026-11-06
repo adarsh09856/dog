@@ -91,7 +91,7 @@ jobs:
         working-directory: api/mcp_server/ts_validator
         run: npm install
 
-      - name: Create disposable client release test database
+      - name: Create disposable API test databases
         run: |
           python - <<'PY'
           import asyncio
@@ -100,7 +100,8 @@ jobs:
           async def main():
               connection = await asyncpg.connect("postgresql://postgres:postgres@127.0.0.1:5432/postgres")
               try:
-                  await connection.execute('CREATE DATABASE "kodewaves_client_release_test"')
+                  for database in ("test_db", "kodewaves_client_release_test"):
+                      await connection.execute(f'CREATE DATABASE "{database}"')
               finally:
                   await connection.close()
 
