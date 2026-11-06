@@ -1,0 +1,246 @@
+name: Client offline-signing image build
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact 40-character commit on main to build and stage
+        required: true
+        type: string
+      license_public_key:
+        description: Canonical URL-safe Base64 Ed25519 license public key (43 characters)
+        required: true
+        type: string
+      release_public_key:
+        description: Canonical URL-safe Base64 Ed25519 release public key (43 characters)
+        required: true
+        type: string
+      owner_status_url:
+        description: HTTPS URL ending exactly in /api/v1/admin/client-installations/check
+        required: true
+        type: string
+      caddy_image:
+        description: Approved immutable Caddy image, pinned with @sha256 digest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: client-offline-signing-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout workflow policy from main
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate exact source and public inputs
+        id: inputs
+        shell: bash
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+          LICENSE_PUBLIC_KEY: ${{ inputs.license_public_key }}
+          RELEASE_PUBLIC_KEY: ${{ inputs.release_public_key }}
+          OWNER_STATUS_URL: ${{ inputs.owner_status_url }}
+          CADDY_IMAGE: ${{ inputs.caddy_image }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python - <<'PY'
+          import base64
+          import os
+          import re
+          from urllib.parse import urlsplit
+
+          source = os.environ["SOURCE_COMMIT"]
+          if not re.fullmatch(r"[0-9a-f]{40}", source):
+              raise SystemExit("source_commit must be a lowercase 40-character Git SHA")
+          for name in ("LICENSE_PUBLIC_KEY", "RELEASE_PUBLIC_KEY"):
+              encoded = os.environ[name]
+              if not re.fullmatch(r"[A-Za-z0-9_-]{43}", encoded):
+                  raise SystemExit(f"{name.lower()} must be canonical 43-character URL-safe Base64")
+              decoded = base64.urlsafe_b64decode(encoded + "=")
+              if len(decoded) != 32 or base64.urlsafe_b64encode(decoded).rstrip(b"=").decode("ascii") != encoded:
+                  raise SystemExit(f"{name.lower()} is not a canonical Ed25519 public key")
+          endpoint = urlsplit(os.environ["OWNER_STATUS_URL"])
+          if (
+              endpoint.scheme != "https"
+              or not endpoint.hostname
+              or endpoint.username
+              or endpoint.password
+              or endpoint.query
+              or endpoint.fragment
+              or endpoint.path != "/api/v1/admin/client-installations/check"
+              or any(ord(char) < 33 or char in {'"', "\\"} for char in os.environ["OWNER_STATUS_URL"])
+          ):
+              raise SystemExit("owner_status_url must be HTTPS with the fixed installation-check path and no credentials/query/fragment")
+          if not re.fullmatch(
+              r"(?:caddy|docker\.io/library/caddy)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
+              os.environ["CADDY_IMAGE"],
+          ):
+              raise SystemExit("caddy_image must be an immutable official Caddy image reference")
+          PY
+          git merge-base --is-ancestor "$SOURCE_COMMIT" origin/main
+          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "api_tag=ghcr.io/adarsh09856/kodewaves-api:client-stage-${SOURCE_COMMIT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          echo "ui_tag=ghcr.io/adarsh09856/kodewaves-ui:client-stage-${SOURCE_COMMIT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact source and submodules
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.inputs.outputs.source_commit }}
+          fetch-depth: 1
+          submodules: recursive
+          path: release-source
+          persist-credentials: false
+
+      - name: Install release verification tooling
+        run: python -m pip install --disable-pip-version-check cryptography 'sqlalchemy==2.0.43' 'PyYAML==6.0.2'
+
+      - name: Build and verify client images without signing
+        shell: bash
+        env:
+          SOURCE_COMMIT: ${{ steps.inputs.outputs.source_commit }}
+          API_TAG: ${{ steps.inputs.outputs.api_tag }}
+          UI_TAG: ${{ steps.inputs.outputs.ui_tag }}
+          LICENSE_PUBLIC_KEY: ${{ inputs.license_public_key }}
+          RELEASE_PUBLIC_KEY: ${{ inputs.release_public_key }}
+          OWNER_STATUS_URL: ${{ inputs.owner_status_url }}
+          CADDY_IMAGE: ${{ inputs.caddy_image }}
+          ARTIFACT_DIR: ${{ runner.temp }}/client-offline-signing-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/release-source"
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          mkdir -m 0700 -p "$ARTIFACT_DIR"
+          printf '%s\n' "$LICENSE_PUBLIC_KEY" > "$ARTIFACT_DIR/license-public.key"
+          printf '%s\n' "$RELEASE_PUBLIC_KEY" > "$ARTIFACT_DIR/release-public.key"
+          python deploy/client/build_and_verify.py \
+            --source-commit "$SOURCE_COMMIT" \
+            --api-tag "$API_TAG" \
+            --ui-tag "$UI_TAG" \
+            --caddy-image "$CADDY_IMAGE" \
+            --license-public-key-file "$ARTIFACT_DIR/license-public.key" \
+            --release-public-key-file "$ARTIFACT_DIR/release-public.key" \
+            --owner-status-url "$OWNER_STATUS_URL"
+          printf '%s\n' "$SOURCE_COMMIT" > "$ARTIFACT_DIR/source-commit.txt"
+          printf '%s\n' "$OWNER_STATUS_URL" > "$ARTIFACT_DIR/owner-status-url.txt"
+          printf '%s\n' "$CADDY_IMAGE" > "$ARTIFACT_DIR/caddy-image.txt"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          logout: true
+
+      - name: Push uniquely tagged staging images
+        shell: bash
+        env:
+          API_TAG: ${{ steps.inputs.outputs.api_tag }}
+          UI_TAG: ${{ steps.inputs.outputs.ui_tag }}
+        run: |
+          set -euo pipefail
+          docker push "$API_TAG"
+          docker push "$UI_TAG"
+
+      - name: Export actual image inventories and schema metadata
+        shell: bash
+        env:
+          SOURCE_COMMIT: ${{ steps.inputs.outputs.source_commit }}
+          API_TAG: ${{ steps.inputs.outputs.api_tag }}
+          UI_TAG: ${{ steps.inputs.outputs.ui_tag }}
+          ARTIFACT_DIR: ${{ runner.temp }}/client-offline-signing-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/release-source"
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          root = Path.cwd()
+          sys.path.insert(0, str(root / "deploy" / "client"))
+          from build_and_verify import _pushed_digest
+          from api.services.release_schema import migration_compatibility
+
+          out = Path(os.environ["ARTIFACT_DIR"])
+          tags = {"api": os.environ["API_TAG"], "ui": os.environ["UI_TAG"]}
+          images = {}
+          for component, tag in tags.items():
+              repo_digests = subprocess.run(
+                  ["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", tag],
+                  check=True, capture_output=True, text=True,
+              ).stdout.strip()
+              reference = _pushed_digest(tag, repo_digests)
+              if not reference.startswith(tag.rsplit(":", 1)[0] + "@sha256:"):
+                  raise SystemExit(f"{component} digest is not bound to its approved GHCR repository")
+              images[component] = {"kind": "registry_digest", "reference": reference}
+
+          api_inventory = subprocess.run(
+              ["docker", "run", "--rm", "--network", "none", "--entrypoint", "python",
+               images["api"]["reference"], "-c",
+               "import json; from pathlib import Path; from api.services.release_integrity import protected_files; print(json.dumps(protected_files(Path('/app'))))"],
+              check=True, capture_output=True, text=True,
+          ).stdout
+          ui_inventory = subprocess.run(
+              ["docker", "run", "--rm", "--network", "none", "--entrypoint", "node",
+               images["ui"]["reference"], "/app/verify-client-release.mjs", "--inventory"],
+              check=True, capture_output=True, text=True,
+          ).stdout
+          inventories = {"api-inventory.json": json.loads(api_inventory),
+                         "ui-inventory.json": json.loads(ui_inventory)}
+          if any(not isinstance(value, dict) or not value for value in inventories.values()):
+              raise SystemExit("Protected API/UI inventories must be non-empty JSON objects")
+          for name, value in inventories.items():
+              (out / name).write_text(json.dumps(value, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          (out / "images.json").write_text(json.dumps(images, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          schema = migration_compatibility(root / "api" / "alembic" / "versions")
+          (out / "schema-compatibility.json").write_text(json.dumps(schema, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          (out / "artifact-README.md").write_text(
+              "# Unsigned client image staging bundle\n\n"
+              f"Source commit: `{os.environ['SOURCE_COMMIT']}`\n\n"
+              "This bundle is not a customer release. The images are public, uniquely tagged staging images; "
+              "the artifact contains no owner private key and no signed license. The pinned Caddy image is "
+              "recorded in `caddy-image.txt`; keep that immutable reference in the customer package.\n\n"
+              "From a trusted offline owner machine, check out this exact source commit, verify the two public "
+              "keys and staging image digests, then sign the inventories with:\n\n"
+              "```bash\n"
+              "python owner-tools/sign_client_release.py \\\n"
+              "  --files-json api-inventory.json \\\n"
+              "  --ui-files-json ui-inventory.json \\\n"
+              "  --images-json images.json \\\n"
+              "  --schema-compatibility-json schema-compatibility.json \\\n"
+              "  --private-key /secure/offline/release-private.key \\\n"
+              "  --output client-release-manifest.json \\\n"
+              "  --public-key-output release-public.key\n"
+              "```\n\n"
+              "The signer must be run from the checked-out source because it imports the release verifier. "
+              "A separate owner-controlled packaging and lifecycle-acceptance step is still required before "
+              "customer distribution.\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload unsigned offline-signing inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-offline-signing-${{ steps.inputs.outputs.source_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/client-offline-signing-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: error
+          retention-days: 30
