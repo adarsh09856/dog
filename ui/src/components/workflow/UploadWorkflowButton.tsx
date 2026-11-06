@@ -88,7 +88,6 @@ export function UploadWorkflowButton() {
             <Button
                 onClick={() => setIsOpen(true)}
                 variant="outline"
-                className="!text-[#17271f]"
                 data-hero-action="upload"
             >
                 <Upload className="w-4 h-4 mr-2" />

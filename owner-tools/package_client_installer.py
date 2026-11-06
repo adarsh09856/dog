@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deploy/client"))
 from build_and_verify import read_public_key, validate_owner_private_key_path
 from validate_install import IMAGE_KEYS, PINNED_IMAGE, parse_env
+from verify_installer import MAX_INSTALLER_ARCHIVE_BYTES
 
 
 def package_installer(
@@ -195,6 +196,10 @@ def package_installer(
     # Exclusive creation avoids overwriting an existing package even if another
     # process created it while signature verification was running.
     archive_bytes = archive.getvalue()
+    if len(archive_bytes) > MAX_INSTALLER_ARCHIVE_BYTES:
+        raise ValueError(
+            f"Installer archive exceeds supported size ({MAX_INSTALLER_ARCHIVE_BYTES} bytes)"
+        )
     signature = (
         base64.urlsafe_b64encode(private_key.sign(archive_bytes)).rstrip(b"=") + b"\n"
         if private_key is not None else None
