@@ -51,8 +51,48 @@ jobs:
         working-directory: ui
         run: npm ci
 
-      - name: Run scripts/format.sh
-        run: ./scripts/format.sh
+      - name: Check formatting and lint for changed source files
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          mapfile -t changed_files < <(git diff --name-only "$BASE_SHA...HEAD")
+          python_files=()
+          ui_files=()
+          pipecat_changed=false
+
+          for path in "${changed_files[@]}"; do
+            case "$path" in
+              *.py) python_files+=("$path") ;;
+              ui/*.js|ui/*.jsx|ui/*.ts|ui/*.tsx|ui/*.mjs|ui/*.cjs)
+                if [[ -f "$path" ]]; then ui_files+=("${path#ui/}"); fi
+                ;;
+              pipecat) pipecat_changed=true ;;
+            esac
+          done
+
+          if ((${#python_files[@]})); then
+            ruff check "${python_files[@]}" --select I --select F401 --fix
+            ruff format "${python_files[@]}"
+          fi
+          if ((${#ui_files[@]})); then
+            (cd ui && npx eslint --fix "${ui_files[@]}")
+          fi
+          if [[ "$pipecat_changed" == true ]]; then
+            ruff check pipecat --select I --select F401 --fix
+            ruff format pipecat
+            if ! git -C pipecat diff --exit-code HEAD -- .; then
+              echo "::error::Pipecat source needs formatting. Format the changed submodule source and update its pinned commit."
+              exit 1
+            fi
+          fi
+
+          if ! git diff --exit-code HEAD -- "${changed_files[@]}"; then
+            echo "::error::Changed source files are not formatted. Run './scripts/format.sh' locally and commit the formatting changes."
+            exit 1
+          fi
 
       - name: Check for Python format/lint drift
         run: |
