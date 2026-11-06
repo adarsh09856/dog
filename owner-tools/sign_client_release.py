@@ -18,6 +18,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from api.services.release_integrity import protected_files, verify_release_manifest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deploy" / "client"))
+from validate_install import PINNED_IMAGE
+
+MODEL_IMAGE_COMPONENTS = {"ollama", "indic_stt", "indus_tts", "indic_vits_tts"}
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -26,6 +31,7 @@ def main() -> int:
     source.add_argument("--files-json", type=Path, help="Protected-file hashes read from the built client image")
     parser.add_argument("--ui-files-json", type=Path, help="Protected UI hashes read from the built client image")
     parser.add_argument("--images-json", type=Path, help="API/UI immutable image references and kinds")
+    parser.add_argument("--model-images-json", type=Path, help="Optional exact Ollama/STT/TTS immutable image references")
     parser.add_argument("--schema-compatibility-json", type=Path, help="Alembic compatibility metadata")
     parser.add_argument("--private-key", type=Path, required=True, help="Owner-only Ed25519 key file")
     parser.add_argument("--output", type=Path, required=True, help="Signed manifest destination")
@@ -67,12 +73,21 @@ def main() -> int:
         parser.error("Protected UI file hash inventory is invalid")
     if bool(args.images_json) != bool(args.schema_compatibility_json):
         parser.error("--images-json and --schema-compatibility-json must be used together")
+    if args.model_images_json and not args.images_json:
+        parser.error("--model-images-json requires --images-json and --schema-compatibility-json")
     payload = {"edition": "client", "files": files, "ui_files": ui_files}
     if args.images_json:
         payload["images"] = json.loads(args.images_json.read_text(encoding="utf-8"))
         payload["schema_compatibility"] = json.loads(
             args.schema_compatibility_json.read_text(encoding="utf-8")
         )
+    if args.model_images_json:
+        model_images = json.loads(args.model_images_json.read_text(encoding="utf-8"))
+        if not isinstance(model_images, dict) or set(model_images) != MODEL_IMAGE_COMPONENTS:
+            parser.error("Model image inventory must contain exactly ollama, indic_stt, indus_tts, and indic_vits_tts")
+        if not all(isinstance(reference, str) and PINNED_IMAGE.fullmatch(reference) for reference in model_images.values()):
+            parser.error("Model image inventory entries must be immutable sha256 image references")
+        payload["model_images"] = model_images
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     signature = base64.urlsafe_b64encode(key.sign(canonical)).rstrip(b"=").decode("ascii")
     public = key.public_key().public_bytes(

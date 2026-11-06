@@ -25,6 +25,13 @@ from build_and_verify import read_public_key, validate_owner_private_key_path
 from validate_install import IMAGE_KEYS, MODEL_IMAGE_KEYS, PINNED_IMAGE, parse_env, validate_model_images
 from verify_installer import MAX_INSTALLER_ARCHIVE_BYTES
 
+MODEL_IMAGE_COMPONENTS = {
+    "ollama": "CLIENT_OLLAMA_IMAGE",
+    "indic_stt": "CLIENT_INDIC_STT_IMAGE",
+    "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
+    "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
+}
+
 
 def package_installer(
     images_env: Path,
@@ -127,6 +134,24 @@ def package_installer(
         expected = {"kind": "registry_digest", "reference": images[variable]}
         if signed_images.get(component) != expected:
             raise ValueError(f"Signed {component.upper()} image does not match the installer digest")
+    signed_model_images = payload.get("model_images")
+    configured_model_images = {
+        component: images[variable]
+        for component, variable in MODEL_IMAGE_COMPONENTS.items()
+        if variable in images
+    }
+    if configured_model_images:
+        if set(configured_model_images) != set(MODEL_IMAGE_COMPONENTS):
+            raise ValueError("Installer must configure either no local inference images or all four")
+        if not isinstance(signed_model_images, dict) or set(signed_model_images) != set(MODEL_IMAGE_COMPONENTS):
+            raise ValueError("Release manifest must sign the exact four configured local inference images")
+        if signed_model_images != configured_model_images:
+            raise ValueError("Signed model image digests do not match the installer image pins")
+    elif signed_model_images is not None:
+        if not isinstance(signed_model_images, dict) or set(signed_model_images) != set(MODEL_IMAGE_COMPONENTS):
+            raise ValueError("Release manifest model inventory must contain exactly four local inference images")
+        if not all(isinstance(value, str) and PINNED_IMAGE.fullmatch(value) for value in signed_model_images.values()):
+            raise ValueError("Release manifest model inventory must use immutable image digests")
     if not all(isinstance(payload.get(key), dict) and payload[key] for key in ("files", "ui_files")):
         raise ValueError("Release manifest must contain nonempty API and UI inventories")
     for inventory in (payload["files"], payload["ui_files"]):

@@ -49,6 +49,13 @@ HOST_TOOL_FILES = (
     "recovery_lock.py", "verify_installer.py", "update_agent.py",
 )
 MODEL_HOST_FILES = ("docker-compose.models.yaml", "warm_local_models.py")
+MODEL_COMPOSE_SERVICES = ("ollama", "indic-stt", "indus-tts", "indic-vits-tts")
+MODEL_MANIFEST_COMPONENTS = {
+    "ollama": "CLIENT_OLLAMA_IMAGE",
+    "indic_stt": "CLIENT_INDIC_STT_IMAGE",
+    "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
+    "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
+}
 SYSTEMD_UNIT_FILES = ("kodewaves-client-update.service", "kodewaves-client-update.timer")
 SYSTEMD_UNIT_DIR = Path("/etc/systemd/system")
 HOST_JOURNAL_NAME = ".host-update-transaction.json"
@@ -298,6 +305,26 @@ def _manifest_images(manifest: dict[str, object]) -> tuple[dict[str, str], dict[
     return references, schema
 
 
+def _manifest_model_images(payload: dict[str, object]) -> dict[str, str]:
+    """Return signed model image refs by installer .env key; absent means cloud-only metadata."""
+    model_images = payload.get("model_images")
+    if model_images is None:
+        return {}
+    if not isinstance(model_images, dict) or set(model_images) != set(MODEL_MANIFEST_COMPONENTS):
+        raise UpdateError("Signed release manifest must contain all four model image digests")
+    values = {
+        env_key: model_images[component]
+        for component, env_key in MODEL_MANIFEST_COMPONENTS.items()
+    }
+    if any(not isinstance(value, str) or not _DIGEST_IMAGE.fullmatch(value) for value in values.values()):
+        raise UpdateError("Signed release manifest contains invalid model image digests")
+    try:
+        validate_model_images(values)
+    except (TypeError, ValueError) as exc:
+        raise UpdateError("Signed release manifest contains invalid model image digests") from exc
+    return values
+
+
 def _verify_manifest_signature(manifest: dict[str, object], public_key_file: Path) -> dict[str, object]:
     from build_and_verify import read_public_key
 
@@ -501,10 +528,14 @@ def _download_verified_host_release(update: dict, work_dir: Path, public_key_fil
     return archive_path, extracted, payload
 
 
-def _model_update_values(env: dict[str, str], extracted: Path) -> dict[str, str]:
-    if "self-hosted" not in {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",")}:
+def _model_update_values(
+    env: dict[str, str], extracted: Path, manifest_payload: dict[str, object],
+) -> dict[str, str]:
+    profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()}
+    configured = {key for key in MODEL_IMAGE_KEYS if env.get(key, "").strip()}
+    if "self-hosted" not in profiles and not configured:
         return {}
-    if not all((extracted / name).is_file() for name in MODEL_HOST_FILES):
+    if "self-hosted" in profiles and not all((extracted / name).is_file() for name in MODEL_HOST_FILES):
         raise UpdateError("Self-hosted installation requires a signed local-inference package")
     packaged = parse_env(extracted / ".env.example")
     values = {key: packaged.get(key, "") for key in MODEL_IMAGE_KEYS}
@@ -512,7 +543,16 @@ def _model_update_values(env: dict[str, str], extracted: Path) -> dict[str, str]
         validate_model_images(values)
     except ValueError as exc:
         raise UpdateError("Signed local-inference image pins are incomplete or invalid") from exc
+    manifest_values = _manifest_model_images(manifest_payload)
+    if manifest_values != values:
+        raise UpdateError("Signed model image pins do not match the installer template")
     return values
+
+
+def _release_compose_services(env: dict[str, str]) -> list[str]:
+    """Return release services, including local inference only when enabled."""
+    profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()}
+    return [*APP_IMAGES, *(MODEL_COMPOSE_SERVICES if "self-hosted" in profiles else ())]
 
 
 def _apply_host_maintenance(
@@ -636,6 +676,20 @@ def _active_manifest(directory: Path, env: dict[str, str], public_key_file: Path
     images, schema = _manifest_images({"payload": payload})
     if images != {"api": env["CLIENT_API_IMAGE"], "ui": env["CLIENT_UI_IMAGE"]}:
         raise UpdateError("Running image pins do not match the installed signed manifest")
+    model_images = _manifest_model_images(payload)
+    configured_models = {key for key in MODEL_IMAGE_KEYS if env.get(key, "").strip()}
+    self_hosted = "self-hosted" in {
+        item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()
+    }
+    if self_hosted or configured_models:
+        try:
+            validate_model_images({key: env.get(key, "") for key in MODEL_IMAGE_KEYS})
+        except ValueError as exc:
+            raise UpdateError("Installed model image pins are incomplete or invalid") from exc
+        if configured_models != MODEL_IMAGE_KEYS or model_images != {
+            key: env.get(key, "") for key in MODEL_IMAGE_KEYS
+        }:
+            raise UpdateError("Running model image pins do not match the installed signed manifest")
     return {"payload": payload, "schema": schema}
 
 
@@ -793,6 +847,9 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             images, schema = _manifest_images({"payload": payload})
             if images != {"api": env["CLIENT_API_IMAGE"], "ui": env["CLIENT_UI_IMAGE"]}:
                 raise UpdateError("Resumed release images do not match the healthy installation")
+            resumed_model_values = _model_update_values(env, extracted, payload)
+            if resumed_model_values and any(env.get(key, "") != value for key, value in resumed_model_values.items()):
+                raise UpdateError("Resumed release model images do not match the healthy installation")
             if _current_version(images["api"]) != version or schema["head"] != expected_head:
                 raise UpdateError("Resumed release archive does not match the healthy installation")
             refreshed, refreshed_url = _owner_status(env, current_version)
@@ -838,6 +895,7 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
     old_env: bytes | None = None
     env_was_switched = False
     containers_activated = False
+    activation_started = False
     target_images: dict[str, str] | None = None
     try:
         if initial_target_status == "staged":
@@ -878,7 +936,7 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             "CLIENT_UI_IMAGE": target_images["ui"],
             "CLIENT_RELEASE_MANIFEST_FILE": candidate_ref,
         }
-        new_values.update(_model_update_values(env, extracted))
+        new_values.update(_model_update_values(env, extracted, manifest_payload))
         # Validate the whole candidate configuration before pulling images.
         old_env = _atomic_env(directory, new_values)
         env_was_switched = True
@@ -889,7 +947,7 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
         config = compose_client.build_command(directory, ["config", "--quiet"])
         subprocess.run(config, cwd=directory, env=controlled, timeout=60, check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        model_services = ["ollama", "indic-stt", "indus-tts", "indic-vits-tts"] if new_values.keys() & MODEL_IMAGE_KEYS else []
+        model_services = _release_compose_services(env)[len(APP_IMAGES):]
         _compose(directory, ["pull", "api", "ui", *model_services])
         # The fresh owner-signed status check also prevents applying a rollout
         # that the owner paused or stopped during the download.
@@ -945,7 +1003,12 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             _report(env, status_url, update, "applying")
         _atomic_env(directory, new_values)
         env_was_switched = True
-        _compose(directory, ["up", "--detach", "--wait", "--wait-timeout", "480", "api", "ui"], timeout=COMPOSE_TIMEOUT)
+        activation_started = True
+        _compose(
+            directory,
+            ["up", "--detach", "--wait", "--wait-timeout", "480", *_release_compose_services(parse_env(env_file))],
+            timeout=COMPOSE_TIMEOUT,
+        )
         if not _wait_for_release_healthy(directory, parse_env(env_file), target_schema["head"]):
             raise UpdateError("Updated API/UI or migrated database failed health verification")
         containers_activated = True
@@ -982,8 +1045,12 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
                     )
                 else:
                     _restore_env(directory, old_env)
-                if not backup_path.is_file() and containers_activated:
-                    _compose(directory, ["up", "--detach", "--wait", "--wait-timeout", "480", "api", "ui"])
+                if not backup_path.is_file() and activation_started:
+                    _compose(
+                        directory,
+                        ["up", "--detach", "--wait", "--wait-timeout", "480", *_release_compose_services(parse_env(env_file))],
+                        timeout=COMPOSE_TIMEOUT,
+                    )
                 final_status = "rolled_back" if backup_path.is_file() or containers_activated else "failed"
                 _report(parse_env(env_file), status_url, update, final_status, _report_protected(exc))
             except Exception:

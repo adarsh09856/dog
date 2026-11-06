@@ -21,6 +21,17 @@ from api.services.owner_trust import (
     trusted_release_public_key,
 )
 
+MODEL_IMAGE_ENV_KEYS = {
+    "ollama": "KODEWAVES_CLIENT_OLLAMA_IMAGE",
+    "indic_stt": "KODEWAVES_CLIENT_INDIC_STT_IMAGE",
+    "indus_tts": "KODEWAVES_CLIENT_INDUS_TTS_IMAGE",
+    "indic_vits_tts": "KODEWAVES_CLIENT_INDIC_VITS_TTS_IMAGE",
+}
+MODEL_IMAGE_REFERENCE = re.compile(
+    r"[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?"
+    r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}"
+)
+
 
 class ReleaseIntegrityError(RuntimeError):
     def __init__(
@@ -130,9 +141,16 @@ def verify_release_manifest(
         ):
             raise ReleaseIntegrityError("Invalid client release manifest")
         images = payload.get("images")
+        model_images = payload.get("model_images")
         schema = payload.get("schema_compatibility")
         if (images is None) != (schema is None):
             raise ReleaseIntegrityError("Release image and schema metadata must be signed together")
+        if model_images is not None:
+            if images is None or not isinstance(model_images, dict) or set(model_images) != set(MODEL_IMAGE_ENV_KEYS):
+                raise ReleaseIntegrityError("Invalid client release model image metadata")
+            for name, reference in model_images.items():
+                if not isinstance(reference, str) or not MODEL_IMAGE_REFERENCE.fullmatch(reference):
+                    raise ReleaseIntegrityError(f"Invalid client release model image metadata: {name}")
         if images is not None:
             if not isinstance(images, dict) or set(images) != {"api", "ui"}:
                 raise ReleaseIntegrityError("Invalid client release image metadata")
@@ -230,6 +248,33 @@ def verify_configured_release(root: Path | None = None) -> dict[str, object] | N
                 raise ReleaseIntegrityError(
                     f"Configured {service.upper()} image does not match the signed release",
                     reason="unknown", component=f"{service}_image",
+                )
+    signed_model_images = payload.get("model_images")
+    configured_models = {
+        service: os.getenv(variable, "").strip()
+        for service, variable in MODEL_IMAGE_ENV_KEYS.items()
+    }
+    configured_services = {name for name, value in configured_models.items() if value}
+    self_hosted = "self-hosted" in {
+        item.strip() for item in os.getenv("COMPOSE_PROFILES", "").split(",") if item.strip()
+    }
+    if self_hosted and signed_model_images is None:
+        raise ReleaseIntegrityError(
+            "Self-hosted inference is not bound to the signed release",
+            reason="unknown", component="model_image_manifest",
+        )
+    if configured_services or self_hosted:
+        if signed_model_images is None or configured_services != set(MODEL_IMAGE_ENV_KEYS):
+            raise ReleaseIntegrityError(
+                "Configured model images do not match the signed release inventory",
+                reason="unknown", component="model_image_manifest",
+            )
+        for service, configured in configured_models.items():
+            if configured != signed_model_images.get(service):
+                label = service.upper().replace("_", " ")
+                raise ReleaseIntegrityError(
+                    f"Configured {label} model image does not match the signed release",
+                    reason="unknown", component=f"{service}_model_image",
                 )
     return payload
 

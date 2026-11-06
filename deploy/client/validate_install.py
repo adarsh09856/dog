@@ -29,6 +29,12 @@ MODEL_IMAGE_KEYS = {
     "CLIENT_OLLAMA_IMAGE", "CLIENT_INDIC_STT_IMAGE",
     "CLIENT_INDUS_TTS_IMAGE", "CLIENT_INDIC_VITS_TTS_IMAGE",
 }
+MODEL_IMAGE_COMPONENTS = {
+    "ollama": "CLIENT_OLLAMA_IMAGE",
+    "indic_stt": "CLIENT_INDIC_STT_IMAGE",
+    "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
+    "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
+}
 
 
 def validate_model_images(images: dict[str, str]) -> None:
@@ -375,6 +381,27 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
                                     or image.get("reference") != env.get(variable)
                                 ):
                                     errors.append(f"{variable} does not match the signed release manifest")
+                    model_images = payload.get("model_images")
+                    configured_model_keys = {
+                        key for key in MODEL_IMAGE_KEYS if env.get(key, "").strip()
+                    }
+                    self_hosted = "self-hosted" in profiles
+                    if model_images is not None:
+                        if (
+                            images is None
+                            or not isinstance(model_images, dict)
+                            or set(model_images) != set(MODEL_IMAGE_COMPONENTS)
+                        ):
+                            errors.append("signed release manifest must contain all four model image entries")
+                        else:
+                            for component, variable in MODEL_IMAGE_COMPONENTS.items():
+                                reference = model_images.get(component)
+                                if not isinstance(reference, str) or not PINNED_IMAGE.fullmatch(reference):
+                                    errors.append(f"signed release manifest has an invalid {component} model image")
+                                elif (self_hosted or configured_model_keys) and env.get(variable, "").strip() != reference:
+                                    errors.append(f"{variable} does not match the signed release manifest")
+                    elif self_hosted or configured_model_keys:
+                        errors.append("signed release manifest is missing the configured model image inventory")
             except (OSError, ValueError, AttributeError):
                 errors.append("signed release manifest must contain valid JSON")
 
