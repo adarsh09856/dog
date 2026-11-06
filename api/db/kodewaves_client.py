@@ -856,9 +856,9 @@ class KodewavesDBClient(BaseDBClient):
     ) -> bool:
         """Record a terminal call once for a matching tenant contact.
 
-        ``call_id`` is unique for call activities, so runtime completion and
-        provider status callbacks can safely race or be replayed. The contact
-        counters are incremented only when this transaction inserts the row.
+        Runtime completion and provider callbacks lock the same workflow-run
+        row, so racing or replayed events record only one activity. Contact
+        counters change only when this transaction inserts the activity.
         """
         phone = (contact_phone or "").strip()
         if not phone:
