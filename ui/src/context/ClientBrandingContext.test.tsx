@@ -103,6 +103,16 @@ describe("shared platform branding", () => {
   });
 
   it("updates brand identity, support, browser title, icon and color after an admin save", async () => {
+    const rootStyle = document.documentElement.style;
+    const genericThemeVariables = [
+      "--primary",
+      "--primary-foreground",
+      "--accent",
+      "--accent-foreground",
+    ] as const;
+    const initialGenericTheme = genericThemeVariables.map((name) =>
+      rootStyle.getPropertyValue(name),
+    );
     const initial = {
       ...DEFAULT_BRANDING,
       company_name: "Acme Voice",
@@ -123,26 +133,17 @@ describe("shared platform branding", () => {
     expect(screen.getAllByText("Acme Voice").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Acme conversations" })).toBeTruthy();
     await waitFor(() => expect(document.title).toBe("Admin | Acme Voice"));
-    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "#123456",
+    expect(rootStyle.getPropertyValue("--brand-primary-color")).toBe("#123456");
+    expect(rootStyle.getPropertyValue("--cta")).toBe("#123456");
+    expect(
+      contrastRatio(
+        rootStyle.getPropertyValue("--cta"),
+        rootStyle.getPropertyValue("--cta-foreground"),
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(genericThemeVariables.map((name) => rootStyle.getPropertyValue(name))).toEqual(
+      initialGenericTheme,
     );
-    expect(
-      contrastRatio(
-        document.documentElement.style.getPropertyValue("--primary"),
-        document.documentElement.style.getPropertyValue("--primary-foreground"),
-      ),
-    ).toBeGreaterThanOrEqual(4.5);
-    const initialAccent = document.documentElement.style.getPropertyValue("--accent");
-    expect(initialAccent).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(
-      document.documentElement.style.getPropertyValue("--accent-foreground"),
-    ).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(
-      contrastRatio(
-        initialAccent,
-        document.documentElement.style.getPropertyValue("--accent-foreground"),
-      ),
-    ).toBeGreaterThanOrEqual(4.5);
     expect(document.documentElement.style.getPropertyValue("--brand-font-family")).toContain("system-ui");
     expect(
       screen
@@ -167,18 +168,14 @@ describe("shared platform branding", () => {
     })).toBeTruthy();
     expect(screen.queryByText("Acme Voice")).toBeNull();
     expect(screen.getAllByText("New Brand").length).toBeGreaterThan(0);
-    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "#654321",
-    );
-    expect(document.documentElement.style.getPropertyValue("--accent")).not.toBe(
-      initialAccent,
-    );
+    expect(rootStyle.getPropertyValue("--brand-primary-color")).toBe("#654321");
+    expect(rootStyle.getPropertyValue("--cta")).toBe("#654321");
     expect(
-      contrastRatio(
-        document.documentElement.style.getPropertyValue("--primary"),
-        document.documentElement.style.getPropertyValue("--primary-foreground"),
-      ),
+      contrastRatio(rootStyle.getPropertyValue("--cta"), rootStyle.getPropertyValue("--cta-foreground")),
     ).toBeGreaterThanOrEqual(4.5);
+    expect(genericThemeVariables.map((name) => rootStyle.getPropertyValue(name))).toEqual(
+      initialGenericTheme,
+    );
   });
 
   it("restores the configured browser title after framework metadata overwrites it", async () => {
