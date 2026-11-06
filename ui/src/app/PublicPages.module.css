@@ -68,10 +68,10 @@
 .hero .heroRailItem > span:first-child { color: #dfc87e; }
 .hero .secondaryAction { border-color: #ffffff3b; background: #ffffff0a; color: #f1f4eb; }
 .hero .secondaryAction:hover { border-color: #ffffff75; background: #ffffff14; }
-.hero .primaryAction { background: #d5c17f; color: #162c2a; }
-.hero .primaryAction:hover { background: #e2d29f; }
+.hero .primaryAction { background: var(--cta); color: var(--cta-foreground); }
+.hero .primaryAction:hover { background: color-mix(in srgb, var(--cta) 88%, var(--cta-foreground)); }
 .hero .primaryAction:focus-visible,
-.hero .secondaryAction:focus-visible { outline-color: #e3d28d; }
+.hero .secondaryAction:focus-visible { outline-color: var(--ring); }
 
 .heroGrid {
   display: grid;
