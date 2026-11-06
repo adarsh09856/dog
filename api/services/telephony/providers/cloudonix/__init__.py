@@ -134,7 +134,6 @@ async def _ensure_application_name(credentials: dict[str, Any]) -> dict[str, Any
     inbound_url = f"{backend_endpoint}/api/v1/telephony/inbound/run"
 
     provisioning_id = credentials.get("provisioning_id")
-    recovery_names = {name}
     if isinstance(provisioning_id, str) and provisioning_id.strip():
         stable_id = "".join(ch for ch in provisioning_id.lower() if ch.isalnum())
         name = f"kodewaves-{stable_id[:24]}"
@@ -144,6 +143,7 @@ async def _ensure_application_name(credentials: dict[str, Any]) -> dict[str, Any
         recovery_names = {name, f"dograh-{stable_id[:24]}"}
     else:
         name = f"kodewaves-{uuid.uuid4().hex[:12]}"
+        recovery_names = {name}
 
     encoded_domain_id = quote(str(domain_id), safe="")
     endpoint = (
