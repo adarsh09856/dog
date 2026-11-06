@@ -390,6 +390,20 @@ _DATE_SMALL_NUMBERS = {
     "seventeenth": 17, "eighteen": 18, "eighteenth": 18, "nineteen": 19,
     "nineteenth": 19, "twenty": 20, "thirty": 30,
 }
+_HINDI_TIME_HOURS = {
+    "एक": 1, "इक": 1,
+    "दो": 2,
+    "तीन": 3,
+    "चार": 4,
+    "पाँच": 5, "पांच": 5, "पाच": 5,
+    "छह": 6, "छः": 6, "छे": 6,
+    "सात": 7,
+    "आठ": 8,
+    "नौ": 9,
+    "दस": 10,
+    "ग्यारह": 11,
+    "बारह": 12,
+}
 _DATE_COMPOSITE_NUMBERS = {
     "twentyone": 21, "twentytwo": 22, "twentythree": 23, "twentyfour": 24,
     "twentyfive": 25, "twentysix": 26, "twentyseven": 27, "twentyeight": 28,
@@ -1721,13 +1735,15 @@ def booking_time_confirmation_question(
         value = token.strip().casefold()
         if value.isdecimal():
             return int(value)
+        if value in _HINDI_TIME_HOURS:
+            return _HINDI_TIME_HOURS[value]
         digit = _SPOKEN_DIGITS.get(value)
         if digit is not None and len(digit) == 1:
             return int(digit)
         return _DATE_SMALL_NUMBERS.get(value)
 
     hindi = re.search(
-        r"(?:सुबह|दोपहर|शाम)\s*(\d{1,2}|[^\s:]+)(?::([0-5]\d))?\s*बजे",
+        r"(?:सुबह|दोपहर|शाम|रात)\s*(\d{1,2}|[^\s:]+)(?::([0-5]\d))?\s*बजे",
         normalized,
     )
     english_pattern = (
@@ -1814,13 +1830,25 @@ def booking_time_confirmation_question(
         hour24 = hour % 12 + (12 if is_pm else 0)
         state.pop("booking_pending_time_hour", None)
     elif hindi:
-        period_match = re.search(r"सुबह|दोपहर|शाम", normalized)
+        period_match = re.search(r"सुबह|दोपहर|शाम|रात", normalized)
         period, hour, minute = period_match.group(), spoken_hour(hindi.group(1)), int(hindi.group(2) or 0)
         if hour is None:
             return None
         if not 1 <= hour <= 12:
             return None
-        hour24 = hour % 12 + (12 if period in ("दोपहर", "शाम") else 0)
+        if period == "रात":
+            if hour == 12:
+                hour24 = 0
+            elif 1 <= hour <= 4:
+                hour24 = hour
+            elif hour in {5, 6}:
+                if state.get("reply_language") == "English":
+                    return f"Did you mean {hour}:00 AM or {hour}:00 PM?"
+                return f"आपका मतलब सुबह {hour}:00 बजे या शाम {hour}:00 बजे है?"
+            else:
+                hour24 = hour + 12
+        else:
+            hour24 = hour % 12 + (12 if period in ("दोपहर", "शाम") else 0)
     elif meridian_only:
         if state.get("reply_language") == "English" or not re.search(
             r"[\u0900-\u097f]", latest
