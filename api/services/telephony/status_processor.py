@@ -20,6 +20,7 @@ from api.services.campaign.campaign_event_publisher import (
 )
 from api.services.campaign.campaign_retry import schedule_campaign_retry
 from api.services.campaign.circuit_breaker import circuit_breaker
+from api.services.crm.call_history import record_terminal_call_history
 from api.services.workflow.disposition_mapping import map_disposition
 from api.tasks.arq import enqueue_job
 from api.tasks.function_names import FunctionNames
@@ -240,4 +241,14 @@ async def _process_status_update(workflow_run_id: int, status: StatusCallbackReq
         normalized_status == TelephonyCallStatus.COMPLETED
         or normalized_status in TERMINAL_NOT_CONNECTED_STATUSES
     ):
+        await record_terminal_call_history(
+            workflow_run_id=workflow_run_id,
+            organization_id=workflow_run.workflow.organization_id,
+            initial_context=workflow_run.initial_context,
+            call_type=getattr(workflow_run.call_type, "value", workflow_run.call_type),
+            direction=status.direction,
+            caller_number=status.from_number,
+            called_number=status.to_number,
+            outcome=status_value,
+        )
         await notify_campaign_call_completed(workflow_run.campaign_id, workflow_run_id)

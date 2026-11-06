@@ -33,6 +33,7 @@ from api.db.kodewaves_models import (
     WebsiteWidgetModel,
     GlobalPlatformSettingModel,
 )
+from api.utils.telephony_address import normalize_telephony_address
 
 
 def _materialize_paid_plan_assignment(
@@ -844,6 +845,94 @@ class KodewavesDBClient(BaseDBClient):
                 LeadActivityModel.contact_id == contact_id,
             ).order_by(desc(LeadActivityModel.created_at)))
             return list(result.scalars().all())
+
+    async def record_crm_call_activity(
+        self,
+        organization_id: int,
+        contact_phone: str,
+        workflow_run_id: int,
+        summary: str,
+    ) -> bool:
+        """Record a terminal call once for a matching tenant contact.
+
+        ``call_id`` is unique for call activities, so runtime completion and
+        provider status callbacks can safely race or be replayed. The contact
+        counters are incremented only when this transaction inserts the row.
+        """
+        phone = (contact_phone or "").strip()
+        if not phone:
+            return False
+        try:
+            canonical_phone = normalize_telephony_address(phone).canonical
+        except ValueError:
+            return False
+
+        async with self.get_session() as session:
+            # Contact phone numbers have no indexed canonical form or country
+            # field. Normalize a bounded tenant-scoped candidate set, and skip
+            # the match if the organization exceeds that bound or has
+            # duplicate canonical numbers. Never guess from trailing digits.
+            candidate_rows = (await session.execute(
+                select(ContactModel.id, ContactModel.phone)
+                .where(ContactModel.organization_id == organization_id)
+                .order_by(ContactModel.created_at, ContactModel.id)
+                .limit(5001)
+            )).all()
+            if len(candidate_rows) > 5000:
+                return False
+
+            matching_ids = []
+            for candidate_id, candidate_phone in candidate_rows:
+                try:
+                    candidate_canonical = normalize_telephony_address(
+                        candidate_phone
+                    ).canonical
+                except (TypeError, ValueError):
+                    continue
+                if candidate_canonical == canonical_phone:
+                    matching_ids.append(candidate_id)
+                    if len(matching_ids) > 1:
+                        return False
+            if not matching_ids:
+                return False
+
+            contact = (await session.execute(
+                select(ContactModel)
+                .where(
+                    ContactModel.id == matching_ids[0],
+                    ContactModel.organization_id == organization_id,
+                )
+                .with_for_update()
+            )).scalar_one_or_none()
+            if contact is None:
+                return False
+            try:
+                locked_phone = normalize_telephony_address(contact.phone).canonical
+                if locked_phone != canonical_phone:
+                    return False
+            except (TypeError, ValueError):
+                return False
+
+            now = datetime.now(UTC)
+            inserted_id = (await session.execute(
+                insert(LeadActivityModel)
+                .values(
+                    contact_id=contact.id,
+                    activity_type="call",
+                    summary=summary,
+                    call_id=workflow_run_id,
+                    created_at=now,
+                )
+                .on_conflict_do_nothing(index_elements=[LeadActivityModel.call_id])
+                .returning(LeadActivityModel.id)
+            )).scalar_one_or_none()
+            if inserted_id is None:
+                return False
+
+            contact.total_calls = (contact.total_calls or 0) + 1
+            contact.last_contacted_at = now
+            await session.commit()
+            return True
 
     async def list_contacts(self, organization_id: int, limit: int = 100, offset: int = 0) -> List[ContactModel]:
         async with self.get_session() as session:
