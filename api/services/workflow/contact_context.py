@@ -1742,10 +1742,13 @@ def booking_time_confirmation_question(
             return int(digit)
         return _DATE_SMALL_NUMBERS.get(value)
 
-    hindi = re.search(
-        r"(?:सुबह|दोपहर|शाम|रात)\s*(\d{1,2}|[^\s:]+)(?::([0-5]\d))?\s*बजे",
-        normalized,
+    hindi_matches = list(
+        re.finditer(
+            r"(?:सुबह|दोपहर|शाम|रात)\s*(\d{1,2}|[^\s:]+)(?::([0-5]\d))?\s*बजे",
+            normalized,
+        )
     )
+    hindi = hindi_matches[0] if hindi_matches else None
     english_pattern = (
         r"(?:\bat\s+)?(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
         r"(?::([0-5]\d))?\s*(?:बजे\s*)?"
@@ -1770,14 +1773,18 @@ def booking_time_confirmation_question(
         )
     ]
     english_daypart = english_daypart_matches[0] if english_daypart_matches else None
-    if len(english_matches) + len(english_daypart_matches) > 1:
+    if len(hindi_matches) + len(english_matches) + len(english_daypart_matches) > 1:
+        for key in (
+            "booking_confirmation_slot", "booking_slot_candidate", "booking_pending_time_hour"
+        ):
+            state.pop(key, None)
         if state.get("reply_language") == "English" or not re.search(
             r"[\u0900-\u097f]", latest
         ):
             return "I couldn't tell which time you meant. What exact time should I use?"
         return "कौन-सा समय चाहिए, यह स्पष्ट नहीं हुआ। कृपया सही समय बताइए।"
-    if english or english_daypart:
-        time_match = english or english_daypart
+    if hindi or english or english_daypart:
+        time_match = hindi or english or english_daypart
         prior_clause = re.split(
             r"[.!?।]|\b(?:but|however)\b",
             normalized[:time_match.start()],
@@ -1790,11 +1797,16 @@ def booking_time_confirmation_question(
         )[0]
         negation_pattern = (
             r"\b(?:not|no|never|don't|do not|didn't|did not|can't|cannot|won't)\b"
-            r"|नहीं|ना|मत|\b(?:nahi|nahin|mat)\b"
+            r"|(?<![\w\u0900-\u097f])(?:नहीं|ना|मत)(?![\w\u0900-\u097f])"
+            r"|\b(?:nahi|nahin|mat)\b"
         )
         if re.search(negation_pattern, prior_clause[-60:], re.I) or re.search(
             negation_pattern, following_clause[:60], re.I
         ):
+            for key in (
+                "booking_confirmation_slot", "booking_slot_candidate", "booking_pending_time_hour"
+            ):
+                state.pop(key, None)
             if state.get("reply_language") == "English" or not re.search(
                 r"[\u0900-\u097f]", latest
             ):
