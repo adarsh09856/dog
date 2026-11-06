@@ -137,8 +137,13 @@ async def _ensure_application_name(credentials: dict[str, Any]) -> dict[str, Any
     if isinstance(provisioning_id, str) and provisioning_id.strip():
         stable_id = "".join(ch for ch in provisioning_id.lower() if ch.isalnum())
         name = f"kodewaves-{stable_id[:24]}"
+        # MPS installations created before the Dograh → Kodewaves rebrand
+        # already have a deterministic application under the legacy prefix.
+        # Reuse it on retry so a rename never provisions a duplicate app.
+        recovery_names = {name, f"dograh-{stable_id[:24]}"}
     else:
         name = f"kodewaves-{uuid.uuid4().hex[:12]}"
+        recovery_names = {name}
 
     encoded_domain_id = quote(str(domain_id), safe="")
     endpoint = (
@@ -174,7 +179,8 @@ async def _ensure_application_name(credentials: dict[str, Any]) -> dict[str, Any
                             (
                                 app
                                 for app in applications
-                                if isinstance(app, dict) and app.get("name") == name
+                                if isinstance(app, dict)
+                                and app.get("name") in recovery_names
                             ),
                             None,
                         )

@@ -16,8 +16,8 @@
 .actions [data-hero-action="upload"] [data-hero-label] { color:var(--cta-foreground)!important;-webkit-text-fill-color:var(--cta-foreground)!important; }
 .actions [data-hero-action="folder"] [data-hero-label] { color:#edf2e9!important;-webkit-text-fill-color:#edf2e9!important; }
 .actions [data-hero-action="create"] [data-hero-label] { color:#f2f4eb!important;-webkit-text-fill-color:#f2f4eb!important; }
-.actions > :global(button[data-hero-action="upload"]) { color:var(--cta-foreground);background:var(--cta);border-color:var(--cta); }
-.actions > :global(button[data-hero-action="upload"]:hover) { color:var(--cta-foreground);background:color-mix(in srgb,var(--cta) 88%,var(--cta-foreground));border-color:color-mix(in srgb,var(--cta) 88%,var(--cta-foreground)); }
+.actions > :global(button[data-hero-action="upload"]) { color:var(--cta-foreground)!important;background:var(--cta);border-color:var(--cta); }
+.actions > :global(button[data-hero-action="upload"]:hover) { color:var(--cta-foreground)!important;background:color-mix(in srgb,var(--cta) 88%,var(--cta-foreground));border-color:color-mix(in srgb,var(--cta) 88%,var(--cta-foreground)); }
 .actions > :global(button[data-hero-action="folder"]) { color:#edf2e9;border-color:rgba(223,233,223,.4);background:rgba(255,255,255,.08); }
 .actions > :global(button[data-hero-action="folder"]:hover) { color:#fff;border-color:rgba(223,233,223,.64);background:rgba(255,255,255,.14); }
 .activeSection { padding:24px; border:1px solid var(--border); border-radius:17px; background:color-mix(in srgb,var(--card) 88%,var(--background)); box-shadow:0 16px 40px -38px var(--foreground); }

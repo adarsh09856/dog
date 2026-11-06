@@ -390,6 +390,20 @@ _DATE_SMALL_NUMBERS = {
     "seventeenth": 17, "eighteen": 18, "eighteenth": 18, "nineteen": 19,
     "nineteenth": 19, "twenty": 20, "thirty": 30,
 }
+_HINDI_TIME_HOURS = {
+    "एक": 1, "इक": 1,
+    "दो": 2,
+    "तीन": 3,
+    "चार": 4,
+    "पाँच": 5, "पांच": 5, "पाच": 5,
+    "छह": 6, "छः": 6, "छे": 6,
+    "सात": 7,
+    "आठ": 8,
+    "नौ": 9,
+    "दस": 10,
+    "ग्यारह": 11,
+    "बारह": 12,
+}
 _DATE_COMPOSITE_NUMBERS = {
     "twentyone": 21, "twentytwo": 22, "twentythree": 23, "twentyfour": 24,
     "twentyfive": 25, "twentysix": 26, "twentyseven": 27, "twentyeight": 28,
@@ -871,7 +885,9 @@ def _booking_was_requested(messages: list) -> bool:
     )
 
 
-def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
+def caller_phone_fragment_reply(
+    messages: list, state: dict, *, booking_available: bool = True,
+) -> str | None:
     """Collect a caller's explicitly introduced phone number across short turns.
 
     Speech recognition often splits dictated numbers across utterances. Keep
@@ -972,7 +988,7 @@ def caller_phone_fragment_reply(messages: list, state: dict) -> str | None:
             booking_requested = False
             from api.services.workflow.confirmed_booking import new_booking_requested
 
-            booking_requested = any(
+            booking_requested = booking_available and any(
                 isinstance(message, dict)
                 and message.get("role") == "user"
                 and isinstance(message.get("content"), str)
@@ -1719,15 +1735,20 @@ def booking_time_confirmation_question(
         value = token.strip().casefold()
         if value.isdecimal():
             return int(value)
+        if value in _HINDI_TIME_HOURS:
+            return _HINDI_TIME_HOURS[value]
         digit = _SPOKEN_DIGITS.get(value)
         if digit is not None and len(digit) == 1:
             return int(digit)
         return _DATE_SMALL_NUMBERS.get(value)
 
-    hindi = re.search(
-        r"(?:सुबह|दोपहर|शाम)\s*(\d{1,2}|[^\s:]+)(?::([0-5]\d))?\s*बजे",
-        normalized,
+    hindi_matches = list(
+        re.finditer(
+            r"(?:सुबह|दोपहर|शाम|रात)\s*(\d{1,2}|[^\s:]+)(?::([0-5]\d))?\s*बजे",
+            normalized,
+        )
     )
+    hindi = hindi_matches[0] if hindi_matches else None
     english_pattern = (
         r"(?:\bat\s+)?(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
         r"(?::([0-5]\d))?\s*(?:बजे\s*)?"
@@ -1752,14 +1773,18 @@ def booking_time_confirmation_question(
         )
     ]
     english_daypart = english_daypart_matches[0] if english_daypart_matches else None
-    if len(english_matches) + len(english_daypart_matches) > 1:
+    if len(hindi_matches) + len(english_matches) + len(english_daypart_matches) > 1:
+        for key in (
+            "booking_confirmation_slot", "booking_slot_candidate", "booking_pending_time_hour"
+        ):
+            state.pop(key, None)
         if state.get("reply_language") == "English" or not re.search(
             r"[\u0900-\u097f]", latest
         ):
             return "I couldn't tell which time you meant. What exact time should I use?"
         return "कौन-सा समय चाहिए, यह स्पष्ट नहीं हुआ। कृपया सही समय बताइए।"
-    if english or english_daypart:
-        time_match = english or english_daypart
+    if hindi or english or english_daypart:
+        time_match = hindi or english or english_daypart
         prior_clause = re.split(
             r"[.!?।]|\b(?:but|however)\b",
             normalized[:time_match.start()],
@@ -1772,11 +1797,16 @@ def booking_time_confirmation_question(
         )[0]
         negation_pattern = (
             r"\b(?:not|no|never|don't|do not|didn't|did not|can't|cannot|won't)\b"
-            r"|नहीं|ना|मत|\b(?:nahi|nahin|mat)\b"
+            r"|(?<![\w\u0900-\u097f])(?:नहीं|ना|मत)(?![\w\u0900-\u097f])"
+            r"|\b(?:nahi|nahin|mat)\b"
         )
         if re.search(negation_pattern, prior_clause[-60:], re.I) or re.search(
             negation_pattern, following_clause[:60], re.I
         ):
+            for key in (
+                "booking_confirmation_slot", "booking_slot_candidate", "booking_pending_time_hour"
+            ):
+                state.pop(key, None)
             if state.get("reply_language") == "English" or not re.search(
                 r"[\u0900-\u097f]", latest
             ):
@@ -1812,13 +1842,25 @@ def booking_time_confirmation_question(
         hour24 = hour % 12 + (12 if is_pm else 0)
         state.pop("booking_pending_time_hour", None)
     elif hindi:
-        period_match = re.search(r"सुबह|दोपहर|शाम", normalized)
+        period_match = re.search(r"सुबह|दोपहर|शाम|रात", normalized)
         period, hour, minute = period_match.group(), spoken_hour(hindi.group(1)), int(hindi.group(2) or 0)
         if hour is None:
             return None
         if not 1 <= hour <= 12:
             return None
-        hour24 = hour % 12 + (12 if period in ("दोपहर", "शाम") else 0)
+        if period == "रात":
+            if hour == 12:
+                hour24 = 0
+            elif 1 <= hour <= 4:
+                hour24 = hour
+            elif hour in {5, 6}:
+                if state.get("reply_language") == "English":
+                    return f"Did you mean {hour}:00 AM or {hour}:00 PM?"
+                return f"आपका मतलब सुबह {hour}:00 बजे या शाम {hour}:00 बजे है?"
+            else:
+                hour24 = hour + 12
+        else:
+            hour24 = hour % 12 + (12 if period in ("दोपहर", "शाम") else 0)
     elif meridian_only:
         if state.get("reply_language") == "English" or not re.search(
             r"[\u0900-\u097f]", latest

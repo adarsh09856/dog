@@ -8,10 +8,13 @@ import base64
 import binascii
 import hashlib
 import re
+import stat
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+MAX_INSTALLER_ARCHIVE_BYTES = 64 * 1024 * 1024
 
 
 def _read_trusted_public_key(path: Path) -> bytes:
@@ -42,7 +45,19 @@ def verify_installer_archive(
 ) -> str:
     """Verify exact archive bytes using a key supplied independently of the archive."""
     try:
-        archive_bytes = archive.read_bytes()
+        archive_info = archive.stat()
+        if not stat.S_ISREG(archive_info.st_mode):
+            raise ValueError("installer archive must be a regular file")
+        if archive_info.st_size > MAX_INSTALLER_ARCHIVE_BYTES:
+            raise ValueError(
+                f"installer archive exceeds supported size ({MAX_INSTALLER_ARCHIVE_BYTES} bytes)"
+            )
+        with archive.open("rb") as archive_stream:
+            archive_bytes = archive_stream.read(MAX_INSTALLER_ARCHIVE_BYTES + 1)
+        if len(archive_bytes) > MAX_INSTALLER_ARCHIVE_BYTES:
+            raise ValueError(
+                f"installer archive exceeds supported size ({MAX_INSTALLER_ARCHIVE_BYTES} bytes)"
+            )
         encoded_signature = signature_file.read_text(encoding="ascii").strip()
         if not re.fullmatch(r"[A-Za-z0-9_-]{86}", encoded_signature):
             raise ValueError("signature is not canonical URL-safe Base64")

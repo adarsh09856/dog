@@ -221,6 +221,34 @@ def validate_owner_private_key_path(path: Path, repository_root: Path) -> Path:
     return resolved_path
 
 
+def ensure_clean_release_source(repository_root: Path) -> None:
+    """Refuse to sign or publish artifacts from a source tree that differs from HEAD."""
+    commands = (
+        [
+            "git", "status", "--porcelain=v1", "--untracked-files=all",
+            "--ignore-submodules=none",
+        ],
+        [
+            "git", "submodule", "foreach", "--recursive", "--quiet",
+            "git status --porcelain=v1 --untracked-files=all --ignore-submodules=none",
+        ],
+    )
+    for command in commands:
+        try:
+            result = subprocess.run(
+                command, cwd=repository_root, check=True, capture_output=True,
+                text=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ValueError(
+                "Could not verify that the client release source tree is clean"
+            ) from exc
+        if result.stdout.strip():
+            raise ValueError(
+                "Signing or publishing requires a clean source tree, including submodules"
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -270,6 +298,14 @@ def main() -> int:
         )
         if args.owner_private_key else None
     )
+    # Validate the requested schema origins before probing Git. Besides keeping
+    # invalid release requests fast and side-effect-free, this ensures a bad
+    # origin is reported directly even when the checkout cannot run Git.
+    if args.owner_private_key or args.push:
+        try:
+            ensure_clean_release_source(root)
+        except ValueError as exc:
+            parser.error(str(exc))
     try:
         checked_out_commit = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=root, check=True,

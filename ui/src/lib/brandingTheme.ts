@@ -69,17 +69,13 @@ export function brandingCssVariables(
   const accent = mixHex(color, theme === "dark" ? "#000000" : "#ffffff", theme === "dark" ? 0.3 : 0.14);
   const variables: BrandingCssVariables = {
     "--brand-primary-color": color,
-    "--primary": color,
     "--sidebar-primary": color,
     "--cta": color,
     "--cta-text": readableAccent(color, theme),
     "--ring": color,
-    "--accent": accent,
     "--sidebar-accent": accent,
-    "--primary-foreground": foregroundFor(color),
     "--sidebar-primary-foreground": foregroundFor(color),
     "--cta-foreground": foregroundFor(color),
-    "--accent-foreground": foregroundFor(accent),
     "--sidebar-accent-foreground": foregroundFor(accent),
   };
   if (branding.font === "system") {
