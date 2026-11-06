@@ -7,9 +7,9 @@ describe("server and client branding theme variables", () => {
   it("uses the Kodewaves forest brand as the shared default", () => {
     expect(DEFAULT_BRANDING.primary_color).toBe("#426b57");
     expect(DEFAULT_BRANDING.favicon_url).toBe("/kodewaves-mark.svg");
-    expect(brandingCssVariables(DEFAULT_BRANDING, "light")["--primary"]).toBe(
-      DEFAULT_BRANDING.primary_color,
-    );
+    expect(
+      brandingCssVariables(DEFAULT_BRANDING, "light")["--brand-primary-color"],
+    ).toBe(DEFAULT_BRANDING.primary_color);
   });
 
   it("keeps accent text readable when the configured brand color is very light or dark", () => {
@@ -35,14 +35,16 @@ describe("server and client branding theme variables", () => {
     const light = brandingCssVariables(branding, "light");
     const dark = brandingCssVariables(branding, "dark");
 
-    expect(light["--primary"]).toBe("#123456");
-    expect(light["--brand-primary-color"]).toBe(light["--primary"]);
-    expect(dark["--brand-primary-color"]).toBe(dark["--primary"]);
-    expect(dark["--primary"]).not.toBe("#123456");
-    expect(light["--cta"]).toBe(light["--primary"]);
-    expect(dark["--sidebar-primary"]).toBe(dark["--primary"]);
-    expect(light["--primary-foreground"]).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(dark["--primary-foreground"]).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(light["--brand-primary-color"]).toBe("#123456");
+    expect(light["--cta"]).toBe(light["--brand-primary-color"]);
+    expect(light["--sidebar-primary"]).toBe(light["--brand-primary-color"]);
+    expect(dark["--brand-primary-color"]).not.toBe("#123456");
+    expect(dark["--cta"]).toBe(dark["--brand-primary-color"]);
+    expect(dark["--sidebar-primary"]).toBe(dark["--brand-primary-color"]);
+    expect(light["--cta-foreground"]).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(dark["--cta-foreground"]).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(light).not.toHaveProperty("--primary");
+    expect(dark).not.toHaveProperty("--primary");
   });
 
   it("includes the system font override only when configured", () => {

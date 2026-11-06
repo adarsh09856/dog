@@ -41,7 +41,8 @@ USER_CONFIGURATION: dict[str, Any] = {
     "is_realtime": False,
     "stt": {
         "provider": "deepgram",
-        "model": "nova-3",
+        "model": "nova-3-general",
+        "language": "en",
         "api_key": "test-key",
     },
     "tts": {
