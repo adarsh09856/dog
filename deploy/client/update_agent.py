@@ -56,10 +56,18 @@ MODEL_MANIFEST_COMPONENTS = {
     "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
     "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
 }
+MODEL_ASSET_ENV_KEYS = {
+    "ollama": {
+        "name": "CLIENT_OLLAMA_MODEL",
+        "digest": "CLIENT_OLLAMA_MODEL_DIGEST",
+    },
+}
 SYSTEMD_UNIT_FILES = ("kodewaves-client-update.service", "kodewaves-client-update.timer")
 SYSTEMD_UNIT_DIR = Path("/etc/systemd/system")
 HOST_JOURNAL_NAME = ".host-update-transaction.json"
 _DIGEST_IMAGE = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}\Z")
+_MODEL_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}\Z")
+_MODEL_ASSET_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 _PACKAGE_FILES = {
     "README.md", "docker-compose.client.yaml", "docker-compose.identity.yaml",
@@ -325,6 +333,41 @@ def _manifest_model_images(payload: dict[str, object]) -> dict[str, str]:
     return values
 
 
+def _manifest_model_assets(payload: dict[str, object]) -> dict[str, dict[str, str]] | None:
+    """Return the optional signed model asset descriptors after strict validation."""
+    assets = payload.get("model_assets")
+    if assets is None:
+        return None
+    if not isinstance(assets, dict) or set(assets) != set(MODEL_ASSET_ENV_KEYS):
+        raise UpdateError("Signed release manifest model assets are invalid")
+    ollama = assets["ollama"]
+    if (
+        not isinstance(ollama, dict)
+        or set(ollama) != {"name", "digest"}
+        or not isinstance(ollama.get("name"), str)
+        or not _MODEL_ASSET_NAME.fullmatch(ollama["name"])
+        or not isinstance(ollama.get("digest"), str)
+        or not _MODEL_ASSET_DIGEST.fullmatch(ollama["digest"])
+    ):
+        raise UpdateError("Signed release manifest model assets are invalid")
+    return {"ollama": {"name": ollama["name"], "digest": ollama["digest"]}}
+
+
+def _check_model_assets(
+    payload: dict[str, object], get_value: Callable[[str], str | None], *, description: str,
+) -> dict[str, dict[str, str]] | None:
+    assets = _manifest_model_assets(payload)
+    if assets is None:
+        profiles = {item.strip() for item in (get_value("COMPOSE_PROFILES") or "").split(",") if item.strip()}
+        if "self-hosted" in profiles:
+            raise UpdateError(f"{description} self-hosted release is missing its signed model asset descriptor")
+        return None
+    for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items():
+        if (get_value(env_key) or "") != assets["ollama"][field]:
+            raise UpdateError(f"{description} model asset {field} does not match the signed release manifest")
+    return assets
+
+
 def _verify_manifest_signature(manifest: dict[str, object], public_key_file: Path) -> dict[str, object]:
     from build_and_verify import read_public_key
 
@@ -374,6 +417,19 @@ def _atomic_env(directory: Path, values: dict[str, str]) -> bytes:
         if matches != 1:
             raise UpdateError(f"Client .env must define {key} exactly once")
         replacement = recovery._update_env_value(replacement, key, values[key])
+    optional_release_keys = set(MODEL_IMAGE_KEYS) | set(MODEL_ASSET_ENV_KEYS["ollama"].values())
+    for key, value in values.items():
+        if key in {"CLIENT_API_IMAGE", "CLIENT_UI_IMAGE", "CLIENT_RELEASE_MANIFEST_FILE"}:
+            continue
+        if key not in optional_release_keys:
+            raise UpdateError("Update contains an unsupported release configuration setting")
+        matches = sum(
+            1 for line in replacement.decode("utf-8").splitlines()
+            if re.match(rf"^\s*(?:export\s+)?{re.escape(key)}\s*=", line)
+        )
+        if matches > 1:
+            raise UpdateError(f"Client .env must define {key} at most once")
+        replacement = recovery._update_env_value(replacement, key, value)
     recovery._atomic_write(env_file, replacement, mode=0o600)
     return before
 
@@ -531,10 +587,22 @@ def _download_verified_host_release(update: dict, work_dir: Path, public_key_fil
 def _model_update_values(
     env: dict[str, str], extracted: Path, manifest_payload: dict[str, object],
 ) -> dict[str, str]:
+    model_assets = _manifest_model_assets(manifest_payload)
     profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()}
     configured = {key for key in MODEL_IMAGE_KEYS if env.get(key, "").strip()}
+    if "self-hosted" in profiles and model_assets is None:
+        raise UpdateError("Signed self-hosted release is missing its model asset descriptor")
     if "self-hosted" not in profiles and not configured:
-        return {}
+        if model_assets is None:
+            return {key: "" for key in MODEL_ASSET_ENV_KEYS["ollama"].values() if env.get(key, "")}
+        packaged = parse_env(extracted / ".env.example")
+        values = {
+            env_key: packaged.get(env_key, "")
+            for env_key in MODEL_ASSET_ENV_KEYS["ollama"].values()
+        }
+        if any(values[env_key] != model_assets["ollama"][field] for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items()):
+            raise UpdateError("Signed model asset descriptor does not match the installer template")
+        return values
     if "self-hosted" in profiles and not all((extracted / name).is_file() for name in MODEL_HOST_FILES):
         raise UpdateError("Self-hosted installation requires a signed local-inference package")
     packaged = parse_env(extracted / ".env.example")
@@ -546,6 +614,17 @@ def _model_update_values(
     manifest_values = _manifest_model_images(manifest_payload)
     if manifest_values != values:
         raise UpdateError("Signed model image pins do not match the installer template")
+    if model_assets is not None:
+        for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items():
+            configured = packaged.get(env_key, "")
+            if configured != model_assets["ollama"][field]:
+                raise UpdateError("Signed model asset descriptor does not match the installer template")
+            values[env_key] = configured
+    else:
+        values.update({
+            key: "" for key in MODEL_ASSET_ENV_KEYS["ollama"].values()
+            if env.get(key, "")
+        })
     return values
 
 
@@ -690,6 +769,7 @@ def _active_manifest(directory: Path, env: dict[str, str], public_key_file: Path
             key: env.get(key, "") for key in MODEL_IMAGE_KEYS
         }:
             raise UpdateError("Running model image pins do not match the installed signed manifest")
+    _check_model_assets(payload, env.get, description="Installed")
     return {"payload": payload, "schema": schema}
 
 
@@ -918,7 +998,19 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             raise UpdateError("Release has no signed database rollback path from the installed schema")
         if _version(update["min_current_version"]) > _version(current_version):
             raise UpdateError("Installed version is below this release's minimum")
-        if target_images["api"] == env["CLIENT_API_IMAGE"] and target_images["ui"] == env["CLIENT_UI_IMAGE"]:
+        model_update_values = _model_update_values(env, extracted, manifest_payload)
+        target_model_assets = _manifest_model_assets(manifest_payload)
+        current_payload = current_manifest.get("payload")
+        current_model_assets = _manifest_model_assets(
+            current_payload if isinstance(current_payload, dict) else {},
+        )
+        model_config_matches = all(env.get(key, "") == value for key, value in model_update_values.items())
+        if (
+            target_images["api"] == env["CLIENT_API_IMAGE"]
+            and target_images["ui"] == env["CLIENT_UI_IMAGE"]
+            and target_model_assets == current_model_assets
+            and model_config_matches
+        ):
             _report(env, status_url, update, "applied", "Release images already match the installation")
             return f"Release {version} is already installed."
 
@@ -936,7 +1028,7 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             "CLIENT_UI_IMAGE": target_images["ui"],
             "CLIENT_RELEASE_MANIFEST_FILE": candidate_ref,
         }
-        new_values.update(_model_update_values(env, extracted, manifest_payload))
+        new_values.update(model_update_values)
         # Validate the whole candidate configuration before pulling images.
         old_env = _atomic_env(directory, new_values)
         env_was_switched = True

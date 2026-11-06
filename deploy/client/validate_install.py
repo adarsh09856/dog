@@ -35,6 +35,8 @@ MODEL_IMAGE_COMPONENTS = {
     "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
     "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
 }
+MODEL_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}")
+MODEL_ASSET_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def validate_model_images(images: dict[str, str]) -> None:
@@ -47,6 +49,35 @@ def validate_model_images(images: dict[str, str]) -> None:
     for key in supplied:
         if not PINNED_IMAGE.fullmatch(images[key]):
             raise ValueError(f"{key} must use an immutable sha256 image reference")
+
+
+def validate_model_asset(payload: dict, env: dict[str, str], *, self_hosted: bool) -> list[str]:
+    """Check customer model selection against its optional owner-signed digest."""
+    errors: list[str] = []
+    model_assets = payload.get("model_assets")
+    if model_assets is None:
+        if self_hosted:
+            errors.append("signed release manifest is missing the self-hosted Ollama model asset")
+        return errors
+
+    descriptor = model_assets.get("ollama") if isinstance(model_assets, dict) else None
+    if (
+        not isinstance(model_assets, dict)
+        or set(model_assets) != {"ollama"}
+        or not isinstance(descriptor, dict)
+        or set(descriptor) != {"name", "digest"}
+        or not isinstance(descriptor.get("name"), str)
+        or not MODEL_ASSET_NAME.fullmatch(descriptor["name"])
+        or not isinstance(descriptor.get("digest"), str)
+        or not MODEL_ASSET_DIGEST.fullmatch(descriptor["digest"])
+    ):
+        errors.append("signed release manifest has invalid Ollama model asset metadata")
+    elif self_hosted and (
+        env.get("CLIENT_OLLAMA_MODEL", "").strip() != descriptor["name"]
+        or env.get("CLIENT_OLLAMA_MODEL_DIGEST", "").strip() != descriptor["digest"]
+    ):
+        errors.append("CLIENT_OLLAMA_MODEL and CLIENT_OLLAMA_MODEL_DIGEST must match the signed release manifest")
+    return errors
 
 DEFAULT_CLIENT_INTERNAL_SUBNET = "172.30.0.0/24"
 DEFAULT_CLIENT_CADDY_IPV4 = "172.30.0.2"
@@ -402,6 +433,7 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
                                     errors.append(f"{variable} does not match the signed release manifest")
                     elif self_hosted or configured_model_keys:
                         errors.append("signed release manifest is missing the configured model image inventory")
+                    errors.extend(validate_model_asset(payload, env, self_hosted=self_hosted))
             except (OSError, ValueError, AttributeError):
                 errors.append("signed release manifest must contain valid JSON")
 

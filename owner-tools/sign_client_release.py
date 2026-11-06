@@ -22,6 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deploy" / "client"
 from validate_install import PINNED_IMAGE
 
 MODEL_IMAGE_COMPONENTS = {"ollama", "indic_stt", "indus_tts", "indic_vits_tts"}
+OLLAMA_MODEL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}")
+OLLAMA_MODEL_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def main() -> int:
@@ -32,6 +34,7 @@ def main() -> int:
     parser.add_argument("--ui-files-json", type=Path, help="Protected UI hashes read from the built client image")
     parser.add_argument("--images-json", type=Path, help="API/UI immutable image references and kinds")
     parser.add_argument("--model-images-json", type=Path, help="Optional exact Ollama/STT/TTS immutable image references")
+    parser.add_argument("--model-assets-json", type=Path, help="Optional signed model-weight inventory (Ollama model name and digest)")
     parser.add_argument("--schema-compatibility-json", type=Path, help="Alembic compatibility metadata")
     parser.add_argument("--private-key", type=Path, required=True, help="Owner-only Ed25519 key file")
     parser.add_argument("--output", type=Path, required=True, help="Signed manifest destination")
@@ -75,6 +78,8 @@ def main() -> int:
         parser.error("--images-json and --schema-compatibility-json must be used together")
     if args.model_images_json and not args.images_json:
         parser.error("--model-images-json requires --images-json and --schema-compatibility-json")
+    if args.model_assets_json and not args.model_images_json:
+        parser.error("--model-assets-json requires --model-images-json")
     payload = {"edition": "client", "files": files, "ui_files": ui_files}
     if args.images_json:
         payload["images"] = json.loads(args.images_json.read_text(encoding="utf-8"))
@@ -88,6 +93,21 @@ def main() -> int:
         if not all(isinstance(reference, str) and PINNED_IMAGE.fullmatch(reference) for reference in model_images.values()):
             parser.error("Model image inventory entries must be immutable sha256 image references")
         payload["model_images"] = model_images
+    if args.model_assets_json:
+        model_assets = json.loads(args.model_assets_json.read_text(encoding="utf-8"))
+        if not isinstance(model_assets, dict) or set(model_assets) != {"ollama"}:
+            parser.error("Model asset inventory must contain exactly the ollama model asset")
+        ollama = model_assets["ollama"]
+        if (
+            not isinstance(ollama, dict)
+            or set(ollama) != {"name", "digest"}
+            or not isinstance(ollama.get("name"), str)
+            or not OLLAMA_MODEL_NAME.fullmatch(ollama["name"])
+            or not isinstance(ollama.get("digest"), str)
+            or not OLLAMA_MODEL_DIGEST.fullmatch(ollama["digest"])
+        ):
+            parser.error("Ollama model asset must have exactly a valid name and sha256 digest")
+        payload["model_assets"] = model_assets
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     signature = base64.urlsafe_b64encode(key.sign(canonical)).rstrip(b"=").decode("ascii")
     public = key.public_key().public_bytes(

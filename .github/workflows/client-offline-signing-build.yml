@@ -137,6 +137,7 @@ jobs:
           echo "minio_image=$MINIO_IMAGE" >> "$GITHUB_OUTPUT"
           echo "coturn_image=$COTURN_IMAGE" >> "$GITHUB_OUTPUT"
           echo "ollama_image=$OLLAMA_IMAGE" >> "$GITHUB_OUTPUT"
+          echo "ollama_model=qwen3.5:2b-q4_K_M" >> "$GITHUB_OUTPUT"
 
       - name: Checkout exact source and submodules
         uses: actions/checkout@v4
@@ -205,6 +206,63 @@ jobs:
             echo "vits_tag=$vits_tag"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Resolve exact Ollama model-weight digest
+        shell: bash
+        env:
+          OLLAMA_IMAGE: ${{ steps.inputs.outputs.ollama_image }}
+          OLLAMA_MODEL: ${{ steps.inputs.outputs.ollama_model }}
+          ARTIFACT_DIR: ${{ runner.temp }}/client-offline-signing-${{ github.run_id }}-${{ github.run_attempt }}
+          CONTAINER_NAME: client-model-digest-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          trap 'docker rm --force "$CONTAINER_NAME" >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name "$CONTAINER_NAME" \
+            --publish 127.0.0.1:11434:11434 \
+            --env OLLAMA_HOST=0.0.0.0:11434 \
+            "$OLLAMA_IMAGE" >/dev/null
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import time
+          import urllib.error
+          import urllib.request
+          from pathlib import Path
+
+          base = "http://127.0.0.1:11434"
+          name = os.environ["OLLAMA_MODEL"]
+          def request(path, payload=None, timeout=30):
+              body = None if payload is None else json.dumps(payload).encode("utf-8")
+              req = urllib.request.Request(base + path, data=body, headers={"Content-Type": "application/json"})
+              with urllib.request.urlopen(req, timeout=timeout) as response:
+                  return json.loads(response.read())
+
+          deadline = time.monotonic() + 180
+          while True:
+              try:
+                  request("/api/tags")
+                  break
+              except (OSError, urllib.error.URLError, json.JSONDecodeError):
+                  if time.monotonic() >= deadline:
+                      raise SystemExit("Pinned Ollama server did not become ready")
+                  time.sleep(3)
+
+          request("/api/pull", {"model": name, "stream": False}, timeout=7200)
+          tags = request("/api/tags", timeout=60)
+          models = tags.get("models") if isinstance(tags, dict) else None
+          matches = [item for item in models or [] if isinstance(item, dict) and item.get("name") == name]
+          if len(matches) != 1:
+              raise SystemExit("Ollama did not return exactly one digest for the approved model name")
+          raw_digest = matches[0].get("digest")
+          if isinstance(raw_digest, str) and raw_digest.startswith("sha256:"):
+              raw_digest = raw_digest.removeprefix("sha256:")
+          if not isinstance(raw_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", raw_digest):
+              raise SystemExit("Ollama returned an invalid model digest")
+          assets = {"ollama": {"name": name, "digest": "sha256:" + raw_digest}}
+          output = Path(os.environ["ARTIFACT_DIR"]) / "model-assets.json"
+          output.write_text(json.dumps(assets, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+          PY
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -243,6 +301,7 @@ jobs:
           MINIO_IMAGE: ${{ steps.inputs.outputs.minio_image }}
           COTURN_IMAGE: ${{ steps.inputs.outputs.coturn_image }}
           CADDY_IMAGE: ${{ inputs.caddy_image }}
+          OLLAMA_MODEL: ${{ steps.inputs.outputs.ollama_model }}
           ARTIFACT_DIR: ${{ runner.temp }}/client-offline-signing-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           set -euo pipefail
@@ -250,6 +309,7 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import re
           import subprocess
           import sys
           from pathlib import Path
@@ -288,6 +348,17 @@ jobs:
               if not reference.startswith(tag.rsplit(":", 1)[0] + "@sha256:"):
                   raise SystemExit(f"{component} digest is not bound to its approved GHCR repository")
               model_images[component] = reference
+          model_assets = json.loads((out / "model-assets.json").read_text(encoding="utf-8"))
+          if (
+              not isinstance(model_assets, dict)
+              or set(model_assets) != {"ollama"}
+              or not isinstance(model_assets["ollama"], dict)
+              or set(model_assets["ollama"]) != {"name", "digest"}
+              or model_assets["ollama"].get("name") != os.environ["OLLAMA_MODEL"]
+              or not isinstance(model_assets["ollama"].get("digest"), str)
+              or not re.fullmatch(r"sha256:[0-9a-f]{64}", model_assets["ollama"]["digest"])
+          ):
+              raise SystemExit("Ollama model assets do not match the staged model name")
 
           api_inventory = subprocess.run(
               ["docker", "run", "--rm", "--network", "none", "--entrypoint", "python",
@@ -317,6 +388,8 @@ jobs:
               "CLIENT_COTURN_IMAGE": os.environ["COTURN_IMAGE"],
               "CLIENT_CADDY_IMAGE": os.environ["CADDY_IMAGE"],
               "CLIENT_OLLAMA_IMAGE": model_images["ollama"],
+              "CLIENT_OLLAMA_MODEL": model_assets["ollama"]["name"],
+              "CLIENT_OLLAMA_MODEL_DIGEST": model_assets["ollama"]["digest"],
               "CLIENT_INDIC_STT_IMAGE": model_images["indic_stt"],
               "CLIENT_INDUS_TTS_IMAGE": model_images["indus_tts"],
               "CLIENT_INDIC_VITS_TTS_IMAGE": model_images["indic_vits_tts"],
@@ -331,15 +404,18 @@ jobs:
               f"Source commit: `{os.environ['SOURCE_COMMIT']}`\n\n"
               "This bundle is not a customer release. The images are public, uniquely tagged staging images; "
               "the artifact contains no owner private key and no signed license. `customer-images.env` pins "
-              "all seven infrastructure images and all four local inference images to immutable digests.\n\n"
+              "all seven infrastructure images and all four local inference images to immutable digests; "
+              "`model-assets.json` records the exact Ollama model-weight digest.\n\n"
               "From a trusted owner machine, check out this exact source commit, verify the public keys and "
-              "all image digests, then sign the API/UI inventories and exact four-component local-model image inventory with:\n\n"
+              "all image and model-weight digests, then sign the API/UI inventories, exact four-component local-model image inventory, "
+              "and Ollama model asset inventory with:\n\n"
               "```bash\n"
               "python owner-tools/sign_client_release.py \\\n"
               "  --files-json api-inventory.json \\\n"
               "  --ui-files-json ui-inventory.json \\\n"
               "  --images-json images.json \\\n"
               "  --model-images-json model-images.json \\\n"
+              "  --model-assets-json model-assets.json \\\n"
               "  --schema-compatibility-json schema-compatibility.json \\\n"
               "  --private-key /secure/offline/release-private.key \\\n"
               "  --output client-release-manifest.json \\\n"

@@ -56,11 +56,19 @@ MODEL_IMAGE_ENV_KEYS = {
     "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
     "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
 }
+MODEL_ASSET_ENV_KEYS = {
+    "ollama": {
+        "name": "CLIENT_OLLAMA_MODEL",
+        "digest": "CLIENT_OLLAMA_MODEL_DIGEST",
+    },
+}
 MODEL_COMPOSE_SERVICES = ("ollama", "indic-stt", "indus-tts", "indic-vits-tts")
 _PINNED_IMAGE_REFERENCE = re.compile(
     r"[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?"
     r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}"
 )
+_MODEL_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}\Z")
+_MODEL_ASSET_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
 def _validate_member_name(name: str) -> None:
@@ -319,6 +327,20 @@ def _verify_release_manifest(manifest_bytes: bytes, release_public_key: str) -> 
                 for reference in model_images.values()
             ):
                 raise ValueError("manifest model image metadata is invalid")
+        model_assets = payload.get("model_assets")
+        if model_assets is not None:
+            if not isinstance(model_assets, dict) or set(model_assets) != set(MODEL_ASSET_ENV_KEYS):
+                raise ValueError("manifest model asset metadata is incomplete")
+            ollama_asset = model_assets["ollama"]
+            if (
+                not isinstance(ollama_asset, dict)
+                or set(ollama_asset) != {"name", "digest"}
+                or not isinstance(ollama_asset.get("name"), str)
+                or not _MODEL_ASSET_NAME.fullmatch(ollama_asset["name"])
+                or not isinstance(ollama_asset.get("digest"), str)
+                or not _MODEL_ASSET_DIGEST.fullmatch(ollama_asset["digest"])
+            ):
+                raise ValueError("manifest model asset metadata is invalid")
         if not isinstance(images, dict) or set(images) != {"api", "ui"} or not isinstance(schema, dict):
             raise ValueError("manifest image or schema metadata is invalid")
         for name, image in images.items():
@@ -395,6 +417,27 @@ def _check_model_images(payload: dict[str, object], get_value, *, description: s
     if signed != configured:
         raise ValueError(f"{description} model image pins do not match the signed release manifest")
     return configured
+
+
+def _check_model_assets(
+    payload: dict[str, object], get_value, *, description: str,
+) -> dict[str, dict[str, str]] | None:
+    """Verify the signed Ollama asset descriptor against the release config."""
+    assets = payload.get("model_assets")
+    if assets is None:
+        profiles = {
+            item.strip() for item in (get_value("COMPOSE_PROFILES") or "").split(",")
+            if item.strip()
+        }
+        if "self-hosted" in profiles:
+            raise ValueError(f"{description} self-hosted release is missing its signed model asset descriptor")
+        return None
+    # _verify_release_manifest validates the exact signed schema first.
+    descriptor = assets["ollama"]
+    for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items():
+        if (get_value(env_key) or "") != descriptor[field]:
+            raise ValueError(f"{description} model asset {field} does not match the signed release manifest")
+    return {"ollama": {"name": descriptor["name"], "digest": descriptor["digest"]}}
 
 
 def _check_nested_tar_file(path: Path, description: str) -> None:
@@ -512,6 +555,11 @@ def create_archive(
             lambda key: _env_value(env_bytes, key),
             description="Archived .env",
         )
+        model_assets = _check_model_assets(
+            payload,
+            lambda key: _env_value(env_bytes, key),
+            description="Archived .env",
+        )
     except (KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError("Archived release manifest does not identify the configured API/UI images") from exc
 
@@ -532,6 +580,8 @@ def create_archive(
     }
     if model_images is not None:
         metadata["model_images"] = model_images
+    if model_assets is not None:
+        metadata["model_assets"] = model_assets
     contents: dict[str, bytes] = {
         "recovery.json": (json.dumps(metadata, sort_keys=True, indent=2) + "\n").encode(),
     }
@@ -919,7 +969,8 @@ def _staged_config_matches_installation(staged: Path, env_file: Path, compose_di
 
 
 _RELEASE_CONFIG_KEYS = {
-    "CLIENT_API_IMAGE", "CLIENT_UI_IMAGE", "CLIENT_RELEASE_MANIFEST_FILE", *MODEL_IMAGE_KEYS,
+    "CLIENT_API_IMAGE", "CLIENT_UI_IMAGE", "CLIENT_RELEASE_MANIFEST_FILE",
+    *MODEL_ASSET_ENV_KEYS["ollama"].values(), *MODEL_IMAGE_KEYS,
 }
 
 
@@ -954,6 +1005,9 @@ def _release_rollback_config(
     target_model_images = _check_model_images(
         target, archived_env.get, description="Archived release",
     )
+    target_model_assets = _check_model_assets(
+        target, archived_env.get, description="Archived release",
+    )
 
     current_manifest_ref = current_env.get("CLIENT_RELEASE_MANIFEST_FILE", "")
     current_manifest_path = Path(current_manifest_ref)
@@ -974,6 +1028,7 @@ def _release_rollback_config(
     current_model_images = _check_model_images(
         current, current_env.get, description="Active release",
     )
+    _check_model_assets(current, current_env.get, description="Active release")
     current_head = current["schema_compatibility"]["head"]
     target_head = target["schema_compatibility"]["head"]
     if target_head not in current["schema_compatibility"]["rollback_to"]:
@@ -1004,6 +1059,17 @@ def _release_rollback_config(
         })
     elif current_model_images is not None:
         replacements.update({key: "" for key in MODEL_IMAGE_KEYS})
+    if target_model_assets is not None:
+        replacements.update({
+            env_key: target_model_assets["ollama"][field]
+            for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items()
+        })
+    elif any(key in archived_env or key in current_env for key in MODEL_ASSET_ENV_KEYS["ollama"].values()):
+        # Preserve the selected model from older manifests that predate signed assets.
+        replacements.update({
+            key: archived_env.get(key, "")
+            for key in MODEL_ASSET_ENV_KEYS["ollama"].values()
+        })
     original_env_bytes = env_file.read_bytes()
     try:
         lines = original_env_bytes.decode("utf-8").splitlines(keepends=True)
@@ -1114,12 +1180,19 @@ def _restore_to_docker_volumes_locked(
         original_override = override_path.read_bytes() if original_override_exists else b""
         previous_manifest_path: Path | None = None
         previous_manifest_bytes = b""
+        previous_model_assets = None
         if allow_release_rollback:
             previous_manifest_path = Path(current_env["CLIENT_RELEASE_MANIFEST_FILE"])
             if not previous_manifest_path.is_absolute():
                 previous_manifest_path = compose_dir / previous_manifest_path
             _check_regular_file(previous_manifest_path, "active release manifest")
             previous_manifest_bytes = previous_manifest_path.read_bytes()
+            previous_payload = _verify_release_manifest(
+                previous_manifest_bytes, _read_release_public_key(release_public_key),
+            )
+            previous_model_assets = _check_model_assets(
+                previous_payload, current_env.get, description="Active release",
+            )
         state_dir.mkdir(mode=0o700)
         try:
             _write_private(state_dir / "previous-recovery-override", original_override)
@@ -1151,6 +1224,8 @@ def _restore_to_docker_volumes_locked(
                 "previous_manifest_sha256": hashlib.sha256(previous_manifest_bytes).hexdigest(),
                 "release_public_key_path": str(release_public_key.resolve(strict=True)),
                 "release_public_key_sha256": _sha256_file(release_public_key),
+                "previous_model_assets": previous_model_assets,
+                "restored_model_assets": metadata.get("model_assets"),
             })
         try:
             _write_private(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
@@ -1331,6 +1406,11 @@ def _rollback_docker_restore_locked(
         ):
             raise ValueError("Active recovery image pins do not match the signed manifest")
         _check_model_images(target_payload, active_env.get, description="Active recovery")
+        restored_model_assets = _check_model_assets(
+            target_payload, active_env.get, description="Active recovery",
+        )
+        if "restored_model_assets" in state and state.get("restored_model_assets") != restored_model_assets:
+            raise ValueError("Saved recovery model asset descriptor changed after restore")
         previous_env = parse_env(state_dir / "previous-env")
         previous_manifest_path = Path(previous_env["CLIENT_RELEASE_MANIFEST_FILE"])
         if not previous_manifest_path.is_absolute():
@@ -1343,6 +1423,11 @@ def _rollback_docker_restore_locked(
             raise ValueError("Saved prior release manifest is damaged")
         previous_payload = _verify_release_manifest(previous_manifest_bytes, trusted_key)
         _check_model_images(previous_payload, previous_env.get, description="Saved prior release")
+        previous_model_assets = _check_model_assets(
+            previous_payload, previous_env.get, description="Saved prior release",
+        )
+        if "previous_model_assets" in state and state.get("previous_model_assets") != previous_model_assets:
+            raise ValueError("Saved prior model asset descriptor changed after restore")
     command, model, _env = _compose_context(compose_dir, env_file)
     running = _running_services(command, compose_dir, set(model.get("services", {})))
     original_running = list(state.get("running_services", []))
@@ -1469,6 +1554,13 @@ def _validate_archive_handle(
         )
         if metadata.get("model_images") != model_images:
             raise ValueError("Recovery model image metadata does not match the signed release manifest")
+        model_assets = _check_model_assets(
+            manifest_payload,
+            lambda key: _env_value(env_bytes, key),
+            description="Archived .env",
+        )
+        if metadata.get("model_assets") != model_assets:
+            raise ValueError("Recovery model asset metadata does not match the signed release manifest")
     except (KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError("Archived client release manifest is invalid or incomplete") from exc
     key_configured = bool(_env_value(env_bytes, "CLIENT_IDENTITY_KEY_FILE"))

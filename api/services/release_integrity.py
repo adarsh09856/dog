@@ -31,6 +31,23 @@ MODEL_IMAGE_REFERENCE = re.compile(
     r"[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?"
     r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}"
 )
+MODEL_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}")
+MODEL_ASSET_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def _valid_model_assets(value: object) -> bool:
+    """Validate the signed identities of downloaded model weights."""
+    if not isinstance(value, dict) or set(value) != {"ollama"}:
+        return False
+    descriptor = value["ollama"]
+    return (
+        isinstance(descriptor, dict)
+        and set(descriptor) == {"name", "digest"}
+        and isinstance(descriptor.get("name"), str)
+        and bool(MODEL_ASSET_NAME.fullmatch(descriptor["name"]))
+        and isinstance(descriptor.get("digest"), str)
+        and bool(MODEL_ASSET_DIGEST.fullmatch(descriptor["digest"]))
+    )
 
 
 class ReleaseIntegrityError(RuntimeError):
@@ -142,6 +159,7 @@ def verify_release_manifest(
             raise ReleaseIntegrityError("Invalid client release manifest")
         images = payload.get("images")
         model_images = payload.get("model_images")
+        model_assets = payload.get("model_assets")
         schema = payload.get("schema_compatibility")
         if (images is None) != (schema is None):
             raise ReleaseIntegrityError("Release image and schema metadata must be signed together")
@@ -151,6 +169,8 @@ def verify_release_manifest(
             for name, reference in model_images.items():
                 if not isinstance(reference, str) or not MODEL_IMAGE_REFERENCE.fullmatch(reference):
                     raise ReleaseIntegrityError(f"Invalid client release model image metadata: {name}")
+        if model_assets is not None and not _valid_model_assets(model_assets):
+            raise ReleaseIntegrityError("Invalid client release model asset metadata")
         if images is not None:
             if not isinstance(images, dict) or set(images) != {"api", "ui"}:
                 raise ReleaseIntegrityError("Invalid client release image metadata")
@@ -250,6 +270,7 @@ def verify_configured_release(root: Path | None = None) -> dict[str, object] | N
                     reason="unknown", component=f"{service}_image",
                 )
     signed_model_images = payload.get("model_images")
+    signed_model_assets = payload.get("model_assets")
     configured_models = {
         service: os.getenv(variable, "").strip()
         for service, variable in MODEL_IMAGE_ENV_KEYS.items()
@@ -276,6 +297,25 @@ def verify_configured_release(root: Path | None = None) -> dict[str, object] | N
                     f"Configured {label} model image does not match the signed release",
                     reason="unknown", component=f"{service}_model_image",
                 )
+    configured_model_name = os.getenv("KODEWAVES_CLIENT_OLLAMA_MODEL", "").strip()
+    configured_model_digest = os.getenv("KODEWAVES_CLIENT_OLLAMA_MODEL_DIGEST", "").strip()
+    if self_hosted or configured_model_name or configured_model_digest:
+        if not _valid_model_assets(signed_model_assets):
+            raise ReleaseIntegrityError(
+                "Self-hosted model weights are not bound to the signed release",
+                reason="unknown", component="model_asset_manifest",
+            )
+        expected_asset = signed_model_assets["ollama"]
+        if (
+            configured_model_name != expected_asset["name"]
+            or configured_model_digest != expected_asset["digest"]
+        ):
+            raise ReleaseIntegrityError(
+                "Configured Ollama model weights do not match the signed release",
+                reason="unknown", component="ollama_model_asset",
+                expected_sha256=expected_asset["digest"],
+                observed_sha256=configured_model_digest or None,
+            )
     return payload
 
 

@@ -44,6 +44,7 @@ services:
     environment:
       OLLAMA_ENDPOINT: http://ollama:11434
       CLIENT_OLLAMA_MODEL: ${CLIENT_OLLAMA_MODEL:-qwen3.5:2b-q4_K_M}
+      CLIENT_OLLAMA_MODEL_DIGEST: ${CLIENT_OLLAMA_MODEL_DIGEST:-}
     volumes:
       - ./warm_local_models.py:/client-tools/warm_local_models.py:ro
     depends_on:

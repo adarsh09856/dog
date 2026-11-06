@@ -31,6 +31,8 @@ MODEL_IMAGE_COMPONENTS = {
     "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
     "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
 }
+OLLAMA_MODEL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}")
+OLLAMA_MODEL_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def package_installer(
@@ -61,8 +63,15 @@ def package_installer(
         raise ValueError("Installer archive already exists; choose a new output path")
     if private_key_file is not None:
         private_key_file = validate_owner_private_key_path(private_key_file, ROOT)
+    input_values = parse_env(images_env)
+    configured_model_name = input_values.pop("CLIENT_OLLAMA_MODEL", None)
+    configured_model_digest = input_values.pop("CLIENT_OLLAMA_MODEL_DIGEST", None)
+    if configured_model_name is not None and not OLLAMA_MODEL_NAME.fullmatch(configured_model_name):
+        raise ValueError("CLIENT_OLLAMA_MODEL must be a valid Ollama model identifier")
+    if configured_model_digest is not None and not OLLAMA_MODEL_DIGEST.fullmatch(configured_model_digest):
+        raise ValueError("CLIENT_OLLAMA_MODEL_DIGEST must be a sha256 digest")
     images = {
-        key: value for key, value in parse_env(images_env).items()
+        key: value for key, value in input_values.items()
         if key not in MODEL_IMAGE_KEYS or value.strip()
     }
     if set(images) not in (IMAGE_KEYS, IMAGE_KEYS | MODEL_IMAGE_KEYS):
@@ -135,6 +144,19 @@ def package_installer(
         if signed_images.get(component) != expected:
             raise ValueError(f"Signed {component.upper()} image does not match the installer digest")
     signed_model_images = payload.get("model_images")
+    signed_model_assets = payload.get("model_assets")
+    if signed_model_assets is not None:
+        if (
+            not isinstance(signed_model_assets, dict)
+            or set(signed_model_assets) != {"ollama"}
+            or not isinstance(signed_model_assets["ollama"], dict)
+            or set(signed_model_assets["ollama"]) != {"name", "digest"}
+            or not isinstance(signed_model_assets["ollama"].get("name"), str)
+            or not OLLAMA_MODEL_NAME.fullmatch(signed_model_assets["ollama"]["name"])
+            or not isinstance(signed_model_assets["ollama"].get("digest"), str)
+            or not OLLAMA_MODEL_DIGEST.fullmatch(signed_model_assets["ollama"]["digest"])
+        ):
+            raise ValueError("Release manifest Ollama model asset must contain exactly a valid name and sha256 digest")
     configured_model_images = {
         component: images[variable]
         for component, variable in MODEL_IMAGE_COMPONENTS.items()
@@ -147,11 +169,26 @@ def package_installer(
             raise ValueError("Release manifest must sign the exact four configured local inference images")
         if signed_model_images != configured_model_images:
             raise ValueError("Signed model image digests do not match the installer image pins")
+        if signed_model_assets is None:
+            raise ValueError("Self-hosted installer requires the signed Ollama model asset digest")
     elif signed_model_images is not None:
         if not isinstance(signed_model_images, dict) or set(signed_model_images) != set(MODEL_IMAGE_COMPONENTS):
             raise ValueError("Release manifest model inventory must contain exactly four local inference images")
         if not all(isinstance(value, str) and PINNED_IMAGE.fullmatch(value) for value in signed_model_images.values()):
             raise ValueError("Release manifest model inventory must use immutable image digests")
+    if configured_model_name is not None and not configured_model_images:
+        raise ValueError("CLIENT_OLLAMA_MODEL is only valid when all local inference images are configured")
+    if configured_model_digest is not None and not configured_model_images:
+        raise ValueError("CLIENT_OLLAMA_MODEL_DIGEST is only valid when all local inference images are configured")
+    template_model_match = re.search(r"^CLIENT_OLLAMA_MODEL=([^\r\n]*)$", (root / "deploy/client/.env.example").read_text(encoding="utf-8"), re.MULTILINE)
+    if not template_model_match:
+        raise ValueError("Installer template must define CLIENT_OLLAMA_MODEL exactly once")
+    installer_model_name = configured_model_name or template_model_match.group(1)
+    if signed_model_assets is not None and signed_model_assets["ollama"]["name"] != installer_model_name:
+        raise ValueError("Signed Ollama model name does not match the installer model configuration")
+    signed_model_digest = signed_model_assets["ollama"]["digest"] if signed_model_assets is not None else None
+    if configured_model_digest is not None and configured_model_digest != signed_model_digest:
+        raise ValueError("Signed Ollama model digest does not match the installer model configuration")
     if not all(isinstance(payload.get(key), dict) and payload[key] for key in ("files", "ui_files")):
         raise ValueError("Release manifest must contain nonempty API and UI inventories")
     for inventory in (payload["files"], payload["ui_files"]):
@@ -182,6 +219,24 @@ def package_installer(
         )
         if replacements != 1:
             raise ValueError(f"Installer template must define {variable} exactly once")
+    if configured_model_name is not None:
+        env_template, replacements = re.subn(
+            r"^CLIENT_OLLAMA_MODEL=.*$",
+            f"CLIENT_OLLAMA_MODEL={configured_model_name}",
+            env_template,
+            flags=re.MULTILINE,
+        )
+        if replacements != 1:
+            raise ValueError("Installer template must define CLIENT_OLLAMA_MODEL exactly once")
+    if signed_model_digest is not None:
+        env_template, replacements = re.subn(
+            r"^CLIENT_OLLAMA_MODEL_DIGEST=.*$",
+            f"CLIENT_OLLAMA_MODEL_DIGEST={signed_model_digest}",
+            env_template,
+            flags=re.MULTILINE,
+        )
+        if replacements != 1:
+            raise ValueError("Installer template must define CLIENT_OLLAMA_MODEL_DIGEST exactly once")
 
     # Reading only these fixed paths prevents caller-selected sources, archive
     # traversal names, local .env files or private signing tools from shipping.
