@@ -58,6 +58,24 @@ class ContactDirectoryPage(BaseModel):
     total_pages: int
 
 
+def _spreadsheet_safe_text(value: Optional[str]) -> str:
+    """Keep formula-like contact text inert when opened as a spreadsheet."""
+    text = value or ""
+    # Spreadsheet programs may ignore leading whitespace/control characters
+    # before interpreting a formula. Prefix a text marker in that case.
+    first = next(
+        (
+            char
+            for char in text
+            if not (char.isspace() or ord(char) < 32 or char == "\ufeff")
+        ),
+        "",
+    )
+    if first in {"=", "+", "-", "@"}:
+        return "'" + text
+    return text
+
+
 class LeadStageItem(BaseModel):
     id: str
     name: str
@@ -432,12 +450,12 @@ async def export_contacts_csv(user: UserModel = Depends(get_user)):
         for c in contacts:
             writer.writerow([
                 str(c.id),
-                c.first_name or "",
-                c.last_name or "",
-                c.phone or "",
-                c.email or "",
-                c.company or "",
-                ",".join(c.tags or []),
+                _spreadsheet_safe_text(c.first_name),
+                _spreadsheet_safe_text(c.last_name),
+                _spreadsheet_safe_text(c.phone),
+                _spreadsheet_safe_text(c.email),
+                _spreadsheet_safe_text(c.company),
+                _spreadsheet_safe_text(",".join(c.tags or [])),
                 c.created_at.isoformat() if c.created_at else "",
             ])
 

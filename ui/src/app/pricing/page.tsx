@@ -4,8 +4,8 @@ import { ArrowRight, Check, ChevronDown, Globe2, Server } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { PublicEnterpriseLeadCTA } from "@/components/lead-forms/PublicEnterpriseLeadCTA";
+import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { Button } from "@/components/ui/button";
 import {
   publicApi,

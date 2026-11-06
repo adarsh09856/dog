@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
 import { PublicEnterpriseLeadCTA } from "@/components/lead-forms/PublicEnterpriseLeadCTA";
+import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { useClientBranding } from "@/context/ClientBrandingContext";
 
