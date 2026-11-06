@@ -290,11 +290,6 @@ def main() -> int:
         for tag in (args.api_tag, args.ui_tag):
             if "/" not in _repository_name(tag):
                 parser.error(f"Publish tags must include a registry or namespace: {tag}")
-    if args.owner_private_key or args.push:
-        try:
-            ensure_clean_release_source(root)
-        except ValueError as exc:
-            parser.error(str(exc))
     schema_compatibility = (
         migration_compatibility(
             root / "api" / "alembic" / "versions",
@@ -303,6 +298,14 @@ def main() -> int:
         )
         if args.owner_private_key else None
     )
+    # Validate the requested schema origins before probing Git. Besides keeping
+    # invalid release requests fast and side-effect-free, this ensures a bad
+    # origin is reported directly even when the checkout cannot run Git.
+    if args.owner_private_key or args.push:
+        try:
+            ensure_clean_release_source(root)
+        except ValueError as exc:
+            parser.error(str(exc))
     try:
         checked_out_commit = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=root, check=True,
