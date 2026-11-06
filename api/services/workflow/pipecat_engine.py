@@ -904,6 +904,19 @@ class PipecatEngine:
             await self._register_knowledge_base_function(
                 knowledge_document_uuids, agent=agent
             )
+        functions = await compose_functions_for_node(
+            node=node,
+            custom_tool_manager=manager,
+            additional_document_uuids=self._website_knowledge_document_uuids or [],
+        )
+        booking_available = any(
+            getattr(function, "name", None) == "book_appointment"
+            or (
+                isinstance(function, dict)
+                and function.get("name") == "book_appointment"
+            )
+            for function in functions
+        )
         speech_instructions = []
         if not agent.is_realtime:
             language_instruction = speech_language_instruction(
@@ -934,7 +947,11 @@ class PipecatEngine:
             speech_instructions.append(client_identity)
         # Keep caller-specific values after the stable language and voice rules
         # so changing contacts does not invalidate that reusable model prefix.
-        speech_instructions.append(contact_context_instruction(self._call_context_vars))
+        speech_instructions.append(
+            contact_context_instruction(
+                self._call_context_vars, booking_available=booking_available
+            )
+        )
         prompt = compose_system_prompt_for_node(
             node=node,
             workflow=agent.workflow,
@@ -944,11 +961,6 @@ class PipecatEngine:
             has_website_knowledge=bool(self._website_knowledge_document_uuids),
         )
         system_prompt = prompt.text
-        functions = await compose_functions_for_node(
-            node=node,
-            custom_tool_manager=manager,
-            additional_document_uuids=self._website_knowledge_document_uuids or [],
-        )
         agent.tools = ToolsSchema(standard_tools=functions)
         agent.system_prompt = system_prompt
         if agent.recording_router is not None:
