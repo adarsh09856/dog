@@ -1,5 +1,7 @@
 """Provider-neutral caller context shared by every cascade agent LLM."""
 
+import re
+
 from pipecat.frames.frames import (
     CancelFrame,
     EndFrame,
@@ -136,6 +138,64 @@ class CallerContextPolicyProcessor(FrameProcessor):
                 "again. Continue by asking only the next missing detail: "
                 + self._phone_followup
             )
+        if booking_available and not any(
+            base.__name__ == "_BookingToolChoiceMixin"
+            for base in type(self._llm_service).__mro__
+        ):
+            # The local/OpenAI mixin already runs these stateful parsers inside
+            # its provider service. Run them here only for native providers so
+            # the same exact date/time interpretation reaches every cascade
+            # backend without double-consuming a slot on existing services.
+            from api.services.workflow.contact_context import (
+                booking_date_time_question,
+                booking_time_confirmation_question,
+            )
+
+            contact = getattr(self._llm_service, "_known_contact", {})
+            recent = state.get("recent_caller_statements")
+            visible_user = {
+                " ".join(item["content"].split()).casefold()
+                for item in messages
+                if isinstance(item, dict)
+                and item.get("role") == "user"
+                and isinstance(item.get("content"), str)
+            }
+            hidden_statements = [
+                statement for statement in recent[-8:]
+                if isinstance(statement, str)
+                and " ".join(statement.split()).casefold() not in visible_user
+            ] if isinstance(recent, list) else []
+            parser_messages = [
+                *({"role": "user", "content": statement} for statement in hidden_statements),
+                *messages,
+            ]
+            latest_user = next(
+                (item.get("content", "") for item in reversed(messages)
+                 if isinstance(item, dict) and item.get("role") == "user"),
+                "",
+            )
+            has_new_slot = isinstance(latest_user, str) and bool(re.search(
+                r"\b(?:tomorrow|today|kal|aaj|at\s+\d{1,2}|\d{1,2}(?::\d{2})?\s*"
+                r"(?:a\.?m\.?|p\.?m\.?|am|pm)|(?:eight|nine|ten|eleven|twelve)\s*"
+                r"(?:a\.?m\.?|p\.?m\.?|am|pm))\b|कल|आज|बजे|सुबह|दोपहर|शाम|रात",
+                latest_user, re.IGNORECASE,
+            ))
+            if has_new_slot and not re.fullmatch(
+                r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|हाँ|हां|जी|ठीक है)[.!?\s।]*",
+                latest_user, re.IGNORECASE,
+            ):
+                state.pop("booking_slot_candidate", None)
+                state.pop("booking_confirmation_slot", None)
+            date_followup = booking_date_time_question(parser_messages, state, contact)
+            time_followup = booking_time_confirmation_question(parser_messages, state)
+            slot_followup = time_followup or date_followup
+            if slot_followup:
+                policy += (
+                    " The latest caller date/time was parsed by the shared booking "
+                    "rules. Do not reuse an older assistant suggestion or invent a "
+                    "date/time. Continue with this exact follow-up: "
+                    + slot_followup
+                )
 
         message = {"role": "system", "content": policy}
         first_user = next(
