@@ -412,6 +412,26 @@ _HINDI_TIME_HOURS = {
     "ग्यारह": 11,
     "बारह": 12,
 }
+_HINGLISH_TIME_WORDS = {
+    "aath": "आठ", "ath": "आठ", "aatth": "आठ",
+    "subah": "सुबह", "dopahar": "दोपहर", "dupehar": "दोपहर",
+    "shaam": "शाम", "sham": "शाम", "raat": "रात", "baje": "बजे",
+}
+
+
+def _normalize_hinglish_booking_time(text: str) -> str:
+    """Normalize exact Roman Hindi time words for deterministic slot parsing."""
+    normalized = unicodedata.normalize("NFC", str(text or ""))
+    for word, replacement in _HINGLISH_TIME_WORDS.items():
+        normalized = re.sub(
+            rf"(?<![\w]){re.escape(word)}(?![\w])",
+            replacement,
+            normalized,
+            flags=re.IGNORECASE,
+        )
+    return normalized
+
+
 _DATE_COMPOSITE_NUMBERS = {
     "twentyone": 21, "twentytwo": 22, "twentythree": 23, "twentyfour": 24,
     "twentyfive": 25, "twentysix": 26, "twentyseven": 27, "twentyeight": 28,
@@ -1660,15 +1680,16 @@ def booking_time_confirmation_question(
         re.IGNORECASE,
     )
     has_new_date = bool(re.search(r"\b(?:tomorrow|today|kal|aaj)\b|कल|आज", latest, re.I))
+    normalized_latest = _normalize_hinglish_booking_time(latest)
     if not has_new_date:
         has_new_date = _explicit_caller_booking_date(
-            [latest], reference_date=today
+            [normalized_latest], reference_date=today
         ) is not None
     has_new_time = bool(re.search(
         r"\b(?:at\s+)?(?:\d{1,2}|[a-z]+)(?:\s+\w+)?\s*"
         r"(?:a\.?m\.?|p\.?m\.?|am|pm|morning|afternoon|evening|night)\b"
         r"|(?:सुबह|दोपहर|शाम|रात)|\b\d{1,2}:\d{2}\b",
-        latest,
+        normalized_latest,
         re.IGNORECASE,
     ))
     if (has_new_date or has_new_time) and not affirmative:
@@ -1677,6 +1698,21 @@ def booking_time_confirmation_question(
         # date or time from this turn instead of repeating the stale proposal.
         state.pop("booking_slot_candidate", None)
         state.pop("booking_confirmation_slot", None)
+    from api.services.workflow.confirmed_booking import new_booking_requested
+
+    fresh_booking_without_slot = new_booking_requested(latest) and any(
+        new_booking_requested(message["content"])
+        for message in users[:-1]
+    ) and not (has_new_date or has_new_time)
+    if fresh_booking_without_slot:
+        # A distinct later booking starts a fresh slot. Do not reuse the date
+        # or time staged for the previous request if this request has no time.
+        for key in (
+            "booking_slot_candidate", "booking_confirmation_slot",
+            "booking_time_question_date", "booking_time_pending",
+            "booking_pending_time_hour", "booking_pending_time_minute",
+        ):
+            state.pop(key, None)
     candidate = state.get("booking_slot_candidate")
     if allow_readback and isinstance(candidate, str) and re.fullmatch(
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", candidate
@@ -1734,7 +1770,7 @@ def booking_time_confirmation_question(
     date_was_in_latest = stated_date is not None
     if stated_date is None:
         stated_date = state.get("booking_time_question_date")
-    if not isinstance(stated_date, str):
+    if not isinstance(stated_date, str) and not fresh_booking_without_slot:
         stated_date = _explicit_caller_booking_date(
             [message["content"] for message in users[-8:]], reference_date=today
         )
@@ -1775,7 +1811,9 @@ def booking_time_confirmation_question(
     )
     if not (has_prior_booking or staged_date_is_valid or initial_booking_with_date):
         return None
-    normalized = latest.translate(str.maketrans("०१२३४५६७८९", "0123456789"))
+    normalized = _normalize_hinglish_booking_time(latest).translate(
+        str.maketrans("०१२३४५६७८९", "0123456789")
+    )
 
     def spoken_hour(token: str) -> int | None:
         value = token.strip().casefold()

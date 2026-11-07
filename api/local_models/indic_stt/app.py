@@ -530,10 +530,15 @@ def _resolve_decode_language(
             for code in allowed_languages
             if isinstance(code, str) and str(code).strip()
         }
-    # Urdu has no configured reply voice in this product. Use the Hindi
-    # decoder only when the active TTS model explicitly enables Hindi.
-    if detected == "ur" and "hi" in enabled:
-        return "hi", "urdu_routed_to_hindi"
+    # Urdu has no enabled reply voice. Treat it as unsupported and keep the
+    # configured/stable enabled decoder when available; use Hindi only as the
+    # initial product fallback when no call language has been established.
+    if detected == "ur":
+        if fallback in enabled:
+            route = "urdu_routed_to_hindi" if fallback == "hi" else "unsupported_language_held_previous"
+            return fallback, route
+        if "hi" in enabled:
+            return "hi", "urdu_routed_to_hindi"
     supported = enabled
     if detected not in supported:
         threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE

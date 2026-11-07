@@ -32,7 +32,6 @@ LOCAL_INDIC_STT_LANGUAGES = frozenset({
 })
 _DEVANAGARI_LANGUAGES = frozenset({"hi", "mr", "ne", "sa", "mai", "brx", "doi"})
 _CONFIRMED_LANGUAGE_ROUTES = frozenset({
-    "urdu_routed_to_hindi",
     "competitive_indian_english",
     "whisper_english_rescue",
     "initial_voice_fallback_low_confidence",
@@ -141,6 +140,11 @@ def _advance_stable_language(
     """
     stable = str(current or "").strip().lower().replace("_", "-").split("-", 1)[0]
     detected = str(candidate or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    if route == "urdu_routed_to_hindi" and stable:
+        # Urdu has no enabled reply voice. The Hindi decoder is a transcript
+        # fallback only; it must never change an established call language,
+        # even after repeated Urdu-classified turns.
+        return stable, None, 0
     if detected not in LOCAL_INDIC_STT_LANGUAGES:
         return stable or None, None, 0
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE

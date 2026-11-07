@@ -57,6 +57,14 @@ REGIONAL_SPOKEN_DIGITS = {
 # segmentation is performed.
 PHONE_SPOKEN_DIGITS = {
     **REGIONAL_SPOKEN_DIGITS,
+    # Common Romanized Hindi forms emitted by multilingual STT for Hinglish
+    # phone dictation. Exact-token matching is safe because parsing only runs
+    # inside an active phone slot.
+    "shunya": "0", "shoonya": "0", "ek": "1", "ikk": "1",
+    "do": "2", "doh": "2", "teen": "3", "tin": "3",
+    "char": "4", "chaar": "4", "panch": "5", "paanch": "5",
+    "cheh": "6", "chhe": "6", "saat": "7", "aath": "8",
+    "ath": "8", "nau": "9", "nao": "9",
     "zero": "0", "oh": "0", "शून्य": "0", "जीरो": "0", "ज़ीरो": "0",
     "one": "1", "एक": "1", "वन": "1", "ओन": "1", "two": "2", "दो": "2", "टू": "2",
     "three": "3", "तीन": "3", "थ्री": "3", "four": "4", "चार": "4", "फोर": "4",

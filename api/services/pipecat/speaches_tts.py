@@ -366,6 +366,16 @@ class SpeachesLiveTTSService(SpeachesTTSService):
             await self._stop_turn_keepalive()
 
     async def _handle_interruption(self, frame: InterruptionFrame, direction: FrameDirection):
+        context_id = self._turn_context_id
+        logger.info(
+            "local_tts_interruption model={} context={} audio_context_active={} "
+            "deferred_tasks={} direction={}",
+            self._settings.model,
+            context_id or "none",
+            bool(context_id and self.audio_context_available(context_id)),
+            len(self._deferred_tts_tasks),
+            direction.name if hasattr(direction, "name") else str(direction),
+        )
         await self._stop_turn_keepalive()
         self._initial_pcm_context_id = None
         self._speech_turn_open = False
