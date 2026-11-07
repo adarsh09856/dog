@@ -70,7 +70,10 @@ PHONE_SPOKEN_DIGITS = {
     "three": "3", "तीन": "3", "थ्री": "3", "four": "4", "चार": "4", "फोर": "4",
     "five": "5", "पांच": "5", "पाँच": "5", "फाइव": "5",
     "six": "6", "छह": "6", "सिक्स": "6", "seven": "7", "सात": "7", "सेवन": "7",
-    "eight": "8", "आठ": "8", "एट": "8", "ऐट": "8", "nine": "9", "नौ": "9", "नाइन": "9",
+    # Hindi TTS → STT synthetic probe rendered spoken "eight" as exact token
+    # "at" inside a dictated number. Keep this phone-slot-only alias behind
+    # the mandatory digit readback/confirmation before a booking can use it.
+    "eight": "8", "at": "8", "आठ": "8", "एट": "8", "ऐट": "8", "nine": "9", "नौ": "9", "नाइन": "9",
     "नीन": "9", "निन": "9", "नान": "9", "नाईन": "9", "थी": "3", "आइट": "8", "आईट": "8",
     "on": "1", "run": "1", "won": "1", "wan": "1",
     "फोरन": "41", "नाइनफोर": "94",
