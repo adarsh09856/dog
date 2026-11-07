@@ -398,6 +398,28 @@ _DATE_SMALL_NUMBERS = {
     "seventeenth": 17, "eighteen": 18, "eighteenth": 18, "nineteen": 19,
     "nineteenth": 19, "twenty": 20, "thirty": 30,
 }
+_DATE_HINDI_NUMBERS = {
+    "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पाँच": 5, "पांच": 5,
+    "छह": 6, "छः": 6, "सात": 7, "आठ": 8, "नौ": 9, "दस": 10,
+    "ग्यारह": 11, "बारह": 12, "तेरह": 13, "चौदह": 14,
+    "पंद्रह": 15, "पन्द्रह": 15, "सोलह": 16, "सत्रह": 17,
+    "अठारह": 18, "उन्नीस": 19, "बीस": 20, "इक्कीस": 21,
+    "बाईस": 22, "तेईस": 23, "चौबीस": 24, "पच्चीस": 25,
+    "छब्बीस": 26, "सत्ताईस": 27, "अट्ठाईस": 28, "उनतीस": 29,
+    "तीस": 30, "इकतीस": 31,
+}
+_DATE_HINGLISH_NUMBERS = {
+    "ek": 1, "do": 2, "teen": 3, "chaar": 4, "char": 4,
+    "paanch": 5, "panch": 5, "chhe": 6, "cheh": 6, "saat": 7,
+    "aath": 8, "nau": 9, "das": 10, "gyarah": 11, "barah": 12,
+    "terah": 13, "chaudah": 14, "pandrah": 15, "solah": 16,
+    "satrah": 17, "atharah": 18, "unnees": 19, "bees": 20,
+    "ikkees": 21, "ikkis": 21, "baais": 22, "bais": 22, "teis": 23,
+    "chaubees": 24, "chobees": 24, "pachees": 25, "pachis": 25,
+    "chhabbees": 26, "chhabbis": 26, "sattais": 27, "sattaees": 27,
+    "athais": 28, "atthais": 28, "untees": 29, "unatis": 29,
+    "tees": 30, "ikattis": 31,
+}
 _HINDI_TIME_HOURS = {
     "एक": 1, "इक": 1,
     "दो": 2,
@@ -460,6 +482,10 @@ def _spoken_date_number(tokens: list[str]) -> int | None:
     if len(words) == 1:
         if words[0].isdecimal():
             return int(words[0])
+        if words[0] in _DATE_HINDI_NUMBERS:
+            return _DATE_HINDI_NUMBERS[words[0]]
+        if words[0] in _DATE_HINGLISH_NUMBERS:
+            return _DATE_HINGLISH_NUMBERS[words[0]]
         return _DATE_COMPOSITE_NUMBERS.get(words[0], _DATE_SMALL_NUMBERS.get(words[0]))
     if len(words) == 2 and words[0] in {"twenty", "thirty"}:
         tail = _DATE_SMALL_NUMBERS.get(words[1])
@@ -492,7 +518,12 @@ def _parse_explicit_date_statement(
     def is_day_token(word: str) -> bool:
         if word.isdecimal():
             return len(word) != 4 and 1 <= int(word) <= 31
-        return word in _DATE_SMALL_NUMBERS or word in _DATE_COMPOSITE_NUMBERS
+        return (
+            word in _DATE_SMALL_NUMBERS
+            or word in _DATE_COMPOSITE_NUMBERS
+            or word in _DATE_HINDI_NUMBERS
+            or word in _DATE_HINGLISH_NUMBERS
+        )
 
     for month_index, token in enumerate(tokens):
         month = _DATE_MONTHS.get(token)
@@ -1857,6 +1888,28 @@ def booking_time_confirmation_question(
             for english_match in english_matches
         )
     ]
+    english_daypart = english_daypart_matches[0] if english_daypart_matches else None
+    # ASR can repeat a phrase in one final transcript. Repeated identical
+    # readings are one candidate time; genuinely different readings remain
+    # ambiguous and still require clarification.
+    categorized_matches = (
+        [("hindi", match) for match in hindi_matches]
+        + [("english", match) for match in english_matches]
+        + [("english_daypart", match) for match in english_daypart_matches]
+    )
+    seen_phrases = set()
+    deduplicated = {"hindi": [], "english": [], "english_daypart": []}
+    for kind, match in sorted(categorized_matches, key=lambda item: item[1].start()):
+        phrase_key = re.sub(r"[^\w\u0900-\u097f]+", "", match.group(0).casefold())
+        if phrase_key in seen_phrases:
+            continue
+        seen_phrases.add(phrase_key)
+        deduplicated[kind].append(match)
+    hindi_matches = deduplicated["hindi"]
+    english_matches = deduplicated["english"]
+    english_daypart_matches = deduplicated["english_daypart"]
+    hindi = hindi_matches[0] if hindi_matches else None
+    english = english_matches[0] if english_matches else None
     english_daypart = english_daypart_matches[0] if english_daypart_matches else None
     if len(hindi_matches) + len(english_matches) + len(english_daypart_matches) > 1:
         for key in (
