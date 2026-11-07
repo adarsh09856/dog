@@ -77,6 +77,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          # Keep the prior checkout outside the candidate's signed source tree.
+          path: release-source
           submodules: recursive
           persist-credentials: false
 
@@ -98,6 +100,7 @@ jobs:
       - name: Test the prior schema against this candidate release
         id: lifecycle_acceptance
         shell: bash
+        working-directory: release-source
         env:
           PRIOR_COMMIT: ${{ inputs.prior_commit }}
           COTURN_IMAGE: ${{ inputs.coturn_image }}
@@ -142,7 +145,6 @@ jobs:
           MINIO_IMAGE: ${{ inputs.minio_image }}
           COTURN_IMAGE: ${{ inputs.coturn_image }}
           OWNER_STATUS_URL: ${{ inputs.owner_status_url }}
-          PRIOR_SCHEMA_HEAD: ${{ steps.lifecycle_acceptance.outputs.prior_schema_head }}
         run: |
           set -euo pipefail
           for value in "$REGISTRY_HOST" "$API_TAG" "$UI_TAG" "$CADDY_IMAGE" \
@@ -226,11 +228,13 @@ jobs:
 
       - name: Build, verify, sign and package the client release
         shell: bash
+        working-directory: release-source
         env:
           API_TAG: ${{ inputs.api_tag }}
           UI_TAG: ${{ inputs.ui_tag }}
           CADDY_IMAGE: ${{ inputs.caddy_image }}
           OWNER_STATUS_URL: ${{ inputs.owner_status_url }}
+          PRIOR_SCHEMA_HEAD: ${{ steps.lifecycle_acceptance.outputs.prior_schema_head }}
           CLIENT_POSTGRES_IMAGE: ${{ inputs.postgres_image }}
           CLIENT_REDIS_IMAGE: ${{ inputs.redis_image }}
           CLIENT_MINIO_IMAGE: ${{ inputs.minio_image }}
@@ -242,6 +246,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          : "${PRIOR_SCHEMA_HEAD:?Missing prior schema head from lifecycle acceptance}"
           work_dir="$CLIENT_RELEASE_WORK_DIR"
           key_dir="$CLIENT_RELEASE_KEY_DIR"
           mkdir -m 0700 "$work_dir"
