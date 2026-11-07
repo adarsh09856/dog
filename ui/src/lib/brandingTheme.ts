@@ -68,8 +68,15 @@ export function brandingCssVariables(
       : baseColor;
   const accent = mixHex(color, theme === "dark" ? "#000000" : "#ffffff", theme === "dark" ? 0.3 : 0.14);
   const variables: BrandingCssVariables = {
+    // These are the shared shadcn/Tailwind tokens used by buttons, links,
+    // selected controls, and focus states across public, workspace, and admin
+    // routes. Keeping them in the branding context makes one admin change
+    // reach every surface without tinting neutral accent backgrounds.
+    "--primary": color,
+    "--primary-foreground": foregroundFor(color),
     "--brand-primary-color": color,
     "--sidebar-primary": color,
+    "--sidebar-ring": color,
     "--cta": color,
     "--cta-text": readableAccent(color, theme),
     "--ring": color,
