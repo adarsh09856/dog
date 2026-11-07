@@ -9,6 +9,20 @@ from pipecat.turns.user_stop.speech_timeout_user_turn_stop_strategy import (
 )
 
 
+def _same_confirmed_utterance(speculative: str, confirmed: str) -> bool:
+    """Ignore transcript whitespace and terminal punctuation normalization.
+
+    Local STT can append punctuation or normalize whitespace when the same
+    utterance is committed. Those formatting changes should not throw away a
+    completed speculative model request and force a second inference.
+    """
+    def normalize(text: str) -> str:
+        normalized = " ".join(str(text or "").split())
+        return normalized.rstrip(".,!?;:।॥…؟،").rstrip()
+
+    return normalize(speculative) == normalize(confirmed)
+
+
 class SpeculativeLocalTurnStopStrategy(SpeechTimeoutUserTurnStopStrategy):
     """Prepare a provisional local reply without shortening the pause window.
 
@@ -81,7 +95,7 @@ class SpeculativeLocalTurnStopStrategy(SpeechTimeoutUserTurnStopStrategy):
 
     async def trigger_user_turn_stopped(self, *, enable_user_speaking_frames=None):
         candidate = self._local_speculation
-        if candidate is not None and candidate.text == self._text:
+        if candidate is not None and _same_confirmed_utterance(candidate.text, self._text):
             self._local_speculation = None
             await self.trigger_user_turn_finalized(
                 enable_user_speaking_frames=enable_user_speaking_frames,
