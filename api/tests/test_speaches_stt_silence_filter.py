@@ -7,6 +7,7 @@ from openai.types.audio import Transcription
 from api.services.pipecat.speaches_stt import BoundedSpeachesSTTService
 from api.services.pipecat.speaches_stt import (
     _advance_stable_language,
+    _auto_stt_language_allowlist,
     _normalize_quiet_pcm16_wav,
     _resolve_auto_language,
     _resolve_script_language_conflict,
@@ -55,25 +56,52 @@ def test_latin_transliterated_text_does_not_bypass_stable_language_routing():
     assert _trusted_tts_language(detected, 0.9, confirmed[0], route) == "pa"
 
 
-def test_supported_stt_language_is_preserved_even_when_current_tts_cannot_speak_it():
-    detected, route = _resolve_auto_language("gu", 0.94, "hi")
-    assert (detected, route) == ("gu", "detector")
+def test_detector_language_is_restricted_to_enabled_tts_capabilities():
+    detected, route = _resolve_auto_language(
+        "gu", 0.94, "hi", supported_codes={"en", "hi"}
+    )
+    assert (detected, route) == ("hi", "disabled_language_held_previous")
+    assert _trusted_tts_language(detected, 0.94, "hi", route, {"en", "hi"}) == "hi"
 
-    stable = _advance_stable_language("hi", detected, 0.94, route, None, 0)
-    assert stable == ("hi", "gu", 1)
-
-    # STT keeps the real detector language, while the current 15-language TTS
-    # set does not get a false Gujarati reply route.
-    assert _trusted_tts_language(detected, 0.94, "hi", route) == "hi"
-
+    # A Gujarati decoder/reply route is allowed when the active voice really
+    # advertises it; the allowlist is per selected model, not globally fixed.
     all_indic_tts = frozenset({"en", "gu", "hi"})
+    assert _resolve_auto_language(
+        "gu", 0.94, "hi", supported_codes=all_indic_tts
+    ) == ("gu", "detector")
     assert _trusted_tts_language(
-        detected, 0.94, "gu", route, supported_codes=all_indic_tts,
+        "gu", 0.94, "gu", "detector", supported_codes=all_indic_tts,
     ) == "gu"
 
 
-def test_urdu_is_a_distinct_stt_language_when_the_detector_confirms_it():
-    assert _resolve_auto_language("ur", 0.91, "hi") == ("ur", "detector")
+def test_auto_stt_allowlist_tracks_the_active_tts_capabilities():
+    assert _auto_stt_language_allowlist({"hi-IN", "en", "ur"}) == frozenset({"hi", "en"})
+    assert _auto_stt_language_allowlist(frozenset()) == frozenset()
+    assert _auto_stt_language_allowlist(None) == frozenset({
+        "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
+        "ne", "pa", "sa", "ta", "te",
+    })
+
+
+def test_urdu_detection_keeps_hindi_reply_route_stable():
+    detected, route = _resolve_auto_language("ur", 0.91, "hi")
+    assert (detected, route) == ("hi", "urdu_routed_to_hindi")
+    assert _advance_stable_language("hi", detected, 0.91, route, None, 0) == (
+        "hi", None, 0
+    )
+    assert _trusted_tts_language(detected, 0.91, "hi", route) == "hi"
+
+
+def test_auto_language_resolution_holds_disabled_languages_to_enabled_route():
+    assert _resolve_auto_language(
+        "gu", 0.95, "hi", supported_codes={"hi", "en"}
+    ) == ("hi", "disabled_language_held_previous")
+    assert _resolve_auto_language(
+        "gu", 0.95, None, supported_codes={"hi", "en"}
+    ) == (None, "disabled_language_no_voice_route")
+    assert _resolve_auto_language(
+        "ur", 0.95, "en", supported_codes={"en"}
+    ) == ("en", "disabled_language_held_previous")
 
 
 def _wav(samples):
@@ -190,3 +218,46 @@ async def test_indic_auto_route_does_not_make_punjabi_sticky_for_devanagari_hind
     assert service.latest_detected_language == "hi"
     assert service.latest_tts_language == "hi"
     assert service._stable_detected_language == "hi"
+
+
+@pytest.mark.asyncio
+async def test_indic_auto_request_sends_active_voice_allowlist_and_uses_fallback_decoder():
+    service = object.__new__(BoundedSpeachesSTTService)
+    service._settings = SimpleNamespace(
+        model="indicconformer-ctc-int8", language="auto", prompt=None, temperature=0.0,
+    )
+    service._stable_detected_language = "hi"
+    service._caller_language_supported_codes = frozenset({"hi", "en"})
+    service.latest_tts_language = None
+    service.latest_detected_language = None
+    service.latest_decoder_language = None
+    service.latest_detected_text = None
+    service._latest_language_confidence = None
+    service.phone_capture_pending = None
+
+    class TranscriptionResult(SimpleNamespace):
+        def model_copy(self, *, update):
+            return TranscriptionResult(**{**vars(self), **update})
+
+    result = TranscriptionResult(
+        text="नमस्ते, मुझे मदद चाहिए।",
+        language="hi",
+        model_extra={
+            "detected_language": "gu",
+            "language_confidence": 0.91,
+            "language_route": "unsupported_language_held_previous",
+        },
+    )
+    create = AsyncMock(return_value=result)
+    service._client = SimpleNamespace(
+        audio=SimpleNamespace(transcriptions=SimpleNamespace(create=create))
+    )
+
+    transcription = await service._transcribe(b"not-a-wav")
+
+    extra_body = create.await_args.kwargs["extra_body"]
+    assert extra_body["allowed_languages"] == "en,hi"
+    assert extra_body["fallback_language"] == "hi"
+    assert transcription.language == "hi"
+    assert service.latest_detected_language == "hi"
+    assert service.latest_tts_language == "hi"

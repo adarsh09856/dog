@@ -9,6 +9,7 @@ from api.services.campaign.campaign_event_publisher import (
     notify_campaign_call_completed,
 )
 from api.services.campaign.circuit_breaker import circuit_breaker
+from api.services.crm.call_history import record_terminal_call_history
 from api.services.integrations import IntegrationRuntimeSession
 from api.services.pipecat.audio_config import AudioConfig
 from api.services.pipecat.audio_playback import play_audio_loop
@@ -525,6 +526,13 @@ def register_event_handlers(
             is_completed=True,
             state=WorkflowRunState.COMPLETED.value,
         )
+        if workflow_run:
+            await record_terminal_call_history(
+                workflow_run_id=workflow_run_id,
+                organization_id=workflow_run.workflow.organization_id,
+                initial_context=workflow_run.initial_context,
+                call_type=getattr(workflow_run.call_type, "value", workflow_run.call_type),
+            )
         await notify_campaign_call_completed(
             workflow_run.campaign_id if workflow_run else None, workflow_run_id
         )

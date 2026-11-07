@@ -21,6 +21,34 @@ from api.services.owner_trust import (
     trusted_release_public_key,
 )
 
+MODEL_IMAGE_ENV_KEYS = {
+    "ollama": "KODEWAVES_CLIENT_OLLAMA_IMAGE",
+    "indic_stt": "KODEWAVES_CLIENT_INDIC_STT_IMAGE",
+    "indus_tts": "KODEWAVES_CLIENT_INDUS_TTS_IMAGE",
+    "indic_vits_tts": "KODEWAVES_CLIENT_INDIC_VITS_TTS_IMAGE",
+}
+MODEL_IMAGE_REFERENCE = re.compile(
+    r"[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?"
+    r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}"
+)
+MODEL_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}")
+MODEL_ASSET_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def _valid_model_assets(value: object) -> bool:
+    """Validate the signed identities of downloaded model weights."""
+    if not isinstance(value, dict) or set(value) != {"ollama"}:
+        return False
+    descriptor = value["ollama"]
+    return (
+        isinstance(descriptor, dict)
+        and set(descriptor) == {"name", "digest"}
+        and isinstance(descriptor.get("name"), str)
+        and bool(MODEL_ASSET_NAME.fullmatch(descriptor["name"]))
+        and isinstance(descriptor.get("digest"), str)
+        and bool(MODEL_ASSET_DIGEST.fullmatch(descriptor["digest"]))
+    )
+
 
 class ReleaseIntegrityError(RuntimeError):
     def __init__(
@@ -130,9 +158,19 @@ def verify_release_manifest(
         ):
             raise ReleaseIntegrityError("Invalid client release manifest")
         images = payload.get("images")
+        model_images = payload.get("model_images")
+        model_assets = payload.get("model_assets")
         schema = payload.get("schema_compatibility")
         if (images is None) != (schema is None):
             raise ReleaseIntegrityError("Release image and schema metadata must be signed together")
+        if model_images is not None:
+            if images is None or not isinstance(model_images, dict) or set(model_images) != set(MODEL_IMAGE_ENV_KEYS):
+                raise ReleaseIntegrityError("Invalid client release model image metadata")
+            for name, reference in model_images.items():
+                if not isinstance(reference, str) or not MODEL_IMAGE_REFERENCE.fullmatch(reference):
+                    raise ReleaseIntegrityError(f"Invalid client release model image metadata: {name}")
+        if model_assets is not None and not _valid_model_assets(model_assets):
+            raise ReleaseIntegrityError("Invalid client release model asset metadata")
         if images is not None:
             if not isinstance(images, dict) or set(images) != {"api", "ui"}:
                 raise ReleaseIntegrityError("Invalid client release image metadata")
@@ -231,7 +269,63 @@ def verify_configured_release(root: Path | None = None) -> dict[str, object] | N
                     f"Configured {service.upper()} image does not match the signed release",
                     reason="unknown", component=f"{service}_image",
                 )
+    signed_model_images = payload.get("model_images")
+    signed_model_assets = payload.get("model_assets")
+    configured_models = {
+        service: os.getenv(variable, "").strip()
+        for service, variable in MODEL_IMAGE_ENV_KEYS.items()
+    }
+    configured_services = {name for name, value in configured_models.items() if value}
+    self_hosted = "self-hosted" in {
+        item.strip() for item in os.getenv("COMPOSE_PROFILES", "").split(",") if item.strip()
+    }
+    if self_hosted and signed_model_images is None:
+        raise ReleaseIntegrityError(
+            "Self-hosted inference is not bound to the signed release",
+            reason="unknown", component="model_image_manifest",
+        )
+    if configured_services or self_hosted:
+        if signed_model_images is None or configured_services != set(MODEL_IMAGE_ENV_KEYS):
+            raise ReleaseIntegrityError(
+                "Configured model images do not match the signed release inventory",
+                reason="unknown", component="model_image_manifest",
+            )
+        for service, configured in configured_models.items():
+            if configured != signed_model_images.get(service):
+                label = service.upper().replace("_", " ")
+                raise ReleaseIntegrityError(
+                    f"Configured {label} model image does not match the signed release",
+                    reason="unknown", component=f"{service}_model_image",
+                )
+    configured_model_name = os.getenv("KODEWAVES_CLIENT_OLLAMA_MODEL", "").strip()
+    configured_model_digest = os.getenv("KODEWAVES_CLIENT_OLLAMA_MODEL_DIGEST", "").strip()
+    if self_hosted or configured_model_name or configured_model_digest:
+        if not _valid_model_assets(signed_model_assets):
+            raise ReleaseIntegrityError(
+                "Self-hosted model weights are not bound to the signed release",
+                reason="unknown", component="model_asset_manifest",
+            )
+        expected_asset = signed_model_assets["ollama"]
+        if (
+            configured_model_name != expected_asset["name"]
+            or configured_model_digest != expected_asset["digest"]
+        ):
+            raise ReleaseIntegrityError(
+                "Configured Ollama model weights do not match the signed release",
+                reason="unknown", component="ollama_model_asset",
+                expected_sha256=expected_asset["digest"],
+                observed_sha256=configured_model_digest or None,
+            )
     return payload
+
+
+def _persist_startup_integrity_finding(
+    finding: dict[str, str | None], *, installation_id: str
+) -> None:
+    """Queue the startup finding on the API's mounted persistent volume."""
+    from api.services.client_integrity_outbox import persist_integrity_finding
+
+    persist_integrity_finding(finding, installation_id=installation_id)
 
 
 def report_startup_integrity_failure(error: ReleaseIntegrityError) -> None:
@@ -240,7 +334,17 @@ def report_startup_integrity_failure(error: ReleaseIntegrityError) -> None:
     if runtime_image_edition != "client":
         return
     token = os.getenv("KODEWAVES_LICENSE_TOKEN", "")
-    if not token:
+    installation_id = os.getenv("KODEWAVES_INSTALLATION_ID", "")
+    finding = error.finding()
+    if installation_id:
+        try:
+            _persist_startup_integrity_finding(finding, installation_id=installation_id)
+        except Exception as exc:  # noqa: BLE001 - integrity enforcement must remain fail-closed
+            print(
+                f"Owner integrity alert persistence failed: {type(exc).__name__}",
+                file=sys.stderr,
+            )
+    if not token or not installation_id:
         return
     try:
         import httpx
@@ -249,8 +353,8 @@ def report_startup_integrity_failure(error: ReleaseIntegrityError) -> None:
         response = httpx.post(
             trusted_owner_status_url(),
             json=owner_check_payload(
-                installation_id=os.getenv("KODEWAVES_INSTALLATION_ID", ""), license_token=token,
-                nonce=secrets.token_urlsafe(32), integrity_ok=False, integrity_finding=error.finding(),
+                installation_id=installation_id, license_token=token,
+                nonce=secrets.token_urlsafe(32), integrity_ok=False, integrity_finding=finding,
                 private_key_path=os.getenv("KODEWAVES_INSTALLATION_KEY_FILE", ""),
             ),
             headers={"Authorization": f"Bearer {token}"},

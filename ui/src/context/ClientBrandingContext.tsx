@@ -10,13 +10,13 @@ import {
   useState,
 } from "react";
 
-import { DEFAULT_BRANDING, type PlatformBranding } from "@/lib/branding";
+import { defaultBrandingForEdition, type PlatformBranding } from "@/lib/branding";
 import { brandingCssVariables } from "@/lib/brandingTheme";
 import { apiFetch } from "@/lib/kodewavesApi";
 
 export type ClientBranding = PlatformBranding;
 
-const ClientBrandingContext = createContext<ClientBranding>(DEFAULT_BRANDING);
+const ClientBrandingContext = createContext<ClientBranding>(defaultBrandingForEdition());
 
 export function notifyBrandingChanged() {
   window.dispatchEvent(new Event("kodewaves-branding-updated"));
@@ -29,7 +29,7 @@ export function notifyBrandingChanged() {
 
 export function ClientBrandingProvider({
   children,
-  initialBranding = DEFAULT_BRANDING,
+  initialBranding = defaultBrandingForEdition(),
 }: {
   children: ReactNode;
   initialBranding?: ClientBranding;
@@ -46,7 +46,7 @@ export function ClientBrandingProvider({
       apiFetch<ClientBranding>("/installation/branding")
         .then((value) => {
           if (active && revision === refreshRevision) {
-            setBranding({ ...DEFAULT_BRANDING, ...value });
+            setBranding({ ...defaultBrandingForEdition(), ...value });
           }
         })
         .catch(() => {
@@ -110,7 +110,8 @@ export function ClientBrandingProvider({
       icon.rel = "icon";
       document.head.appendChild(icon);
     }
-    icon.href = branding.favicon_url || "/kodewaves-mark.svg";
+    const fallback = defaultBrandingForEdition();
+    icon.href = branding.favicon_url || fallback.favicon_url || "";
     const variables = brandingCssVariables(
       branding,
       resolvedTheme === "light" ? "light" : "dark",

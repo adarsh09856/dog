@@ -221,6 +221,34 @@ def validate_owner_private_key_path(path: Path, repository_root: Path) -> Path:
     return resolved_path
 
 
+def ensure_clean_release_source(repository_root: Path) -> None:
+    """Refuse to sign or publish artifacts from a source tree that differs from HEAD."""
+    commands = (
+        [
+            "git", "status", "--porcelain=v1", "--untracked-files=all",
+            "--ignore-submodules=none",
+        ],
+        [
+            "git", "submodule", "foreach", "--recursive", "--quiet",
+            "git status --porcelain=v1 --untracked-files=all --ignore-submodules=none",
+        ],
+    )
+    for command in commands:
+        try:
+            result = subprocess.run(
+                command, cwd=repository_root, check=True, capture_output=True,
+                text=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ValueError(
+                "Could not verify that the client release source tree is clean"
+            ) from exc
+        if result.stdout.strip():
+            raise ValueError(
+                "Signing or publishing requires a clean source tree, including submodules"
+            )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -239,6 +267,7 @@ def main() -> int:
     parser.add_argument("--public-key-output", type=Path, help="Where to write its public verification key")
     parser.add_argument("--inventory-metrics-output", type=Path, help="Write protected API/UI file counts and inventory scan durations")
     parser.add_argument("--approved-upgrade-from", action="append", default=[], help="Tested Alembic revision permitted for upgrade; repeat for each verified origin")
+    parser.add_argument("--approved-rollback-to", action="append", default=[], help="Prior Alembic revision permitted for rollback after lifecycle acceptance; repeat for each verified origin")
     parser.add_argument("--push", action="store_true", help="Stage, verify, then promote images to unused release tags")
     parser.add_argument("--release-env-output", type=Path, help="Write API/UI @sha256 references after verified promotion")
     args = parser.parse_args()
@@ -249,6 +278,10 @@ def main() -> int:
         parser.error("--owner-private-key, --manifest-output and --public-key-output must be used together")
     if args.approved_upgrade_from and not args.owner_private_key:
         parser.error("--approved-upgrade-from requires a signed release manifest")
+    if args.approved_rollback_to and not args.owner_private_key:
+        parser.error("--approved-rollback-to requires a signed release manifest")
+    if not set(args.approved_rollback_to).issubset(args.approved_upgrade_from):
+        parser.error("--approved-rollback-to revisions must also be listed by --approved-upgrade-from")
     if args.push != (args.release_env_output is not None):
         parser.error("--push and --release-env-output must be used together")
     if args.push:
@@ -258,9 +291,21 @@ def main() -> int:
             if "/" not in _repository_name(tag):
                 parser.error(f"Publish tags must include a registry or namespace: {tag}")
     schema_compatibility = (
-        migration_compatibility(root / "api" / "alembic" / "versions", args.approved_upgrade_from)
+        migration_compatibility(
+            root / "api" / "alembic" / "versions",
+            args.approved_upgrade_from,
+            args.approved_rollback_to,
+        )
         if args.owner_private_key else None
     )
+    # Validate the requested schema origins before probing Git. Besides keeping
+    # invalid release requests fast and side-effect-free, this ensures a bad
+    # origin is reported directly even when the checkout cannot run Git.
+    if args.owner_private_key or args.push:
+        try:
+            ensure_clean_release_source(root)
+        except ValueError as exc:
+            parser.error(str(exc))
     try:
         checked_out_commit = subprocess.run(
             ["git", "rev-parse", "HEAD"], cwd=root, check=True,

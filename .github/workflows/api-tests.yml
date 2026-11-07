@@ -91,7 +91,7 @@ jobs:
         working-directory: api/mcp_server/ts_validator
         run: npm install
 
-      - name: Create disposable client release test database
+      - name: Create disposable API test databases
         run: |
           python - <<'PY'
           import asyncio
@@ -100,9 +100,47 @@ jobs:
           async def main():
               connection = await asyncpg.connect("postgresql://postgres:postgres@127.0.0.1:5432/postgres")
               try:
-                  await connection.execute('CREATE DATABASE "kodewaves_client_release_test"')
+                  for database in ("test_db", "kodewaves_client_release_test"):
+                      await connection.execute(f'CREATE DATABASE "{database}"')
               finally:
                   await connection.close()
+
+          asyncio.run(main())
+          PY
+
+      - name: Seed disposable default plan for SaaS quota tests
+        run: |
+          python - <<'PY'
+          import asyncio
+          import os
+
+          from api.db.saas_plan_catalog import save_plan
+          from api.conftest import run_migrations
+
+          async def main():
+              # Build the isolated schema before pytest; its session fixture then
+              # observes the already-migrated DB and uses this CI-only catalog row.
+              await run_migrations(os.environ["DATABASE_URL"])
+              await save_plan({
+                  "name": "CI Test Plan",
+                  "code": "ci-test-default",
+                  "description": "Disposable plan for API tests",
+                  "monthly_price_cents": 0,
+                  "annual_price_cents": 0,
+                  "currency": "INR",
+                  "included_monthly_minutes": 1000000,
+                  "max_agents": 10000,
+                  "max_concurrent_calls": 1000,
+                  "has_crm_access": True,
+                  "has_appointments_access": True,
+                  "has_forms_access": True,
+                  "has_widget_access": True,
+                  "has_campaigns_access": True,
+                  "allow_user_byok": True,
+                  "is_default": True,
+                  "is_active": True,
+                  "is_public": True,
+              })
 
           asyncio.run(main())
           PY

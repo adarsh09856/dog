@@ -18,7 +18,7 @@ import styles from "../PublicPages.module.css";
 export const metadata: Metadata = {
   title: "Platform",
   description:
-    "Build voice-agent workflows, connect supported calling channels and business tools, and review conversations in Kodewaves.",
+    "Build voice-agent workflows, connect supported calling channels and business tools, and review conversations in your workspace.",
 };
 
 const lifecycle = [
@@ -38,6 +38,7 @@ const workspaceTools = [
 ];
 
 export default function PlatformPage() {
+  const isClientEdition = process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client";
   return (
     <div className="public-site public-platform min-h-screen bg-background text-foreground">
       <PublicHeader />
@@ -45,14 +46,18 @@ export default function PlatformPage() {
         <section className={styles.hero}>
           <div className={`${styles.pageFrame} ${styles.heroGrid}`}>
             <div className={styles.heroCopy}>
-              <p className={styles.eyebrow}>Platform / Voice operations</p>
-              <h1 className={styles.headline}>From first prompt to conversations in production.</h1>
+              <p className={styles.eyebrow}>{isClientEdition ? "Your installation / Voice operations" : "Platform / Voice operations"}</p>
+              <h1 className={styles.headline}>{isClientEdition ? "Voice workflows from first prompt to production conversations." : "From first prompt to conversations in production."}</h1>
               <p className={styles.lede}>
-                Design voice agents, connect the systems and channels your deployment supports, then review how each conversation went.
+                {isClientEdition
+                  ? "Configure agents, speech providers, channels and business tools available to this licensed installation, then review each conversation."
+                  : "Design voice agents, connect the systems and channels your deployment supports, then review how each conversation went."}
               </p>
               <div className={styles.actions}>
                 <Link href="/auth/login" className={styles.primaryAction}>Open workspace <ArrowRight aria-hidden className="size-4" /></Link>
-                <Link href="/pricing" className={styles.secondaryAction}>View plans</Link>
+                {isClientEdition
+                  ? <Link href="/deployment" className={styles.secondaryAction}>Deployment details</Link>
+                  : <Link href="/pricing" className={styles.secondaryAction}>View plans</Link>}
               </div>
             </div>
             <div className={`${styles.heroRail} ${styles.productRail}`} aria-label="Illustrative agent workflow">
@@ -84,9 +89,9 @@ export default function PlatformPage() {
                 <p className={styles.eyebrow}>A practical operating loop</p>
                 <h2>Build, connect, test, learn.</h2>
               </div>
-              <p>
-                Keep agent configuration and day-to-day conversation operations together. Available tools depend on plan, enabled providers and deployment configuration.
-              </p>
+              <p>{isClientEdition
+                ? "Keep agent configuration and day-to-day conversation operations together. Available tools depend on this installation's license, enabled providers and configuration."
+                : "Keep agent configuration and day-to-day conversation operations together. Available tools depend on plan, enabled providers and deployment configuration."}</p>
             </div>
             <div className={styles.quadGrid}>
               {lifecycle.map(([number, title, text]) => (
@@ -131,10 +136,12 @@ export default function PlatformPage() {
           <div className={`${styles.pageFrame} ${styles.closing}`}>
             <p className={styles.eyebrow}>A platform for the whole conversation</p>
             <h2>Build the workflow around the work your team owns.</h2>
-            <p>Sign in to explore your enabled workspace, or review the configured plans and deployment choices.</p>
+            <p>{isClientEdition
+              ? "Sign in to explore the capabilities enabled for this installation, or review its deployment details."
+              : "Sign in to explore your enabled workspace, or review the configured plans and deployment choices."}</p>
             <div className={styles.actions}>
               <Link href="/auth/login" className={styles.primaryAction}>Get started in your workspace <ArrowRight aria-hidden className="size-4" /></Link>
-              <Link href="/deployment" className={styles.secondaryAction}>Compare deployments</Link>
+              <Link href="/deployment" className={styles.secondaryAction}>{isClientEdition ? "Deployment details" : "Compare deployments"}</Link>
             </div>
           </div>
         </section>

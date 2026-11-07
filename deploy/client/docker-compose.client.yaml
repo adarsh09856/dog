@@ -118,9 +118,17 @@ services:
       KODEWAVES_INSTALLATION_ID: ${KODEWAVES_INSTALLATION_ID:?Set installation ID}
       KODEWAVES_LICENSE_TOKEN: ${KODEWAVES_LICENSE_TOKEN:?Set signed license}
       KODEWAVES_OWNER_STATUS_POLL_SECONDS: ${KODEWAVES_OWNER_STATUS_POLL_SECONDS:-60}
+      KODEWAVES_INTEGRITY_OUTBOX_DIR: /var/lib/kodewaves/integrity-outbox
       KODEWAVES_RELEASE_MANIFEST: /app/client-release-manifest.json
       KODEWAVES_API_IMAGE: ${CLIENT_API_IMAGE:?Set pinned client API image digest}
       KODEWAVES_UI_IMAGE: ${CLIENT_UI_IMAGE:?Set pinned client UI image digest}
+      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
+      KODEWAVES_CLIENT_OLLAMA_IMAGE: ${CLIENT_OLLAMA_IMAGE:-}
+      KODEWAVES_CLIENT_INDIC_STT_IMAGE: ${CLIENT_INDIC_STT_IMAGE:-}
+      KODEWAVES_CLIENT_INDUS_TTS_IMAGE: ${CLIENT_INDUS_TTS_IMAGE:-}
+      KODEWAVES_CLIENT_INDIC_VITS_TTS_IMAGE: ${CLIENT_INDIC_VITS_TTS_IMAGE:-}
+      KODEWAVES_CLIENT_OLLAMA_MODEL: ${CLIENT_OLLAMA_MODEL:-}
+      KODEWAVES_CLIENT_OLLAMA_MODEL_DIGEST: ${CLIENT_OLLAMA_MODEL_DIGEST:-}
       PUBLIC_BASE_URL: https://${PUBLIC_HOST:?Set licensed public host}
       PUBLIC_HOST: ${PUBLIC_HOST:?Set licensed public host}
       SERVER_IP: ${SERVER_IP:-}
@@ -152,6 +160,7 @@ services:
     volumes:
       - ${CLIENT_RELEASE_MANIFEST_FILE:?Set signed release manifest path}:/app/client-release-manifest.json:ro
       - api_audio_cache:/app/kodewaves_pcm_cache
+      - client_integrity_outbox:/var/lib/kodewaves/integrity-outbox
     ports: ["127.0.0.1:${API_PORT:-8000}:8000"]
     depends_on:
       postgres: {condition: service_healthy}
@@ -208,6 +217,7 @@ networks:
 
 volumes:
   api_audio_cache:
+  client_integrity_outbox:
   postgres_data:
   redis_data:
   minio_data:

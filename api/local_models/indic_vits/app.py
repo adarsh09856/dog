@@ -22,7 +22,6 @@ except ImportError:
     sherpa_onnx = None
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from huggingface_hub import hf_hub_download
 from pydantic import BaseModel, Field
 
 MODEL_ID = "indic-vits-rasa-13"
@@ -336,6 +335,11 @@ def speech_segments(text: str, preferred_voice: str, context_language: str | Non
     is voice routing, not translation.
     """
     stable_voice = _response_voice(preferred_voice, context_language)
+    if stable_voice is None:
+        # When automatic language detection has no trusted result, resolve the
+        # dominant language from the whole response once. Per-word routing can
+        # otherwise change speaker on every Hindi/English script boundary.
+        stable_voice = voice_for_text(text, preferred_voice, context_language)
     if stable_voice:
         stable_segments: list[tuple[str, str]] = []
         for match in re.finditer(r"\S+\s*", text):
@@ -552,6 +556,10 @@ async def stream_pcm(request, context_language: str | None = None, indus_only: b
 
 def _load() -> None:
     global RASA_MODEL, PIPER_MODELS, MELO_MODEL, INDUS_READY
+    # Model downloads are performed only by the standalone TTS sidecar.
+    # Keep inventory and helper imports usable in the API test environment.
+    from huggingface_hub import hf_hub_download
+
     if INDUS_ENDPOINT:
         with urllib.request.urlopen(f"{INDUS_ENDPOINT}/models", timeout=5) as response:
             inventory = json.load(response)

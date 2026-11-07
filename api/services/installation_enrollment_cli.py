@@ -114,6 +114,8 @@ def execute(request: dict[str, Any]) -> dict[str, Any]:
                 "status": request["status"],
                 "detail": request.get("detail", ""),
             }
+            if request.get("installed_version") is not None:
+                fields["installed_version"] = request["installed_version"]
             message = update_report_message(**fields)
             stage = "installation_key_construction"
             signature = Ed25519PrivateKey.from_private_bytes(seed).sign(message)

@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/PublicSiteChrome", () => ({
   PublicHeader: () => <header>Public navigation</header>,
@@ -9,6 +9,8 @@ vi.mock("@/components/PublicSiteChrome", () => ({
 import PlatformPage, { metadata } from "./page";
 
 describe("public platform page", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it("sets a page-specific browser title and search description", () => {
     expect(metadata.title).toBe("Platform");
     expect(metadata.description).toContain("voice-agent workflows");
@@ -21,5 +23,15 @@ describe("public platform page", () => {
     expect(screen.getByRole("heading", { name: "CRM and appointments" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Open workspace/ }).getAttribute("href")).toBe("/auth/login");
     expect(screen.getByRole("link", { name: "View plans" }).getAttribute("href")).toBe("/pricing");
+  });
+
+  it("keeps client installation copy out of hosted plan messaging", () => {
+    vi.stubEnv("NEXT_PUBLIC_KODEWAVES_EDITION", "client");
+    render(<PlatformPage />);
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Voice workflows");
+    expect(screen.queryByRole("link", { name: "View plans" })).toBeNull();
+    expect(screen.getAllByRole("link", { name: "Deployment details" }).every((link) => link.getAttribute("href") === "/deployment")).toBe(true);
+    expect(screen.getByText(/Available tools depend on this installation's license/)).toBeTruthy();
   });
 });

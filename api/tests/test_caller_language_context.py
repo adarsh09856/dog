@@ -153,6 +153,26 @@ def test_stt_language_without_installed_tts_uses_the_selected_supported_reply_la
     assert "Answer in Hindi" in request[0]["content"]
 
 
+def test_detected_language_outside_active_tts_inventory_does_not_override_reply_language():
+    utterance = "مجھے مدد چاہیے"
+    source = NS(
+        latest_detected_language="ur",
+        latest_tts_language="ur",
+        latest_detected_text=utterance,
+        reply_language_override=None,
+    )
+    messages = [{"role": "user", "content": utterance}]
+
+    request = CallerLanguageContext().apply(
+        messages,
+        source,
+        supported_languages={"en", "hi"},
+    )
+
+    assert request == messages
+    assert source.reply_language_override is None
+
+
 def test_explicit_switch_persists_for_a_short_hindi_name_then_resumes_auto_matching():
     context = CallerLanguageContext()
     history = [{"role": "user", "content": "क्या तुम इंग्लिश में बात कर सकते हो"}]

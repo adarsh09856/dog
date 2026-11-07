@@ -34,7 +34,7 @@ import compose_client
 import enroll_identity
 import recovery
 from recovery_lock import recovery_operation_lock
-from validate_install import parse_env, validate as validate_install
+from validate_install import MODEL_IMAGE_KEYS, parse_env, validate as validate_install, validate_model_images
 
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 128 * 1024 * 1024
@@ -48,10 +48,26 @@ HOST_TOOL_FILES = (
     "enroll_identity.py", "recovery.py", "compose_client.py",
     "recovery_lock.py", "verify_installer.py", "update_agent.py",
 )
+MODEL_HOST_FILES = ("docker-compose.models.yaml", "warm_local_models.py")
+MODEL_COMPOSE_SERVICES = ("ollama", "indic-stt", "indus-tts", "indic-vits-tts")
+MODEL_MANIFEST_COMPONENTS = {
+    "ollama": "CLIENT_OLLAMA_IMAGE",
+    "indic_stt": "CLIENT_INDIC_STT_IMAGE",
+    "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
+    "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
+}
+MODEL_ASSET_ENV_KEYS = {
+    "ollama": {
+        "name": "CLIENT_OLLAMA_MODEL",
+        "digest": "CLIENT_OLLAMA_MODEL_DIGEST",
+    },
+}
 SYSTEMD_UNIT_FILES = ("kodewaves-client-update.service", "kodewaves-client-update.timer")
 SYSTEMD_UNIT_DIR = Path("/etc/systemd/system")
 HOST_JOURNAL_NAME = ".host-update-transaction.json"
 _DIGEST_IMAGE = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}\Z")
+_MODEL_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}\Z")
+_MODEL_ASSET_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _VERSION = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 _PACKAGE_FILES = {
     "README.md", "docker-compose.client.yaml", "docker-compose.identity.yaml",
@@ -169,6 +185,8 @@ def _report(env: dict[str, str], status_url: str, update: dict, state: str, deta
         "version": update["version"], "nonce": nonce, "issued_at": issued_at,
         "status": state, "detail": detail[:1000],
     }
+    if state == "rolled_back":
+        fields["installed_version"] = _current_version(env["CLIENT_API_IMAGE"])
     key = _read_identity_key(Path(env["CLIENT_IDENTITY_KEY_FILE"]), int(env["CLIENT_IDENTITY_GID"]))
     proof = _helper_request(env["CLIENT_API_IMAGE"], {
         "action": "prepare_update_report",
@@ -248,7 +266,7 @@ def _extract_verified_archive(archive_path: Path, destination: Path) -> dict[str
                 if len(data) != member.size:
                     raise UpdateError("Release archive entry size is invalid")
                 contents[member.name] = data
-            if names != _PACKAGE_FILES:
+            if names not in (_PACKAGE_FILES, _PACKAGE_FILES | set(MODEL_HOST_FILES)):
                 raise UpdateError("Release archive file inventory is incomplete or unexpected")
         checksums: dict[str, str] = {}
         for line in contents["SHA256SUMS"].decode("ascii").splitlines():
@@ -293,6 +311,61 @@ def _manifest_images(manifest: dict[str, object]) -> tuple[dict[str, str], dict[
     if not isinstance(schema, dict) or not isinstance(schema.get("head"), str) or not isinstance(schema.get("rollback_to"), list):
         raise UpdateError("Release manifest has no schema rollback metadata")
     return references, schema
+
+
+def _manifest_model_images(payload: dict[str, object]) -> dict[str, str]:
+    """Return signed model image refs by installer .env key; absent means cloud-only metadata."""
+    model_images = payload.get("model_images")
+    if model_images is None:
+        return {}
+    if not isinstance(model_images, dict) or set(model_images) != set(MODEL_MANIFEST_COMPONENTS):
+        raise UpdateError("Signed release manifest must contain all four model image digests")
+    values = {
+        env_key: model_images[component]
+        for component, env_key in MODEL_MANIFEST_COMPONENTS.items()
+    }
+    if any(not isinstance(value, str) or not _DIGEST_IMAGE.fullmatch(value) for value in values.values()):
+        raise UpdateError("Signed release manifest contains invalid model image digests")
+    try:
+        validate_model_images(values)
+    except (TypeError, ValueError) as exc:
+        raise UpdateError("Signed release manifest contains invalid model image digests") from exc
+    return values
+
+
+def _manifest_model_assets(payload: dict[str, object]) -> dict[str, dict[str, str]] | None:
+    """Return the optional signed model asset descriptors after strict validation."""
+    assets = payload.get("model_assets")
+    if assets is None:
+        return None
+    if not isinstance(assets, dict) or set(assets) != set(MODEL_ASSET_ENV_KEYS):
+        raise UpdateError("Signed release manifest model assets are invalid")
+    ollama = assets["ollama"]
+    if (
+        not isinstance(ollama, dict)
+        or set(ollama) != {"name", "digest"}
+        or not isinstance(ollama.get("name"), str)
+        or not _MODEL_ASSET_NAME.fullmatch(ollama["name"])
+        or not isinstance(ollama.get("digest"), str)
+        or not _MODEL_ASSET_DIGEST.fullmatch(ollama["digest"])
+    ):
+        raise UpdateError("Signed release manifest model assets are invalid")
+    return {"ollama": {"name": ollama["name"], "digest": ollama["digest"]}}
+
+
+def _check_model_assets(
+    payload: dict[str, object], get_value: Callable[[str], str | None], *, description: str,
+) -> dict[str, dict[str, str]] | None:
+    assets = _manifest_model_assets(payload)
+    if assets is None:
+        profiles = {item.strip() for item in (get_value("COMPOSE_PROFILES") or "").split(",") if item.strip()}
+        if "self-hosted" in profiles:
+            raise UpdateError(f"{description} self-hosted release is missing its signed model asset descriptor")
+        return None
+    for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items():
+        if (get_value(env_key) or "") != assets["ollama"][field]:
+            raise UpdateError(f"{description} model asset {field} does not match the signed release manifest")
+    return assets
 
 
 def _verify_manifest_signature(manifest: dict[str, object], public_key_file: Path) -> dict[str, object]:
@@ -344,6 +417,19 @@ def _atomic_env(directory: Path, values: dict[str, str]) -> bytes:
         if matches != 1:
             raise UpdateError(f"Client .env must define {key} exactly once")
         replacement = recovery._update_env_value(replacement, key, values[key])
+    optional_release_keys = set(MODEL_IMAGE_KEYS) | set(MODEL_ASSET_ENV_KEYS["ollama"].values())
+    for key, value in values.items():
+        if key in {"CLIENT_API_IMAGE", "CLIENT_UI_IMAGE", "CLIENT_RELEASE_MANIFEST_FILE"}:
+            continue
+        if key not in optional_release_keys:
+            raise UpdateError("Update contains an unsupported release configuration setting")
+        matches = sum(
+            1 for line in replacement.decode("utf-8").splitlines()
+            if re.match(rf"^\s*(?:export\s+)?{re.escape(key)}\s*=", line)
+        )
+        if matches > 1:
+            raise UpdateError(f"Client .env must define {key} at most once")
+        replacement = recovery._update_env_value(replacement, key, value)
     recovery._atomic_write(env_file, replacement, mode=0o600)
     return before
 
@@ -399,7 +485,7 @@ def _atomic_replace_bytes(path: Path, contents: bytes, mode: int, uid: int, gid:
 
 def _host_targets(directory: Path, systemd_dir: Path) -> dict[str, Path]:
     return {
-        **{name: directory / name for name in HOST_TOOL_FILES},
+        **{name: directory / name for name in (*HOST_TOOL_FILES, *MODEL_HOST_FILES)},
         **{name: systemd_dir / name for name in SYSTEMD_UNIT_FILES},
     }
 
@@ -498,6 +584,56 @@ def _download_verified_host_release(update: dict, work_dir: Path, public_key_fil
     return archive_path, extracted, payload
 
 
+def _model_update_values(
+    env: dict[str, str], extracted: Path, manifest_payload: dict[str, object],
+) -> dict[str, str]:
+    model_assets = _manifest_model_assets(manifest_payload)
+    profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()}
+    configured = {key for key in MODEL_IMAGE_KEYS if env.get(key, "").strip()}
+    if "self-hosted" in profiles and model_assets is None:
+        raise UpdateError("Signed self-hosted release is missing its model asset descriptor")
+    if "self-hosted" not in profiles and not configured:
+        if model_assets is None:
+            return {key: "" for key in MODEL_ASSET_ENV_KEYS["ollama"].values() if env.get(key, "")}
+        packaged = parse_env(extracted / ".env.example")
+        values = {
+            env_key: packaged.get(env_key, "")
+            for env_key in MODEL_ASSET_ENV_KEYS["ollama"].values()
+        }
+        if any(values[env_key] != model_assets["ollama"][field] for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items()):
+            raise UpdateError("Signed model asset descriptor does not match the installer template")
+        return values
+    if "self-hosted" in profiles and not all((extracted / name).is_file() for name in MODEL_HOST_FILES):
+        raise UpdateError("Self-hosted installation requires a signed local-inference package")
+    packaged = parse_env(extracted / ".env.example")
+    values = {key: packaged.get(key, "") for key in MODEL_IMAGE_KEYS}
+    try:
+        validate_model_images(values)
+    except ValueError as exc:
+        raise UpdateError("Signed local-inference image pins are incomplete or invalid") from exc
+    manifest_values = _manifest_model_images(manifest_payload)
+    if manifest_values != values:
+        raise UpdateError("Signed model image pins do not match the installer template")
+    if model_assets is not None:
+        for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items():
+            configured = packaged.get(env_key, "")
+            if configured != model_assets["ollama"][field]:
+                raise UpdateError("Signed model asset descriptor does not match the installer template")
+            values[env_key] = configured
+    else:
+        values.update({
+            key: "" for key in MODEL_ASSET_ENV_KEYS["ollama"].values()
+            if env.get(key, "")
+        })
+    return values
+
+
+def _release_compose_services(env: dict[str, str]) -> list[str]:
+    """Return release services, including local inference only when enabled."""
+    profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()}
+    return [*APP_IMAGES, *(MODEL_COMPOSE_SERVICES if "self-hosted" in profiles else ())]
+
+
 def _apply_host_maintenance(
     directory: Path, extracted: Path, work_dir: Path, *, systemd_dir: Path = SYSTEMD_UNIT_DIR,
 ) -> None:
@@ -510,7 +646,8 @@ def _apply_host_maintenance(
     entries: dict[str, dict] = {}
     sources: dict[str, bytes] = {}
     units_changed = False
-    for name in (*HOST_TOOL_FILES, *SYSTEMD_UNIT_FILES):
+    model_files = MODEL_HOST_FILES if all((extracted / name).is_file() for name in MODEL_HOST_FILES) else ()
+    for name in (*HOST_TOOL_FILES, *model_files, *SYSTEMD_UNIT_FILES):
         source = extracted / name
         if source.is_symlink() or not source.is_file() or source.resolve(strict=True).parent != extracted.resolve(strict=True):
             raise UpdateError("Verified archive host file is missing or unsafe")
@@ -530,7 +667,7 @@ def _apply_host_maintenance(
                 "gid": stat.st_gid,
             }
         else:
-            if name not in SYSTEMD_UNIT_FILES:
+            if name not in (*SYSTEMD_UNIT_FILES, *MODEL_HOST_FILES):
                 raise UpdateError("A required installed host control file is missing")
             entries[name] = {"existed": False}
     _write_host_journal(journal_path, {"state": "prepared", "files": entries})
@@ -618,6 +755,21 @@ def _active_manifest(directory: Path, env: dict[str, str], public_key_file: Path
     images, schema = _manifest_images({"payload": payload})
     if images != {"api": env["CLIENT_API_IMAGE"], "ui": env["CLIENT_UI_IMAGE"]}:
         raise UpdateError("Running image pins do not match the installed signed manifest")
+    model_images = _manifest_model_images(payload)
+    configured_models = {key for key in MODEL_IMAGE_KEYS if env.get(key, "").strip()}
+    self_hosted = "self-hosted" in {
+        item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()
+    }
+    if self_hosted or configured_models:
+        try:
+            validate_model_images({key: env.get(key, "") for key in MODEL_IMAGE_KEYS})
+        except ValueError as exc:
+            raise UpdateError("Installed model image pins are incomplete or invalid") from exc
+        if configured_models != MODEL_IMAGE_KEYS or model_images != {
+            key: env.get(key, "") for key in MODEL_IMAGE_KEYS
+        }:
+            raise UpdateError("Running model image pins do not match the installed signed manifest")
+    _check_model_assets(payload, env.get, description="Installed")
     return {"payload": payload, "schema": schema}
 
 
@@ -775,6 +927,9 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             images, schema = _manifest_images({"payload": payload})
             if images != {"api": env["CLIENT_API_IMAGE"], "ui": env["CLIENT_UI_IMAGE"]}:
                 raise UpdateError("Resumed release images do not match the healthy installation")
+            resumed_model_values = _model_update_values(env, extracted, payload)
+            if resumed_model_values and any(env.get(key, "") != value for key, value in resumed_model_values.items()):
+                raise UpdateError("Resumed release model images do not match the healthy installation")
             if _current_version(images["api"]) != version or schema["head"] != expected_head:
                 raise UpdateError("Resumed release archive does not match the healthy installation")
             refreshed, refreshed_url = _owner_status(env, current_version)
@@ -820,6 +975,7 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
     old_env: bytes | None = None
     env_was_switched = False
     containers_activated = False
+    activation_started = False
     target_images: dict[str, str] | None = None
     try:
         if initial_target_status == "staged":
@@ -842,7 +998,19 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             raise UpdateError("Release has no signed database rollback path from the installed schema")
         if _version(update["min_current_version"]) > _version(current_version):
             raise UpdateError("Installed version is below this release's minimum")
-        if target_images["api"] == env["CLIENT_API_IMAGE"] and target_images["ui"] == env["CLIENT_UI_IMAGE"]:
+        model_update_values = _model_update_values(env, extracted, manifest_payload)
+        target_model_assets = _manifest_model_assets(manifest_payload)
+        current_payload = current_manifest.get("payload")
+        current_model_assets = _manifest_model_assets(
+            current_payload if isinstance(current_payload, dict) else {},
+        )
+        model_config_matches = all(env.get(key, "") == value for key, value in model_update_values.items())
+        if (
+            target_images["api"] == env["CLIENT_API_IMAGE"]
+            and target_images["ui"] == env["CLIENT_UI_IMAGE"]
+            and target_model_assets == current_model_assets
+            and model_config_matches
+        ):
             _report(env, status_url, update, "applied", "Release images already match the installation")
             return f"Release {version} is already installed."
 
@@ -860,6 +1028,7 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             "CLIENT_UI_IMAGE": target_images["ui"],
             "CLIENT_RELEASE_MANIFEST_FILE": candidate_ref,
         }
+        new_values.update(model_update_values)
         # Validate the whole candidate configuration before pulling images.
         old_env = _atomic_env(directory, new_values)
         env_was_switched = True
@@ -870,7 +1039,8 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
         config = compose_client.build_command(directory, ["config", "--quiet"])
         subprocess.run(config, cwd=directory, env=controlled, timeout=60, check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        _compose(directory, ["pull", "api", "ui"])
+        model_services = _release_compose_services(env)[len(APP_IMAGES):]
+        _compose(directory, ["pull", "api", "ui", *model_services])
         # The fresh owner-signed status check also prevents applying a rollout
         # that the owner paused or stopped during the download.
         refreshed, refreshed_url = _owner_status(env, current_version)
@@ -925,7 +1095,12 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
             _report(env, status_url, update, "applying")
         _atomic_env(directory, new_values)
         env_was_switched = True
-        _compose(directory, ["up", "--detach", "--wait", "--wait-timeout", "480", "api", "ui"], timeout=COMPOSE_TIMEOUT)
+        activation_started = True
+        _compose(
+            directory,
+            ["up", "--detach", "--wait", "--wait-timeout", "480", *_release_compose_services(parse_env(env_file))],
+            timeout=COMPOSE_TIMEOUT,
+        )
         if not _wait_for_release_healthy(directory, parse_env(env_file), target_schema["head"]):
             raise UpdateError("Updated API/UI or migrated database failed health verification")
         containers_activated = True
@@ -962,8 +1137,12 @@ def update_once(directory: Path, *, dry_run: bool = False) -> str:
                     )
                 else:
                     _restore_env(directory, old_env)
-                if not backup_path.is_file() and containers_activated:
-                    _compose(directory, ["up", "--detach", "--wait", "--wait-timeout", "480", "api", "ui"])
+                if not backup_path.is_file() and activation_started:
+                    _compose(
+                        directory,
+                        ["up", "--detach", "--wait", "--wait-timeout", "480", *_release_compose_services(parse_env(env_file))],
+                        timeout=COMPOSE_TIMEOUT,
+                    )
                 final_status = "rolled_back" if backup_path.is_file() or containers_activated else "failed"
                 _report(parse_env(env_file), status_url, update, final_status, _report_protected(exc))
             except Exception:

@@ -1,13 +1,11 @@
 # Kodewaves client installation
 
-This directory contains the source-free Compose deployment input for the
-client edition. It is an implementation package, not an accepted production
-installer. Disposable Compose upgrade/rollback acceptance passed in workflow
-run [41303436791](https://github.com/adarsh09856/dog/actions/runs/41303436791)
-for candidate commit `899dc3f150497bb85f8b6657f5f9ee60c95d0c2b`. Packaging and
-verification code changed after that run, so the current candidate still needs
-the lifecycle workflow. Fresh customer-server installation, production
-signing, owner rotation and live telephony acceptance remain open. Read
+This directory contains source for the client-edition Compose deployment. For
+customer deployment, use the exact Kodewaves-issued installer archive together
+with its detached signature and independently supplied trusted release public
+key. Verify the archive before extracting it, then follow [`INSTALL.md`](INSTALL.md).
+Do not install from an unverified source checkout or treat disposable CI
+acceptance as a production-signed customer release. Read
 [`../../docs/deployment/client-installation-license.md`](../../docs/deployment/client-installation-license.md)
 for the owner-issued license and security model.
 
@@ -15,6 +13,26 @@ The API image starts the API, ARQ worker and campaign orchestrator. This Compose
 topology exposes only one API listener and has no nginx dispatcher, so client
 images stay at one asynchronous FastAPI process even on hosts with more CPUs.
 The Asterisk ARI manager remains disabled unless an installation enables it.
+
+## Capacity planning
+
+The default Compose CPU and memory limits are **ceilings**, not reserved
+capacity, minimum hardware requirements, or a performance guarantee. With the
+sample's bundled Caddy ingress enabled, the seven app services have ceilings
+that sum to about **4.75 CPU cores and 4.75 GiB of memory**. Without bundled
+Caddy, the six remaining services sum to about **4.5 CPU cores and 4.5 GiB**.
+The host also needs capacity for Linux, Docker, filesystem cache and other
+services. On a 4-core host, busy containers can contend because their combined
+CPU ceilings exceed four cores.
+
+The default client package uses connected or separately hosted inference. An
+owner-approved package may also include the optional self-hosted profile with
+Ollama, multilingual STT and VITS/Indus TTS images. That profile requires all
+four model-image digests and `COMPOSE_PROFILES=direct-ingress,self-hosted`.
+Budget at least 16 GiB RAM plus model-download storage; use connected inference
+on an 8 GiB host. These are capacity guidelines, not certified latency or
+concurrency targets. Test the selected models and expected call volume before
+production; no 4-core/8-GB or 16-GB performance configuration is certified.
 
 ## Before installation
 
@@ -165,6 +183,42 @@ On the Kodewaves release runner, use a registry namespace you control and
 authenticate with that registry before using `--push`. Keep the private release
 signing key outside the checkout and Docker build context. The public key passed
 to `--release-public-key-file` must match the private signing key. Example:
+
+The owner repository also includes the manual workflow
+`.github/workflows/client-production-release.yml`. Before using it, configure a
+GitHub environment named `client-production` with `main` as its only allowed
+deployment branch and required human reviewers. The workflow uses an ephemeral GitHub-hosted `ubuntu-24.04` runner; no persistent or self-hosted signing runner is needed. The workflow fails closed unless it runs from `main` and the dispatch
+confirmation is exactly `RELEASE`.
+
+The separate Release Please automation also requires the repository secret `RELEASE_PLEASE_TOKEN`; without it, automated release preparation fails.
+
+The workflow is pinned to `ghcr.io` and this repository's `kodewaves-api` and
+`kodewaves-ui` package paths; it does not accept a registry hostname or package
+path from the dispatch form. The job-scoped `GITHUB_TOKEN` authenticates the
+release runner. Store these values as secrets in that environment:
+`CLIENT_LICENSE_PUBLIC_KEY_B64`,
+`CLIENT_RELEASE_PUBLIC_KEY_B64`, and `CLIENT_RELEASE_PRIVATE_KEY_B64`. The
+private-key secret is the URL-safe Base64 encoding of the 32 raw private-key
+bytes; it is written only to the runner's `/dev/shm` key directory for the
+release and is removed when the step exits. The signed installer, manifest,
+public key, and immutable image references are uploaded as a 30-day GitHub
+Actions artifact. This workflow does not deploy to the VPS or publish an
+unverified final image tag; the builder may leave temporary `kodewaves-verify-*`
+staging tags in the registry for later retention-policy cleanup.
+
+Create this release-signing keypair once on a trusted owner machine. Keep the
+private key backed up offline and never copy it into the repository or an image
+build context. Choose new file names for intentional rotation; the command
+refuses to overwrite either output.
+
+```bash
+python owner-tools/generate_client_release_keypair.py \
+  --private-key /secure/owner/release-private.key \
+  --public-key /secure/owner/release-public.key
+```
+
+This signing key is separate from the license-issuer keypair. Back up both
+securely and keep the matching public keys with the release configuration.
 
 ```bash
 python deploy/client/build_and_verify.py \

@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
 import { PublicEnterpriseLeadCTA } from "@/components/lead-forms/PublicEnterpriseLeadCTA";
+import { VoiceOperationsIllustration } from "@/components/public/VoiceOperationsIllustration";
 import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { useClientBranding } from "@/context/ClientBrandingContext";
 
@@ -84,6 +84,7 @@ const platformAreas = [
 
 export default function HomePage() {
   const branding = useClientBranding();
+  const isClientEdition = process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client";
 
   return (
     <div className="public-site public-home min-h-screen bg-background text-foreground">
@@ -102,16 +103,34 @@ export default function HomePage() {
                 Answer inbound calls, run outbound campaigns, qualify leads and book appointments. Configure browser and phone agents, speech and language models, routing, tools and knowledge in one workspace.
               </p>
               <div className={styles.actions}>
-                <PublicEnterpriseLeadCTA
-                  label="Talk to our team"
-                  className={styles.primaryAction}
-                />
-                <Link href="/platform" className={styles.secondaryAction}>
-                  Explore the platform
-                </Link>
-                <Link href="/auth/login" className={styles.secondaryAction}>
-                  Open your workspace
-                </Link>
+                {isClientEdition ? (
+                  <>
+                    <Link href="/auth/login" className={styles.primaryAction}>
+                      Open your workspace <ArrowRight aria-hidden className="size-4" />
+                    </Link>
+                    {branding.support_email && (
+                      <a href={`mailto:${branding.support_email}`} className={styles.secondaryAction}>
+                        Contact support
+                      </a>
+                    )}
+                    <Link href="/platform" className={styles.secondaryAction}>
+                      Explore the platform
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <PublicEnterpriseLeadCTA
+                      label="Talk to our team"
+                      className={styles.primaryAction}
+                    />
+                    <Link href="/platform" className={styles.secondaryAction}>
+                      Explore the platform
+                    </Link>
+                    <Link href="/auth/login" className={styles.secondaryAction}>
+                      Open your workspace
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
             <div className={styles.heroVisual}>
@@ -137,6 +156,48 @@ export default function HomePage() {
             </div>
           ))}
         </div>
+
+        <section id="scenarios" className={`${styles.sectionMuted} scroll-mt-24`}>
+          <div className={`${styles.pageFrame} ${styles.section}`}>
+            <div className={styles.sectionHead}>
+              <div>
+                <h2>One voice workspace. Different jobs to get done.</h2>
+              </div>
+              <p>
+                Configure each workflow, carrier and connected tool for your workspace. These examples describe supported ways to use the platform; exact options depend on deployment and setup.
+              </p>
+            </div>
+            <div className="divide-y divide-border border-y border-border">
+              <article className="grid gap-4 py-6 md:grid-cols-[minmax(13rem,.7fr)_minmax(0,1.3fr)] md:gap-10 md:py-7">
+                <div className="flex items-center gap-3">
+                  <span className={styles.capabilityIcon}><Phone aria-hidden className="size-5" /></span>
+                  <h3 className="text-base font-semibold tracking-tight">Handle inbound questions</h3>
+                </div>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
+                  Route an inbound number to an agent workflow. Use connected knowledge and configured branches to answer caller questions, then review the run, transcript and recording when available.
+                </p>
+              </article>
+              <article className="grid gap-4 py-6 md:grid-cols-[minmax(13rem,.7fr)_minmax(0,1.3fr)] md:gap-10 md:py-7">
+                <div className="flex items-center gap-3">
+                  <span className={styles.capabilityIcon}><AudioLines aria-hidden className="size-5" /></span>
+                  <h3 className="text-base font-semibold tracking-tight">Follow up with a contact list</h3>
+                </div>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
+                  Start an outbound campaign with a configured carrier and workflow that asks qualifying questions. Review campaign activity and call results in the workspace.
+                </p>
+              </article>
+              <article className="grid gap-4 py-6 md:grid-cols-[minmax(13rem,.7fr)_minmax(0,1.3fr)] md:gap-10 md:py-7">
+                <div className="flex items-center gap-3">
+                  <span className={styles.capabilityIcon}><Database aria-hidden className="size-5" /></span>
+                  <h3 className="text-base font-semibold tracking-tight">Manage appointment requests</h3>
+                </div>
+                <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
+                  Collect caller details through a voice workflow, then review lead and appointment activity in the CRM and appointments workspace.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
 
         <section id="platform" className={styles.section}>
           <div className={styles.pageFrame}>
@@ -194,9 +255,9 @@ export default function HomePage() {
                 <p className={styles.eyebrow}>Tools around each conversation</p>
                 <h2>Use calls to support real business workflows.</h2>
               </div>
-              <p>
-                Available tools depend on the workspace plan, enabled integrations and deployment configuration.
-              </p>
+              <p>{isClientEdition
+                ? "Available tools depend on this installation's license, enabled integrations and configuration."
+                : "Available tools depend on the workspace plan, enabled integrations and deployment configuration."}</p>
             </div>
             <div className={styles.capabilityGrid}>
               {platformAreas.map(({ title, text, icon: Icon }) => (
@@ -214,24 +275,28 @@ export default function HomePage() {
           <div className={styles.pageFrame}>
             <div className={styles.sectionHead}>
               <div>
-                <p className={styles.eyebrow}>Choose your operating model</p>
-                <h2>A managed workspace or a licensed installation.</h2>
+                <p className={styles.eyebrow}>{isClientEdition ? "Your deployment" : "Choose your operating model"}</p>
+                <h2>{isClientEdition ? "Voice operations in your environment." : "A managed workspace or a licensed installation."}</h2>
               </div>
-              <p>Compare the deployment scope before connecting providers or planning capacity.</p>
+              <p>{isClientEdition
+                ? "Your team operates this licensed installation with the providers and capacity configured for your environment."
+                : "Compare the deployment scope before connecting providers or planning capacity."}</p>
             </div>
             <div className={styles.comparison}>
+              {!isClientEdition && (
+                <article className={styles.comparisonItem}>
+                  <span className={styles.comparisonLabel}>01 / HOSTED</span>
+                  <h3><Cloud aria-hidden className="mr-2 inline size-5 text-primary" />Managed platform</h3>
+                  <p>Build and operate agents in a hosted workspace. Your configured plan determines available features and usage.</p>
+                  <ul>
+                    <li><Check aria-hidden />Workspace, agents and conversation review</li>
+                    <li><Check aria-hidden />Connect providers enabled for your account</li>
+                    <li><Check aria-hidden />Review plan terms and configured prices</li>
+                  </ul>
+                </article>
+              )}
               <article className={styles.comparisonItem}>
-                <span className={styles.comparisonLabel}>01 / HOSTED</span>
-                <h3><Cloud aria-hidden className="mr-2 inline size-5 text-primary" />Managed platform</h3>
-                <p>Build and operate agents in a hosted workspace. Your configured plan determines available features and usage.</p>
-                <ul>
-                  <li><Check aria-hidden />Workspace, agents and conversation review</li>
-                  <li><Check aria-hidden />Connect providers enabled for your account</li>
-                  <li><Check aria-hidden />Review plan terms and configured prices</li>
-                </ul>
-              </article>
-              <article className={styles.comparisonItem}>
-                <span className={styles.comparisonLabel}>02 / CUSTOMER ENVIRONMENT</span>
+                <span className={styles.comparisonLabel}>{isClientEdition ? "YOUR ENVIRONMENT" : "02 / CUSTOMER ENVIRONMENT"}</span>
                 <h3><Server aria-hidden className="mr-2 inline size-5 text-primary" />Client installation</h3>
                 <p>Run a licensed installation in an agreed environment, with server capacity and connected providers scoped to the deployment.</p>
                 <ul>
@@ -241,10 +306,12 @@ export default function HomePage() {
                 </ul>
               </article>
             </div>
-            <div className={`${styles.actions} mt-6`}>
-              <Link href="/deployment" className={styles.secondaryAction}>Compare deployment options <ArrowRight aria-hidden className="size-4" /></Link>
-              <Link href="/pricing" className={styles.secondaryAction}>See configured plans</Link>
-            </div>
+            {!isClientEdition && (
+              <div className={`${styles.actions} mt-6`}>
+                <Link href="/deployment" className={styles.secondaryAction}>Compare deployment options <ArrowRight aria-hidden className="size-4" /></Link>
+                <Link href="/pricing" className={styles.secondaryAction}>See configured plans</Link>
+              </div>
+            )}
           </div>
         </section>
 
@@ -252,10 +319,14 @@ export default function HomePage() {
           <div className={`${styles.pageFrame} ${styles.closing}`}>
             <p className={styles.eyebrow}>{branding.company_name} voice agent workspace</p>
             <h2>Start with the work your callers need done.</h2>
-            <p>Sign in to configure an agent and test its workflow, or compare plans and deployment choices with your team.</p>
+            <p>{isClientEdition
+              ? "Sign in to configure an agent and test its workflow, or review the features available in this installation."
+              : "Sign in to configure an agent and test its workflow, or compare plans and deployment choices with your team."}</p>
             <div className={styles.actions}>
               <Link href="/auth/login" className={styles.primaryAction}>Open your workspace <ArrowRight aria-hidden className="size-4" /></Link>
-              <Link href="/pricing" className={styles.secondaryAction}>Plans and pricing</Link>
+              {isClientEdition
+                ? <Link href="/deployment" className={styles.secondaryAction}>Deployment details</Link>
+                : <Link href="/pricing" className={styles.secondaryAction}>Plans and pricing</Link>}
             </div>
           </div>
         </section>

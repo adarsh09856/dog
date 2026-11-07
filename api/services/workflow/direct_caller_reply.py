@@ -225,7 +225,7 @@ _ROMAN_HINDI_NEW_ORDER_REQUEST = re.compile(
 # Permit one common hesitation prefix, while fullmatch keeps added intent on
 # the normal model/tool path.
 _HESITATION_PREFIX = (
-    r"(?:(?:हम्म|ह्म्म|अच्छा|जी|हाँ|हां|हा|अं|अः|उम्|hmm|umm|um|uh|well|okay|ok|haan|acha)"
+    r"(?:(?:हम्म|ह्म्म|अच्छा|जी|हाँ|हां|हा|अं|अः|अ|उम्|hmm|umm|um|uh|well|okay|ok|haan|acha)"
     r"[,،]?\s+)?"
 )
 _HINDI_HELP_REQUEST = re.compile(
@@ -300,7 +300,7 @@ def direct_caller_reply(
     # A generic lookup or appointment tool cannot book a room. Older callers
     # that do not provide an explicit room capability retain the previous
     # no-tools behavior; live call sites pass an exact capability result.
-    if room_request and not has_room_booking_tool:
+    if room_request and not has_room_booking_tool and not has_lookup_tools:
         roman_hindi = re.search(
             r"\b(?:mujhe|mere|kamra|kamre|karna|karni|chahiye|hai|tha)\b",
             text,

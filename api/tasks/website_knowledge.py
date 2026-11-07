@@ -15,10 +15,12 @@ from api.services.website_knowledge_crawler import (
     CrawlError,
     crawl_website,
 )
+from api.services.client_worker_entitlements import require_client_worker_features
 from api.tasks.function_names import FunctionNames
 
 
 async def refresh_knowledge_base_website(ctx, source_uuid: str, organization_id: int):
+    await require_client_worker_features("knowledge_base")
     source = await db_client.claim_website_source_refresh(source_uuid, organization_id)
     if source is None or source is False:
         return
@@ -121,6 +123,7 @@ async def refresh_knowledge_base_website(ctx, source_uuid: str, organization_id:
 
 
 async def sweep_website_knowledge_sources(ctx):
+    await require_client_worker_features("knowledge_base")
     sources = await db_client.get_due_website_sources(limit=100)
     queued = 0
     for source in sources:

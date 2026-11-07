@@ -54,6 +54,9 @@ def build_command(directory: Path, arguments: list[str]) -> list[str]:
     if not key_reference and starts_services:
         raise ValueError("Owner enrollment is required before starting or entering client services")
     files = ["docker-compose.client.yaml"]
+    profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",")}
+    if "self-hosted" in profiles:
+        files.append("docker-compose.models.yaml")
     if key_exists:
         files.append("docker-compose.identity.yaml")
     files.append("docker-compose.recovery.yaml")
@@ -61,6 +64,10 @@ def build_command(directory: Path, arguments: list[str]) -> list[str]:
         target = directory / name
         if not target.is_file() or target.is_symlink():
             raise ValueError(f"Required Compose file is missing or unsafe: {name}")
+    if "self-hosted" in profiles:
+        helper = directory / "warm_local_models.py"
+        if not helper.is_file() or helper.is_symlink():
+            raise ValueError("Required local model warmup helper is missing or unsafe")
     command = [
         "docker", "compose", "--project-directory", str(directory.resolve()),
         "--project-name", _project_name(directory, env), "--env-file", str(env_file.resolve()),
@@ -75,11 +82,14 @@ def controlled_environment(directory: Path, env_file: Path | None = None) -> dic
     """Keep shell variables from overriding configured values or Compose defaults."""
     configured = parse_env(env_file or directory / ".env")
     interpolated: set[str] = set()
-    for name in (
+    files = [
         "docker-compose.client.yaml",
         "docker-compose.identity.yaml",
         "docker-compose.recovery.yaml",
-    ):
+    ]
+    if "self-hosted" in {item.strip() for item in configured.get("COMPOSE_PROFILES", "").split(",")}:
+        files.append("docker-compose.models.yaml")
+    for name in files:
         path = directory / name
         if not path.is_file() or path.is_symlink():
             raise ValueError(f"Required Compose file is missing or unsafe: {name}")
@@ -114,6 +124,18 @@ def preflight_start(directory: Path, environment: dict[str, str]) -> None:
         raise ValueError(
             "Docker Compose configuration check failed; run `python3 compose_client.py config --quiet` for details"
         )
+    configured = parse_env(env_file)
+    if "self-hosted" in {item.strip() for item in configured.get("COMPOSE_PROFILES", "").split(",")}:
+        capacity = subprocess.run(
+            ["docker", "info", "--format", "{{.MemTotal}}"],
+            capture_output=True, text=True, env=environment, check=False,
+        )
+        try:
+            # Docker reports usable RAM, slightly below a nominal 16 GiB host.
+            if capacity.returncode or int(capacity.stdout.strip()) < 15 * 1024**3:
+                raise ValueError
+        except ValueError:
+            raise ValueError("Self-hosted inference requires a Docker host with at least 16 GiB-class RAM; use connected inference on smaller hosts")
 
 
 def main(argv: list[str] | None = None) -> int:

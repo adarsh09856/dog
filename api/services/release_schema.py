@@ -110,13 +110,15 @@ async def preflight_deploy() -> None:
 
 
 def migration_compatibility(
-    migrations_dir: Path, approved_upgrade_from: tuple[str, ...] | list[str] = (),
+    migrations_dir: Path,
+    approved_upgrade_from: tuple[str, ...] | list[str] = (),
+    approved_rollback_to: tuple[str, ...] | list[str] = (),
 ) -> dict[str, object]:
-    """Sign only explicitly approved upgrade origins in the Alembic history.
+    """Sign only explicitly tested upgrade and rollback origins in Alembic history.
 
-    Rollback support is intentionally empty until a prior app version has been
-    exercised against a migrated database. The release record must not promise
-    rollback compatibility based only on the existence of a migration graph.
+    Rollback support stays empty unless a prior schema was explicitly exercised
+    by the disposable client lifecycle acceptance. Migration ancestry alone is
+    never enough to authorize a rollback.
     """
     revisions: dict[str, tuple[str, ...]] = {}
     for source in sorted(migrations_dir.glob("*.py")):
@@ -175,13 +177,16 @@ def migration_compatibility(
 
     include(heads[0])
     approved = set(approved_upgrade_from)
-    unsupported = sorted(approved - ancestors)
+    rollback = set(approved_rollback_to)
+    unsupported = sorted((approved | rollback) - ancestors)
     if unsupported:
-        raise ValueError(f"Approved upgrade revisions are not ancestors of the release head: {unsupported}")
+        raise ValueError(f"Approved schema revisions are not ancestors of the release head: {unsupported}")
+    if not rollback.issubset(approved):
+        raise ValueError("Approved rollback revisions must also be explicitly approved upgrade origins")
     return {
         "head": heads[0],
         "upgrade_from": sorted(approved | {heads[0]}),
-        "rollback_to": [],
+        "rollback_to": sorted(rollback),
     }
 
 

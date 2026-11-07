@@ -7,6 +7,10 @@ on:
         description: Type RELEASE to authorize a customer client release
         required: true
         type: string
+      prior_commit:
+        description: Full Git SHA of the prior client release; it must be an ancestor of main
+        required: true
+        type: string
       api_tag:
         description: New client API release tag; the tag must not already exist
         required: true
@@ -52,7 +56,10 @@ jobs:
   release:
     if: github.ref == 'refs/heads/main'
     environment: client-production
-    runs-on: [self-hosted, linux, client-release]
+    # GitHub-hosted VMs are discarded after each job. Keep the protected
+    # environment/reviewer gate and expose release secrets only to this job;
+    # a persistent self-hosted signing runner is not required.
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
       - name: Require explicit release confirmation and trusted main ref
@@ -69,13 +76,57 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.prior_commit }}
           fetch-depth: 1
+          path: prior-source
           submodules: recursive
           persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
+      - name: Install isolated lifecycle tooling
+        run: python -m pip install --disable-pip-version-check cryptography 'sqlalchemy==2.0.43' 'PyYAML==6.0.2'
+
+      - name: Test the prior schema against this candidate release
+        id: lifecycle_acceptance
+        shell: bash
+        env:
+          PRIOR_COMMIT: ${{ inputs.prior_commit }}
+          COTURN_IMAGE: ${{ inputs.coturn_image }}
+          CADDY_IMAGE: ${{ inputs.caddy_image }}
+          CANDIDATE_COMMIT: ${{ github.sha }}
+          LIFECYCLE_REPORT: ${{ runner.temp }}/client-production-lifecycle-${{ github.run_id }}.json
+        run: |
+          set -euo pipefail
+          python deploy/client/lifecycle_acceptance.py \
+            --prior-commit "$PRIOR_COMMIT" \
+            --prior-source "$GITHUB_WORKSPACE/prior-source" \
+            --candidate-commit "$CANDIDATE_COMMIT" \
+            --coturn-image "$COTURN_IMAGE" \
+            --caddy-image "$CADDY_IMAGE" \
+            --report "$LIFECYCLE_REPORT"
+          python deploy/client/production_release_preflight.py \
+            --report "$LIFECYCLE_REPORT" \
+            --prior-commit "$PRIOR_COMMIT" \
+            --candidate-commit "$CANDIDATE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Lifecycle rollback acceptance passed for prior schema $(grep '^prior_schema_head=' "$GITHUB_OUTPUT" | cut -d= -f2)."
+
+      - name: Preserve sanitized production lifecycle report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-production-lifecycle-${{ github.run_id }}
+          path: ${{ runner.temp }}/client-production-lifecycle-${{ github.run_id }}.json
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Validate release inputs
         shell: bash
@@ -89,6 +140,7 @@ jobs:
           MINIO_IMAGE: ${{ inputs.minio_image }}
           COTURN_IMAGE: ${{ inputs.coturn_image }}
           OWNER_STATUS_URL: ${{ inputs.owner_status_url }}
+          PRIOR_SCHEMA_HEAD: ${{ steps.lifecycle_acceptance.outputs.prior_schema_head }}
         run: |
           set -euo pipefail
           for value in "$REGISTRY_HOST" "$API_TAG" "$UI_TAG" "$CADDY_IMAGE" \
@@ -200,6 +252,8 @@ jobs:
             --release-public-key-file "$key_dir/release-public.key" \
             --owner-status-url "$OWNER_STATUS_URL" \
             --owner-private-key "$key_dir/release-private.key" \
+            --approved-upgrade-from "$PRIOR_SCHEMA_HEAD" \
+            --approved-rollback-to "$PRIOR_SCHEMA_HEAD" \
             --manifest-output "$work_dir/client-release-manifest.json" \
             --public-key-output "$work_dir/release-public.key.out" \
             --push \

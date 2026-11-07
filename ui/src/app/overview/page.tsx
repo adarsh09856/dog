@@ -33,6 +33,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useClientBranding } from "@/context/ClientBrandingContext";
+import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
+import type { ClientFeature } from "@/lib/clientEntitlements";
 import { useAuth } from "@/lib/auth";
 import { overviewApi, OverviewStatsResponse } from "@/lib/kodewavesApi";
 
@@ -40,7 +42,14 @@ import dashboard from "./OverviewWorkspace.module.css";
 
 export default function OverviewPage() {
   const branding = useClientBranding();
+  const {
+    isClientEdition,
+    hasFeature,
+    features: licensedFeatures,
+    loading: entitlementsLoading,
+  } = useClientEntitlements();
   const { user, loading: authLoading } = useAuth();
+  const canUseBilling = !isClientEdition || hasFeature("billing");
   const [stats, setStats] = useState<OverviewStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -72,6 +81,7 @@ export default function OverviewPage() {
         {
           title: "Voice Agents",
           href: "/workflow",
+          feature: "voice",
           icon: Bot,
           badge: stats?.agents.total_agents_count ? `${stats.agents.total_agents_count} Agents` : "Core",
           desc: "Build agents with prompts, workflow branches, speech settings and channel connections.",
@@ -79,12 +89,14 @@ export default function OverviewPage() {
         {
           title: "Campaigns",
           href: "/campaigns",
+          feature: "campaigns",
           icon: Megaphone,
           desc: "Schedule outbound calls and review campaign progress and outcomes.",
         },
         {
           title: "Models & Engines",
           href: "/model-configurations",
+          feature: "voice",
           icon: Brain,
           badge: stats?.model_health.total_models ? `${stats.model_health.total_models} Models` : "BYOK + Cloud",
           desc: "Choose configured cloud or self-hosted LLM, STT and TTS providers.",
@@ -92,24 +104,28 @@ export default function OverviewPage() {
         {
           title: "Telephony",
           href: "/telephony-configurations",
+          feature: "telephony",
           icon: Phone,
           desc: "Manage SIP trunks, Twilio, Exotel, Plivo, Telnyx, and WebRTC carrier lines.",
         },
         {
           title: "Tools & Functions",
           href: "/tools",
+          feature: "voice",
           icon: Wrench,
           desc: "Connect webhook tools, CRM lookups, and custom API functions to your agents.",
         },
         {
           title: "Knowledge Base",
           href: "/files",
+          feature: "knowledge_base",
           icon: Database,
           desc: "Upload and manage documents used by agents during conversations.",
         },
         {
           title: "Recordings & Cache",
           href: "/recordings",
+          feature: "voice",
           icon: AudioLines,
           desc: "Access recorded conversations, audio transcripts, and cached speech assets.",
         },
@@ -122,6 +138,7 @@ export default function OverviewPage() {
         {
           title: "CRM Leads",
           href: "/crm",
+          feature: "crm",
           icon: UserCheck,
           badge: "Leads",
           desc: "Track caller contact details, qualification stages, and conversation summaries.",
@@ -129,18 +146,21 @@ export default function OverviewPage() {
         {
           title: "Appointments",
           href: "/appointments",
+          feature: "appointments",
           icon: Calendar,
           desc: "Automate calendar bookings, callback schedules, and reminder calls.",
         },
         {
           title: "Voice Forms",
           href: "/forms",
+          feature: "forms",
           icon: LayoutList,
           desc: "Create dynamic voice questionnaires and structured data intake surveys.",
         },
         {
           title: "Web Widgets",
           href: "/widgets",
+          feature: "widgets",
           icon: Globe,
           badge: "WebRTC",
           desc: "Embed an instant browser-based voice assistant on your public websites.",
@@ -148,6 +168,7 @@ export default function OverviewPage() {
         {
           title: "Prompt Templates",
           href: "/prompt-templates",
+          feature: "voice",
           icon: FileText,
           desc: "Curate reusable agent personas, compliance guardrails, and greeting scripts.",
         },
@@ -155,31 +176,44 @@ export default function OverviewPage() {
     },
     {
       category: "MANAGE AND OBSERVABILITY",
-      description: "Monitor call executions, review analytics, and manage minute balances",
+      description: canUseBilling
+        ? "Monitor call executions, review analytics, and manage minute balances"
+        : "Monitor call executions and review analytics",
       items: [
         {
           title: "Agent Runs",
           href: "/usage",
+          feature: "voice",
           icon: Activity,
           badge: stats?.calls.calls_today ? `${stats.calls.calls_today} Today` : "Live",
           desc: "Real-time call logs, execution graphs, step-by-step latency, and transcript details.",
         },
-        {
+        ...(canUseBilling ? [{
           title: "Sovereign Wallet",
           href: "/billing-sovereign",
+          feature: "billing",
           icon: Wallet,
-          badge: stats?.wallet.total_minutes ? `${stats.wallet.total_minutes}m` : "Minutes",
+          badge: stats?.wallet?.total_minutes ? `${stats.wallet.total_minutes}m` : "Minutes",
           desc: "Monitor organization minutes, view ledger deductions, and manage top-up packages.",
-        },
+        }] : []),
         {
           title: "Reports & Analytics",
           href: "/reports",
+          feature: "voice",
           icon: BarChart3,
           desc: "Inspect call disposition breakdowns, duration distributions, and export CSV reports.",
         },
       ],
     },
   ];
+  const visibleSections = sections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => !isClientEdition || hasFeature(item.feature as ClientFeature),
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
   return (
     <div className={dashboard.dashboard}>
       {loadError && <div role="alert" className="rounded-md border border-destructive p-3 text-sm text-destructive">{loadError}</div>}
@@ -189,11 +223,11 @@ export default function OverviewPage() {
             <p className={dashboard.mastheadEyebrow}>{branding.company_name} / OPERATIONS DESK</p>
             <h1>{user?.displayName ? `Welcome, ${user.displayName.split(" ")[0]}.` : `Welcome to ${branding.company_name}`}</h1>
             <p className={dashboard.mastheadDescription}>Your voice operation, at a glance. Build the next conversation or review what happened in the last one.</p>
-            <span className={dashboard.trustLine}><ShieldCheck className="h-3.5 w-3.5 text-primary" />Hosted or customer-managed deployment</span>
+            <span className={dashboard.trustLine}><ShieldCheck className="h-3.5 w-3.5 text-primary" />{isClientEdition ? "Licensed customer-managed installation" : "Hosted or customer-managed deployment"}</span>
             <div className={dashboard.mastheadActions}>
               <Button asChild><Link href="/workflow/create"><Plus className="h-4 w-4" /> Create Agent</Link></Button>
               <Button asChild variant="outline"><Link href="/usage">Review call activity <ArrowRight className="h-4 w-4" /></Link></Button>
-              <Button asChild variant="ghost"><Link href="/billing-sovereign"><Wallet className="h-4 w-4 text-primary" /> Top Up</Link></Button>
+              {canUseBilling && <Button asChild variant="ghost"><Link href="/billing-sovereign"><Wallet className="h-4 w-4 text-primary" /> Top Up</Link></Button>}
             </div>
           </div>
           <div className={dashboard.workspaceCard}>
@@ -205,29 +239,50 @@ export default function OverviewPage() {
         </header>
         {/* Real Dynamic Stat Tiles */}
         <div className={`${panel.metricRail} ${dashboard.metrics}`} aria-label="Workspace performance">
-          {/* Wallet Minutes */}
-          <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Voice Minutes
-              </span>
-              <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                <Wallet className="h-4 w-4" />
+          {canUseBilling ? (
+            <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Voice Minutes
+                </span>
+                <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Wallet className="h-4 w-4" />
+                </div>
               </div>
-            </div>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold tracking-tight text-foreground">
-                {stats ? stats.wallet.total_minutes.toLocaleString() : "--"}
-              </span>
-              <span className="text-xs text-muted-foreground">mins left</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-              <span>{stats ? `${stats.wallet.bonus_minutes}m bonus` : ""}</span>
-              <Link href="/billing-sovereign" className="text-primary hover:underline font-medium flex items-center gap-1">
-                Refill <ArrowRight className="h-3 w-3" />
-              </Link>
-            </div>
-          </Card>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-3xl font-bold tracking-tight text-foreground">
+                  {stats?.wallet ? stats.wallet.total_minutes.toLocaleString() : "--"}
+                </span>
+                <span className="text-xs text-muted-foreground">mins left</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                <span>{stats?.wallet ? `${stats.wallet.bonus_minutes}m bonus` : ""}</span>
+                <Link href="/billing-sovereign" className="text-primary hover:underline font-medium flex items-center gap-1">
+                  Refill <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            </Card>
+          ) : (
+            <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Licensed modules
+                </span>
+                <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-3xl font-bold tracking-tight text-foreground">
+                  {entitlementsLoading ? "--" : licensedFeatures.length}
+                </span>
+                <span className="text-xs text-muted-foreground">enabled</span>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                Managed by your {branding.company_name} license
+              </div>
+            </Card>
+          )}
 
           {/* Calls Today & Week */}
           <Card className="border border-border/60 bg-card p-5 relative overflow-hidden">
@@ -398,7 +453,7 @@ export default function OverviewPage() {
         )}
 
         <section aria-label="Workspace tools" className={`${panel.toolDirectory} ${dashboard.toolDirectory}`}>
-          {sections.map((section, index) => (
+          {visibleSections.map((section, index) => (
             <section key={section.category} className={panel.toolGroup} aria-label={section.category}>
               <div className={panel.groupHeading}><span>0{index + 1}</span><h2>{section.category}</h2></div>
               <p className={panel.groupDescription}>{section.description}</p>
@@ -411,8 +466,8 @@ export default function OverviewPage() {
             </section>
           ))}
         </section>
-        {/* Platform administration is available only to backend superusers. */}
-        {user?.is_superuser === true && <Card className={`${dashboard.adminCard} border-border/70 bg-muted/20`}>
+        {/* Platform administration belongs to the hosted operator, not client installations. */}
+        {!isClientEdition && user?.is_superuser === true && <Card className={`${dashboard.adminCard} border-border/70 bg-muted/20`}>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

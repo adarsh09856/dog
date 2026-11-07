@@ -110,30 +110,31 @@ export default function SovereignBillingPage() {
     }
   }, [authLoading, user]);
 
+  const fetchCreditPackages = useCallback(async () => {
+    if (authLoading || !user) return;
+    setCreditPackagesLoading(true);
+    setCreditPackagesError(null);
+    try {
+      setCreditPackages(await publicApi.getPublicCreditOffers());
+    } catch {
+      setCreditPackages([]);
+      setCreditPackagesError("Credit bundles could not be loaded. Use Refresh to try again.");
+    } finally {
+      setCreditPackagesLoading(false);
+    }
+  }, [authLoading, user]);
+
+  const refreshBilling = useCallback(async () => {
+    await Promise.all([fetchData(), fetchCreditPackages()]);
+  }, [fetchCreditPackages, fetchData]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   useEffect(() => {
-    if (authLoading || !user) return;
-    let active = true;
-    setCreditPackagesLoading(true);
-    setCreditPackagesError(null);
-    void publicApi.getPublicCreditOffers().then(
-      (offers) => {
-        if (!active) return;
-        setCreditPackages(offers);
-      },
-      () => {
-        if (!active) return;
-        setCreditPackages([]);
-        setCreditPackagesError("Credit bundles could not be loaded. Refresh the page to try again.");
-      },
-    ).finally(() => {
-      if (active) setCreditPackagesLoading(false);
-    });
-    return () => { active = false; };
-  }, [authLoading, user]);
+    void fetchCreditPackages();
+  }, [fetchCreditPackages]);
 
   useEffect(() => {
     if (appliedCreditSelection.current || typeof window === "undefined") return;
@@ -343,8 +344,8 @@ export default function SovereignBillingPage() {
           <Badge variant="outline" className="px-3 py-1 bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-xs gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5" /> Organization Wallet
           </Badge>
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading} className="gap-2">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          <Button variant="outline" size="sm" onClick={refreshBilling} disabled={loading || creditPackagesLoading} className="gap-2">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading || creditPackagesLoading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>

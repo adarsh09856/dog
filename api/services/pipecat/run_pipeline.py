@@ -403,7 +403,8 @@ def _create_non_realtime_user_turn_start_strategies(
 
 def _create_non_realtime_user_turn_stop_strategies(
     run_configs: dict, *, uses_external_turns: bool, phone_pending=None,
-    local_segmented_stt: bool = False,
+    local_segmented_stt: bool = False, local_cpu_pipeline: bool = False,
+    can_speculate=None, speech_timeout=None,
 ):
     """Return user turn stop strategies for non-realtime pipelines."""
 
@@ -421,6 +422,18 @@ def _create_non_realtime_user_turn_stop_strategies(
                 turn_analyzer=LocalSmartTurnAnalyzerV3(params=smart_turn_params)
             )
         ]
+
+    if local_cpu_pipeline:
+        # Start local inference during the caller's normal pause window. The
+        # LLM speculation gate holds output until confirmation and withdraws it
+        # if the caller resumes speaking.
+        from api.services.pipecat.local_turn_stop import (
+            SpeculativeLocalTurnStopStrategy,
+        )
+
+        return [SpeculativeLocalTurnStopStrategy(
+            can_speculate=can_speculate, speech_timeout=speech_timeout
+        )]
 
     if phone_pending is not None:
         from api.services.pipecat.contact_turn_stop import ContactAwareTurnStopStrategy
@@ -1294,6 +1307,19 @@ async def _run_pipeline_impl(
             local_segmented_stt=local_segmented_stt,
             phone_pending=lambda: bool(
                 getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+            ),
+            local_cpu_pipeline=local_segmented_stt and bool(
+                getattr(llm, "_kodewaves_local_ollama", False)
+            ),
+            can_speculate=lambda text: getattr(
+                engine.active_agent.llm, "can_speculate_caller_turn", lambda _: True
+            )(text),
+            # Phone dictation needs a longer pause; ordinary local turns keep
+            # the faster pause while the model speculates in parallel.
+            speech_timeout=lambda: (
+                1.2
+                if getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
+                else 0.6
             ),
         )
         user_turn_strategies = UserTurnStrategies(

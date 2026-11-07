@@ -1,0 +1,127 @@
+# Optional signed client overlay; selected by COMPOSE_PROFILES=self-hosted.
+# Model downloads are cached in named volumes. No inference ports are public.
+services:
+  api:
+    environment:
+      OLLAMA_ENDPOINT: http://ollama:11434
+      INDIC_STT_ENDPOINT: http://indic-stt:8000/v1
+      INDIC_VITS_TTS_ENDPOINT: http://indic-vits-tts:8000/v1
+      INDUS_TTS_ENDPOINT: http://indus-tts:8000/v1
+    depends_on:
+      local-models-ready: {condition: service_healthy}
+      indic-stt: {condition: service_healthy}
+      indic-vits-tts: {condition: service_healthy}
+      indus-tts: {condition: service_healthy}
+
+  ollama:
+    image: ${CLIENT_OLLAMA_IMAGE:?Set approved Ollama digest}
+    restart: unless-stopped
+    cpus: ${CLIENT_OLLAMA_CPUS:-2.0}
+    mem_limit: ${CLIENT_OLLAMA_MEMORY_LIMIT:-4g}
+    environment:
+      OLLAMA_KEEP_ALIVE: "-1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_QUEUE: "2"
+    volumes: [ollama_models:/root/.ollama]
+    healthcheck:
+      test: [CMD, ollama, list]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks: [internal]
+
+  local-models-ready:
+    image: ${CLIENT_API_IMAGE:?Set pinned client API image digest}
+    entrypoint: [python, /client-tools/warm_local_models.py]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    cpus: "0.1"
+    mem_limit: 128m
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=8m,mode=1777"]
+    environment:
+      OLLAMA_ENDPOINT: http://ollama:11434
+      CLIENT_OLLAMA_MODEL: ${CLIENT_OLLAMA_MODEL:-qwen3.5:2b-q4_K_M}
+      CLIENT_OLLAMA_MODEL_DIGEST: ${CLIENT_OLLAMA_MODEL_DIGEST:-}
+    volumes:
+      - ./warm_local_models.py:/client-tools/warm_local_models.py:ro
+    depends_on:
+      ollama: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "from pathlib import Path; assert Path('/tmp/models-ready').is_file()"]
+      interval: 10s
+      timeout: 3s
+      retries: 180
+      start_period: 30s
+    networks: [internal]
+
+  indic-stt:
+    image: ${CLIENT_INDIC_STT_IMAGE:?Set approved STT digest}
+    restart: unless-stopped
+    cpus: ${CLIENT_STT_CPUS:-1.5}
+    mem_limit: ${CLIENT_STT_MEMORY_LIMIT:-2g}
+    environment:
+      INDIC_STT_LANGUAGES: ${CLIENT_STT_LANGUAGES:-all}
+      INDIC_STT_PREWARM_LANGUAGES: ${CLIENT_STT_PREWARM_LANGUAGES:-en,hi}
+      INDIC_STT_RESIDENT_MODELS: "2"
+      INDIC_STT_AUTO_DETECT: "1"
+      INDIC_STT_THREADS: "1"
+      INDIC_STT_LID_THREADS: "1"
+    volumes: [indic_stt_models:/models]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health',timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 90
+      start_period: 120s
+    networks: [internal]
+
+  indus-tts:
+    image: ${CLIENT_INDUS_TTS_IMAGE:?Set approved Indus TTS digest}
+    restart: unless-stopped
+    cpus: ${CLIENT_INDUS_CPUS:-1.0}
+    mem_limit: ${CLIENT_INDUS_MEMORY_LIMIT:-2g}
+    environment:
+      INDUS_MODEL_DIR: /models/indus-pocket-tts
+      INDUS_WORKERS: "1"
+      HF_HOME: /models/huggingface
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    volumes: [indus_tts_models:/models]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health',timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 90
+      start_period: 120s
+    networks: [internal]
+
+  indic-vits-tts:
+    image: ${CLIENT_INDIC_VITS_TTS_IMAGE:?Set approved combined TTS digest}
+    restart: unless-stopped
+    cpus: ${CLIENT_TTS_CPUS:-1.0}
+    mem_limit: ${CLIENT_TTS_MEMORY_LIMIT:-1536m}
+    environment:
+      INDIC_VITS_THREADS: "1"
+      INDUS_TTS_ENDPOINT: http://indus-tts:8000/v1
+      INDUS_GATEWAY_WORKERS: "1"
+      HF_HOME: /models/huggingface
+    volumes: [indic_vits_models:/models]
+    depends_on:
+      indus-tts: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health',timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 90
+      start_period: 120s
+    networks: [internal]
+
+volumes:
+  ollama_models:
+  indic_stt_models:
+  indus_tts_models:
+  indic_vits_models:

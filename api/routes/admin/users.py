@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import desc, func, select, or_
+from sqlalchemy import desc, exists, func, select, or_
 
 from api.db import db_client
 from api.db import saas_plan_catalog, owner_user_management
@@ -123,6 +123,19 @@ async def list_admin_users(
         elif role == "user":
             stmt = stmt.where(UserModel.is_superuser == False)
 
+        # Status filters must apply before pagination. A frozen wallet also
+        # makes the account appear suspended in the admin directory.
+        frozen_selected_wallet = exists(
+            select(OrganizationWalletModel.id).where(
+                OrganizationWalletModel.organization_id == UserModel.selected_organization_id,
+                OrganizationWalletModel.is_frozen.is_(True),
+            )
+        )
+        if status == "active":
+            stmt = stmt.where(UserModel.is_active.is_(True), ~frozen_selected_wallet)
+        elif status == "suspended":
+            stmt = stmt.where(or_(UserModel.is_active.is_(False), frozen_selected_wallet))
+
         stmt = stmt.limit(limit).offset(offset)
         result = await session.execute(stmt)
         users = result.scalars().all()
@@ -156,12 +169,6 @@ async def list_admin_users(
             is_active_val = getattr(u, "is_active", True)
             if is_frozen:
                 is_active_val = False
-
-            # Status filter in-memory if needed
-            if status == "active" and not is_active_val:
-                continue
-            if status == "suspended" and is_active_val:
-                continue
 
             # Check if user has admin-granted local AI engine access
             local_setting = await kodewaves_db_client.get_setting(f"local_ai_user_{u.id}")

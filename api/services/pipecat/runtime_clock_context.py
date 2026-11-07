@@ -69,7 +69,8 @@ _OTHER_LOCATION = re.compile(
 # instructions and ordinary references to dates must not be rewritten.
 _COMPOSED_CLOCK = re.compile(
     r"Current India local time: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}\+05:30 "
-    r"\(IST, Asia/Kolkata\)\. Interpret dates and times as India local time\. "
+    r"\(IST, Asia/Kolkata\)\. Interpret dates and times as India local time"
+    r"(?:\.|; never ask the caller for a timezone\.) "
     r"Use another timezone only when the caller explicitly requests one\. "
     r"Never invent the current date\."
 )

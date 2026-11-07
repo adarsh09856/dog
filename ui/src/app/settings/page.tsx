@@ -1,6 +1,4 @@
 "use client";
-import panel from "@/components/layout/PanelWorkspace.module.css";
-
 import { ArrowRight, Building, Cpu, Phone, ShieldAlert, ShieldCheck, User, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -9,6 +7,7 @@ import { CallEventsSection } from "@/components/CallEventsSection";
 import { ClientBrandingSettingsCard } from "@/components/ClientBrandingSettingsCard";
 import { ClientUsersSettingsCard } from "@/components/ClientUsersSettingsCard";
 import { ClientWorkspacesSettingsCard } from "@/components/ClientWorkspacesSettingsCard";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { MCPSection } from "@/components/MCPSection";
 import { OrganizationPreferencesSection } from "@/components/OrganizationPreferencesSection";
 import { TelemetrySection } from "@/components/TelemetrySection";
@@ -21,12 +20,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
 import { useAuth } from "@/lib/auth";
 import { getUserEmail } from "@/lib/auth/userDisplay";
 import { apiFetch } from "@/lib/kodewavesApi";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 interface InstallationLicenseStatus {
   edition: string;
@@ -159,14 +158,16 @@ export default function SettingsPage() {
               Sovereign Voice & Minute Balance
             </CardTitle>
             <CardDescription>
-              Check your minute quota, upgrade subscription plans, or bring your own API keys.
+              {isClientEdition
+                ? "Review your licensed usage allowance and configure the provider keys enabled for this installation."
+                : "Check your minute quota, upgrade subscription plans, or bring your own API keys."}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2.5">
             {canUseBilling && <Link href="/billing-sovereign">
               <Button variant="default" size="sm" className="text-xs gap-1.5">
                 <Wallet className="h-3.5 w-3.5" />
-                Open Sovereign Wallet & Plans
+                {isClientEdition ? "Open licensed usage wallet" : "Open Sovereign Wallet & Plans"}
               </Button>
             </Link>}
             {canUseVoice && <Link href="/model-configurations">
@@ -273,7 +274,7 @@ function InstallationLicenseCard({
           }),
         },
       );
-      setRequestSent("Request #" + result.request_id + " was sent to Kodewaves for review.");
+      setRequestSent("Request #" + result.request_id + " was sent to the platform owner for review.");
       setReason("");
     } catch (cause) {
       setRequestError(cause instanceof Error ? cause.message : "Unable to submit the binding request.");
@@ -328,7 +329,7 @@ function InstallationLicenseCard({
             {installation.installation_id && <form onSubmit={submitBindingRequest} className="space-y-3 border-t border-border/60 pt-4">
               <div>
                 <h3 className="text-sm font-semibold">Request a domain or server IP change</h3>
-                <p className="mt-1 text-xs text-muted-foreground">The Kodewaves owner reviews this request. New domains need DNS verification; approval returns a replacement license token once.</p>
+                <p className="mt-1 text-xs text-muted-foreground">The platform owner reviews this request. New domains need DNS verification; approval returns a replacement license token once.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -349,7 +350,7 @@ function InstallationLicenseCard({
               <Button type="submit" size="sm" disabled={sendingRequest || !installation.binding_request_available}>
                 {sendingRequest ? "Sending request…" : "Request owner review"}
               </Button>
-              {!installation.binding_request_available && <p className="text-xs text-muted-foreground">This server has no installation signing key available. Ask the Kodewaves owner to check its identity configuration and enrollment.</p>}
+              {!installation.binding_request_available && <p className="text-xs text-muted-foreground">This server has no installation signing key available. Ask the platform owner to check its identity configuration and enrollment.</p>}
             </form>}
           </div>
         )}

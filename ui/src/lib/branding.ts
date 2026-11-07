@@ -17,3 +17,16 @@ export const DEFAULT_BRANDING: PlatformBranding = {
   primary_color: "#426b57",
   font: "geist",
 };
+
+export const CLIENT_EDITION_DEFAULT_BRANDING: PlatformBranding = {
+  ...DEFAULT_BRANDING,
+  company_name: "Voice platform",
+  tagline: "Voice agents for web and phone",
+  favicon_url: "/voice-platform-mark.svg",
+};
+
+export function defaultBrandingForEdition(): PlatformBranding {
+  return process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client"
+    ? CLIENT_EDITION_DEFAULT_BRANDING
+    : DEFAULT_BRANDING;
+}

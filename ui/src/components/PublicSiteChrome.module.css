@@ -5,7 +5,8 @@
 .themeButton,.menuButton{display:inline-grid;place-items:center;width:38px;height:38px;border:1px solid transparent;transition:background-color 160ms ease,border-color 160ms ease,color 160ms ease}.themeButton:hover,.menuButton:hover{border-color:var(--border)}
 .consoleLink{border-radius:8px;box-shadow:0 3px 0 color-mix(in srgb,var(--foreground) 17%,transparent);transition:transform .18s ease,box-shadow .18s ease,background-color .18s ease}.consoleLink:hover{transform:translateY(-2px);box-shadow:0 5px 0 color-mix(in srgb,var(--foreground) 16%,transparent)}
 .mobileMenu{border-color:var(--border);background:var(--public-paper,var(--background));animation:menu-enter 160ms ease-out both}.mobileLink{font-weight:600}.mobileLink:hover,.mobileLink[aria-current="page"]{background:var(--muted);color:var(--foreground)}
+.mobileWorkspaceLink{background:var(--cta);color:var(--cta-foreground);transition:background-color 160ms ease,transform 160ms ease}.mobileWorkspaceLink:hover{background:color-mix(in srgb,var(--cta) 88%,var(--cta-foreground));transform:translateY(-1px)}.mobileWorkspaceLink:focus-visible{outline:2px solid var(--ring);outline-offset:3px}
 .footer{background:#0d2328;color:#e8f1eb}.footer a{color:#d8e8df}.footer a:hover{color:#fff}.footer p{color:#a9c2b5}.footer :global(img){filter:none}
 @keyframes menu-enter{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:767px){.headerInner{height:68px}.headerInner:after{left:20px;width:calc(100% - 40px)}.consoleLink{border-radius:8px}}
-@media(prefers-reduced-motion:reduce){.consoleLink,.navLink:after,.themeButton,.menuButton{transition:none}.consoleLink:hover{transform:none}.mobileMenu{animation:none}}
+@media(prefers-reduced-motion:reduce){.consoleLink,.navLink:after,.themeButton,.menuButton,.mobileWorkspaceLink{transition:none}.consoleLink:hover,.mobileWorkspaceLink:hover{transform:none}.mobileMenu{animation:none}}

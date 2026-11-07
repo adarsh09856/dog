@@ -901,7 +901,7 @@ export interface OverviewStatsResponse {
     credit_balance_minutes: number;
     bonus_minutes: number;
     total_minutes: number;
-  };
+  } | null;
   calls: {
     active_calls: number;
     calls_today: number;

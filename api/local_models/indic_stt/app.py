@@ -22,7 +22,6 @@ import sherpa_onnx
 import soundfile as sf
 import soxr
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from huggingface_hub import hf_hub_download
 
 try:
     from api.local_models.indic_stt.spoken_digits import (
@@ -208,6 +207,11 @@ def _installed_languages() -> list[str]:
 
 
 def _download_models(languages: set[str]) -> None:
+    # The API test environment imports this module to exercise detector
+    # orchestration without installing the STT image's model-download tools.
+    # Keep the optional Hugging Face client off the module import path.
+    from huggingface_hub import hf_hub_download
+
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     indic_languages = languages & INDIC_LANGUAGES
     if indic_languages:
@@ -374,6 +378,7 @@ async def models() -> dict:
 def _load_language_identifier() -> None:
     global _lid_session, _english_lid
     import onnxruntime as ort
+    from huggingface_hub import hf_hub_download
 
     model_path = hf_hub_download(
         repo_id=LID_REPOSITORY,

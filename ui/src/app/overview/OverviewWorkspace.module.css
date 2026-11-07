@@ -8,15 +8,15 @@
 .masthead h1 { max-width:760px; margin:19px 0 12px; color:#f4f5ec; font-size:clamp(2.2rem,4vw,4.1rem); font-weight:520; letter-spacing:-.065em; line-height:1.02; }
 .mastheadDescription { max-width:600px; color:#c2d0c7; font-size:14px; line-height:1.8; }
 .mastheadActions { display:flex; flex-wrap:wrap; gap:10px; margin-top:24px; }
-.mastheadActions a:first-child { color:#17271f; background:#d1b36e; border-color:#d1b36e; }
-.mastheadActions a:first-child:hover { background:#dec783; }
+.mastheadActions a:first-child { color:var(--cta-foreground); background:var(--cta); border-color:var(--cta); }
+.mastheadActions a:first-child:hover { background:color-mix(in srgb,var(--cta) 88%,var(--cta-foreground)); border-color:color-mix(in srgb,var(--cta) 88%,var(--cta-foreground)); }
 .mastheadActions a:not(:first-child) { color:#edf2e9; border-color:rgba(223,233,223,.24); background:rgba(255,255,255,.045); }
 .workspaceCard { position:relative; align-self:stretch; display:flex; flex-direction:column; justify-content:center; padding:24px 0 24px clamp(20px,3vw,44px); border-left:1px solid rgba(224,234,220,.19); }
 .workspaceCardTop { display:flex; align-items:center; justify-content:space-between; color:#b8c9bc; font:600 9px/1.5 var(--font-geist-mono),monospace; letter-spacing:.14em; }
 .workspaceCardTop button { color:#d6e1d7; }
 .workspaceCard strong { margin-top:23px; color:#f1f4eb; font-size:clamp(19px,2vw,25px); font-weight:530; letter-spacing:-.04em; }
 .workspaceCard p { max-width:280px; margin-top:10px; color:#bac9bf; font-size:12px; line-height:1.75; }
-.workspaceCard a { display:inline-flex; align-items:center; gap:8px; margin-top:22px; color:#dec783; font-size:11px; font-weight:650; }
+.workspaceCard a { display:inline-flex; align-items:center; gap:8px; margin-top:22px; color:#edf2e9; font-size:11px; font-weight:650; }
 .trustLine { display:inline-flex; align-items:center; gap:8px; margin-top:16px; color:#bdcfc2; font-size:11px; }
 .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); overflow:hidden; border:1px solid var(--border); border-radius:16px; background:var(--card); box-shadow:0 14px 38px -35px var(--foreground); }
 .metrics > div { min-width:0; padding:21px 23px; border-right:1px solid var(--border); background:linear-gradient(155deg,color-mix(in srgb,var(--primary) 4%,var(--card)),var(--card) 64%); }

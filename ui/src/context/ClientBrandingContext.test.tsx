@@ -1,5 +1,5 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn(), pathname: "/admin/settings" }));
 vi.mock("@/lib/kodewavesApi", () => ({ apiFetch: mocks.apiFetch }));
@@ -10,7 +10,7 @@ vi.mock("next-themes", () => ({
 
 import { AuthShell } from "@/components/auth/AuthShell";
 import { BrandLogo } from "@/components/BrandLogo";
-import { PublicFooter } from "@/components/PublicSiteChrome";
+import { PublicFooter, PublicHeader } from "@/components/PublicSiteChrome";
 import { DEFAULT_BRANDING } from "@/lib/branding";
 
 import {
@@ -32,6 +32,8 @@ function contrastRatio(first: string, second: string): number {
 }
 
 describe("shared platform branding", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   beforeEach(() => {
     mocks.apiFetch.mockReset();
     mocks.pathname = "/admin/settings";
@@ -101,6 +103,16 @@ describe("shared platform branding", () => {
   });
 
   it("updates brand identity, support, browser title, icon and color after an admin save", async () => {
+    const rootStyle = document.documentElement.style;
+    const genericThemeVariables = [
+      "--primary",
+      "--primary-foreground",
+      "--accent",
+      "--accent-foreground",
+    ] as const;
+    const initialGenericTheme = genericThemeVariables.map((name) =>
+      rootStyle.getPropertyValue(name),
+    );
     const initial = {
       ...DEFAULT_BRANDING,
       company_name: "Acme Voice",
@@ -121,26 +133,17 @@ describe("shared platform branding", () => {
     expect(screen.getAllByText("Acme Voice").length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "Acme conversations" })).toBeTruthy();
     await waitFor(() => expect(document.title).toBe("Admin | Acme Voice"));
-    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "#123456",
+    expect(rootStyle.getPropertyValue("--brand-primary-color")).toBe("#123456");
+    expect(rootStyle.getPropertyValue("--cta")).toBe("#123456");
+    expect(
+      contrastRatio(
+        rootStyle.getPropertyValue("--cta"),
+        rootStyle.getPropertyValue("--cta-foreground"),
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(genericThemeVariables.map((name) => rootStyle.getPropertyValue(name))).toEqual(
+      initialGenericTheme,
     );
-    expect(
-      contrastRatio(
-        document.documentElement.style.getPropertyValue("--primary"),
-        document.documentElement.style.getPropertyValue("--primary-foreground"),
-      ),
-    ).toBeGreaterThanOrEqual(4.5);
-    const initialAccent = document.documentElement.style.getPropertyValue("--accent");
-    expect(initialAccent).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(
-      document.documentElement.style.getPropertyValue("--accent-foreground"),
-    ).toMatch(/^#[0-9a-f]{6}$/i);
-    expect(
-      contrastRatio(
-        initialAccent,
-        document.documentElement.style.getPropertyValue("--accent-foreground"),
-      ),
-    ).toBeGreaterThanOrEqual(4.5);
     expect(document.documentElement.style.getPropertyValue("--brand-font-family")).toContain("system-ui");
     expect(
       screen
@@ -165,18 +168,14 @@ describe("shared platform branding", () => {
     })).toBeTruthy();
     expect(screen.queryByText("Acme Voice")).toBeNull();
     expect(screen.getAllByText("New Brand").length).toBeGreaterThan(0);
-    expect(document.documentElement.style.getPropertyValue("--primary")).toBe(
-      "#654321",
-    );
-    expect(document.documentElement.style.getPropertyValue("--accent")).not.toBe(
-      initialAccent,
-    );
+    expect(rootStyle.getPropertyValue("--brand-primary-color")).toBe("#654321");
+    expect(rootStyle.getPropertyValue("--cta")).toBe("#654321");
     expect(
-      contrastRatio(
-        document.documentElement.style.getPropertyValue("--primary"),
-        document.documentElement.style.getPropertyValue("--primary-foreground"),
-      ),
+      contrastRatio(rootStyle.getPropertyValue("--cta"), rootStyle.getPropertyValue("--cta-foreground")),
     ).toBeGreaterThanOrEqual(4.5);
+    expect(genericThemeVariables.map((name) => rootStyle.getPropertyValue(name))).toEqual(
+      initialGenericTheme,
+    );
   });
 
   it("restores the configured browser title after framework metadata overwrites it", async () => {
@@ -187,6 +186,22 @@ describe("shared platform branding", () => {
 
     act(() => { document.title = "Kodewaves"; });
     await waitFor(() => expect(document.title).toBe("Admin | Acme Voice"));
+  });
+
+  it("hides hosted pricing links from client-edition public navigation", () => {
+    vi.stubEnv("NEXT_PUBLIC_KODEWAVES_EDITION", "client");
+    mocks.apiFetch.mockReturnValue(new Promise(() => {}));
+    render(
+      <ClientBrandingProvider initialBranding={DEFAULT_BRANDING}>
+        <PublicHeader />
+        <PublicFooter />
+      </ClientBrandingProvider>,
+    );
+
+    expect(screen.queryAllByRole("link", { name: "Pricing" })).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+    expect(screen.queryAllByRole("link", { name: "Pricing" })).toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: "Deployment" }).length).toBeGreaterThan(0);
   });
 
 });

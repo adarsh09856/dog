@@ -28,7 +28,7 @@ import uuid
 from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from validate_install import parse_env
+from validate_install import MODEL_IMAGE_KEYS, parse_env, validate_model_images
 from recovery_lock import RECOVERY_LOCK_FILE, recovery_operation_lock
 
 REQUIRED_FILES = {
@@ -50,6 +50,25 @@ MAX_DOCKER_TIMEOUT = 3600
 RECOVERY_OVERRIDE = "docker-compose.recovery.yaml"
 RECOVERY_STATE_DIR = ".client-recovery-state"
 _recovery_operation_lock = recovery_operation_lock
+MODEL_IMAGE_ENV_KEYS = {
+    "ollama": "CLIENT_OLLAMA_IMAGE",
+    "indic_stt": "CLIENT_INDIC_STT_IMAGE",
+    "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
+    "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
+}
+MODEL_ASSET_ENV_KEYS = {
+    "ollama": {
+        "name": "CLIENT_OLLAMA_MODEL",
+        "digest": "CLIENT_OLLAMA_MODEL_DIGEST",
+    },
+}
+MODEL_COMPOSE_SERVICES = ("ollama", "indic-stt", "indus-tts", "indic-vits-tts")
+_PINNED_IMAGE_REFERENCE = re.compile(
+    r"[a-z0-9][a-z0-9.-]*(?::[0-9]{1,5})?"
+    r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}"
+)
+_MODEL_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}\Z")
+_MODEL_ASSET_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
 def _validate_member_name(name: str) -> None:
@@ -298,7 +317,30 @@ def _verify_release_manifest(manifest_bytes: bytes, release_public_key: str) -> 
         ):
             raise ValueError("manifest inventories are invalid")
         images = payload.get("images")
+        model_images = payload.get("model_images")
         schema = payload.get("schema_compatibility")
+        if model_images is not None:
+            if images is None or not isinstance(model_images, dict) or set(model_images) != set(MODEL_IMAGE_ENV_KEYS):
+                raise ValueError("manifest model image metadata is incomplete")
+            if not all(
+                isinstance(reference, str) and _PINNED_IMAGE_REFERENCE.fullmatch(reference)
+                for reference in model_images.values()
+            ):
+                raise ValueError("manifest model image metadata is invalid")
+        model_assets = payload.get("model_assets")
+        if model_assets is not None:
+            if not isinstance(model_assets, dict) or set(model_assets) != set(MODEL_ASSET_ENV_KEYS):
+                raise ValueError("manifest model asset metadata is incomplete")
+            ollama_asset = model_assets["ollama"]
+            if (
+                not isinstance(ollama_asset, dict)
+                or set(ollama_asset) != {"name", "digest"}
+                or not isinstance(ollama_asset.get("name"), str)
+                or not _MODEL_ASSET_NAME.fullmatch(ollama_asset["name"])
+                or not isinstance(ollama_asset.get("digest"), str)
+                or not _MODEL_ASSET_DIGEST.fullmatch(ollama_asset["digest"])
+            ):
+                raise ValueError("manifest model asset metadata is invalid")
         if not isinstance(images, dict) or set(images) != {"api", "ui"} or not isinstance(schema, dict):
             raise ValueError("manifest image or schema metadata is invalid")
         for name, image in images.items():
@@ -344,6 +386,58 @@ def _verify_release_manifest(manifest_bytes: bytes, release_public_key: str) -> 
             raise
         raise ValueError("Client release manifest is missing or invalid, including its signature") from exc
     return payload
+
+
+def _model_images_from_env(get_value) -> dict[str, str] | None:
+    """Read a complete optional local-model stack from an env mapping/reader."""
+    values = {name: get_value(env_key) or "" for name, env_key in MODEL_IMAGE_ENV_KEYS.items()}
+    supplied = {name for name, value in values.items() if value.strip()}
+    if not supplied:
+        return None
+    if supplied != set(MODEL_IMAGE_ENV_KEYS):
+        raise ValueError("Local inference recovery config requires all four model image pins")
+    if not all(_PINNED_IMAGE_REFERENCE.fullmatch(value) for value in values.values()):
+        raise ValueError("Recovery model image pins must use immutable sha256 references")
+    return values
+
+
+def _check_model_images(payload: dict[str, object], get_value, *, description: str) -> dict[str, str] | None:
+    signed = payload.get("model_images")
+    configured = _model_images_from_env(get_value)
+    profiles = {
+        item.strip() for item in (get_value("COMPOSE_PROFILES") or "").split(",")
+        if item.strip()
+    }
+    if configured is None:
+        if "self-hosted" in profiles:
+            raise ValueError(f"{description} self-hosted config is missing all four model image pins")
+        # A release can carry a signed optional model inventory while this
+        # installation deliberately uses connected inference only.
+        return None
+    if signed != configured:
+        raise ValueError(f"{description} model image pins do not match the signed release manifest")
+    return configured
+
+
+def _check_model_assets(
+    payload: dict[str, object], get_value, *, description: str,
+) -> dict[str, dict[str, str]] | None:
+    """Verify the signed Ollama asset descriptor against the release config."""
+    assets = payload.get("model_assets")
+    if assets is None:
+        profiles = {
+            item.strip() for item in (get_value("COMPOSE_PROFILES") or "").split(",")
+            if item.strip()
+        }
+        if "self-hosted" in profiles:
+            raise ValueError(f"{description} self-hosted release is missing its signed model asset descriptor")
+        return None
+    # _verify_release_manifest validates the exact signed schema first.
+    descriptor = assets["ollama"]
+    for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items():
+        if (get_value(env_key) or "") != descriptor[field]:
+            raise ValueError(f"{description} model asset {field} does not match the signed release manifest")
+    return {"ollama": {"name": descriptor["name"], "digest": descriptor["digest"]}}
 
 
 def _check_nested_tar_file(path: Path, description: str) -> None:
@@ -456,6 +550,16 @@ def create_archive(
             or manifest_images["ui"].get("reference") != env_ui
         ):
             raise ValueError("Archived .env images do not match the signed release manifest")
+        model_images = _check_model_images(
+            payload,
+            lambda key: _env_value(env_bytes, key),
+            description="Archived .env",
+        )
+        model_assets = _check_model_assets(
+            payload,
+            lambda key: _env_value(env_bytes, key),
+            description="Archived .env",
+        )
     except (KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError("Archived release manifest does not identify the configured API/UI images") from exc
 
@@ -474,6 +578,10 @@ def create_archive(
         "identity_uid": identity_uid,
         "identity_mode": identity_mode,
     }
+    if model_images is not None:
+        metadata["model_images"] = model_images
+    if model_assets is not None:
+        metadata["model_assets"] = model_assets
     contents: dict[str, bytes] = {
         "recovery.json": (json.dumps(metadata, sort_keys=True, indent=2) + "\n").encode(),
     }
@@ -546,6 +654,8 @@ def _compose_context(compose_dir: Path, env_file: Path) -> tuple[list[str], dict
     env_file = env_file.resolve(strict=True)
     env = parse_env(env_file)
     compose_files = ["docker-compose.client.yaml"]
+    if "self-hosted" in {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",")}:
+        compose_files.append("docker-compose.models.yaml")
     if env.get("CLIENT_IDENTITY_KEY_FILE"):
         compose_files.append("docker-compose.identity.yaml")
     compose_files.append(RECOVERY_OVERRIDE)
@@ -858,7 +968,10 @@ def _staged_config_matches_installation(staged: Path, env_file: Path, compose_di
     return current_env
 
 
-_RELEASE_CONFIG_KEYS = {"CLIENT_API_IMAGE", "CLIENT_UI_IMAGE", "CLIENT_RELEASE_MANIFEST_FILE"}
+_RELEASE_CONFIG_KEYS = {
+    "CLIENT_API_IMAGE", "CLIENT_UI_IMAGE", "CLIENT_RELEASE_MANIFEST_FILE",
+    *MODEL_ASSET_ENV_KEYS["ollama"].values(), *MODEL_IMAGE_KEYS,
+}
 
 
 def _release_rollback_config(
@@ -868,7 +981,7 @@ def _release_rollback_config(
     """Authorize a signed schema-compatible prior release and derive an env overlay.
 
     All installation credentials and infrastructure settings must still match the
-    archive. Only the API/UI digest pins and manifest path may differ.
+    archive. Only signed release image pins and the manifest path may differ.
     """
     trusted_key = _read_release_public_key(release_public_key)
     archived_env_path = staged / "config/.env"
@@ -889,6 +1002,12 @@ def _release_rollback_config(
         or archived_env.get("CLIENT_UI_IMAGE") != target_images["ui"]["reference"]
     ):
         raise ValueError("Archived release image pins do not match its signed manifest")
+    target_model_images = _check_model_images(
+        target, archived_env.get, description="Archived release",
+    )
+    target_model_assets = _check_model_assets(
+        target, archived_env.get, description="Archived release",
+    )
 
     current_manifest_ref = current_env.get("CLIENT_RELEASE_MANIFEST_FILE", "")
     current_manifest_path = Path(current_manifest_ref)
@@ -906,6 +1025,10 @@ def _release_rollback_config(
         or current_env.get("CLIENT_UI_IMAGE") != current_images["ui"]["reference"]
     ):
         raise ValueError("Active release image pins do not match its signed manifest")
+    current_model_images = _check_model_images(
+        current, current_env.get, description="Active release",
+    )
+    _check_model_assets(current, current_env.get, description="Active release")
     current_head = current["schema_compatibility"]["head"]
     target_head = target["schema_compatibility"]["head"]
     if target_head not in current["schema_compatibility"]["rollback_to"]:
@@ -926,6 +1049,27 @@ def _release_rollback_config(
         "CLIENT_UI_IMAGE": target_images["ui"]["reference"],
         "CLIENT_RELEASE_MANIFEST_FILE": manifest_ref,
     }
+    # Restore the model stack with the signed release. Clear a newer local
+    # stack when the archived target is cloud-only, and keep legacy .env files
+    # valid when neither release has any local model pins.
+    if target_model_images is not None:
+        replacements.update({
+            MODEL_IMAGE_ENV_KEYS[name]: reference
+            for name, reference in target_model_images.items()
+        })
+    elif current_model_images is not None:
+        replacements.update({key: "" for key in MODEL_IMAGE_KEYS})
+    if target_model_assets is not None:
+        replacements.update({
+            env_key: target_model_assets["ollama"][field]
+            for field, env_key in MODEL_ASSET_ENV_KEYS["ollama"].items()
+        })
+    elif any(key in archived_env or key in current_env for key in MODEL_ASSET_ENV_KEYS["ollama"].values()):
+        # Preserve the selected model from older manifests that predate signed assets.
+        replacements.update({
+            key: archived_env.get(key, "")
+            for key in MODEL_ASSET_ENV_KEYS["ollama"].values()
+        })
     original_env_bytes = env_file.read_bytes()
     try:
         lines = original_env_bytes.decode("utf-8").splitlines(keepends=True)
@@ -946,7 +1090,14 @@ def _release_rollback_config(
         else:
             rewritten.append(raw)
     if found != set(replacements):
-        raise ValueError("Active .env is missing one or more release pin settings")
+        missing_model_pins = set(replacements) - found - {
+            "CLIENT_API_IMAGE", "CLIENT_UI_IMAGE", "CLIENT_RELEASE_MANIFEST_FILE",
+        }
+        if missing_model_pins and target_model_images is not None:
+            rewritten.extend(f"{key}=\n" for key in sorted(missing_model_pins))
+            found.update(missing_model_pins)
+        if found != set(replacements):
+            raise ValueError("Active .env is missing one or more release pin settings")
     return current_env, original_env_bytes, "".join(rewritten).encode("utf-8")
 
 
@@ -956,7 +1107,14 @@ def _persisted_recovery_state(compose_dir: Path) -> Path:
 
 def _switch_compose_up(
     compose_dir: Path, env_file: Path, services: list[str], *, timeout: int = 360,
+    include_model_services: bool = False,
 ) -> None:
+    env = parse_env(env_file)
+    profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()}
+    model_profile_active = "self-hosted" in profiles
+    if include_model_services and model_profile_active:
+        validate_model_images({key: env.get(key, "") for key in MODEL_IMAGE_KEYS})
+        services = list(dict.fromkeys([*services, *MODEL_COMPOSE_SERVICES]))
     if not services:
         return
     command, _model, _env = _compose_context(compose_dir, env_file)
@@ -1022,12 +1180,19 @@ def _restore_to_docker_volumes_locked(
         original_override = override_path.read_bytes() if original_override_exists else b""
         previous_manifest_path: Path | None = None
         previous_manifest_bytes = b""
+        previous_model_assets = None
         if allow_release_rollback:
             previous_manifest_path = Path(current_env["CLIENT_RELEASE_MANIFEST_FILE"])
             if not previous_manifest_path.is_absolute():
                 previous_manifest_path = compose_dir / previous_manifest_path
             _check_regular_file(previous_manifest_path, "active release manifest")
             previous_manifest_bytes = previous_manifest_path.read_bytes()
+            previous_payload = _verify_release_manifest(
+                previous_manifest_bytes, _read_release_public_key(release_public_key),
+            )
+            previous_model_assets = _check_model_assets(
+                previous_payload, current_env.get, description="Active release",
+            )
         state_dir.mkdir(mode=0o700)
         try:
             _write_private(state_dir / "previous-recovery-override", original_override)
@@ -1059,6 +1224,8 @@ def _restore_to_docker_volumes_locked(
                 "previous_manifest_sha256": hashlib.sha256(previous_manifest_bytes).hexdigest(),
                 "release_public_key_path": str(release_public_key.resolve(strict=True)),
                 "release_public_key_sha256": _sha256_file(release_public_key),
+                "previous_model_assets": previous_model_assets,
+                "restored_model_assets": metadata.get("model_assets"),
             })
         try:
             _write_private(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
@@ -1097,7 +1264,10 @@ def _restore_to_docker_volumes_locked(
             _atomic_write(override_path, _recovery_override(new_volumes), mode=0o600)
             state["status"] = "switching"
             _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
-            _switch_compose_up(compose_dir, env_file, running)
+            _switch_compose_up(
+                compose_dir, env_file, running,
+                include_model_services=allow_release_rollback,
+            )
         except Exception as restore_error:
             # A failed stop may have stopped only part of the project. Restore
             # the exact previous mapping first, then restart only its services.
@@ -1114,7 +1284,10 @@ def _restore_to_docker_volumes_locked(
             if allow_release_rollback:
                 _atomic_write(env_file, previous_env_bytes, mode=0o600)
             try:
-                _switch_compose_up(compose_dir, env_file, running)
+                _switch_compose_up(
+                    compose_dir, env_file, running,
+                    include_model_services=allow_release_rollback,
+                )
             except Exception as rollback_error:
                 state["status"] = "automatic_rollback_failed"
                 _atomic_write(state_dir / "state.json", (json.dumps(state, indent=2, sort_keys=True) + "\n").encode())
@@ -1232,6 +1405,12 @@ def _rollback_docker_restore_locked(
             or active_env.get("CLIENT_UI_IMAGE") != target_payload["images"]["ui"]["reference"]
         ):
             raise ValueError("Active recovery image pins do not match the signed manifest")
+        _check_model_images(target_payload, active_env.get, description="Active recovery")
+        restored_model_assets = _check_model_assets(
+            target_payload, active_env.get, description="Active recovery",
+        )
+        if "restored_model_assets" in state and state.get("restored_model_assets") != restored_model_assets:
+            raise ValueError("Saved recovery model asset descriptor changed after restore")
         previous_env = parse_env(state_dir / "previous-env")
         previous_manifest_path = Path(previous_env["CLIENT_RELEASE_MANIFEST_FILE"])
         if not previous_manifest_path.is_absolute():
@@ -1242,7 +1421,13 @@ def _rollback_docker_restore_locked(
         previous_manifest_bytes = (state_dir / "previous-manifest").read_bytes()
         if hashlib.sha256(previous_manifest_bytes).hexdigest() != state.get("previous_manifest_sha256"):
             raise ValueError("Saved prior release manifest is damaged")
-        _verify_release_manifest(previous_manifest_bytes, trusted_key)
+        previous_payload = _verify_release_manifest(previous_manifest_bytes, trusted_key)
+        _check_model_images(previous_payload, previous_env.get, description="Saved prior release")
+        previous_model_assets = _check_model_assets(
+            previous_payload, previous_env.get, description="Saved prior release",
+        )
+        if "previous_model_assets" in state and state.get("previous_model_assets") != previous_model_assets:
+            raise ValueError("Saved prior model asset descriptor changed after restore")
     command, model, _env = _compose_context(compose_dir, env_file)
     running = _running_services(command, compose_dir, set(model.get("services", {})))
     original_running = list(state.get("running_services", []))
@@ -1256,14 +1441,20 @@ def _rollback_docker_restore_locked(
         if release_rollback:
             _atomic_write(previous_manifest_path, previous_manifest_bytes, mode=0o644)
             _atomic_write(env_file, previous_env_bytes, mode=0o600)
-        _switch_compose_up(compose_dir, env_file, original_running)
+        _switch_compose_up(
+            compose_dir, env_file, original_running,
+            include_model_services=release_rollback,
+        )
     except Exception as rollback_error:
         _atomic_write(current_override, current_bytes, mode=0o600)
         if release_rollback:
             _atomic_write(target_manifest_path, target_manifest_bytes, mode=0o644)
             _atomic_write(env_file, active_env_bytes, mode=0o600)
         try:
-            _switch_compose_up(compose_dir, env_file, running)
+            _switch_compose_up(
+                compose_dir, env_file, running,
+                include_model_services=release_rollback,
+            )
         except Exception as restart_error:
             raise RuntimeError(
                 "Rollback failed and the restored-volume services could not restart; both volume sets are retained"
@@ -1356,6 +1547,20 @@ def _validate_archive_handle(
             or manifest_payload["images"]["ui"].get("reference") != metadata.get("ui_image")
         ):
             raise ValueError("Recovery image references do not match the archived config and manifest")
+        model_images = _check_model_images(
+            manifest_payload,
+            lambda key: _env_value(env_bytes, key),
+            description="Archived .env",
+        )
+        if metadata.get("model_images") != model_images:
+            raise ValueError("Recovery model image metadata does not match the signed release manifest")
+        model_assets = _check_model_assets(
+            manifest_payload,
+            lambda key: _env_value(env_bytes, key),
+            description="Archived .env",
+        )
+        if metadata.get("model_assets") != model_assets:
+            raise ValueError("Recovery model asset metadata does not match the signed release manifest")
     except (KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError("Archived client release manifest is invalid or incomplete") from exc
     key_configured = bool(_env_value(env_bytes, "CLIENT_IDENTITY_KEY_FILE"))

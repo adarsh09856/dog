@@ -15,6 +15,7 @@ from opentelemetry import trace
 from pipecat.utils.tracing.langfuse_helpers import mark_trace_public
 
 from api.db import db_client
+from api.services.client_worker_entitlements import require_client_worker_features
 from api.services.gen_ai import build_embedding_service
 from api.services.pipecat.tracing_config import ensure_tracing
 
@@ -116,6 +117,11 @@ async def retrieve_from_knowledge_base(
         - query: The original query
         - total_results: Number of results returned
     """
+    # Recheck the signed grant at execution time. The workflow's `/workflow`
+    # route is voice-gated, but knowledge-base retrieval is a separate feature
+    # and can run long after a workflow was created or its license changed.
+    await require_client_worker_features("knowledge_base")
+
     # Create span for retrieval operation if tracing is enabled
     if ensure_tracing():
         try:

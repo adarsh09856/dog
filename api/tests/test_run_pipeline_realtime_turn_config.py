@@ -306,6 +306,41 @@ def test_non_realtime_default_uses_speech_timeout_stop():
     assert isinstance(strategies[0], SpeechTimeoutUserTurnStopStrategy)
 
 
+def test_local_ollama_segmented_stt_uses_speculative_turn_stop():
+    from api.services.pipecat.local_turn_stop import SpeculativeLocalTurnStopStrategy
+
+    strategies = _create_non_realtime_user_turn_stop_strategies(
+        {},
+        uses_external_turns=False,
+        local_segmented_stt=True,
+        local_cpu_pipeline=True,
+        can_speculate=lambda _text: True,
+        speech_timeout=lambda: 0.6,
+    )
+
+    assert len(strategies) == 1
+    assert isinstance(strategies[0], SpeculativeLocalTurnStopStrategy)
+    strategies[0]._apply_speech_timeout()
+    assert strategies[0]._user_speech_timeout == 0.6
+
+
+def test_local_ollama_phone_collection_keeps_longer_pause():
+    from api.services.pipecat.local_turn_stop import SpeculativeLocalTurnStopStrategy
+
+    strategies = _create_non_realtime_user_turn_stop_strategies(
+        {},
+        uses_external_turns=False,
+        local_segmented_stt=True,
+        local_cpu_pipeline=True,
+        phone_pending=lambda: True,
+        speech_timeout=lambda: 1.2,
+    )
+
+    assert isinstance(strategies[0], SpeculativeLocalTurnStopStrategy)
+    strategies[0]._apply_speech_timeout()
+    assert strategies[0]._user_speech_timeout == 1.2
+
+
 def test_non_realtime_can_use_turn_analyzer_stop_strategy(monkeypatch):
     monkeypatch.setattr(
         run_pipeline_module,

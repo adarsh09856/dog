@@ -25,6 +25,60 @@ IMAGE_KEYS = {
     "CLIENT_CADDY_IMAGE",
 }
 PROFILE_IMAGE_KEYS = {"CLIENT_CADDY_IMAGE"}
+MODEL_IMAGE_KEYS = {
+    "CLIENT_OLLAMA_IMAGE", "CLIENT_INDIC_STT_IMAGE",
+    "CLIENT_INDUS_TTS_IMAGE", "CLIENT_INDIC_VITS_TTS_IMAGE",
+}
+MODEL_IMAGE_COMPONENTS = {
+    "ollama": "CLIENT_OLLAMA_IMAGE",
+    "indic_stt": "CLIENT_INDIC_STT_IMAGE",
+    "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
+    "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
+}
+MODEL_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}")
+MODEL_ASSET_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def validate_model_images(images: dict[str, str]) -> None:
+    """Model pins are either absent or a complete, immutable inference stack."""
+    # The customer .env template carries blank optional pins for cloud-only
+    # installs. Treat blank as absent; any partial nonblank set is invalid.
+    supplied = {key for key in MODEL_IMAGE_KEYS if images.get(key, "").strip()}
+    if supplied and supplied != MODEL_IMAGE_KEYS:
+        raise ValueError("Local inference requires all four approved model image digests")
+    for key in supplied:
+        if not PINNED_IMAGE.fullmatch(images[key]):
+            raise ValueError(f"{key} must use an immutable sha256 image reference")
+
+
+def validate_model_asset(payload: dict, env: dict[str, str], *, self_hosted: bool) -> list[str]:
+    """Check customer model selection against its optional owner-signed digest."""
+    errors: list[str] = []
+    model_assets = payload.get("model_assets")
+    if model_assets is None:
+        if self_hosted:
+            errors.append("signed release manifest is missing the self-hosted Ollama model asset")
+        return errors
+
+    descriptor = model_assets.get("ollama") if isinstance(model_assets, dict) else None
+    if (
+        not isinstance(model_assets, dict)
+        or set(model_assets) != {"ollama"}
+        or not isinstance(descriptor, dict)
+        or set(descriptor) != {"name", "digest"}
+        or not isinstance(descriptor.get("name"), str)
+        or not MODEL_ASSET_NAME.fullmatch(descriptor["name"])
+        or not isinstance(descriptor.get("digest"), str)
+        or not MODEL_ASSET_DIGEST.fullmatch(descriptor["digest"])
+    ):
+        errors.append("signed release manifest has invalid Ollama model asset metadata")
+    elif self_hosted and (
+        env.get("CLIENT_OLLAMA_MODEL", "").strip() != descriptor["name"]
+        or env.get("CLIENT_OLLAMA_MODEL_DIGEST", "").strip() != descriptor["digest"]
+    ):
+        errors.append("CLIENT_OLLAMA_MODEL and CLIENT_OLLAMA_MODEL_DIGEST must match the signed release manifest")
+    return errors
+
 DEFAULT_CLIENT_INTERNAL_SUBNET = "172.30.0.0/24"
 DEFAULT_CLIENT_CADDY_IPV4 = "172.30.0.2"
 SECRET_KEYS = {
@@ -115,6 +169,21 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
     required = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*):\?", compose_text))
 
     profiles = {item.strip() for item in env.get("COMPOSE_PROFILES", "").split(",") if item.strip()}
+    if "self-hosted" in profiles:
+        model_compose = compose_path.with_name("docker-compose.models.yaml")
+        if not model_compose.is_file() or model_compose.is_symlink():
+            errors.append("The approved docker-compose.models.yaml is required for self-hosted inference")
+        required.update(MODEL_IMAGE_KEYS)
+        try:
+            budget = int(env.get("CLIENT_SELF_HOSTED_MEMORY_GIB", "16"))
+            if budget < 16:
+                raise ValueError
+        except ValueError:
+            errors.append("Self-hosted inference requires a memory budget of at least 16 GiB; use connected inference on smaller hosts")
+        try:
+            validate_model_images({key: env.get(key, "") for key in MODEL_IMAGE_KEYS})
+        except ValueError as exc:
+            errors.append(str(exc))
     local_ports = {}
     for key, default in (("API_PORT", "8000"), ("UI_PORT", "3010"), ("MINIO_PORT", "9000")):
         value = env.get(key, "") or default
@@ -189,6 +258,8 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
             errors.append(f"{key} still contains a template placeholder")
 
     selected_images = IMAGE_KEYS - (PROFILE_IMAGE_KEYS if "direct-ingress" not in profiles else set())
+    if "self-hosted" in profiles:
+        selected_images |= MODEL_IMAGE_KEYS
     for key in sorted(selected_images):
         value = env.get(key, "")
         if value:
@@ -341,6 +412,28 @@ def validate(env_path: Path, compose_path: Path) -> list[str]:
                                     or image.get("reference") != env.get(variable)
                                 ):
                                     errors.append(f"{variable} does not match the signed release manifest")
+                    model_images = payload.get("model_images")
+                    configured_model_keys = {
+                        key for key in MODEL_IMAGE_KEYS if env.get(key, "").strip()
+                    }
+                    self_hosted = "self-hosted" in profiles
+                    if model_images is not None:
+                        if (
+                            images is None
+                            or not isinstance(model_images, dict)
+                            or set(model_images) != set(MODEL_IMAGE_COMPONENTS)
+                        ):
+                            errors.append("signed release manifest must contain all four model image entries")
+                        else:
+                            for component, variable in MODEL_IMAGE_COMPONENTS.items():
+                                reference = model_images.get(component)
+                                if not isinstance(reference, str) or not PINNED_IMAGE.fullmatch(reference):
+                                    errors.append(f"signed release manifest has an invalid {component} model image")
+                                elif (self_hosted or configured_model_keys) and env.get(variable, "").strip() != reference:
+                                    errors.append(f"{variable} does not match the signed release manifest")
+                    elif self_hosted or configured_model_keys:
+                        errors.append("signed release manifest is missing the configured model image inventory")
+                    errors.extend(validate_model_asset(payload, env, self_hosted=self_hosted))
             except (OSError, ValueError, AttributeError):
                 errors.append("signed release manifest must contain valid JSON")
 
