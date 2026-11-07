@@ -18,9 +18,9 @@ vi.mock('@/components/ui/dialog', () => ({
 vi.mock('@/components/workflow/folders/FolderFormDialog', () => ({ FolderFormDialog: () => null }));
 vi.mock('@/components/workflow/TemplateSelectorModal', () => ({ TemplateSelectorModal: () => null }));
 
-import { UploadWorkflowButton } from '@/components/workflow/UploadWorkflowButton';
-import { CreateFolderButton } from '@/components/workflow/folders/CreateFolderButton';
 import { CreateWorkflowButton } from '@/components/workflow/CreateWorkflowButton';
+import { CreateFolderButton } from '@/components/workflow/folders/CreateFolderButton';
+import { UploadWorkflowButton } from '@/components/workflow/UploadWorkflowButton';
 
 afterEach(cleanup);
 
@@ -34,7 +34,7 @@ it('marks each agent-library action explicitly so hero contrast does not depend 
     const upload = screen.getByRole('button', { name: /Upload Agent Definition/ });
     const folder = screen.getByRole('button', { name: /New Folder/ });
     expect(upload.getAttribute('data-hero-action')).toBe('upload');
-    expect(upload.className).toContain('!text-[#17271f]');
+    expect(upload.className).not.toMatch(/#(?:d1b367|dec783|17271f)/i);
     expect(upload.querySelector('[data-hero-label]')?.textContent).toBe('Upload Agent Definition');
     expect(folder.getAttribute('data-hero-action')).toBe('folder');
     expect(folder.className).toContain('!text-[#edf2e9]');

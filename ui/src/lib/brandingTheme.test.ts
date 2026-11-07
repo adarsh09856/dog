@@ -30,17 +30,22 @@ describe("server and client branding theme variables", () => {
     }
   });
 
-  it("keeps the configured hue on brand accents without recoloring generic UI surfaces", () => {
+  it("applies the configured brand color to shared controls in both themes", () => {
     const branding = { ...DEFAULT_BRANDING, primary_color: "#123456" };
     const light = brandingCssVariables(branding, "light");
     const dark = brandingCssVariables(branding, "dark");
 
     expect(light["--brand-primary-color"]).toBe("#123456");
     expect(dark["--brand-primary-color"]).not.toBe("#123456");
+    expect(light["--primary"]).toBe("#123456");
+    expect(dark["--primary"]).toBe(dark["--brand-primary-color"]);
+    expect(light["--primary-foreground"]).toBe("#ffffff");
+    expect(dark["--primary-foreground"]).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(light["--sidebar-ring"]).toBe("#123456");
     expect(light["--cta"]).toBe("#123456");
     expect(dark["--sidebar-primary"]).toBe(dark["--brand-primary-color"]);
-    expect(light).not.toHaveProperty("--primary");
-    expect(dark).not.toHaveProperty("--primary");
+    // Keep the restrained neutral surfaces neutral; branding changes control
+    // emphasis, not every pale accent background on the product.
     expect(light).not.toHaveProperty("--accent");
     expect(dark).not.toHaveProperty("--accent");
     expect(light["--cta-foreground"]).toMatch(/^#[0-9a-f]{6}$/i);
