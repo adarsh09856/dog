@@ -52,6 +52,7 @@ class CallerContextPolicyProcessor(FrameProcessor):
         super().__init__()
         self._llm_service = llm_service
         self._policy_state = policy_state
+        self._phone_followup = None
 
     async def _prepare_context(self, frame: LLMContextFrame):
         if frame.speculation:
@@ -71,6 +72,20 @@ class CallerContextPolicyProcessor(FrameProcessor):
             self._llm_service._contact_conversation_state = state
         remember_recent_caller_statements(messages, state)
         remember_explicit_caller_name(messages, state)
+
+        # Resolve phone capture and confirmation before calling any provider.
+        # This is the same shared parser used by the local-provider mixin, now
+        # available to native and custom cascade LLM services too.
+        from api.services.workflow.contact_context import caller_phone_fragment_reply
+
+        tools = getattr(getattr(context, "tools", None), "standard_tools", [])
+        booking_available = any(
+            getattr(tool, "name", None) == "book_appointment" for tool in tools
+        )
+        phone_reply = caller_phone_fragment_reply(
+            messages, state, booking_available=booking_available
+        )
+        self._phone_followup = phone_reply
 
         from api.services.pipecat.caller_language_context import (
             reply_language_switch_capabilities,
@@ -114,6 +129,13 @@ class CallerContextPolicyProcessor(FrameProcessor):
         policy = _BASE_POLICY + language_policy
         if detail:
             policy += " " + detail
+        if self._phone_followup:
+            policy += (
+                " The caller's phone confirmation was just handled and the number is "
+                "already stored for this call. Do not ask them to confirm or repeat it "
+                "again. Continue by asking only the next missing detail: "
+                + self._phone_followup
+            )
 
         message = {"role": "system", "content": policy}
         first_user = next(
@@ -131,6 +153,7 @@ class CallerContextPolicyProcessor(FrameProcessor):
         if isinstance(frame, LLMContextFrame) and direction == FrameDirection.DOWNSTREAM:
             # A previous provider failure may have skipped its normal end frame.
             self._policy_state.remove()
+            self._phone_followup = None
             await self._prepare_context(frame)
 
         await self.push_frame(frame, direction)

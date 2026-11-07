@@ -11,6 +11,7 @@ import uuid
 import warnings
 from abc import abstractmethod
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
+from contextlib import aclosing
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import (
@@ -106,6 +107,23 @@ class _WordTimestampEntry:
     timestamp: float
     context_id: str
     includes_inter_frame_spaces: bool = False
+
+
+@dataclass(eq=False)
+class _DeferredTTSFrameStream:
+    """Internal stream marker that lets a TTS generator run off the frame task."""
+
+    context_id: str
+    queue: asyncio.Queue[Frame | None]
+    release_callback: Callable[[], None] | None = None
+    released: bool = False
+
+    def release(self):
+        if self.released:
+            return
+        self.released = True
+        if self.release_callback:
+            self.release_callback()
 
 
 class TTSService(AIService):
@@ -394,6 +412,13 @@ class TTSService(AIService):
         self._turn_context_id: str | None = None
         self._audio_contexts: dict[str, asyncio.Queue] = {}
         self._audio_context_task: asyncio.Task | None = None
+        # Provider opt-in: synthesize through bounded deferred frame streams so
+        # token processing can continue while the current phrase is generated.
+        self._defer_tts_streaming: bool = False
+        self._deferred_tts_frame_queue_size: int = 4
+        self._deferred_tts_generation: int = 0
+        self._deferred_tts_tasks: set[asyncio.Task] = set()
+        self._deferred_tts_streams: set[_DeferredTTSFrameStream] = set()
 
         # Single FIFO queue that serializes everything the TTS service emits downstream.
         # Items can be:
@@ -606,8 +631,30 @@ class TTSService(AIService):
 
     async def cleanup(self):
         """Release TTS resources at teardown."""
+        await self._cancel_deferred_tts_work()
         await super().cleanup()
         await self._stop_audio_context_task()
+
+    async def _cancel_deferred_tts_work(self):
+        if not self._defer_tts_streaming:
+            return
+        self._deferred_tts_generation += 1
+        tasks = list(self._deferred_tts_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._deferred_tts_tasks.clear()
+        for stream in tuple(self._deferred_tts_streams):
+            stream.release()
+            while not stream.queue.empty():
+                try:
+                    stream.queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+            # Wake an audio-context consumer that is blocked inside the stream.
+            stream.queue.put_nowait(None)
+        self._deferred_tts_streams.clear()
 
     async def start(self, frame: StartFrame):
         """Start the TTS service.
@@ -1041,6 +1088,8 @@ class TTSService(AIService):
             yield TTSAudioRawFrame(audio, self.sample_rate, 1)
 
     async def _handle_interruption(self, frame: InterruptionFrame, direction: FrameDirection):
+        await self._cancel_deferred_tts_work()
+
         self._processing_text = False
         self._sent_non_whitespace_in_context = False
         self._bot_speaking = False
@@ -1377,6 +1426,22 @@ class TTSService(AIService):
             generator: An async generator yielding Frame objects or None.
 
         """
+        if self._defer_tts_streaming:
+            stream = _DeferredTTSFrameStream(
+                context_id=context_id,
+                queue=asyncio.Queue(maxsize=self._deferred_tts_frame_queue_size),
+                release_callback=getattr(self, "_release_deferred_tts_slot", None),
+            )
+            self._deferred_tts_streams.add(stream)
+            await self.append_to_audio_context(context_id, stream)  # type: ignore[arg-type]
+            generation = self._deferred_tts_generation
+            task = self.create_task(
+                self._deferred_tts_generator_task(generator, stream, generation)
+            )
+            self._deferred_tts_tasks.add(task)
+            task.add_done_callback(self._deferred_tts_tasks.discard)
+            return
+
         is_yielding_frames = False
         async for frame in generator:
             if frame:
@@ -1385,6 +1450,35 @@ class TTSService(AIService):
                     is_yielding_frames = True
 
         self._is_yielding_frames_synchronously = is_yielding_frames
+
+    async def _deferred_tts_generator_task(
+        self,
+        generator: AsyncGenerator[Frame | None, None],
+        stream: _DeferredTTSFrameStream,
+        generation: int,
+    ):
+        lock = getattr(self, "_deferred_tts_synthesis_lock", None)
+        try:
+            async with aclosing(generator):
+                if lock is None:
+                    async for frame in generator:
+                        if generation != self._deferred_tts_generation:
+                            return
+                        await stream.queue.put(frame)
+                else:
+                    async with lock:
+                        async for frame in generator:
+                            if generation != self._deferred_tts_generation:
+                                return
+                            await stream.queue.put(frame)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception(f"{self} deferred TTS generation failed: {exc}")
+            await stream.queue.put(ErrorFrame(error=f"Deferred TTS generation failed: {exc}"))
+        finally:
+            if generation == self._deferred_tts_generation:
+                await stream.queue.put(None)
 
     #
     # Word timestamp methods
@@ -1730,6 +1824,35 @@ class TTSService(AIService):
         timestamps_started = False
         received_audio = False
         should_push_stop_frame = False
+
+        async def emit_frame(frame: Frame | None):
+            nonlocal timestamps_started, received_audio, should_push_stop_frame
+            if frame is None:
+                return
+            if isinstance(frame, TTSAudioRawFrame):
+                received_audio = True
+                if not timestamps_started:
+                    await self.stop_ttfb_metrics()
+                    await self.start_word_timestamps()
+                    timestamps_started = True
+                await self.process_ttfa_metrics(frame)
+
+            if isinstance(frame, TTSStartedFrame):
+                should_push_stop_frame = self._push_stop_frames
+                tts_context = self._tts_contexts.get(context_id)
+                if tts_context is not None:
+                    frame.append_to_context = tts_context.append_to_context
+            elif isinstance(frame, TTSStoppedFrame):
+                await self._apply_force_complete(context_id)
+                should_push_stop_frame = False
+                if not frame.pts:
+                    frame.pts = self._word_last_pts
+
+            if isinstance(frame, ErrorFrame):
+                await self.push_error_frame(frame)
+            else:
+                await self.push_frame(frame)
+
         while running:
             try:
                 frame = await asyncio.wait_for(queue.get(), timeout=self._stop_frame_timeout_s)
@@ -1738,6 +1861,17 @@ class TTSService(AIService):
                     continue
                 elif frame is None:
                     running = False
+                elif isinstance(frame, _DeferredTTSFrameStream):
+                    try:
+                        while True:
+                            deferred_frame = await frame.queue.get()
+                            if deferred_frame is None:
+                                break
+                            await emit_frame(deferred_frame)
+                    finally:
+                        frame.release()
+                        self._deferred_tts_streams.discard(frame)
+                    continue
                 elif isinstance(frame, _WordTimestampEntry):
                     # Route word timestamps through _add_word_timestamps so they are
                     # processed in playback order alongside audio frames.
@@ -1747,38 +1881,7 @@ class TTSService(AIService):
                         includes_inter_frame_spaces=frame.includes_inter_frame_spaces,
                     )
                     continue
-                elif isinstance(frame, TTSAudioRawFrame):
-                    received_audio = True
-                    # Set the word-timestamp baseline once, on the first audio chunk.
-                    if not timestamps_started:
-                        await self.stop_ttfb_metrics()
-                        await self.start_word_timestamps()
-                        timestamps_started = True
-                    await self.process_ttfa_metrics(frame)
-
-                if frame:
-                    if isinstance(frame, TTSStartedFrame):
-                        should_push_stop_frame = self._push_stop_frames
-                        # Stamp appropriate append_to_context value onto every
-                        # TTSStartedFrame here — the single point both
-                        # base-class- and subclass-emitted started frames pass
-                        # through.
-                        tts_context = self._tts_contexts.get(context_id)
-                        if tts_context is not None:
-                            frame.append_to_context = tts_context.append_to_context
-                    elif isinstance(frame, TTSStoppedFrame):
-                        # Checking if we have any remaining spoken slots before pushing the TTSStoppedFrame
-                        await self._apply_force_complete(context_id)
-
-                        should_push_stop_frame = False
-                        # Setting the last word timestamp as the TTSStoppedFrame PTS
-                        if not frame.pts:
-                            frame.pts = self._word_last_pts
-
-                    if isinstance(frame, ErrorFrame):
-                        await self.push_error_frame(frame)
-                    else:
-                        await self.push_frame(frame)
+                await emit_frame(frame)
             except TimeoutError:
                 # We didn't get audio, so let's consider this context finished.
                 logger.trace(f"{self} time out on audio context {context_id}")

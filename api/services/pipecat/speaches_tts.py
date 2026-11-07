@@ -43,6 +43,13 @@ class SpeachesLiveTTSService(SpeachesTTSService):
     def __init__(self, *, speech_language: str | None = None, **kwargs):
         kwargs.setdefault("http_client", DefaultAsyncHttpxClient(timeout=45.0))
         super().__init__(**kwargs)
+        # TTS synthesis runs in a bounded background stream so LLM tokens can
+        # continue while CPU synthesis and audio playback overlap. The base
+        # service preserves stream order inside its audio-context queue.
+        self._defer_tts_streaming = True
+        self._deferred_tts_frame_queue_size = 4
+        self._deferred_tts_slots = asyncio.Semaphore(2)
+        self._deferred_tts_synthesis_lock = asyncio.Lock()
         self._speech_language = speech_language
         self._speech_turn_open = False
         self._turn_speech_language = None
@@ -296,7 +303,10 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         async def keep_context_open():
             while True:
                 await asyncio.sleep(min(1.0, self._stop_frame_timeout_s / 2))
-                if context_id in getattr(self, "_audio_contexts", {}):
+                if (
+                    context_id in getattr(self, "_audio_contexts", {})
+                    and not self._has_deferred_tts_stream(context_id)
+                ):
                     self._refresh_audio_context(context_id)
 
         keepalive = asyncio.create_task(keep_context_open())
@@ -326,13 +336,20 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         async def keep_turn_open():
             while True:
                 await asyncio.sleep(min(1.0, self._stop_frame_timeout_s / 2))
-                if self.audio_context_available(context_id):
+                if (
+                    self.audio_context_available(context_id)
+                    and not self._has_deferred_tts_stream(context_id)
+                ):
                     self._refresh_audio_context(context_id)
         # LLM text may take longer than the audio-context timeout between
         # phrases. Keep it alive until all prefetched synthesis has drained.
         self._turn_keepalive = asyncio.create_task(keep_turn_open())
 
     async def on_turn_context_completed(self):
+        # Complete synthesis before the base service appends the stop sentinel.
+        tasks = tuple(self._deferred_tts_tasks)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         # The HTTP generator is synchronous even when its last phrase failed
         # after an earlier phrase emitted PCM. Pipecat derives this flag from
         # the final phrase only; false would leave the active audio context
@@ -353,6 +370,23 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._initial_pcm_context_id = None
         self._speech_turn_open = False
         await super()._handle_interruption(frame, direction)
+
+    async def tts_process_generator(self, context_id: str, generator):
+        await self._deferred_tts_slots.acquire()
+        try:
+            await super().tts_process_generator(context_id, generator)
+        except BaseException:
+            self._deferred_tts_slots.release()
+            raise
+
+    def _release_deferred_tts_slot(self):
+        self._deferred_tts_slots.release()
+
+    def _has_deferred_tts_stream(self, context_id: str) -> bool:
+        return any(
+            stream.context_id == context_id
+            for stream in self._deferred_tts_streams
+        )
 
 
 class SpeachesCachingTTSService(SpeachesLiveTTSService):
