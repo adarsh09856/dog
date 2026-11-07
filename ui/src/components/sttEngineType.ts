@@ -54,7 +54,7 @@ export function recognitionLanguagesForSttModel(
             .map(baseLanguageCode)
             .filter((language) => LOCAL_STT_LANGUAGES.has(language)),
     ));
-    const replyBases = replyLanguages?.length
+    const replyBases = replyLanguages !== undefined
         ? new Set(replyLanguages.map(baseLanguageCode).filter((language) => LOCAL_STT_LANGUAGES.has(language)))
         : undefined;
     const routedBases = replyBases
@@ -101,7 +101,7 @@ export function languageForLocalSttSelection(
 ): string {
     let installed = Array.from(new Set(installedLanguages.map(baseLanguageCode)
         .filter((language) => LOCAL_STT_LANGUAGES.has(language))));
-    if (replyLanguages?.length) {
+    if (replyLanguages !== undefined) {
         const replyBases = new Set(replyLanguages.map(baseLanguageCode));
         installed = installed.filter((language) => replyBases.has(language));
     }
@@ -114,5 +114,5 @@ export function languageForLocalSttSelection(
         const code = baseLanguageCode(preferred);
         if (code && code !== "multi" && installed.includes(code)) return code;
     }
-    return installed[0] || defaultLanguage;
+    return installed[0] || (replyLanguages === undefined ? defaultLanguage : "");
 }

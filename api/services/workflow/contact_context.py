@@ -27,6 +27,19 @@ _PHONE_REQUEST = re.compile(
     r"मोबाइल|फोन|संपर्क\s+(?:नंबर|विवरण)|नंबर|नम्बर",
     re.IGNORECASE,
 )
+_HANDOFF_SUMMARY_PREFIX = "Handover note from the previous agent on this same call:"
+
+
+def _is_handoff_summary(message: object) -> bool:
+    """Identify assistant-generated handoff notes stored as user messages."""
+    return (
+        isinstance(message, dict)
+        and message.get("role") == "user"
+        and isinstance(message.get("content"), str)
+        and message["content"].startswith(_HANDOFF_SUMMARY_PREFIX)
+    )
+
+
 _EXPLICIT_NAME_ANSWER = re.compile(
     r"^(?:(?:uh|um)[,]?\s+)?(?:(?:actually|correction|sorry)\s*[, :]?\s*)?(?:my\s+name\s+is|i\s+am|i'm|this\s+is|mera\s+naam)\s+(.+?)"
     r"(?:\s+(?:hai|है|हूँ))?[.!?।\s]*$",
@@ -279,10 +292,21 @@ def remember_recent_caller_statements(messages: list | None, state: dict | None)
     statements = state.get("recent_caller_statements")
     if not isinstance(statements, list):
         statements = []
+    else:
+        # Agent handoff summaries are assistant-written context packaged as a
+        # user message for the destination model. They are useful to the LLM,
+        # but must not be persisted as literal caller statements/facts.
+        statements = [
+            item for item in statements
+            if isinstance(item, str)
+            and not item.startswith(_HANDOFF_SUMMARY_PREFIX)
+        ]
+        state["recent_caller_statements"] = statements
     user_messages = [
         message for message in messages
         if isinstance(message, dict) and message.get("role") == "user"
         and isinstance(message.get("content"), str)
+        and not _is_handoff_summary(message)
     ]
     # A successfully persisted booking is a lifecycle boundary. Old history
     # remains in the transcript, but must not repopulate the next task's
