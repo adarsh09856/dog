@@ -496,22 +496,30 @@ def _detect_language(waveform: np.ndarray, sample_rate: int) -> tuple[str, float
     # as Hindi and feed the wrong transcript to the workflow.
     index = int(np.argmax(probabilities))
     detected = LID_LANGUAGE_CODES[index]
-    # Anuvani often classifies Indian-accented English as Hindi or Telugu.
-    # A second, independent detector may rescue English, while its regional
-    # predictions are deliberately ignored because they are less reliable.
-    if detected != "en" and _english_lid is not None and audio.size >= 16000:
+    # Anuvani can confuse Indian-accented English with Hindi or Telugu. Avoid
+    # running the second, much heavier Whisper detector for every non-English
+    # utterance: clear Hindi and other regional languages paid that CPU cost on
+    # every turn, which dominated the measured local STT latency. Only invoke
+    # the rescue when the main model is genuinely unsure between Hindi/Telugu
+    # and English. Other regional-language predictions are already decisive.
+    english_probability = float(probabilities[LID_LANGUAGE_CODES.index("en")])
+    detector_probability = float(probabilities[index])
+    english_competes = detector_probability < 0.85 and english_probability >= 0.10
+    english_confusable_language = detected in {"hi", "te"}
+    if (
+        english_confusable_language
+        and english_competes
+        and _english_lid is not None
+        and audio.size >= 16000
+    ):
         stream = _english_lid.create_stream()
         stream.accept_waveform(16000, audio[: 10 * 16000])
         if _english_lid.compute(stream) == "en":
-            english_probability = float(probabilities[LID_LANGUAGE_CODES.index("en")])
             return "en", english_probability, "whisper_english_rescue"
-    # Indian-accented English can rank just below Hindi even in a clearly
-    # English utterance. Strong Hindi examples have negligible English mass;
-    # rescue only this close hi/en pair, leaving regional routes untouched.
-    if detected == "hi" and audio.size >= 16000:
-        english_probability = float(probabilities[LID_LANGUAGE_CODES.index("en")])
-        if float(probabilities[index]) < 0.85 and english_probability >= 0.10:
-            return "en", english_probability, "competitive_indian_english"
+    # Preserve the calibrated hi/en competition fallback when the independent
+    # detector is unavailable or does not confirm English.
+    if detected == "hi" and english_competes:
+        return "en", english_probability, "competitive_indian_english"
     return detected, float(probabilities[index]), None
 
 
