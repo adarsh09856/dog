@@ -56,10 +56,13 @@ LID_LANGUAGE_CODES = (
     "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai",
     "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 )
-# Speech recognition advertises the languages this service can decode. Reply
-# language/voice routing is separately constrained by the active TTS voice's
-# installed capability contract in the API pipeline.
-AUTO_DETECT_LANGUAGES = frozenset(LID_LANGUAGE_CODES)
+# Product speech support is limited to the languages with a configured voice
+# route. Keep the full 23 labels above for the LID model's output-index mapping,
+# but do not advertise or load decoder routes the product has chosen to omit.
+AUTO_DETECT_LANGUAGES = frozenset({
+    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
+    "ne", "pa", "sa", "ta", "te",
+})
 SCHEDULED_INDIAN_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
 AUTO_ENGLISH_MIN_CONFIDENCE = 0.50
@@ -523,22 +526,13 @@ def _resolve_decode_language(
     """Choose an installed decoder without silently relabeling clear speech."""
     detected = str(detected or "").lower().replace("_", "-").split("-", 1)[0]
     fallback = str(fallback_language or "").lower().replace("_", "-").split("-", 1)[0]
-    enabled = installed & AUTO_DETECT_LANGUAGES - {"ur"}
+    enabled = installed & AUTO_DETECT_LANGUAGES
     if allowed_languages is not None:
         enabled &= {
             str(code).strip().lower().replace("_", "-").split("-", 1)[0]
             for code in allowed_languages
             if isinstance(code, str) and str(code).strip()
         }
-    # Urdu has no enabled reply voice. Treat it as unsupported and keep the
-    # configured/stable enabled decoder when available; use Hindi only as the
-    # initial product fallback when no call language has been established.
-    if detected == "ur":
-        if fallback in enabled:
-            route = "urdu_routed_to_hindi" if fallback == "hi" else "unsupported_language_held_previous"
-            return fallback, route
-        if "hi" in enabled:
-            return "hi", "urdu_routed_to_hindi"
     supported = enabled
     if detected not in supported:
         threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
@@ -593,7 +587,7 @@ async def transcribe(
             code.strip().lower().replace("_", "-").split("-", 1)[0]
             for code in allowed_languages.split(",")
             if code.strip()
-        } & (AUTO_DETECT_LANGUAGES - {"ur"})
+        } & AUTO_DETECT_LANGUAGES
         enabled_languages &= set(installed)
         if auto_detect and not enabled_languages:
             raise HTTPException(

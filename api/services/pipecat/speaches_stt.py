@@ -109,8 +109,6 @@ def _resolve_auto_language(
     code = str(detected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
     allowed = _auto_stt_language_allowlist(supported_codes)
-    if code == "ur" and "hi" in allowed:
-        return "hi", "urdu_routed_to_hindi"
     if not code:
         return (previous if previous in allowed else None), "missing_detector_language"
     if code not in allowed:
@@ -140,10 +138,9 @@ def _advance_stable_language(
     """
     stable = str(current or "").strip().lower().replace("_", "-").split("-", 1)[0]
     detected = str(candidate or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    if route == "urdu_routed_to_hindi" and stable:
-        # Urdu has no enabled reply voice. The Hindi decoder is a transcript
-        # fallback only; it must never change an established call language,
-        # even after repeated Urdu-classified turns.
+    if route == "disabled_language_held_previous" and stable:
+        # A disabled detector label was decoded using the previous route as a
+        # conservative fallback. It is not evidence for changing call language.
         return stable, None, 0
     if detected not in LOCAL_INDIC_STT_LANGUAGES:
         return stable or None, None, 0

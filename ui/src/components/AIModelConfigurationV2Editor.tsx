@@ -27,6 +27,7 @@ import { detailFromError } from "@/lib/apiError";
 import { useAuth } from "@/lib/auth";
 import { formatRoundingPolicy } from "@/lib/billingDisplay";
 import { type AvailableCatalogResponse, catalogApi } from "@/lib/kodewavesApi";
+
 import {
     inferSttEngineType,
     languageForLocalSttSelection,
@@ -607,6 +608,12 @@ export function AIModelConfigurationV2Editor({
     const selectedSttModel = effectiveSttModels.find(
         (model) => model.value === selectedSttModelValue,
     );
+    const selectedTtsModelCatalog = (
+        kodewaves.tts_engine_type === "local_cpu"
+            ? catalogManifest?.local_tts_models
+            : catalogManifest?.cloud_tts_models
+    )?.find((model) => model.value === kodewaves.tts_model);
+    const selectedTtsLanguages = selectedTtsModelCatalog?.languages;
     const supportsRecognitionAutoDetect = mode === "realtime"
         || selectedSttModel?.supports_auto_detect === true;
     const recognitionLanguages = useMemo(() => {
@@ -615,8 +622,12 @@ export function AIModelConfigurationV2Editor({
             selectedSttModel?.languages || [],
             kodewaves.stt_engine_type === "local_cpu",
             supportsRecognitionAutoDetect,
+            selectedTtsLanguages,
         );
-    }, [kodewavesDefaults.languages, kodewaves.stt_engine_type, selectedSttModel, supportsRecognitionAutoDetect]);
+    }, [kodewavesDefaults.languages, kodewaves.stt_engine_type, selectedSttModel, selectedTtsLanguages, supportsRecognitionAutoDetect]);
+    const autoDetectLanguageOptions = recognitionLanguages.filter(
+        (language) => language !== MULTILINGUAL_LANGUAGE_CODE,
+    );
 
     const recognitionLanguageLabel = (language: string) => {
         const localLanguageNames: Record<string, string> = {
@@ -652,6 +663,7 @@ export function AIModelConfigurationV2Editor({
                 selectedSttModel.languages || [],
                 kodewavesDefaults.languages,
                 kodewavesDefaults.defaults.language,
+                selectedTtsLanguages,
             );
             if (nextLanguage !== kodewaves.language) {
                 setKodewaves((current) => ({ ...current, language: nextLanguage }));
@@ -677,6 +689,7 @@ export function AIModelConfigurationV2Editor({
         kodewavesDefaults.languages,
         mode,
         selectedSttModel,
+        selectedTtsLanguages,
         supportsRecognitionAutoDetect,
     ]);
 
@@ -706,6 +719,7 @@ export function AIModelConfigurationV2Editor({
                     selectedSttModel.languages || [],
                     kodewavesDefaults.languages,
                     kodewavesDefaults.defaults.language,
+                    selectedTtsLanguages,
                 ),
             };
         });
@@ -718,6 +732,7 @@ export function AIModelConfigurationV2Editor({
         kodewavesDefaults.languages,
         mode,
         selectedSttModel,
+        selectedTtsLanguages,
     ]);
 
     const setRecognitionLanguage = (language: string) => {
@@ -1667,7 +1682,7 @@ export function AIModelConfigurationV2Editor({
                                     )}
                                     {kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && (
                                         <p className="text-xs text-muted-foreground">
-                                            Speech recognition auto-detects {selectedSttModel?.auto_detect_languages?.length || 0} installed STT languages. Assistant speech also requires a matching installed TTS voice. Regional VITS can switch voices for unambiguous reply scripts. Very short or unclear speech may need repeating; switching languages within one utterance is not fully supported.
+                                            Auto-detect is limited to {autoDetectLanguageOptions.length} languages supported by the installed recognizer and selected TTS model: {autoDetectLanguageOptions.map(recognitionLanguageLabel).join(", ") || "none reported"}. Switching languages within one utterance is not fully supported.
                                         </p>
                                     )}
                                     {kodewaves.tts_engine_type === "local_cpu" && kodewaves.tts_model === "piper" && /^([a-z]{2,3})[-_][A-Z]{2}[-_]/.test(kodewaves.voice) && (

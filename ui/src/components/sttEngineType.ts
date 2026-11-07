@@ -2,12 +2,12 @@ export type SttEngineType = "cloud" | "local_cpu";
 
 export type SttModelOption = { value: string };
 
-// Keep the local selector aligned with the pinned IndicConformer decoder
-// inventory: all 22 scheduled Indian languages plus Indian English.
+// Expose only languages that have both an enabled product STT route and a
+// supported reply-voice route. The detector retains extra labels internally
+// so it can reject unsupported languages instead of misrouting them.
 const LOCAL_STT_LANGUAGES = new Set([
-    "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok",
-    "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd",
-    "ta", "te", "ur",
+    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
+    "ne", "pa", "sa", "ta", "te",
 ]);
 
 const baseLanguageCode = (language: string) =>
@@ -41,6 +41,7 @@ export function recognitionLanguagesForSttModel(
     installedLanguages: string[],
     isLocalCpu: boolean,
     supportsAutoDetect: boolean,
+    replyLanguages?: string[],
 ): string[] {
     if (!isLocalCpu) {
         return supportsAutoDetect
@@ -53,9 +54,15 @@ export function recognitionLanguagesForSttModel(
             .map(baseLanguageCode)
             .filter((language) => LOCAL_STT_LANGUAGES.has(language)),
     ));
+    const replyBases = replyLanguages?.length
+        ? new Set(replyLanguages.map(baseLanguageCode).filter((language) => LOCAL_STT_LANGUAGES.has(language)))
+        : undefined;
+    const routedBases = replyBases
+        ? installedBases.filter((language) => replyBases.has(language))
+        : installedBases;
     return [
-        ...(supportsAutoDetect && installedBases.length > 0 ? ["multi"] : []),
-        ...installedBases,
+        ...(supportsAutoDetect && routedBases.length > 0 ? ["multi"] : []),
+        ...routedBases,
     ];
 }
 
@@ -90,9 +97,14 @@ export function languageForLocalSttSelection(
     installedLanguages: string[],
     preferredLanguages: string[],
     defaultLanguage: string,
+    replyLanguages?: string[],
 ): string {
-    const installed = Array.from(new Set(installedLanguages.map(baseLanguageCode)
+    let installed = Array.from(new Set(installedLanguages.map(baseLanguageCode)
         .filter((language) => LOCAL_STT_LANGUAGES.has(language))));
+    if (replyLanguages?.length) {
+        const replyBases = new Set(replyLanguages.map(baseLanguageCode));
+        installed = installed.filter((language) => replyBases.has(language));
+    }
     if (currentLanguage === "multi" && supportsAutoDetect && installed.length > 0) return "multi";
     const currentCode = baseLanguageCode(currentLanguage);
     if (installed.includes(currentCode)) return currentCode;

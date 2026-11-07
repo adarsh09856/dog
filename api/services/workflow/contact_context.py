@@ -944,6 +944,68 @@ _PHONE_INTRO = re.compile(
     r"(?:phone\s+)?number\s+is)[,:\s]*", re.IGNORECASE
 )
 
+_BOOKING_SLOT_UTTERANCE = re.compile(
+    r"\b(?:today|tomorrow|kal|aaj|at|am|pm|morning|afternoon|evening|night|"
+    r"date|time)\b|कल|आज|सुबह|दोपहर|शाम|रात|बजे|\b\d{1,2}:\d{2}\b",
+    re.IGNORECASE,
+)
+
+
+def _replay_deferred_booking_slot(messages: list, state: dict, texts: list[str]) -> str | None:
+    """Parse slot answers spoken while a caller phone readback was pending."""
+    replay_messages = list(messages)
+    reply = None
+    for text in texts:
+        replay_messages.append({"role": "user", "content": text})
+        reply = booking_time_confirmation_question(
+            replay_messages, state, allow_readback=False
+        )
+        if reply:
+            return reply
+    return None
+
+
+def _spoken_phone_digit_count(text: str) -> int:
+    """Count a clearly dictated phone number without treating a time as one."""
+    normalized = unicodedata.normalize(
+        "NFC", unicodedata.normalize("NFD", text).replace("\u093c", "")
+    ).translate(str.maketrans("०१२३४५६७८९", "0123456789"))
+    words = re.findall(r"[^\s,.!?।:;\-]+", normalized.casefold())
+    count = 0
+    index = 0
+    while index < len(words):
+        word = words[index]
+        cleaned = re.sub(r"[()+.]", "", word)
+        if cleaned.isdecimal():
+            count += len(cleaned)
+        elif word in _SPOKEN_DIGITS:
+            count += 1
+        elif word in _DOUBLE_DIGIT_WORDS and index + 1 < len(words):
+            next_word = words[index + 1]
+            next_cleaned = re.sub(r"[()+.]", "", next_word)
+            if (
+                len(next_cleaned) == 1 and next_cleaned.isdecimal()
+            ) or next_word in _SPOKEN_DIGITS:
+                count += 2
+                index += 1
+        index += 1
+    return count
+
+
+def _is_booking_slot_utterance(text: str, state: dict) -> bool:
+    if _BOOKING_SLOT_UTTERANCE.search(text):
+        return True
+    # When we already asked for a time on a known date, a bare hour is a valid
+    # answer even though it contains no AM/PM marker yet.
+    if not state.get("booking_time_question_date"):
+        return False
+    normalized = unicodedata.normalize(
+        "NFC", unicodedata.normalize("NFD", text).replace("\u093c", "")
+    ).strip().casefold()
+    if normalized.isdecimal() and len(normalized) <= 2:
+        return True
+    return normalized in _SPOKEN_DIGITS or normalized in _DATE_SMALL_NUMBERS
+
 
 def _booking_was_requested(messages: list) -> bool:
     from api.services.workflow.confirmed_booking import new_booking_requested
@@ -1052,11 +1114,21 @@ def caller_phone_fragment_reply(
             phone_text, language_code, affirmative=False
         )
         if affirmative:
+            deferred_slot_turns = state.pop("booking_phone_deferred_slot_turns", [])
             state.pop("caller_phone_confirmation_pending", None)
             state.pop("caller_phone_uncertain_one", None)
             state["caller_phone"] = pending_confirmation
             state["phone_just_completed"] = pending_confirmation
             state["awaiting_phone"] = False
+            deferred_slot_reply = None
+            if booking_available and isinstance(deferred_slot_turns, list):
+                deferred_slot_reply = _replay_deferred_booking_slot(
+                    messages[:latest_index],
+                    state,
+                    [text for text in deferred_slot_turns if isinstance(text, str)],
+                )
+            if deferred_slot_reply:
+                return deferred_slot_reply
             booking_requested = False
             from api.services.workflow.confirmed_booking import new_booking_requested
 
@@ -1085,6 +1157,7 @@ def caller_phone_fragment_reply(
                 return f"Thanks, I have the number ending in {pending_confirmation[-4:]}."
             return f"धन्यवाद, नंबर के आख़िरी चार अंक {pending_confirmation[-4:]} हैं।"
         if negative:
+            state.pop("booking_phone_deferred_slot_turns", None)
             state.pop("caller_phone_confirmation_pending", None)
             state.pop("caller_phone_uncertain_one", None)
             state.pop("caller_phone", None)
@@ -1096,10 +1169,41 @@ def caller_phone_fragment_reply(
             if reply_in_english:
                 return "Please repeat the full phone number, one digit at a time."
             return "कृपया पूरा फ़ोन नंबर फिर से, एक-एक अंक करके बताइए।"
+        booking_requested_before = booking_available and _booking_was_requested(
+            messages[:latest_index + 1]
+        )
+        if booking_requested_before and _is_booking_slot_utterance(phone_text, state):
+            deferred = state.setdefault("booking_phone_deferred_slot_turns", [])
+            if not isinstance(deferred, list):
+                deferred = state["booking_phone_deferred_slot_turns"] = []
+            deferred.append(text)
+            del deferred[:-4]
+            if reply_in_english:
+                return (
+                    "I saved that date or time. Please confirm the phone number first: "
+                    "say yes, or say no and then repeat the full number."
+                )
+            return (
+                "मैंने तारीख या समय नोट कर लिया है। पहले फ़ोन नंबर की पुष्टि करें: "
+                "हाँ कहें, या नहीं कहकर पूरा नंबर फिर से बताइए।"
+            )
         if any(character.isdecimal() for character in phone_text) or any(
             word in _SPOKEN_DIGITS or word in _DOUBLE_DIGIT_WORDS
             for word in re.findall(r"[^\s,.!?।:;\-]+", phone_text.casefold())
         ):
+            # A number readback can be replaced by an explicit full number.
+            # A short digit phrase (for example "five PM") must not erase the
+            # pending number or become an incomplete phone correction.
+            if not intro and _spoken_phone_digit_count(phone_text) < 10:
+                if reply_in_english:
+                    return (
+                        "Please confirm the phone number first: say yes, or say no "
+                        "and then repeat the full number."
+                    )
+                return (
+                    "पहले फ़ोन नंबर की पुष्टि करें: हाँ कहें, या नहीं कहकर पूरा नंबर "
+                    "फिर से बताइए।"
+                )
             state.pop("caller_phone_confirmation_pending", None)
             state.pop("caller_phone_uncertain_one", None)
             state["caller_phone_digits"] = ""
