@@ -108,7 +108,19 @@ def build_agent_generation_pipeline(
     aggregator and the output transport, so the frames arriving at the call
     pipeline's transport are the same as if this ran inline.
     """
-    processors = [llm, generation_callback_processor]
+    from api.services.pipecat.caller_context_policy import (
+        CallerContextPolicyCleanupProcessor,
+        CallerContextPolicyProcessor,
+        CallerContextPolicyState,
+    )
+
+    policy_state = CallerContextPolicyState()
+    processors = [
+        CallerContextPolicyProcessor(llm, policy_state),
+        llm,
+        CallerContextPolicyCleanupProcessor(policy_state),
+        generation_callback_processor,
+    ]
     if recording_router:
         processors.append(recording_router)
     processors.append(tts)
