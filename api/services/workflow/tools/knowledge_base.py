@@ -21,6 +21,72 @@ from api.services.pipecat.tracing_config import ensure_tracing
 
 MAX_WEBSITE_RETRIEVAL_PASSAGES = 5
 MAX_WEBSITE_RETRIEVAL_CHARS = 4000
+MAX_FULL_TEXT_RETRIEVAL_PASSAGES = 3
+MAX_FULL_TEXT_PASSAGE_CHARS = 1000
+
+_RETRIEVAL_STOP_WORDS = {
+    "the", "is", "a", "an", "what", "how", "when", "where", "who", "do",
+    "does", "did", "can", "could", "would", "will", "you", "your", "and",
+    "or", "of", "to", "in", "on", "for", "from", "with", "me", "my",
+    "का", "की", "के", "है", "क्या", "में", "को", "और", "से", "कीजिए",
+    "करें", "बताइए", "मुझे", "आप", "आपका", "आपकी", "एक", "यह", "वह",
+}
+
+
+def _query_terms(query: str) -> set[str]:
+    """Return meaningful Unicode words for conservative lexical matching."""
+    tokens = re.findall(r"[\w\u0900-\u097f]+", query.casefold())
+    terms = {token for token in tokens if len(token) > 1 and token not in _RETRIEVAL_STOP_WORDS}
+    return terms
+
+
+def _text_passages_matching_query(
+    query: str,
+    full_text: str,
+    *,
+    filename: str,
+    limit: int,
+    max_chars: int = MAX_FULL_TEXT_PASSAGE_CHARS,
+) -> list[dict[str, Any]]:
+    """Select bounded passages only when enough query terms match.
+
+    A single shared word is too weak to justify injecting a passage into an
+    agent prompt. Requiring a modest fraction of query-term coverage keeps this
+    usable for short questions while rejecting incidental word overlap.
+    """
+    terms = _query_terms(query)
+    if not terms:
+        return []
+
+    # Split by paragraphs and sentence boundaries, then bound unusually long
+    # lines so one unpunctuated document cannot become an unbounded prompt.
+    raw_parts = re.split(r"\n\s*\n+|(?<=[.!?।])\s+", full_text)
+    parts: list[str] = []
+    for part in raw_parts:
+        part = " ".join(part.split())
+        if not part:
+            continue
+        parts.extend(part[start : start + max_chars] for start in range(0, len(part), max_chars))
+
+    min_hits = 1 if len(terms) <= 2 else max(2, (len(terms) + 2) // 3)
+    candidates: list[dict[str, Any]] = []
+    for index, part in enumerate(parts):
+        words = set(re.findall(r"[\w\u0900-\u097f]+", part.casefold()))
+        hits = terms & words
+        coverage = len(hits) / len(terms)
+        if len(hits) < min_hits or coverage < 0.34:
+            continue
+        candidates.append(
+            {
+                "text": part[:max_chars],
+                "filename": filename,
+                "similarity": round(coverage, 4),
+                "chunk_index": index,
+            }
+        )
+
+    candidates.sort(key=lambda item: item["similarity"], reverse=True)
+    return candidates[:limit]
 
 
 async def get_agent_knowledge_document_uuids(
@@ -37,11 +103,7 @@ async def get_agent_knowledge_document_uuids(
 
 def _website_text_matches(query: str, full_text: str, *, limit: int = 3) -> list[dict[str, Any]]:
     """Return a few query-relevant website passages, never the whole crawl."""
-    tokens = re.findall(r"[\w\u0900-\u097f]+", query.casefold())
-    stop_words = {"the", "is", "a", "an", "what", "how", "when", "where", "who", "do", "does", "can", "you", "your", "and", "or", "of", "to", "in", "का", "की", "के", "है", "क्या", "में", "को", "और", "से"}
-    query_terms = {token for token in tokens if len(token) > 1 and token not in stop_words}
-    if not query_terms:
-        query_terms = {token for token in tokens if len(token) > 1}
+    query_terms = _query_terms(query)
     if not query_terms:
         return []
 
@@ -53,29 +115,15 @@ def _website_text_matches(query: str, full_text: str, *, limit: int = 3) -> list
         lines = page.splitlines()
         source = lines[0].removeprefix("Source:").strip() if lines and lines[0].startswith("Source:") else "Website source"
         body = "\n".join(lines[1:]) if lines and lines[0].startswith("Source:") else page
-        sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?।])\s+|\n+", body) if sentence.strip()]
-        # Keep passages to roughly 1,000 characters for useful context while
-        # bounding the total website material sent to the language model.
-        current: list[str] = []
-        current_size = 0
-        for sentence in sentences:
-            for start in range(0, len(sentence), 900):
-                part = sentence[start : start + 900]
-                if current and current_size + len(part) > 1000:
-                    text = " ".join(current)
-                    words = set(re.findall(r"[\w\u0900-\u097f]+", text.casefold()))
-                    hits = query_terms & words
-                    if hits:
-                        passages.append({"text": text, "filename": source, "similarity": len(hits) / len(query_terms), "chunk_index": len(passages)})
-                    current, current_size = [], 0
-                current.append(part)
-                current_size += len(part) + 1
-        if current:
-            text = " ".join(current)
-            words = set(re.findall(r"[\w\u0900-\u097f]+", text.casefold()))
-            hits = query_terms & words
-            if hits:
-                passages.append({"text": text, "filename": source, "similarity": len(hits) / len(query_terms), "chunk_index": len(passages)})
+        passages.extend(
+            _text_passages_matching_query(
+                query,
+                body,
+                filename=source,
+                limit=limit,
+                max_chars=1000,
+            )
+        )
     passages.sort(key=lambda item: item["similarity"], reverse=True)
     return passages[:limit]
 
@@ -301,6 +349,7 @@ async def _perform_retrieval(
     try:
         chunks = []
         website_chunks: list[dict[str, Any]] = []
+        full_text_chunks: list[dict[str, Any]] = []
 
         # Check for full_document mode documents and return their full text
         if document_uuids:
@@ -313,14 +362,17 @@ async def _perform_retrieval(
                     if (doc.custom_metadata or {}).get("website_source_uuid"):
                         website_chunks.extend(_website_text_matches(query, doc.full_text, limit=3))
                     else:
-                        chunks.append(
-                            {
-                                "text": doc.full_text,
-                                "filename": doc.filename,
-                                "similarity": 1.0,
-                                "chunk_index": 0,
-                            }
+                        full_text_chunks.extend(
+                            _text_passages_matching_query(
+                                query,
+                                doc.full_text,
+                                filename=doc.filename,
+                                limit=MAX_FULL_TEXT_RETRIEVAL_PASSAGES,
+                            )
                         )
+
+            full_text_chunks.sort(key=lambda item: item["similarity"], reverse=True)
+            chunks.extend(full_text_chunks[:MAX_FULL_TEXT_RETRIEVAL_PASSAGES])
 
             # Filter out full_document UUIDs so vector search only hits chunked docs
             full_doc_uuids = {doc.document_uuid for doc in full_text_docs}
