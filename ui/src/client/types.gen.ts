@@ -1032,8 +1032,50 @@ export type ByokRealtimeAiModelConfiguration = {
     } & DograhEmbeddingsConfiguration) | ({
         provider: 'gemini';
     } & GoogleGeminiEmbeddingsConfiguration) | null;
-    /** Optional standalone TTS for workflow-authored realtime messages. */
-    script_tts?: ByokPipelineAiModelConfiguration["tts"] | null;
+    /**
+     * Script Tts
+     */
+    script_tts?: ({
+        provider: 'deepgram';
+    } & DeepgramTtsConfiguration) | ({
+        provider: 'google';
+    } & GoogleTtsConfiguration) | ({
+        provider: 'openai';
+    } & OpenAittsService) | ({
+        provider: 'elevenlabs';
+    } & ElevenlabsTtsConfiguration) | ({
+        provider: 'cartesia';
+    } & CartesiaTtsConfiguration) | ({
+        provider: 'inworld';
+    } & InworldTtsConfiguration) | ({
+        provider: 'kodewaves';
+    } & KodewavesTtsService) | ({
+        provider: 'dograh';
+    } & DograhTtsService) | ({
+        provider: 'sarvam';
+    } & SarvamTtsConfiguration) | ({
+        provider: 'camb';
+    } & CambTtsConfiguration) | ({
+        provider: 'rime';
+    } & RimeTtsConfiguration) | ({
+        provider: 'speaches';
+    } & SpeachesTtsConfiguration) | ({
+        provider: 'minimax';
+    } & MiniMaxTtsConfiguration) | ({
+        provider: 'azure_speech';
+    } & AzureSpeechTtsConfiguration) | ({
+        provider: 'smallest';
+    } & SmallestAittsConfiguration) | ({
+        provider: 'xai';
+    } & XaittsConfiguration) | ({
+        provider: 'lmnt';
+    } & LmntTtsConfiguration) | ({
+        provider: 'speechify';
+    } & SpeechifyTtsConfiguration) | ({
+        provider: 'gemini';
+    } & GoogleGeminiTtsConfiguration) | ({
+        provider: 'navana';
+    } & NavanaTtsConfiguration) | null;
 };
 
 /**
@@ -1823,6 +1865,92 @@ export type CircuitBreakerConfigResponse = {
 };
 
 /**
+ * ClientBindingChangeRequest
+ */
+export type ClientBindingChangeRequest = {
+    /**
+     * Domains
+     */
+    domains: Array<string>;
+    /**
+     * Ip Ranges
+     */
+    ip_ranges?: Array<string>;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
+ * ClientReleaseCreate
+ */
+export type ClientReleaseCreate = {
+    /**
+     * Release Id
+     */
+    release_id: string;
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Archive Url
+     */
+    archive_url: string;
+    /**
+     * Archive Sha256
+     */
+    archive_sha256: string;
+    /**
+     * Archive Signature
+     */
+    archive_signature: string;
+    /**
+     * Min Current Version
+     */
+    min_current_version: string;
+    /**
+     * Notes
+     */
+    notes?: string;
+};
+
+/**
+ * ClientUserCreate
+ */
+export type ClientUserCreate = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Password
+     */
+    password: string;
+};
+
+/**
+ * ClientUserStatus
+ */
+export type ClientUserStatus = {
+    /**
+     * Active
+     */
+    active: boolean;
+};
+
+/**
+ * ClientWorkspaceCreate
+ */
+export type ClientWorkspaceCreate = {
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
  * CloudonixConfigurationRequest
  *
  * Request schema for Cloudonix configuration.
@@ -1894,6 +2022,46 @@ export type ContactCreateRequest = {
      * Notes
      */
     notes?: string | null;
+};
+
+/**
+ * ContactDirectoryPage
+ */
+export type ContactDirectoryPage = {
+    /**
+     * Contacts
+     */
+    contacts: Array<ContactItem>;
+    /**
+     * Total Count
+     */
+    total_count: number;
+    /**
+     * Filtered Count
+     */
+    filtered_count: number;
+    /**
+     * Email Count
+     */
+    email_count: number;
+    /**
+     * Stage Counts
+     */
+    stage_counts: {
+        [key: string]: number;
+    };
+    /**
+     * Page
+     */
+    page: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Total Pages
+     */
+    total_pages: number;
 };
 
 /**
@@ -3253,11 +3421,31 @@ export type DograhTtsService = {
      */
     voice?: string;
     /**
+     * Language
+     *
+     * Script synthesis language; use 'multi' only for multilingual models.
+     */
+    language?: string | null;
+    /**
      * Speed
      *
      * Speed of the voice.
      */
     speed?: number;
+};
+
+/**
+ * DomainChallengeRequest
+ */
+export type DomainChallengeRequest = {
+    /**
+     * Customer Id
+     */
+    customer_id: string;
+    /**
+     * Domain
+     */
+    domain: string;
 };
 
 /**
@@ -3360,6 +3548,7 @@ export type EmbedConfigResponse = {
     settings: {
         [key: string]: unknown;
     };
+    branding: PlatformBranding;
     texts: WidgetTexts;
     /**
      * Theme
@@ -4617,6 +4806,171 @@ export type InitiateCallRequest = {
 };
 
 /**
+ * InstallationBindingRequest
+ */
+export type InstallationBindingRequest = {
+    /**
+     * Nonce
+     */
+    nonce: string;
+    /**
+     * Issued At
+     */
+    issued_at: number;
+    /**
+     * Signature
+     */
+    signature: string;
+    /**
+     * Domains
+     */
+    domains: Array<string>;
+    /**
+     * Ip Ranges
+     */
+    ip_ranges?: Array<string>;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
+ * InstallationCheckRequest
+ */
+export type InstallationCheckRequest = {
+    /**
+     * Nonce
+     */
+    nonce: string;
+    /**
+     * Integrity Ok
+     */
+    integrity_ok: boolean;
+    integrity_finding?: IntegrityFinding | null;
+    /**
+     * Proof Issued At
+     */
+    proof_issued_at?: number | null;
+    /**
+     * Proof Signature
+     */
+    proof_signature?: string | null;
+    /**
+     * Current Version
+     */
+    current_version?: string | null;
+};
+
+/**
+ * InstallationEnrollmentRequest
+ */
+export type InstallationEnrollmentRequest = {
+    /**
+     * Enrollment Token
+     */
+    enrollment_token: string;
+    /**
+     * Public Key
+     */
+    public_key: string;
+    /**
+     * Nonce
+     */
+    nonce: string;
+    /**
+     * Issued At
+     */
+    issued_at: number;
+    /**
+     * Signature
+     */
+    signature: string;
+};
+
+/**
+ * InstallationEnrollmentTokenResponse
+ */
+export type InstallationEnrollmentTokenResponse = {
+    /**
+     * Installation Id
+     */
+    installation_id: string;
+    /**
+     * Enrollment Token
+     */
+    enrollment_token: string;
+    /**
+     * Expires At
+     */
+    expires_at: number;
+};
+
+/**
+ * InstallationUpdateReportRequest
+ */
+export type InstallationUpdateReportRequest = {
+    /**
+     * Rollout Id
+     */
+    rollout_id: string;
+    /**
+     * Release Id
+     */
+    release_id: string;
+    /**
+     * Version
+     */
+    version: string;
+    /**
+     * Nonce
+     */
+    nonce: string;
+    /**
+     * Issued At
+     */
+    issued_at: number;
+    /**
+     * Status
+     */
+    status: 'staged' | 'downloading' | 'applying' | 'applied' | 'failed' | 'rolled_back';
+    /**
+     * Detail
+     */
+    detail?: string;
+    /**
+     * Installed Version
+     */
+    installed_version?: string | null;
+    /**
+     * Proof Signature
+     */
+    proof_signature: string;
+};
+
+/**
+ * IntegrityFinding
+ */
+export type IntegrityFinding = {
+    /**
+     * Reason
+     */
+    reason: 'unknown' | 'modified_file' | 'missing_file' | 'added_file' | 'invalid_manifest' | 'missing_manifest' | 'missing_trust_root';
+    /**
+     * Component
+     */
+    component: string;
+    /**
+     * Expected Sha256
+     */
+    expected_sha256?: string | null;
+    /**
+     * Observed Sha256
+     */
+    observed_sha256?: string | null;
+};
+
+/**
  * Inworld
  *
  * Inworld AI streaming text-to-speech with built-in and cloned voices. Defaults to the Ashley system voice on inworld-tts-2.
@@ -4660,6 +5014,42 @@ export type InworldTtsConfiguration = {
      * Controls stability versus expressiveness for inworld-tts-2 (STABLE, BALANCED, or CREATIVE).
      */
     delivery_mode?: 'STABLE' | 'BALANCED' | 'CREATIVE';
+};
+
+/**
+ * IssueClientInstallation
+ */
+export type IssueClientInstallation = {
+    /**
+     * Installation Id
+     */
+    installation_id: string;
+    /**
+     * Customer Id
+     */
+    customer_id: string;
+    /**
+     * Domains
+     */
+    domains: Array<string>;
+    /**
+     * Ip Ranges
+     */
+    ip_ranges?: Array<string>;
+    /**
+     * Features
+     */
+    features?: Array<string>;
+    /**
+     * Limits
+     */
+    limits?: {
+        [key: string]: number;
+    };
+    /**
+     * Expires At
+     */
+    expires_at: number;
 };
 
 /**
@@ -4777,10 +5167,25 @@ export type KodewavesManagedAiModelConfiguration = {
      * Realtime Model
      */
     realtime_model?: string | null;
-    script_tts_engine_type?: string | null;
+    /**
+     * Script Tts Engine Type
+     */
+    script_tts_engine_type?: 'cloud' | 'local_cpu' | null;
+    /**
+     * Script Tts Model
+     */
     script_tts_model?: string | null;
+    /**
+     * Script Tts Voice
+     */
     script_tts_voice?: string | null;
+    /**
+     * Script Tts Speed
+     */
     script_tts_speed?: number | null;
+    /**
+     * Script Tts Language
+     */
     script_tts_language?: string | null;
 };
 
@@ -4834,7 +5239,11 @@ export type KodewavesTtsService = {
      * Voice preset.
      */
     voice?: string;
-    /** Script synthesis language; use 'multi' only for multilingual models. */
+    /**
+     * Language
+     *
+     * Script synthesis language; use 'multi' only for multilingual models.
+     */
     language?: string | null;
     /**
      * Speed
@@ -6394,11 +6803,11 @@ export type PlanItem = {
     /**
      * Monthly Price Inr
      */
-    monthly_price_inr?: number;
+    monthly_price_inr?: number | null;
     /**
      * Monthly Price Usd
      */
-    monthly_price_usd?: number;
+    monthly_price_usd?: number | null;
     /**
      * Annual Price Cents
      */
@@ -6406,7 +6815,7 @@ export type PlanItem = {
     /**
      * Currency
      */
-    currency?: string;
+    currency?: 'INR' | 'USD';
     /**
      * Included Monthly Minutes
      */
@@ -6415,10 +6824,6 @@ export type PlanItem = {
      * Included Minutes
      */
     included_minutes?: number;
-    /**
-     * Overage Rate Per Minute
-     */
-    overage_rate_per_minute?: number;
     /**
      * Max Agents
      */
@@ -6466,6 +6871,40 @@ export type PlanItem = {
 };
 
 /**
+ * PlatformBranding
+ */
+export type PlatformBranding = {
+    /**
+     * Company Name
+     */
+    company_name?: string;
+    /**
+     * Tagline
+     */
+    tagline?: string;
+    /**
+     * Logo Url
+     */
+    logo_url?: string;
+    /**
+     * Favicon Url
+     */
+    favicon_url?: string;
+    /**
+     * Support Email
+     */
+    support_email?: string;
+    /**
+     * Primary Color
+     */
+    primary_color?: string;
+    /**
+     * Font
+     */
+    font?: 'geist' | 'system';
+};
+
+/**
  * PlatformSettingsResponse
  */
 export type PlatformSettingsResponse = {
@@ -6473,6 +6912,18 @@ export type PlatformSettingsResponse = {
      * Company Name
      */
     company_name?: string;
+    /**
+     * Tagline
+     */
+    tagline?: string;
+    /**
+     * Favicon Url
+     */
+    favicon_url?: string;
+    /**
+     * Font
+     */
+    font?: string;
     /**
      * Logo Url
      */
@@ -7307,6 +7758,42 @@ export type RecordingUploadResponseSchema = {
 };
 
 /**
+ * RedeemFreePackageRequest
+ */
+export type RedeemFreePackageRequest = {
+    /**
+     * Package Id
+     */
+    package_id: string;
+};
+
+/**
+ * RedeemFreePackageResponse
+ */
+export type RedeemFreePackageResponse = {
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * Already Redeemed
+     */
+    already_redeemed: boolean;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Minutes Added
+     */
+    minutes_added: number;
+    /**
+     * New Wallet Balance
+     */
+    new_wallet_balance: number;
+};
+
+/**
  * RedialCampaignRequest
  */
 export type RedialCampaignRequest = {
@@ -7329,6 +7816,26 @@ export type RedialCampaignRequest = {
      */
     retry_on_busy?: boolean;
     retry_config?: RetryConfigRequest | null;
+};
+
+/**
+ * RejectBindingRequest
+ */
+export type RejectBindingRequest = {
+    /**
+     * Note
+     */
+    note?: string;
+};
+
+/**
+ * RenewClientInstallation
+ */
+export type RenewClientInstallation = {
+    /**
+     * Expires At
+     */
+    expires_at: number;
 };
 
 /**
@@ -7454,6 +7961,20 @@ export type RimeTtsConfiguration = {
 };
 
 /**
+ * RolloutCreate
+ */
+export type RolloutCreate = {
+    /**
+     * Release Id
+     */
+    release_id: string;
+    /**
+     * Installation Ids
+     */
+    installation_ids: Array<string>;
+};
+
+/**
  * S3SignedUrlResponse
  */
 export type S3SignedUrlResponse = {
@@ -7550,11 +8071,11 @@ export type SaaSPlanPublicItem = {
     /**
      * Monthly Price Inr
      */
-    monthly_price_inr: number;
+    monthly_price_inr?: number | null;
     /**
      * Monthly Price Usd
      */
-    monthly_price_usd: number;
+    monthly_price_usd?: number | null;
     /**
      * Included Minutes
      */
@@ -7562,7 +8083,23 @@ export type SaaSPlanPublicItem = {
     /**
      * Overage Rate Per Minute
      */
-    overage_rate_per_minute: number;
+    overage_rate_per_minute?: number | null;
+    /**
+     * Monthly Price Cents
+     */
+    monthly_price_cents?: number;
+    /**
+     * Annual Price Cents
+     */
+    annual_price_cents?: number;
+    /**
+     * Currency
+     */
+    currency?: string;
+    /**
+     * Max Agents
+     */
+    max_agents: number;
     /**
      * Max Concurrent Calls
      */
@@ -7920,13 +8457,13 @@ export type SpeachesSttConfiguration = {
     /**
      * Model
      *
-     * Self-hosted Indian-language recognizer. Select one installed language; automatic detection is not supported.
+     * Self-hosted Indian-language and English recognizers. Automatic detection is available only when the installed engine advertises it.
      */
     model?: string;
     /**
      * Language
      *
-     * Select one installed Indian language. IndicConformer does not provide automatic language detection.
+     * Select one installed language or multi when the installed speech detector is available. Mixed-language decoding within an utterance is not guaranteed.
      */
     language?: string;
     /**
@@ -8099,6 +8636,32 @@ export type SubmissionItem = {
      * Created At
      */
     created_at: string;
+};
+
+/**
+ * SubmissionPage
+ */
+export type SubmissionPage = {
+    /**
+     * Submissions
+     */
+    submissions: Array<SubmissionItem>;
+    /**
+     * Total
+     */
+    total: number;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Has More
+     */
+    has_more: boolean;
 };
 
 /**
@@ -9626,6 +10189,10 @@ export type UpdateUserRequest = {
      */
     plan_name?: string | null;
     /**
+     * Plan Code
+     */
+    plan_code?: string | null;
+    /**
      * Wallet Balance Minutes
      */
     wallet_balance_minutes?: number | null;
@@ -9833,6 +10400,10 @@ export type UserAdminResponse = {
      */
     plan_name?: string;
     /**
+     * Plan Code
+     */
+    plan_code?: string | null;
+    /**
      * Total Calls
      */
     total_calls?: number;
@@ -9993,7 +10564,7 @@ export type VerifyPaymentRequest = {
     /**
      * Payment Id
      */
-    payment_id: string;
+    payment_id?: string | null;
     /**
      * Signature
      */
@@ -10036,6 +10607,10 @@ export type VerifyPaymentResponse = {
      * Plan Code
      */
     plan_code?: string | null;
+    /**
+     * Plan Expires At
+     */
+    plan_expires_at?: string | null;
 };
 
 /**
@@ -10339,6 +10914,22 @@ export type WalletResponse = {
      * Is Frozen
      */
     is_frozen: boolean;
+    /**
+     * Plan Code
+     */
+    plan_code?: string | null;
+    /**
+     * Plan Name
+     */
+    plan_name?: string | null;
+    /**
+     * Included Minutes
+     */
+    included_minutes?: number | null;
+    /**
+     * Plan Expires At
+     */
+    plan_expires_at?: string | null;
 };
 
 /**
@@ -10347,6 +10938,104 @@ export type WalletResponse = {
  * Webhook credential authentication types
  */
 export type WebhookCredentialType = 'none' | 'api_key' | 'bearer_token' | 'basic_auth' | 'custom_header';
+
+/**
+ * WebsiteSourceCreate
+ */
+export type WebsiteSourceCreate = {
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Refresh Interval Hours
+     */
+    refresh_interval_hours?: number;
+    /**
+     * Max Pages
+     */
+    max_pages?: number;
+    /**
+     * Available To All Agents
+     */
+    available_to_all_agents?: boolean;
+};
+
+/**
+ * WebsiteSourceList
+ */
+export type WebsiteSourceList = {
+    /**
+     * Sources
+     */
+    sources: Array<WebsiteSourceResponse>;
+};
+
+/**
+ * WebsiteSourceResponse
+ */
+export type WebsiteSourceResponse = {
+    /**
+     * Source Uuid
+     */
+    source_uuid: string;
+    /**
+     * Url
+     */
+    url: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Available To All Agents
+     */
+    available_to_all_agents: boolean;
+    /**
+     * Refresh Interval Hours
+     */
+    refresh_interval_hours: number;
+    /**
+     * Max Pages
+     */
+    max_pages: number;
+    /**
+     * Last Refresh Started At
+     */
+    last_refresh_started_at: string | null;
+    /**
+     * Last Refreshed At
+     */
+    last_refreshed_at: string | null;
+    /**
+     * Next Refresh At
+     */
+    next_refresh_at: string | null;
+    /**
+     * Last Error
+     */
+    last_error: string | null;
+    /**
+     * Etag
+     */
+    etag: string | null;
+    /**
+     * Content Hash
+     */
+    content_hash: string | null;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Document Uuid
+     */
+    document_uuid?: string | null;
+};
 
 /**
  * WidgetCreateRequest
@@ -10371,7 +11060,11 @@ export type WidgetCreateRequest = {
     /**
      * Primary Color
      */
-    primary_color?: string;
+    primary_color?: string | null;
+    /**
+     * Use Installation Branding
+     */
+    use_installation_branding?: boolean | null;
     /**
      * Bubble Title
      */
@@ -10430,6 +11123,10 @@ export type WidgetItem = {
      * Primary Color
      */
     primary_color?: string;
+    /**
+     * Use Installation Branding
+     */
+    use_installation_branding?: boolean;
     /**
      * Bubble Title
      */
@@ -12632,6 +13329,1173 @@ export type UpdateCreditPackageApiV1AdminCreditPackagesPackageIdPutResponses = {
 
 export type UpdateCreditPackageApiV1AdminCreditPackagesPackageIdPutResponse = UpdateCreditPackageApiV1AdminCreditPackagesPackageIdPutResponses[keyof UpdateCreditPackageApiV1AdminCreditPackagesPackageIdPutResponses];
 
+export type GetClientReleasesApiV1AdminClientInstallationsReleasesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/releases';
+};
+
+export type GetClientReleasesApiV1AdminClientInstallationsReleasesGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetClientReleasesApiV1AdminClientInstallationsReleasesGetError = GetClientReleasesApiV1AdminClientInstallationsReleasesGetErrors[keyof GetClientReleasesApiV1AdminClientInstallationsReleasesGetErrors];
+
+export type GetClientReleasesApiV1AdminClientInstallationsReleasesGetResponses = {
+    /**
+     * Response Get Client Releases Api V1 Admin Client Installations Releases Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type GetClientReleasesApiV1AdminClientInstallationsReleasesGetResponse = GetClientReleasesApiV1AdminClientInstallationsReleasesGetResponses[keyof GetClientReleasesApiV1AdminClientInstallationsReleasesGetResponses];
+
+export type AddClientReleaseApiV1AdminClientInstallationsReleasesPostData = {
+    body: ClientReleaseCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/releases';
+};
+
+export type AddClientReleaseApiV1AdminClientInstallationsReleasesPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AddClientReleaseApiV1AdminClientInstallationsReleasesPostError = AddClientReleaseApiV1AdminClientInstallationsReleasesPostErrors[keyof AddClientReleaseApiV1AdminClientInstallationsReleasesPostErrors];
+
+export type AddClientReleaseApiV1AdminClientInstallationsReleasesPostResponses = {
+    /**
+     * Response Add Client Release Api V1 Admin Client Installations Releases Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type AddClientReleaseApiV1AdminClientInstallationsReleasesPostResponse = AddClientReleaseApiV1AdminClientInstallationsReleasesPostResponses[keyof AddClientReleaseApiV1AdminClientInstallationsReleasesPostResponses];
+
+export type MakeClientReleaseAvailableApiV1AdminClientInstallationsReleasesReleaseIdPublishPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Release Id
+         */
+        release_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/releases/{release_id}/publish';
+};
+
+export type MakeClientReleaseAvailableApiV1AdminClientInstallationsReleasesReleaseIdPublishPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MakeClientReleaseAvailableApiV1AdminClientInstallationsReleasesReleaseIdPublishPostError = MakeClientReleaseAvailableApiV1AdminClientInstallationsReleasesReleaseIdPublishPostErrors[keyof MakeClientReleaseAvailableApiV1AdminClientInstallationsReleasesReleaseIdPublishPostErrors];
+
+export type MakeClientReleaseAvailableApiV1AdminClientInstallationsReleasesReleaseIdPublishPostResponses = {
+    /**
+     * Response Make Client Release Available Api V1 Admin Client Installations Releases  Release Id  Publish Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type MakeClientReleaseAvailableApiV1AdminClientInstallationsReleasesReleaseIdPublishPostResponse = MakeClientReleaseAvailableApiV1AdminClientInstallationsReleasesReleaseIdPublishPostResponses[keyof MakeClientReleaseAvailableApiV1AdminClientInstallationsReleasesReleaseIdPublishPostResponses];
+
+export type GetClientRolloutsApiV1AdminClientInstallationsRolloutsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/rollouts';
+};
+
+export type GetClientRolloutsApiV1AdminClientInstallationsRolloutsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetClientRolloutsApiV1AdminClientInstallationsRolloutsGetError = GetClientRolloutsApiV1AdminClientInstallationsRolloutsGetErrors[keyof GetClientRolloutsApiV1AdminClientInstallationsRolloutsGetErrors];
+
+export type GetClientRolloutsApiV1AdminClientInstallationsRolloutsGetResponses = {
+    /**
+     * Response Get Client Rollouts Api V1 Admin Client Installations Rollouts Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type GetClientRolloutsApiV1AdminClientInstallationsRolloutsGetResponse = GetClientRolloutsApiV1AdminClientInstallationsRolloutsGetResponses[keyof GetClientRolloutsApiV1AdminClientInstallationsRolloutsGetResponses];
+
+export type StageClientRolloutApiV1AdminClientInstallationsRolloutsPostData = {
+    body: RolloutCreate;
+    headers: {
+        /**
+         * Idempotency-Key
+         */
+        'Idempotency-Key': string;
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/rollouts';
+};
+
+export type StageClientRolloutApiV1AdminClientInstallationsRolloutsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StageClientRolloutApiV1AdminClientInstallationsRolloutsPostError = StageClientRolloutApiV1AdminClientInstallationsRolloutsPostErrors[keyof StageClientRolloutApiV1AdminClientInstallationsRolloutsPostErrors];
+
+export type StageClientRolloutApiV1AdminClientInstallationsRolloutsPostResponses = {
+    /**
+     * Response Stage Client Rollout Api V1 Admin Client Installations Rollouts Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type StageClientRolloutApiV1AdminClientInstallationsRolloutsPostResponse = StageClientRolloutApiV1AdminClientInstallationsRolloutsPostResponses[keyof StageClientRolloutApiV1AdminClientInstallationsRolloutsPostResponses];
+
+export type GetClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Rollout Id
+         */
+        rollout_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/rollouts/{rollout_id}';
+};
+
+export type GetClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdGetError = GetClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdGetErrors[keyof GetClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdGetErrors];
+
+export type GetClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdGetResponses = {
+    /**
+     * Response Get Client Rollout Api V1 Admin Client Installations Rollouts  Rollout Id  Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdGetResponse = GetClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdGetResponses[keyof GetClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdGetResponses];
+
+export type ActivateClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdActivatePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Rollout Id
+         */
+        rollout_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/rollouts/{rollout_id}/activate';
+};
+
+export type ActivateClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdActivatePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ActivateClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdActivatePostError = ActivateClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdActivatePostErrors[keyof ActivateClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdActivatePostErrors];
+
+export type ActivateClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdActivatePostResponses = {
+    /**
+     * Response Activate Client Rollout Api V1 Admin Client Installations Rollouts  Rollout Id  Activate Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ActivateClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdActivatePostResponse = ActivateClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdActivatePostResponses[keyof ActivateClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdActivatePostResponses];
+
+export type PauseClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdPausePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Rollout Id
+         */
+        rollout_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/rollouts/{rollout_id}/pause';
+};
+
+export type PauseClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdPausePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdPausePostError = PauseClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdPausePostErrors[keyof PauseClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdPausePostErrors];
+
+export type PauseClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdPausePostResponses = {
+    /**
+     * Response Pause Client Rollout Api V1 Admin Client Installations Rollouts  Rollout Id  Pause Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type PauseClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdPausePostResponse = PauseClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdPausePostResponses[keyof PauseClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdPausePostResponses];
+
+export type StopClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdStopPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Rollout Id
+         */
+        rollout_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/rollouts/{rollout_id}/stop';
+};
+
+export type StopClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdStopPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StopClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdStopPostError = StopClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdStopPostErrors[keyof StopClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdStopPostErrors];
+
+export type StopClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdStopPostResponses = {
+    /**
+     * Response Stop Client Rollout Api V1 Admin Client Installations Rollouts  Rollout Id  Stop Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type StopClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdStopPostResponse = StopClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdStopPostResponses[keyof StopClientRolloutApiV1AdminClientInstallationsRolloutsRolloutIdStopPostResponses];
+
+export type ListClientInstallationsApiV1AdminClientInstallationsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations';
+};
+
+export type ListClientInstallationsApiV1AdminClientInstallationsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListClientInstallationsApiV1AdminClientInstallationsGetError = ListClientInstallationsApiV1AdminClientInstallationsGetErrors[keyof ListClientInstallationsApiV1AdminClientInstallationsGetErrors];
+
+export type ListClientInstallationsApiV1AdminClientInstallationsGetResponses = {
+    /**
+     * Response List Client Installations Api V1 Admin Client Installations Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type ListClientInstallationsApiV1AdminClientInstallationsGetResponse = ListClientInstallationsApiV1AdminClientInstallationsGetResponses[keyof ListClientInstallationsApiV1AdminClientInstallationsGetResponses];
+
+export type IssueClientInstallationApiV1AdminClientInstallationsPostData = {
+    body: IssueClientInstallation;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations';
+};
+
+export type IssueClientInstallationApiV1AdminClientInstallationsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IssueClientInstallationApiV1AdminClientInstallationsPostError = IssueClientInstallationApiV1AdminClientInstallationsPostErrors[keyof IssueClientInstallationApiV1AdminClientInstallationsPostErrors];
+
+export type IssueClientInstallationApiV1AdminClientInstallationsPostResponses = {
+    /**
+     * Response Issue Client Installation Api V1 Admin Client Installations Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type IssueClientInstallationApiV1AdminClientInstallationsPostResponse = IssueClientInstallationApiV1AdminClientInstallationsPostResponses[keyof IssueClientInstallationApiV1AdminClientInstallationsPostResponses];
+
+export type GetClientIntegrityAlertsApiV1AdminClientInstallationsAlertsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/alerts';
+};
+
+export type GetClientIntegrityAlertsApiV1AdminClientInstallationsAlertsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetClientIntegrityAlertsApiV1AdminClientInstallationsAlertsGetError = GetClientIntegrityAlertsApiV1AdminClientInstallationsAlertsGetErrors[keyof GetClientIntegrityAlertsApiV1AdminClientInstallationsAlertsGetErrors];
+
+export type GetClientIntegrityAlertsApiV1AdminClientInstallationsAlertsGetResponses = {
+    /**
+     * Response Get Client Integrity Alerts Api V1 Admin Client Installations Alerts Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type GetClientIntegrityAlertsApiV1AdminClientInstallationsAlertsGetResponse = GetClientIntegrityAlertsApiV1AdminClientInstallationsAlertsGetResponses[keyof GetClientIntegrityAlertsApiV1AdminClientInstallationsAlertsGetResponses];
+
+export type GetBindingRequestsApiV1AdminClientInstallationsBindingRequestsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Include Resolved
+         */
+        include_resolved?: boolean;
+    };
+    url: '/api/v1/admin/client-installations/binding-requests';
+};
+
+export type GetBindingRequestsApiV1AdminClientInstallationsBindingRequestsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBindingRequestsApiV1AdminClientInstallationsBindingRequestsGetError = GetBindingRequestsApiV1AdminClientInstallationsBindingRequestsGetErrors[keyof GetBindingRequestsApiV1AdminClientInstallationsBindingRequestsGetErrors];
+
+export type GetBindingRequestsApiV1AdminClientInstallationsBindingRequestsGetResponses = {
+    /**
+     * Response Get Binding Requests Api V1 Admin Client Installations Binding Requests Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type GetBindingRequestsApiV1AdminClientInstallationsBindingRequestsGetResponse = GetBindingRequestsApiV1AdminClientInstallationsBindingRequestsGetResponses[keyof GetBindingRequestsApiV1AdminClientInstallationsBindingRequestsGetResponses];
+
+export type SubmitClientBindingRequestApiV1AdminClientInstallationsBindingRequestsPostData = {
+    body: InstallationBindingRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/binding-requests';
+};
+
+export type SubmitClientBindingRequestApiV1AdminClientInstallationsBindingRequestsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitClientBindingRequestApiV1AdminClientInstallationsBindingRequestsPostError = SubmitClientBindingRequestApiV1AdminClientInstallationsBindingRequestsPostErrors[keyof SubmitClientBindingRequestApiV1AdminClientInstallationsBindingRequestsPostErrors];
+
+export type SubmitClientBindingRequestApiV1AdminClientInstallationsBindingRequestsPostResponses = {
+    /**
+     * Response Submit Client Binding Request Api V1 Admin Client Installations Binding Requests Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type SubmitClientBindingRequestApiV1AdminClientInstallationsBindingRequestsPostResponse = SubmitClientBindingRequestApiV1AdminClientInstallationsBindingRequestsPostResponses[keyof SubmitClientBindingRequestApiV1AdminClientInstallationsBindingRequestsPostResponses];
+
+export type RejectBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdRejectPostData = {
+    body: RejectBindingRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Request Id
+         */
+        request_id: number;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/binding-requests/{request_id}/reject';
+};
+
+export type RejectBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdRejectPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RejectBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdRejectPostError = RejectBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdRejectPostErrors[keyof RejectBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdRejectPostErrors];
+
+export type RejectBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdRejectPostResponses = {
+    /**
+     * Response Reject Binding Request Api V1 Admin Client Installations Binding Requests  Request Id  Reject Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type RejectBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdRejectPostResponse = RejectBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdRejectPostResponses[keyof RejectBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdRejectPostResponses];
+
+export type ApproveBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdApprovePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Request Id
+         */
+        request_id: number;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/binding-requests/{request_id}/approve';
+};
+
+export type ApproveBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdApprovePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApproveBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdApprovePostError = ApproveBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdApprovePostErrors[keyof ApproveBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdApprovePostErrors];
+
+export type ApproveBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdApprovePostResponses = {
+    /**
+     * Response Approve Binding Request Api V1 Admin Client Installations Binding Requests  Request Id  Approve Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ApproveBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdApprovePostResponse = ApproveBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdApprovePostResponses[keyof ApproveBindingRequestApiV1AdminClientInstallationsBindingRequestsRequestIdApprovePostResponses];
+
+export type RecoverBindingRequestTokenApiV1AdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Request Id
+         */
+        request_id: number;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/binding-requests/{request_id}/recover-token';
+};
+
+export type RecoverBindingRequestTokenApiV1AdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecoverBindingRequestTokenApiV1AdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostError = RecoverBindingRequestTokenApiV1AdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostErrors[keyof RecoverBindingRequestTokenApiV1AdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostErrors];
+
+export type RecoverBindingRequestTokenApiV1AdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostResponses = {
+    /**
+     * Response Recover Binding Request Token Api V1 Admin Client Installations Binding Requests  Request Id  Recover Token Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type RecoverBindingRequestTokenApiV1AdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostResponse = RecoverBindingRequestTokenApiV1AdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostResponses[keyof RecoverBindingRequestTokenApiV1AdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostResponses];
+
+export type AcknowledgeIntegrityAlertApiV1AdminClientInstallationsAlertsAlertIdAcknowledgePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Alert Id
+         */
+        alert_id: number;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/alerts/{alert_id}/acknowledge';
+};
+
+export type AcknowledgeIntegrityAlertApiV1AdminClientInstallationsAlertsAlertIdAcknowledgePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AcknowledgeIntegrityAlertApiV1AdminClientInstallationsAlertsAlertIdAcknowledgePostError = AcknowledgeIntegrityAlertApiV1AdminClientInstallationsAlertsAlertIdAcknowledgePostErrors[keyof AcknowledgeIntegrityAlertApiV1AdminClientInstallationsAlertsAlertIdAcknowledgePostErrors];
+
+export type AcknowledgeIntegrityAlertApiV1AdminClientInstallationsAlertsAlertIdAcknowledgePostResponses = {
+    /**
+     * Response Acknowledge Integrity Alert Api V1 Admin Client Installations Alerts  Alert Id  Acknowledge Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type AcknowledgeIntegrityAlertApiV1AdminClientInstallationsAlertsAlertIdAcknowledgePostResponse = AcknowledgeIntegrityAlertApiV1AdminClientInstallationsAlertsAlertIdAcknowledgePostResponses[keyof AcknowledgeIntegrityAlertApiV1AdminClientInstallationsAlertsAlertIdAcknowledgePostResponses];
+
+export type CreateDomainChallengeApiV1AdminClientInstallationsDomainChallengesPostData = {
+    body: DomainChallengeRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/domain-challenges';
+};
+
+export type CreateDomainChallengeApiV1AdminClientInstallationsDomainChallengesPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateDomainChallengeApiV1AdminClientInstallationsDomainChallengesPostError = CreateDomainChallengeApiV1AdminClientInstallationsDomainChallengesPostErrors[keyof CreateDomainChallengeApiV1AdminClientInstallationsDomainChallengesPostErrors];
+
+export type CreateDomainChallengeApiV1AdminClientInstallationsDomainChallengesPostResponses = {
+    /**
+     * Response Create Domain Challenge Api V1 Admin Client Installations Domain Challenges Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type CreateDomainChallengeApiV1AdminClientInstallationsDomainChallengesPostResponse = CreateDomainChallengeApiV1AdminClientInstallationsDomainChallengesPostResponses[keyof CreateDomainChallengeApiV1AdminClientInstallationsDomainChallengesPostResponses];
+
+export type VerifyDomainChallengeApiV1AdminClientInstallationsDomainChallengesVerifyPostData = {
+    body: DomainChallengeRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/domain-challenges/verify';
+};
+
+export type VerifyDomainChallengeApiV1AdminClientInstallationsDomainChallengesVerifyPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type VerifyDomainChallengeApiV1AdminClientInstallationsDomainChallengesVerifyPostError = VerifyDomainChallengeApiV1AdminClientInstallationsDomainChallengesVerifyPostErrors[keyof VerifyDomainChallengeApiV1AdminClientInstallationsDomainChallengesVerifyPostErrors];
+
+export type VerifyDomainChallengeApiV1AdminClientInstallationsDomainChallengesVerifyPostResponses = {
+    /**
+     * Response Verify Domain Challenge Api V1 Admin Client Installations Domain Challenges Verify Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type VerifyDomainChallengeApiV1AdminClientInstallationsDomainChallengesVerifyPostResponse = VerifyDomainChallengeApiV1AdminClientInstallationsDomainChallengesVerifyPostResponses[keyof VerifyDomainChallengeApiV1AdminClientInstallationsDomainChallengesVerifyPostResponses];
+
+export type RenewClientInstallationApiV1AdminClientInstallationsInstallationIdRenewPostData = {
+    body: RenewClientInstallation;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Installation Id
+         */
+        installation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/{installation_id}/renew';
+};
+
+export type RenewClientInstallationApiV1AdminClientInstallationsInstallationIdRenewPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RenewClientInstallationApiV1AdminClientInstallationsInstallationIdRenewPostError = RenewClientInstallationApiV1AdminClientInstallationsInstallationIdRenewPostErrors[keyof RenewClientInstallationApiV1AdminClientInstallationsInstallationIdRenewPostErrors];
+
+export type RenewClientInstallationApiV1AdminClientInstallationsInstallationIdRenewPostResponses = {
+    /**
+     * Response Renew Client Installation Api V1 Admin Client Installations  Installation Id  Renew Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type RenewClientInstallationApiV1AdminClientInstallationsInstallationIdRenewPostResponse = RenewClientInstallationApiV1AdminClientInstallationsInstallationIdRenewPostResponses[keyof RenewClientInstallationApiV1AdminClientInstallationsInstallationIdRenewPostResponses];
+
+export type CreateInstallationEnrollmentTokenApiV1AdminClientInstallationsInstallationIdEnrollmentTokenPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Installation Id
+         */
+        installation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/{installation_id}/enrollment-token';
+};
+
+export type CreateInstallationEnrollmentTokenApiV1AdminClientInstallationsInstallationIdEnrollmentTokenPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateInstallationEnrollmentTokenApiV1AdminClientInstallationsInstallationIdEnrollmentTokenPostError = CreateInstallationEnrollmentTokenApiV1AdminClientInstallationsInstallationIdEnrollmentTokenPostErrors[keyof CreateInstallationEnrollmentTokenApiV1AdminClientInstallationsInstallationIdEnrollmentTokenPostErrors];
+
+export type CreateInstallationEnrollmentTokenApiV1AdminClientInstallationsInstallationIdEnrollmentTokenPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: InstallationEnrollmentTokenResponse;
+};
+
+export type CreateInstallationEnrollmentTokenApiV1AdminClientInstallationsInstallationIdEnrollmentTokenPostResponse = CreateInstallationEnrollmentTokenApiV1AdminClientInstallationsInstallationIdEnrollmentTokenPostResponses[keyof CreateInstallationEnrollmentTokenApiV1AdminClientInstallationsInstallationIdEnrollmentTokenPostResponses];
+
+export type RevokeClientInstallationApiV1AdminClientInstallationsInstallationIdRevokePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Installation Id
+         */
+        installation_id: string;
+    };
+    query?: never;
+    url: '/api/v1/admin/client-installations/{installation_id}/revoke';
+};
+
+export type RevokeClientInstallationApiV1AdminClientInstallationsInstallationIdRevokePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeClientInstallationApiV1AdminClientInstallationsInstallationIdRevokePostError = RevokeClientInstallationApiV1AdminClientInstallationsInstallationIdRevokePostErrors[keyof RevokeClientInstallationApiV1AdminClientInstallationsInstallationIdRevokePostErrors];
+
+export type RevokeClientInstallationApiV1AdminClientInstallationsInstallationIdRevokePostResponses = {
+    /**
+     * Response Revoke Client Installation Api V1 Admin Client Installations  Installation Id  Revoke Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type RevokeClientInstallationApiV1AdminClientInstallationsInstallationIdRevokePostResponse = RevokeClientInstallationApiV1AdminClientInstallationsInstallationIdRevokePostResponses[keyof RevokeClientInstallationApiV1AdminClientInstallationsInstallationIdRevokePostResponses];
+
+export type ReportClientUpdateStatusApiV1AdminClientInstallationsUpdateStatusPostData = {
+    body: InstallationUpdateReportRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/update-status';
+};
+
+export type ReportClientUpdateStatusApiV1AdminClientInstallationsUpdateStatusPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReportClientUpdateStatusApiV1AdminClientInstallationsUpdateStatusPostError = ReportClientUpdateStatusApiV1AdminClientInstallationsUpdateStatusPostErrors[keyof ReportClientUpdateStatusApiV1AdminClientInstallationsUpdateStatusPostErrors];
+
+export type ReportClientUpdateStatusApiV1AdminClientInstallationsUpdateStatusPostResponses = {
+    /**
+     * Response Report Client Update Status Api V1 Admin Client Installations Update Status Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ReportClientUpdateStatusApiV1AdminClientInstallationsUpdateStatusPostResponse = ReportClientUpdateStatusApiV1AdminClientInstallationsUpdateStatusPostResponses[keyof ReportClientUpdateStatusApiV1AdminClientInstallationsUpdateStatusPostResponses];
+
+export type EnrollClientInstallationApiV1AdminClientInstallationsEnrollPostData = {
+    body: InstallationEnrollmentRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/enroll';
+};
+
+export type EnrollClientInstallationApiV1AdminClientInstallationsEnrollPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnrollClientInstallationApiV1AdminClientInstallationsEnrollPostError = EnrollClientInstallationApiV1AdminClientInstallationsEnrollPostErrors[keyof EnrollClientInstallationApiV1AdminClientInstallationsEnrollPostErrors];
+
+export type EnrollClientInstallationApiV1AdminClientInstallationsEnrollPostResponses = {
+    /**
+     * Response Enroll Client Installation Api V1 Admin Client Installations Enroll Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type EnrollClientInstallationApiV1AdminClientInstallationsEnrollPostResponse = EnrollClientInstallationApiV1AdminClientInstallationsEnrollPostResponses[keyof EnrollClientInstallationApiV1AdminClientInstallationsEnrollPostResponses];
+
+export type CheckClientInstallationApiV1AdminClientInstallationsCheckPostData = {
+    body: InstallationCheckRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/admin/client-installations/check';
+};
+
+export type CheckClientInstallationApiV1AdminClientInstallationsCheckPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckClientInstallationApiV1AdminClientInstallationsCheckPostError = CheckClientInstallationApiV1AdminClientInstallationsCheckPostErrors[keyof CheckClientInstallationApiV1AdminClientInstallationsCheckPostErrors];
+
+export type CheckClientInstallationApiV1AdminClientInstallationsCheckPostResponses = {
+    /**
+     * Response Check Client Installation Api V1 Admin Client Installations Check Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type CheckClientInstallationApiV1AdminClientInstallationsCheckPostResponse = CheckClientInstallationApiV1AdminClientInstallationsCheckPostResponses[keyof CheckClientInstallationApiV1AdminClientInstallationsCheckPostResponses];
+
 export type GetMonitoringStatsApiV1AdminMonitoringStatsGetData = {
     body?: never;
     headers?: {
@@ -13826,6 +15690,115 @@ export type ListAuditLogsApiV1AdminAuditLogsGetResponses = {
 
 export type ListAuditLogsApiV1AdminAuditLogsGetResponse = ListAuditLogsApiV1AdminAuditLogsGetResponses[keyof ListAuditLogsApiV1AdminAuditLogsGetResponses];
 
+export type ImpersonateApiV1SuperuserImpersonatePostData = {
+    body: ImpersonateRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/superuser/impersonate';
+};
+
+export type ImpersonateApiV1SuperuserImpersonatePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImpersonateApiV1SuperuserImpersonatePostError = ImpersonateApiV1SuperuserImpersonatePostErrors[keyof ImpersonateApiV1SuperuserImpersonatePostErrors];
+
+export type ImpersonateApiV1SuperuserImpersonatePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ImpersonateResponse;
+};
+
+export type ImpersonateApiV1SuperuserImpersonatePostResponse = ImpersonateApiV1SuperuserImpersonatePostResponses[keyof ImpersonateApiV1SuperuserImpersonatePostResponses];
+
+export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Page
+         *
+         * Page number (starts from 1)
+         */
+        page?: number;
+        /**
+         * Limit
+         *
+         * Number of items per page
+         */
+        limit?: number;
+        /**
+         * Filters
+         *
+         * JSON-encoded filter criteria
+         */
+        filters?: string | null;
+        /**
+         * Sort By
+         *
+         * Field to sort by (e.g., 'duration', 'created_at')
+         */
+        sort_by?: string | null;
+        /**
+         * Sort Order
+         *
+         * Sort order ('asc' or 'desc')
+         */
+        sort_order?: string | null;
+    };
+    url: '/api/v1/superuser/workflow-runs';
+};
+
+export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetError = GetWorkflowRunsApiV1SuperuserWorkflowRunsGetErrors[keyof GetWorkflowRunsApiV1SuperuserWorkflowRunsGetErrors];
+
+export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SuperuserWorkflowRunsListResponse;
+};
+
+export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponse = GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponses[keyof GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponses];
+
 export type GetAvailableCatalogApiV1CatalogAvailableGetData = {
     body?: never;
     headers?: {
@@ -14036,6 +16009,62 @@ export type CreateContactApiV1CrmContactsPostResponses = {
 };
 
 export type CreateContactApiV1CrmContactsPostResponse = CreateContactApiV1CrmContactsPostResponses[keyof CreateContactApiV1CrmContactsPostResponses];
+
+export type GetContactsDirectoryApiV1CrmContactsDirectoryGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Page
+         */
+        page?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Stage Id
+         */
+        stage_id?: string | null;
+    };
+    url: '/api/v1/crm/contacts/directory';
+};
+
+export type GetContactsDirectoryApiV1CrmContactsDirectoryGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetContactsDirectoryApiV1CrmContactsDirectoryGetError = GetContactsDirectoryApiV1CrmContactsDirectoryGetErrors[keyof GetContactsDirectoryApiV1CrmContactsDirectoryGetErrors];
+
+export type GetContactsDirectoryApiV1CrmContactsDirectoryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ContactDirectoryPage;
+};
+
+export type GetContactsDirectoryApiV1CrmContactsDirectoryGetResponse = GetContactsDirectoryApiV1CrmContactsDirectoryGetResponses[keyof GetContactsDirectoryApiV1CrmContactsDirectoryGetResponses];
 
 export type DeleteContactApiV1CrmContactsContactIdDeleteData = {
     body?: never;
@@ -14978,6 +17007,59 @@ export type ListSubmissionsApiV1FormsFormIdSubmissionsGetResponses = {
 
 export type ListSubmissionsApiV1FormsFormIdSubmissionsGetResponse = ListSubmissionsApiV1FormsFormIdSubmissionsGetResponses[keyof ListSubmissionsApiV1FormsFormIdSubmissionsGetResponses];
 
+export type ListSubmissionsPageApiV1FormsFormIdSubmissionsPageGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Form Id
+         */
+        form_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/v1/forms/{form_id}/submissions/page';
+};
+
+export type ListSubmissionsPageApiV1FormsFormIdSubmissionsPageGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSubmissionsPageApiV1FormsFormIdSubmissionsPageGetError = ListSubmissionsPageApiV1FormsFormIdSubmissionsPageGetErrors[keyof ListSubmissionsPageApiV1FormsFormIdSubmissionsPageGetErrors];
+
+export type ListSubmissionsPageApiV1FormsFormIdSubmissionsPageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SubmissionPage;
+};
+
+export type ListSubmissionsPageApiV1FormsFormIdSubmissionsPageGetResponse = ListSubmissionsPageApiV1FormsFormIdSubmissionsPageGetResponses[keyof ListSubmissionsPageApiV1FormsFormIdSubmissionsPageGetResponses];
+
 export type SubmitFormApiV1FormsFormIdSubmitPostData = {
     body: SubmitFormRequest;
     headers?: {
@@ -15744,6 +17826,45 @@ export type GetPaymentConfigurationApiV1PaymentsConfigGetResponses = {
 
 export type GetPaymentConfigurationApiV1PaymentsConfigGetResponse = GetPaymentConfigurationApiV1PaymentsConfigGetResponses[keyof GetPaymentConfigurationApiV1PaymentsConfigGetResponses];
 
+export type RedeemFreePackageApiV1PaymentsRedeemFreePackagePostData = {
+    body: RedeemFreePackageRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/payments/redeem-free-package';
+};
+
+export type RedeemFreePackageApiV1PaymentsRedeemFreePackagePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RedeemFreePackageApiV1PaymentsRedeemFreePackagePostError = RedeemFreePackageApiV1PaymentsRedeemFreePackagePostErrors[keyof RedeemFreePackageApiV1PaymentsRedeemFreePackagePostErrors];
+
+export type RedeemFreePackageApiV1PaymentsRedeemFreePackagePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RedeemFreePackageResponse;
+};
+
+export type RedeemFreePackageApiV1PaymentsRedeemFreePackagePostResponse = RedeemFreePackageApiV1PaymentsRedeemFreePackagePostResponses[keyof RedeemFreePackageApiV1PaymentsRedeemFreePackagePostResponses];
+
 export type CreatePaymentOrderApiV1PaymentsCreateOrderPostData = {
     body: CreateOrderRequest;
     headers?: {
@@ -16477,115 +18598,6 @@ export type HandleVonageEventsWithoutRunApiV1TelephonyVonageEventsPostResponses 
      */
     200: unknown;
 };
-
-export type ImpersonateApiV1SuperuserImpersonatePostData = {
-    body: ImpersonateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/v1/superuser/impersonate';
-};
-
-export type ImpersonateApiV1SuperuserImpersonatePostErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ImpersonateApiV1SuperuserImpersonatePostError = ImpersonateApiV1SuperuserImpersonatePostErrors[keyof ImpersonateApiV1SuperuserImpersonatePostErrors];
-
-export type ImpersonateApiV1SuperuserImpersonatePostResponses = {
-    /**
-     * Successful Response
-     */
-    200: ImpersonateResponse;
-};
-
-export type ImpersonateApiV1SuperuserImpersonatePostResponse = ImpersonateApiV1SuperuserImpersonatePostResponses[keyof ImpersonateApiV1SuperuserImpersonatePostResponses];
-
-export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path?: never;
-    query?: {
-        /**
-         * Page
-         *
-         * Page number (starts from 1)
-         */
-        page?: number;
-        /**
-         * Limit
-         *
-         * Number of items per page
-         */
-        limit?: number;
-        /**
-         * Filters
-         *
-         * JSON-encoded filter criteria
-         */
-        filters?: string | null;
-        /**
-         * Sort By
-         *
-         * Field to sort by (e.g., 'duration', 'created_at')
-         */
-        sort_by?: string | null;
-        /**
-         * Sort Order
-         *
-         * Sort order ('asc' or 'desc')
-         */
-        sort_order?: string | null;
-    };
-    url: '/api/v1/superuser/workflow-runs';
-};
-
-export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetError = GetWorkflowRunsApiV1SuperuserWorkflowRunsGetErrors[keyof GetWorkflowRunsApiV1SuperuserWorkflowRunsGetErrors];
-
-export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: SuperuserWorkflowRunsListResponse;
-};
-
-export type GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponse = GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponses[keyof GetWorkflowRunsApiV1SuperuserWorkflowRunsGetResponses];
 
 export type GenerateWorkflowDefinitionApiV1WorkflowGenerateDefinitionPostData = {
     body: GenerateWorkflowRequest;
@@ -22895,6 +24907,10 @@ export type ListDocumentsApiV1KnowledgeBaseDocumentsGetData = {
          * Offset
          */
         offset?: number;
+        /**
+         * Search
+         */
+        search?: string | null;
     };
     url: '/api/v1/knowledge-base/documents';
 };
@@ -23133,6 +25149,260 @@ export type SearchChunksApiV1KnowledgeBaseSearchPostResponses = {
 };
 
 export type SearchChunksApiV1KnowledgeBaseSearchPostResponse = SearchChunksApiV1KnowledgeBaseSearchPostResponses[keyof SearchChunksApiV1KnowledgeBaseSearchPostResponses];
+
+export type ListWebsiteSourcesApiV1KnowledgeBaseWebsiteSourcesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/knowledge-base/website-sources';
+};
+
+export type ListWebsiteSourcesApiV1KnowledgeBaseWebsiteSourcesGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListWebsiteSourcesApiV1KnowledgeBaseWebsiteSourcesGetError = ListWebsiteSourcesApiV1KnowledgeBaseWebsiteSourcesGetErrors[keyof ListWebsiteSourcesApiV1KnowledgeBaseWebsiteSourcesGetErrors];
+
+export type ListWebsiteSourcesApiV1KnowledgeBaseWebsiteSourcesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WebsiteSourceList;
+};
+
+export type ListWebsiteSourcesApiV1KnowledgeBaseWebsiteSourcesGetResponse = ListWebsiteSourcesApiV1KnowledgeBaseWebsiteSourcesGetResponses[keyof ListWebsiteSourcesApiV1KnowledgeBaseWebsiteSourcesGetResponses];
+
+export type AddWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesPostData = {
+    body: WebsiteSourceCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/knowledge-base/website-sources';
+};
+
+export type AddWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AddWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesPostError = AddWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesPostErrors[keyof AddWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesPostErrors];
+
+export type AddWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: WebsiteSourceResponse;
+};
+
+export type AddWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesPostResponse = AddWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesPostResponses[keyof AddWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesPostResponses];
+
+export type RefreshWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidRefreshPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Source Uuid
+         */
+        source_uuid: string;
+    };
+    query?: never;
+    url: '/api/v1/knowledge-base/website-sources/{source_uuid}/refresh';
+};
+
+export type RefreshWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidRefreshPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RefreshWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidRefreshPostError = RefreshWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidRefreshPostErrors[keyof RefreshWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidRefreshPostErrors];
+
+export type RefreshWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidRefreshPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: WebsiteSourceResponse;
+};
+
+export type RefreshWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidRefreshPostResponse = RefreshWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidRefreshPostResponses[keyof RefreshWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidRefreshPostResponses];
+
+export type PauseWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidPausePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Source Uuid
+         */
+        source_uuid: string;
+    };
+    query?: never;
+    url: '/api/v1/knowledge-base/website-sources/{source_uuid}/pause';
+};
+
+export type PauseWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidPausePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidPausePostError = PauseWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidPausePostErrors[keyof PauseWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidPausePostErrors];
+
+export type PauseWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidPausePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: WebsiteSourceResponse;
+};
+
+export type PauseWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidPausePostResponse = PauseWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidPausePostResponses[keyof PauseWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidPausePostResponses];
+
+export type ResumeWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidResumePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Source Uuid
+         */
+        source_uuid: string;
+    };
+    query?: never;
+    url: '/api/v1/knowledge-base/website-sources/{source_uuid}/resume';
+};
+
+export type ResumeWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidResumePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResumeWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidResumePostError = ResumeWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidResumePostErrors[keyof ResumeWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidResumePostErrors];
+
+export type ResumeWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidResumePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: WebsiteSourceResponse;
+};
+
+export type ResumeWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidResumePostResponse = ResumeWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidResumePostResponses[keyof ResumeWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidResumePostResponses];
+
+export type DeleteWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Source Uuid
+         */
+        source_uuid: string;
+    };
+    query?: never;
+    url: '/api/v1/knowledge-base/website-sources/{source_uuid}';
+};
+
+export type DeleteWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidDeleteErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidDeleteError = DeleteWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidDeleteErrors[keyof DeleteWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidDeleteErrors];
+
+export type DeleteWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidDeleteResponse = DeleteWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidDeleteResponses[keyof DeleteWebsiteSourceApiV1KnowledgeBaseWebsiteSourcesSourceUuidDeleteResponses];
 
 export type GetUploadUrlsApiV1WorkflowRecordingsUploadUrlPostData = {
     body: BatchRecordingUploadRequestSchema;
@@ -23945,6 +26215,465 @@ export type GetNodeTypeApiV1NodeTypesNameGetResponses = {
 };
 
 export type GetNodeTypeApiV1NodeTypesNameGetResponse = GetNodeTypeApiV1NodeTypesNameGetResponses[keyof GetNodeTypeApiV1NodeTypesNameGetResponses];
+
+export type ClientUsersApiV1InstallationUsersGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/installation/users';
+};
+
+export type ClientUsersApiV1InstallationUsersGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClientUsersApiV1InstallationUsersGetError = ClientUsersApiV1InstallationUsersGetErrors[keyof ClientUsersApiV1InstallationUsersGetErrors];
+
+export type ClientUsersApiV1InstallationUsersGetResponses = {
+    /**
+     * Response Client Users Api V1 Installation Users Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type ClientUsersApiV1InstallationUsersGetResponse = ClientUsersApiV1InstallationUsersGetResponses[keyof ClientUsersApiV1InstallationUsersGetResponses];
+
+export type CreateClientUserApiV1InstallationUsersPostData = {
+    body: ClientUserCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/installation/users';
+};
+
+export type CreateClientUserApiV1InstallationUsersPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateClientUserApiV1InstallationUsersPostError = CreateClientUserApiV1InstallationUsersPostErrors[keyof CreateClientUserApiV1InstallationUsersPostErrors];
+
+export type CreateClientUserApiV1InstallationUsersPostResponses = {
+    /**
+     * Response Create Client User Api V1 Installation Users Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type CreateClientUserApiV1InstallationUsersPostResponse = CreateClientUserApiV1InstallationUsersPostResponses[keyof CreateClientUserApiV1InstallationUsersPostResponses];
+
+export type ClientWorkspacesApiV1InstallationWorkspacesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/installation/workspaces';
+};
+
+export type ClientWorkspacesApiV1InstallationWorkspacesGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClientWorkspacesApiV1InstallationWorkspacesGetError = ClientWorkspacesApiV1InstallationWorkspacesGetErrors[keyof ClientWorkspacesApiV1InstallationWorkspacesGetErrors];
+
+export type ClientWorkspacesApiV1InstallationWorkspacesGetResponses = {
+    /**
+     * Response Client Workspaces Api V1 Installation Workspaces Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type ClientWorkspacesApiV1InstallationWorkspacesGetResponse = ClientWorkspacesApiV1InstallationWorkspacesGetResponses[keyof ClientWorkspacesApiV1InstallationWorkspacesGetResponses];
+
+export type CreateClientWorkspaceApiV1InstallationWorkspacesPostData = {
+    body: ClientWorkspaceCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/installation/workspaces';
+};
+
+export type CreateClientWorkspaceApiV1InstallationWorkspacesPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateClientWorkspaceApiV1InstallationWorkspacesPostError = CreateClientWorkspaceApiV1InstallationWorkspacesPostErrors[keyof CreateClientWorkspaceApiV1InstallationWorkspacesPostErrors];
+
+export type CreateClientWorkspaceApiV1InstallationWorkspacesPostResponses = {
+    /**
+     * Response Create Client Workspace Api V1 Installation Workspaces Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type CreateClientWorkspaceApiV1InstallationWorkspacesPostResponse = CreateClientWorkspaceApiV1InstallationWorkspacesPostResponses[keyof CreateClientWorkspaceApiV1InstallationWorkspacesPostResponses];
+
+export type SelectClientWorkspaceApiV1InstallationWorkspacesOrganizationIdSelectPutData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Organization Id
+         */
+        organization_id: number;
+    };
+    query?: never;
+    url: '/api/v1/installation/workspaces/{organization_id}/select';
+};
+
+export type SelectClientWorkspaceApiV1InstallationWorkspacesOrganizationIdSelectPutErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SelectClientWorkspaceApiV1InstallationWorkspacesOrganizationIdSelectPutError = SelectClientWorkspaceApiV1InstallationWorkspacesOrganizationIdSelectPutErrors[keyof SelectClientWorkspaceApiV1InstallationWorkspacesOrganizationIdSelectPutErrors];
+
+export type SelectClientWorkspaceApiV1InstallationWorkspacesOrganizationIdSelectPutResponses = {
+    /**
+     * Response Select Client Workspace Api V1 Installation Workspaces  Organization Id  Select Put
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type SelectClientWorkspaceApiV1InstallationWorkspacesOrganizationIdSelectPutResponse = SelectClientWorkspaceApiV1InstallationWorkspacesOrganizationIdSelectPutResponses[keyof SelectClientWorkspaceApiV1InstallationWorkspacesOrganizationIdSelectPutResponses];
+
+export type UpdateClientUserStatusApiV1InstallationUsersUserIdStatusPutData = {
+    body: ClientUserStatus;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * User Id
+         */
+        user_id: number;
+    };
+    query?: never;
+    url: '/api/v1/installation/users/{user_id}/status';
+};
+
+export type UpdateClientUserStatusApiV1InstallationUsersUserIdStatusPutErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateClientUserStatusApiV1InstallationUsersUserIdStatusPutError = UpdateClientUserStatusApiV1InstallationUsersUserIdStatusPutErrors[keyof UpdateClientUserStatusApiV1InstallationUsersUserIdStatusPutErrors];
+
+export type UpdateClientUserStatusApiV1InstallationUsersUserIdStatusPutResponses = {
+    /**
+     * Response Update Client User Status Api V1 Installation Users  User Id  Status Put
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type UpdateClientUserStatusApiV1InstallationUsersUserIdStatusPutResponse = UpdateClientUserStatusApiV1InstallationUsersUserIdStatusPutResponses[keyof UpdateClientUserStatusApiV1InstallationUsersUserIdStatusPutResponses];
+
+export type GetClientBrandingApiV1InstallationBrandingGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/installation/branding';
+};
+
+export type GetClientBrandingApiV1InstallationBrandingGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+};
+
+export type GetClientBrandingApiV1InstallationBrandingGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlatformBranding;
+};
+
+export type GetClientBrandingApiV1InstallationBrandingGetResponse = GetClientBrandingApiV1InstallationBrandingGetResponses[keyof GetClientBrandingApiV1InstallationBrandingGetResponses];
+
+export type UpdateClientBrandingApiV1InstallationBrandingPutData = {
+    body: PlatformBranding;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/installation/branding';
+};
+
+export type UpdateClientBrandingApiV1InstallationBrandingPutErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateClientBrandingApiV1InstallationBrandingPutError = UpdateClientBrandingApiV1InstallationBrandingPutErrors[keyof UpdateClientBrandingApiV1InstallationBrandingPutErrors];
+
+export type UpdateClientBrandingApiV1InstallationBrandingPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlatformBranding;
+};
+
+export type UpdateClientBrandingApiV1InstallationBrandingPutResponse = UpdateClientBrandingApiV1InstallationBrandingPutResponses[keyof UpdateClientBrandingApiV1InstallationBrandingPutResponses];
+
+export type InstallationFeatureStatusApiV1InstallationFeaturesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/installation/features';
+};
+
+export type InstallationFeatureStatusApiV1InstallationFeaturesGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type InstallationFeatureStatusApiV1InstallationFeaturesGetError = InstallationFeatureStatusApiV1InstallationFeaturesGetErrors[keyof InstallationFeatureStatusApiV1InstallationFeaturesGetErrors];
+
+export type InstallationFeatureStatusApiV1InstallationFeaturesGetResponses = {
+    /**
+     * Response Installation Feature Status Api V1 Installation Features Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type InstallationFeatureStatusApiV1InstallationFeaturesGetResponse = InstallationFeatureStatusApiV1InstallationFeaturesGetResponses[keyof InstallationFeatureStatusApiV1InstallationFeaturesGetResponses];
+
+export type InstallationLicenseStatusApiV1InstallationLicenseGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/installation/license';
+};
+
+export type InstallationLicenseStatusApiV1InstallationLicenseGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type InstallationLicenseStatusApiV1InstallationLicenseGetError = InstallationLicenseStatusApiV1InstallationLicenseGetErrors[keyof InstallationLicenseStatusApiV1InstallationLicenseGetErrors];
+
+export type InstallationLicenseStatusApiV1InstallationLicenseGetResponses = {
+    /**
+     * Response Installation License Status Api V1 Installation License Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type InstallationLicenseStatusApiV1InstallationLicenseGetResponse = InstallationLicenseStatusApiV1InstallationLicenseGetResponses[keyof InstallationLicenseStatusApiV1InstallationLicenseGetResponses];
+
+export type RequestInstallationBindingChangeApiV1InstallationBindingRequestsPostData = {
+    body: ClientBindingChangeRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/v1/installation/binding-requests';
+};
+
+export type RequestInstallationBindingChangeApiV1InstallationBindingRequestsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RequestInstallationBindingChangeApiV1InstallationBindingRequestsPostError = RequestInstallationBindingChangeApiV1InstallationBindingRequestsPostErrors[keyof RequestInstallationBindingChangeApiV1InstallationBindingRequestsPostErrors];
+
+export type RequestInstallationBindingChangeApiV1InstallationBindingRequestsPostResponses = {
+    /**
+     * Response Request Installation Binding Change Api V1 Installation Binding Requests Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type RequestInstallationBindingChangeApiV1InstallationBindingRequestsPostResponse = RequestInstallationBindingChangeApiV1InstallationBindingRequestsPostResponses[keyof RequestInstallationBindingChangeApiV1InstallationBindingRequestsPostResponses];
 
 export type ReadRootApiV1GetData = {
     body?: never;
@@ -25418,6 +28147,1173 @@ export type UpdateCreditPackageAdminCreditPackagesPackageIdPutResponses = {
 
 export type UpdateCreditPackageAdminCreditPackagesPackageIdPutResponse = UpdateCreditPackageAdminCreditPackagesPackageIdPutResponses[keyof UpdateCreditPackageAdminCreditPackagesPackageIdPutResponses];
 
+export type GetClientReleasesAdminClientInstallationsReleasesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/releases';
+};
+
+export type GetClientReleasesAdminClientInstallationsReleasesGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetClientReleasesAdminClientInstallationsReleasesGetError = GetClientReleasesAdminClientInstallationsReleasesGetErrors[keyof GetClientReleasesAdminClientInstallationsReleasesGetErrors];
+
+export type GetClientReleasesAdminClientInstallationsReleasesGetResponses = {
+    /**
+     * Response Get Client Releases Admin Client Installations Releases Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type GetClientReleasesAdminClientInstallationsReleasesGetResponse = GetClientReleasesAdminClientInstallationsReleasesGetResponses[keyof GetClientReleasesAdminClientInstallationsReleasesGetResponses];
+
+export type AddClientReleaseAdminClientInstallationsReleasesPostData = {
+    body: ClientReleaseCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/releases';
+};
+
+export type AddClientReleaseAdminClientInstallationsReleasesPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AddClientReleaseAdminClientInstallationsReleasesPostError = AddClientReleaseAdminClientInstallationsReleasesPostErrors[keyof AddClientReleaseAdminClientInstallationsReleasesPostErrors];
+
+export type AddClientReleaseAdminClientInstallationsReleasesPostResponses = {
+    /**
+     * Response Add Client Release Admin Client Installations Releases Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type AddClientReleaseAdminClientInstallationsReleasesPostResponse = AddClientReleaseAdminClientInstallationsReleasesPostResponses[keyof AddClientReleaseAdminClientInstallationsReleasesPostResponses];
+
+export type MakeClientReleaseAvailableAdminClientInstallationsReleasesReleaseIdPublishPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Release Id
+         */
+        release_id: string;
+    };
+    query?: never;
+    url: '/admin/client-installations/releases/{release_id}/publish';
+};
+
+export type MakeClientReleaseAvailableAdminClientInstallationsReleasesReleaseIdPublishPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MakeClientReleaseAvailableAdminClientInstallationsReleasesReleaseIdPublishPostError = MakeClientReleaseAvailableAdminClientInstallationsReleasesReleaseIdPublishPostErrors[keyof MakeClientReleaseAvailableAdminClientInstallationsReleasesReleaseIdPublishPostErrors];
+
+export type MakeClientReleaseAvailableAdminClientInstallationsReleasesReleaseIdPublishPostResponses = {
+    /**
+     * Response Make Client Release Available Admin Client Installations Releases  Release Id  Publish Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type MakeClientReleaseAvailableAdminClientInstallationsReleasesReleaseIdPublishPostResponse = MakeClientReleaseAvailableAdminClientInstallationsReleasesReleaseIdPublishPostResponses[keyof MakeClientReleaseAvailableAdminClientInstallationsReleasesReleaseIdPublishPostResponses];
+
+export type GetClientRolloutsAdminClientInstallationsRolloutsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/rollouts';
+};
+
+export type GetClientRolloutsAdminClientInstallationsRolloutsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetClientRolloutsAdminClientInstallationsRolloutsGetError = GetClientRolloutsAdminClientInstallationsRolloutsGetErrors[keyof GetClientRolloutsAdminClientInstallationsRolloutsGetErrors];
+
+export type GetClientRolloutsAdminClientInstallationsRolloutsGetResponses = {
+    /**
+     * Response Get Client Rollouts Admin Client Installations Rollouts Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type GetClientRolloutsAdminClientInstallationsRolloutsGetResponse = GetClientRolloutsAdminClientInstallationsRolloutsGetResponses[keyof GetClientRolloutsAdminClientInstallationsRolloutsGetResponses];
+
+export type StageClientRolloutAdminClientInstallationsRolloutsPostData = {
+    body: RolloutCreate;
+    headers: {
+        /**
+         * Idempotency-Key
+         */
+        'Idempotency-Key': string;
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/rollouts';
+};
+
+export type StageClientRolloutAdminClientInstallationsRolloutsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StageClientRolloutAdminClientInstallationsRolloutsPostError = StageClientRolloutAdminClientInstallationsRolloutsPostErrors[keyof StageClientRolloutAdminClientInstallationsRolloutsPostErrors];
+
+export type StageClientRolloutAdminClientInstallationsRolloutsPostResponses = {
+    /**
+     * Response Stage Client Rollout Admin Client Installations Rollouts Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type StageClientRolloutAdminClientInstallationsRolloutsPostResponse = StageClientRolloutAdminClientInstallationsRolloutsPostResponses[keyof StageClientRolloutAdminClientInstallationsRolloutsPostResponses];
+
+export type GetClientRolloutAdminClientInstallationsRolloutsRolloutIdGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Rollout Id
+         */
+        rollout_id: string;
+    };
+    query?: never;
+    url: '/admin/client-installations/rollouts/{rollout_id}';
+};
+
+export type GetClientRolloutAdminClientInstallationsRolloutsRolloutIdGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetClientRolloutAdminClientInstallationsRolloutsRolloutIdGetError = GetClientRolloutAdminClientInstallationsRolloutsRolloutIdGetErrors[keyof GetClientRolloutAdminClientInstallationsRolloutsRolloutIdGetErrors];
+
+export type GetClientRolloutAdminClientInstallationsRolloutsRolloutIdGetResponses = {
+    /**
+     * Response Get Client Rollout Admin Client Installations Rollouts  Rollout Id  Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetClientRolloutAdminClientInstallationsRolloutsRolloutIdGetResponse = GetClientRolloutAdminClientInstallationsRolloutsRolloutIdGetResponses[keyof GetClientRolloutAdminClientInstallationsRolloutsRolloutIdGetResponses];
+
+export type ActivateClientRolloutAdminClientInstallationsRolloutsRolloutIdActivatePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Rollout Id
+         */
+        rollout_id: string;
+    };
+    query?: never;
+    url: '/admin/client-installations/rollouts/{rollout_id}/activate';
+};
+
+export type ActivateClientRolloutAdminClientInstallationsRolloutsRolloutIdActivatePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ActivateClientRolloutAdminClientInstallationsRolloutsRolloutIdActivatePostError = ActivateClientRolloutAdminClientInstallationsRolloutsRolloutIdActivatePostErrors[keyof ActivateClientRolloutAdminClientInstallationsRolloutsRolloutIdActivatePostErrors];
+
+export type ActivateClientRolloutAdminClientInstallationsRolloutsRolloutIdActivatePostResponses = {
+    /**
+     * Response Activate Client Rollout Admin Client Installations Rollouts  Rollout Id  Activate Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ActivateClientRolloutAdminClientInstallationsRolloutsRolloutIdActivatePostResponse = ActivateClientRolloutAdminClientInstallationsRolloutsRolloutIdActivatePostResponses[keyof ActivateClientRolloutAdminClientInstallationsRolloutsRolloutIdActivatePostResponses];
+
+export type PauseClientRolloutAdminClientInstallationsRolloutsRolloutIdPausePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Rollout Id
+         */
+        rollout_id: string;
+    };
+    query?: never;
+    url: '/admin/client-installations/rollouts/{rollout_id}/pause';
+};
+
+export type PauseClientRolloutAdminClientInstallationsRolloutsRolloutIdPausePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseClientRolloutAdminClientInstallationsRolloutsRolloutIdPausePostError = PauseClientRolloutAdminClientInstallationsRolloutsRolloutIdPausePostErrors[keyof PauseClientRolloutAdminClientInstallationsRolloutsRolloutIdPausePostErrors];
+
+export type PauseClientRolloutAdminClientInstallationsRolloutsRolloutIdPausePostResponses = {
+    /**
+     * Response Pause Client Rollout Admin Client Installations Rollouts  Rollout Id  Pause Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type PauseClientRolloutAdminClientInstallationsRolloutsRolloutIdPausePostResponse = PauseClientRolloutAdminClientInstallationsRolloutsRolloutIdPausePostResponses[keyof PauseClientRolloutAdminClientInstallationsRolloutsRolloutIdPausePostResponses];
+
+export type StopClientRolloutAdminClientInstallationsRolloutsRolloutIdStopPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Rollout Id
+         */
+        rollout_id: string;
+    };
+    query?: never;
+    url: '/admin/client-installations/rollouts/{rollout_id}/stop';
+};
+
+export type StopClientRolloutAdminClientInstallationsRolloutsRolloutIdStopPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StopClientRolloutAdminClientInstallationsRolloutsRolloutIdStopPostError = StopClientRolloutAdminClientInstallationsRolloutsRolloutIdStopPostErrors[keyof StopClientRolloutAdminClientInstallationsRolloutsRolloutIdStopPostErrors];
+
+export type StopClientRolloutAdminClientInstallationsRolloutsRolloutIdStopPostResponses = {
+    /**
+     * Response Stop Client Rollout Admin Client Installations Rollouts  Rollout Id  Stop Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type StopClientRolloutAdminClientInstallationsRolloutsRolloutIdStopPostResponse = StopClientRolloutAdminClientInstallationsRolloutsRolloutIdStopPostResponses[keyof StopClientRolloutAdminClientInstallationsRolloutsRolloutIdStopPostResponses];
+
+export type ListClientInstallationsAdminClientInstallationsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations';
+};
+
+export type ListClientInstallationsAdminClientInstallationsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListClientInstallationsAdminClientInstallationsGetError = ListClientInstallationsAdminClientInstallationsGetErrors[keyof ListClientInstallationsAdminClientInstallationsGetErrors];
+
+export type ListClientInstallationsAdminClientInstallationsGetResponses = {
+    /**
+     * Response List Client Installations Admin Client Installations Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type ListClientInstallationsAdminClientInstallationsGetResponse = ListClientInstallationsAdminClientInstallationsGetResponses[keyof ListClientInstallationsAdminClientInstallationsGetResponses];
+
+export type IssueClientInstallationAdminClientInstallationsPostData = {
+    body: IssueClientInstallation;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations';
+};
+
+export type IssueClientInstallationAdminClientInstallationsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IssueClientInstallationAdminClientInstallationsPostError = IssueClientInstallationAdminClientInstallationsPostErrors[keyof IssueClientInstallationAdminClientInstallationsPostErrors];
+
+export type IssueClientInstallationAdminClientInstallationsPostResponses = {
+    /**
+     * Response Issue Client Installation Admin Client Installations Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type IssueClientInstallationAdminClientInstallationsPostResponse = IssueClientInstallationAdminClientInstallationsPostResponses[keyof IssueClientInstallationAdminClientInstallationsPostResponses];
+
+export type GetClientIntegrityAlertsAdminClientInstallationsAlertsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/alerts';
+};
+
+export type GetClientIntegrityAlertsAdminClientInstallationsAlertsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetClientIntegrityAlertsAdminClientInstallationsAlertsGetError = GetClientIntegrityAlertsAdminClientInstallationsAlertsGetErrors[keyof GetClientIntegrityAlertsAdminClientInstallationsAlertsGetErrors];
+
+export type GetClientIntegrityAlertsAdminClientInstallationsAlertsGetResponses = {
+    /**
+     * Response Get Client Integrity Alerts Admin Client Installations Alerts Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type GetClientIntegrityAlertsAdminClientInstallationsAlertsGetResponse = GetClientIntegrityAlertsAdminClientInstallationsAlertsGetResponses[keyof GetClientIntegrityAlertsAdminClientInstallationsAlertsGetResponses];
+
+export type GetBindingRequestsAdminClientInstallationsBindingRequestsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Include Resolved
+         */
+        include_resolved?: boolean;
+    };
+    url: '/admin/client-installations/binding-requests';
+};
+
+export type GetBindingRequestsAdminClientInstallationsBindingRequestsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBindingRequestsAdminClientInstallationsBindingRequestsGetError = GetBindingRequestsAdminClientInstallationsBindingRequestsGetErrors[keyof GetBindingRequestsAdminClientInstallationsBindingRequestsGetErrors];
+
+export type GetBindingRequestsAdminClientInstallationsBindingRequestsGetResponses = {
+    /**
+     * Response Get Binding Requests Admin Client Installations Binding Requests Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type GetBindingRequestsAdminClientInstallationsBindingRequestsGetResponse = GetBindingRequestsAdminClientInstallationsBindingRequestsGetResponses[keyof GetBindingRequestsAdminClientInstallationsBindingRequestsGetResponses];
+
+export type SubmitClientBindingRequestAdminClientInstallationsBindingRequestsPostData = {
+    body: InstallationBindingRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/binding-requests';
+};
+
+export type SubmitClientBindingRequestAdminClientInstallationsBindingRequestsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitClientBindingRequestAdminClientInstallationsBindingRequestsPostError = SubmitClientBindingRequestAdminClientInstallationsBindingRequestsPostErrors[keyof SubmitClientBindingRequestAdminClientInstallationsBindingRequestsPostErrors];
+
+export type SubmitClientBindingRequestAdminClientInstallationsBindingRequestsPostResponses = {
+    /**
+     * Response Submit Client Binding Request Admin Client Installations Binding Requests Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type SubmitClientBindingRequestAdminClientInstallationsBindingRequestsPostResponse = SubmitClientBindingRequestAdminClientInstallationsBindingRequestsPostResponses[keyof SubmitClientBindingRequestAdminClientInstallationsBindingRequestsPostResponses];
+
+export type RejectBindingRequestAdminClientInstallationsBindingRequestsRequestIdRejectPostData = {
+    body: RejectBindingRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Request Id
+         */
+        request_id: number;
+    };
+    query?: never;
+    url: '/admin/client-installations/binding-requests/{request_id}/reject';
+};
+
+export type RejectBindingRequestAdminClientInstallationsBindingRequestsRequestIdRejectPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RejectBindingRequestAdminClientInstallationsBindingRequestsRequestIdRejectPostError = RejectBindingRequestAdminClientInstallationsBindingRequestsRequestIdRejectPostErrors[keyof RejectBindingRequestAdminClientInstallationsBindingRequestsRequestIdRejectPostErrors];
+
+export type RejectBindingRequestAdminClientInstallationsBindingRequestsRequestIdRejectPostResponses = {
+    /**
+     * Response Reject Binding Request Admin Client Installations Binding Requests  Request Id  Reject Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type RejectBindingRequestAdminClientInstallationsBindingRequestsRequestIdRejectPostResponse = RejectBindingRequestAdminClientInstallationsBindingRequestsRequestIdRejectPostResponses[keyof RejectBindingRequestAdminClientInstallationsBindingRequestsRequestIdRejectPostResponses];
+
+export type ApproveBindingRequestAdminClientInstallationsBindingRequestsRequestIdApprovePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Request Id
+         */
+        request_id: number;
+    };
+    query?: never;
+    url: '/admin/client-installations/binding-requests/{request_id}/approve';
+};
+
+export type ApproveBindingRequestAdminClientInstallationsBindingRequestsRequestIdApprovePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApproveBindingRequestAdminClientInstallationsBindingRequestsRequestIdApprovePostError = ApproveBindingRequestAdminClientInstallationsBindingRequestsRequestIdApprovePostErrors[keyof ApproveBindingRequestAdminClientInstallationsBindingRequestsRequestIdApprovePostErrors];
+
+export type ApproveBindingRequestAdminClientInstallationsBindingRequestsRequestIdApprovePostResponses = {
+    /**
+     * Response Approve Binding Request Admin Client Installations Binding Requests  Request Id  Approve Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ApproveBindingRequestAdminClientInstallationsBindingRequestsRequestIdApprovePostResponse = ApproveBindingRequestAdminClientInstallationsBindingRequestsRequestIdApprovePostResponses[keyof ApproveBindingRequestAdminClientInstallationsBindingRequestsRequestIdApprovePostResponses];
+
+export type RecoverBindingRequestTokenAdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Request Id
+         */
+        request_id: number;
+    };
+    query?: never;
+    url: '/admin/client-installations/binding-requests/{request_id}/recover-token';
+};
+
+export type RecoverBindingRequestTokenAdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecoverBindingRequestTokenAdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostError = RecoverBindingRequestTokenAdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostErrors[keyof RecoverBindingRequestTokenAdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostErrors];
+
+export type RecoverBindingRequestTokenAdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostResponses = {
+    /**
+     * Response Recover Binding Request Token Admin Client Installations Binding Requests  Request Id  Recover Token Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type RecoverBindingRequestTokenAdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostResponse = RecoverBindingRequestTokenAdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostResponses[keyof RecoverBindingRequestTokenAdminClientInstallationsBindingRequestsRequestIdRecoverTokenPostResponses];
+
+export type AcknowledgeIntegrityAlertAdminClientInstallationsAlertsAlertIdAcknowledgePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Alert Id
+         */
+        alert_id: number;
+    };
+    query?: never;
+    url: '/admin/client-installations/alerts/{alert_id}/acknowledge';
+};
+
+export type AcknowledgeIntegrityAlertAdminClientInstallationsAlertsAlertIdAcknowledgePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AcknowledgeIntegrityAlertAdminClientInstallationsAlertsAlertIdAcknowledgePostError = AcknowledgeIntegrityAlertAdminClientInstallationsAlertsAlertIdAcknowledgePostErrors[keyof AcknowledgeIntegrityAlertAdminClientInstallationsAlertsAlertIdAcknowledgePostErrors];
+
+export type AcknowledgeIntegrityAlertAdminClientInstallationsAlertsAlertIdAcknowledgePostResponses = {
+    /**
+     * Response Acknowledge Integrity Alert Admin Client Installations Alerts  Alert Id  Acknowledge Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type AcknowledgeIntegrityAlertAdminClientInstallationsAlertsAlertIdAcknowledgePostResponse = AcknowledgeIntegrityAlertAdminClientInstallationsAlertsAlertIdAcknowledgePostResponses[keyof AcknowledgeIntegrityAlertAdminClientInstallationsAlertsAlertIdAcknowledgePostResponses];
+
+export type CreateDomainChallengeAdminClientInstallationsDomainChallengesPostData = {
+    body: DomainChallengeRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/domain-challenges';
+};
+
+export type CreateDomainChallengeAdminClientInstallationsDomainChallengesPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateDomainChallengeAdminClientInstallationsDomainChallengesPostError = CreateDomainChallengeAdminClientInstallationsDomainChallengesPostErrors[keyof CreateDomainChallengeAdminClientInstallationsDomainChallengesPostErrors];
+
+export type CreateDomainChallengeAdminClientInstallationsDomainChallengesPostResponses = {
+    /**
+     * Response Create Domain Challenge Admin Client Installations Domain Challenges Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type CreateDomainChallengeAdminClientInstallationsDomainChallengesPostResponse = CreateDomainChallengeAdminClientInstallationsDomainChallengesPostResponses[keyof CreateDomainChallengeAdminClientInstallationsDomainChallengesPostResponses];
+
+export type VerifyDomainChallengeAdminClientInstallationsDomainChallengesVerifyPostData = {
+    body: DomainChallengeRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/domain-challenges/verify';
+};
+
+export type VerifyDomainChallengeAdminClientInstallationsDomainChallengesVerifyPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type VerifyDomainChallengeAdminClientInstallationsDomainChallengesVerifyPostError = VerifyDomainChallengeAdminClientInstallationsDomainChallengesVerifyPostErrors[keyof VerifyDomainChallengeAdminClientInstallationsDomainChallengesVerifyPostErrors];
+
+export type VerifyDomainChallengeAdminClientInstallationsDomainChallengesVerifyPostResponses = {
+    /**
+     * Response Verify Domain Challenge Admin Client Installations Domain Challenges Verify Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type VerifyDomainChallengeAdminClientInstallationsDomainChallengesVerifyPostResponse = VerifyDomainChallengeAdminClientInstallationsDomainChallengesVerifyPostResponses[keyof VerifyDomainChallengeAdminClientInstallationsDomainChallengesVerifyPostResponses];
+
+export type RenewClientInstallationAdminClientInstallationsInstallationIdRenewPostData = {
+    body: RenewClientInstallation;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Installation Id
+         */
+        installation_id: string;
+    };
+    query?: never;
+    url: '/admin/client-installations/{installation_id}/renew';
+};
+
+export type RenewClientInstallationAdminClientInstallationsInstallationIdRenewPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RenewClientInstallationAdminClientInstallationsInstallationIdRenewPostError = RenewClientInstallationAdminClientInstallationsInstallationIdRenewPostErrors[keyof RenewClientInstallationAdminClientInstallationsInstallationIdRenewPostErrors];
+
+export type RenewClientInstallationAdminClientInstallationsInstallationIdRenewPostResponses = {
+    /**
+     * Response Renew Client Installation Admin Client Installations  Installation Id  Renew Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type RenewClientInstallationAdminClientInstallationsInstallationIdRenewPostResponse = RenewClientInstallationAdminClientInstallationsInstallationIdRenewPostResponses[keyof RenewClientInstallationAdminClientInstallationsInstallationIdRenewPostResponses];
+
+export type CreateInstallationEnrollmentTokenAdminClientInstallationsInstallationIdEnrollmentTokenPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Installation Id
+         */
+        installation_id: string;
+    };
+    query?: never;
+    url: '/admin/client-installations/{installation_id}/enrollment-token';
+};
+
+export type CreateInstallationEnrollmentTokenAdminClientInstallationsInstallationIdEnrollmentTokenPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateInstallationEnrollmentTokenAdminClientInstallationsInstallationIdEnrollmentTokenPostError = CreateInstallationEnrollmentTokenAdminClientInstallationsInstallationIdEnrollmentTokenPostErrors[keyof CreateInstallationEnrollmentTokenAdminClientInstallationsInstallationIdEnrollmentTokenPostErrors];
+
+export type CreateInstallationEnrollmentTokenAdminClientInstallationsInstallationIdEnrollmentTokenPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: InstallationEnrollmentTokenResponse;
+};
+
+export type CreateInstallationEnrollmentTokenAdminClientInstallationsInstallationIdEnrollmentTokenPostResponse = CreateInstallationEnrollmentTokenAdminClientInstallationsInstallationIdEnrollmentTokenPostResponses[keyof CreateInstallationEnrollmentTokenAdminClientInstallationsInstallationIdEnrollmentTokenPostResponses];
+
+export type RevokeClientInstallationAdminClientInstallationsInstallationIdRevokePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Installation Id
+         */
+        installation_id: string;
+    };
+    query?: never;
+    url: '/admin/client-installations/{installation_id}/revoke';
+};
+
+export type RevokeClientInstallationAdminClientInstallationsInstallationIdRevokePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevokeClientInstallationAdminClientInstallationsInstallationIdRevokePostError = RevokeClientInstallationAdminClientInstallationsInstallationIdRevokePostErrors[keyof RevokeClientInstallationAdminClientInstallationsInstallationIdRevokePostErrors];
+
+export type RevokeClientInstallationAdminClientInstallationsInstallationIdRevokePostResponses = {
+    /**
+     * Response Revoke Client Installation Admin Client Installations  Installation Id  Revoke Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type RevokeClientInstallationAdminClientInstallationsInstallationIdRevokePostResponse = RevokeClientInstallationAdminClientInstallationsInstallationIdRevokePostResponses[keyof RevokeClientInstallationAdminClientInstallationsInstallationIdRevokePostResponses];
+
+export type ReportClientUpdateStatusAdminClientInstallationsUpdateStatusPostData = {
+    body: InstallationUpdateReportRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/update-status';
+};
+
+export type ReportClientUpdateStatusAdminClientInstallationsUpdateStatusPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReportClientUpdateStatusAdminClientInstallationsUpdateStatusPostError = ReportClientUpdateStatusAdminClientInstallationsUpdateStatusPostErrors[keyof ReportClientUpdateStatusAdminClientInstallationsUpdateStatusPostErrors];
+
+export type ReportClientUpdateStatusAdminClientInstallationsUpdateStatusPostResponses = {
+    /**
+     * Response Report Client Update Status Admin Client Installations Update Status Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ReportClientUpdateStatusAdminClientInstallationsUpdateStatusPostResponse = ReportClientUpdateStatusAdminClientInstallationsUpdateStatusPostResponses[keyof ReportClientUpdateStatusAdminClientInstallationsUpdateStatusPostResponses];
+
+export type EnrollClientInstallationAdminClientInstallationsEnrollPostData = {
+    body: InstallationEnrollmentRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/enroll';
+};
+
+export type EnrollClientInstallationAdminClientInstallationsEnrollPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnrollClientInstallationAdminClientInstallationsEnrollPostError = EnrollClientInstallationAdminClientInstallationsEnrollPostErrors[keyof EnrollClientInstallationAdminClientInstallationsEnrollPostErrors];
+
+export type EnrollClientInstallationAdminClientInstallationsEnrollPostResponses = {
+    /**
+     * Response Enroll Client Installation Admin Client Installations Enroll Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type EnrollClientInstallationAdminClientInstallationsEnrollPostResponse = EnrollClientInstallationAdminClientInstallationsEnrollPostResponses[keyof EnrollClientInstallationAdminClientInstallationsEnrollPostResponses];
+
+export type CheckClientInstallationAdminClientInstallationsCheckPostData = {
+    body: InstallationCheckRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/admin/client-installations/check';
+};
+
+export type CheckClientInstallationAdminClientInstallationsCheckPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckClientInstallationAdminClientInstallationsCheckPostError = CheckClientInstallationAdminClientInstallationsCheckPostErrors[keyof CheckClientInstallationAdminClientInstallationsCheckPostErrors];
+
+export type CheckClientInstallationAdminClientInstallationsCheckPostResponses = {
+    /**
+     * Response Check Client Installation Admin Client Installations Check Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type CheckClientInstallationAdminClientInstallationsCheckPostResponse = CheckClientInstallationAdminClientInstallationsCheckPostResponses[keyof CheckClientInstallationAdminClientInstallationsCheckPostResponses];
+
 export type GetMonitoringStatsAdminMonitoringStatsGetData = {
     body?: never;
     headers?: {
@@ -26612,6 +30508,115 @@ export type ListAuditLogsAdminAuditLogsGetResponses = {
 
 export type ListAuditLogsAdminAuditLogsGetResponse = ListAuditLogsAdminAuditLogsGetResponses[keyof ListAuditLogsAdminAuditLogsGetResponses];
 
+export type ImpersonateSuperuserImpersonatePostData = {
+    body: ImpersonateRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/superuser/impersonate';
+};
+
+export type ImpersonateSuperuserImpersonatePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImpersonateSuperuserImpersonatePostError = ImpersonateSuperuserImpersonatePostErrors[keyof ImpersonateSuperuserImpersonatePostErrors];
+
+export type ImpersonateSuperuserImpersonatePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ImpersonateResponse;
+};
+
+export type ImpersonateSuperuserImpersonatePostResponse = ImpersonateSuperuserImpersonatePostResponses[keyof ImpersonateSuperuserImpersonatePostResponses];
+
+export type GetWorkflowRunsSuperuserWorkflowRunsGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Page
+         *
+         * Page number (starts from 1)
+         */
+        page?: number;
+        /**
+         * Limit
+         *
+         * Number of items per page
+         */
+        limit?: number;
+        /**
+         * Filters
+         *
+         * JSON-encoded filter criteria
+         */
+        filters?: string | null;
+        /**
+         * Sort By
+         *
+         * Field to sort by (e.g., 'duration', 'created_at')
+         */
+        sort_by?: string | null;
+        /**
+         * Sort Order
+         *
+         * Sort order ('asc' or 'desc')
+         */
+        sort_order?: string | null;
+    };
+    url: '/superuser/workflow-runs';
+};
+
+export type GetWorkflowRunsSuperuserWorkflowRunsGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkflowRunsSuperuserWorkflowRunsGetError = GetWorkflowRunsSuperuserWorkflowRunsGetErrors[keyof GetWorkflowRunsSuperuserWorkflowRunsGetErrors];
+
+export type GetWorkflowRunsSuperuserWorkflowRunsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SuperuserWorkflowRunsListResponse;
+};
+
+export type GetWorkflowRunsSuperuserWorkflowRunsGetResponse = GetWorkflowRunsSuperuserWorkflowRunsGetResponses[keyof GetWorkflowRunsSuperuserWorkflowRunsGetResponses];
+
 export type GetAvailableCatalogCatalogAvailableGetData = {
     body?: never;
     headers?: {
@@ -26822,6 +30827,62 @@ export type CreateContactCrmContactsPostResponses = {
 };
 
 export type CreateContactCrmContactsPostResponse = CreateContactCrmContactsPostResponses[keyof CreateContactCrmContactsPostResponses];
+
+export type GetContactsDirectoryCrmContactsDirectoryGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: {
+        /**
+         * Page
+         */
+        page?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Stage Id
+         */
+        stage_id?: string | null;
+    };
+    url: '/crm/contacts/directory';
+};
+
+export type GetContactsDirectoryCrmContactsDirectoryGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetContactsDirectoryCrmContactsDirectoryGetError = GetContactsDirectoryCrmContactsDirectoryGetErrors[keyof GetContactsDirectoryCrmContactsDirectoryGetErrors];
+
+export type GetContactsDirectoryCrmContactsDirectoryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ContactDirectoryPage;
+};
+
+export type GetContactsDirectoryCrmContactsDirectoryGetResponse = GetContactsDirectoryCrmContactsDirectoryGetResponses[keyof GetContactsDirectoryCrmContactsDirectoryGetResponses];
 
 export type DeleteContactCrmContactsContactIdDeleteData = {
     body?: never;
@@ -27764,6 +31825,59 @@ export type ListSubmissionsFormsFormIdSubmissionsGetResponses = {
 
 export type ListSubmissionsFormsFormIdSubmissionsGetResponse = ListSubmissionsFormsFormIdSubmissionsGetResponses[keyof ListSubmissionsFormsFormIdSubmissionsGetResponses];
 
+export type ListSubmissionsPageFormsFormIdSubmissionsPageGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Form Id
+         */
+        form_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/forms/{form_id}/submissions/page';
+};
+
+export type ListSubmissionsPageFormsFormIdSubmissionsPageGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSubmissionsPageFormsFormIdSubmissionsPageGetError = ListSubmissionsPageFormsFormIdSubmissionsPageGetErrors[keyof ListSubmissionsPageFormsFormIdSubmissionsPageGetErrors];
+
+export type ListSubmissionsPageFormsFormIdSubmissionsPageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SubmissionPage;
+};
+
+export type ListSubmissionsPageFormsFormIdSubmissionsPageGetResponse = ListSubmissionsPageFormsFormIdSubmissionsPageGetResponses[keyof ListSubmissionsPageFormsFormIdSubmissionsPageGetResponses];
+
 export type SubmitFormFormsFormIdSubmitPostData = {
     body: SubmitFormRequest;
     headers?: {
@@ -28530,6 +32644,45 @@ export type GetPaymentConfigurationPaymentsConfigGetResponses = {
 
 export type GetPaymentConfigurationPaymentsConfigGetResponse = GetPaymentConfigurationPaymentsConfigGetResponses[keyof GetPaymentConfigurationPaymentsConfigGetResponses];
 
+export type RedeemFreePackagePaymentsRedeemFreePackagePostData = {
+    body: RedeemFreePackageRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/payments/redeem-free-package';
+};
+
+export type RedeemFreePackagePaymentsRedeemFreePackagePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RedeemFreePackagePaymentsRedeemFreePackagePostError = RedeemFreePackagePaymentsRedeemFreePackagePostErrors[keyof RedeemFreePackagePaymentsRedeemFreePackagePostErrors];
+
+export type RedeemFreePackagePaymentsRedeemFreePackagePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RedeemFreePackageResponse;
+};
+
+export type RedeemFreePackagePaymentsRedeemFreePackagePostResponse = RedeemFreePackagePaymentsRedeemFreePackagePostResponses[keyof RedeemFreePackagePaymentsRedeemFreePackagePostResponses];
+
 export type CreatePaymentOrderPaymentsCreateOrderPostData = {
     body: CreateOrderRequest;
     headers?: {
@@ -29263,115 +33416,6 @@ export type HandleVonageEventsWithoutRunTelephonyVonageEventsPostResponses = {
      */
     200: unknown;
 };
-
-export type ImpersonateSuperuserImpersonatePostData = {
-    body: ImpersonateRequest;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path?: never;
-    query?: never;
-    url: '/superuser/impersonate';
-};
-
-export type ImpersonateSuperuserImpersonatePostErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ImpersonateSuperuserImpersonatePostError = ImpersonateSuperuserImpersonatePostErrors[keyof ImpersonateSuperuserImpersonatePostErrors];
-
-export type ImpersonateSuperuserImpersonatePostResponses = {
-    /**
-     * Successful Response
-     */
-    200: ImpersonateResponse;
-};
-
-export type ImpersonateSuperuserImpersonatePostResponse = ImpersonateSuperuserImpersonatePostResponses[keyof ImpersonateSuperuserImpersonatePostResponses];
-
-export type GetWorkflowRunsSuperuserWorkflowRunsGetData = {
-    body?: never;
-    headers?: {
-        /**
-         * Authorization
-         */
-        authorization?: string | null;
-        /**
-         * X-Api-Key
-         */
-        'X-API-Key'?: string | null;
-    };
-    path?: never;
-    query?: {
-        /**
-         * Page
-         *
-         * Page number (starts from 1)
-         */
-        page?: number;
-        /**
-         * Limit
-         *
-         * Number of items per page
-         */
-        limit?: number;
-        /**
-         * Filters
-         *
-         * JSON-encoded filter criteria
-         */
-        filters?: string | null;
-        /**
-         * Sort By
-         *
-         * Field to sort by (e.g., 'duration', 'created_at')
-         */
-        sort_by?: string | null;
-        /**
-         * Sort Order
-         *
-         * Sort order ('asc' or 'desc')
-         */
-        sort_order?: string | null;
-    };
-    url: '/superuser/workflow-runs';
-};
-
-export type GetWorkflowRunsSuperuserWorkflowRunsGetErrors = {
-    /**
-     * Not found
-     */
-    404: unknown;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetWorkflowRunsSuperuserWorkflowRunsGetError = GetWorkflowRunsSuperuserWorkflowRunsGetErrors[keyof GetWorkflowRunsSuperuserWorkflowRunsGetErrors];
-
-export type GetWorkflowRunsSuperuserWorkflowRunsGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: SuperuserWorkflowRunsListResponse;
-};
-
-export type GetWorkflowRunsSuperuserWorkflowRunsGetResponse = GetWorkflowRunsSuperuserWorkflowRunsGetResponses[keyof GetWorkflowRunsSuperuserWorkflowRunsGetResponses];
 
 export type GenerateWorkflowDefinitionWorkflowGenerateDefinitionPostData = {
     body: GenerateWorkflowRequest;
@@ -35681,6 +39725,10 @@ export type ListDocumentsKnowledgeBaseDocumentsGetData = {
          * Offset
          */
         offset?: number;
+        /**
+         * Search
+         */
+        search?: string | null;
     };
     url: '/knowledge-base/documents';
 };
@@ -35919,6 +39967,260 @@ export type SearchChunksKnowledgeBaseSearchPostResponses = {
 };
 
 export type SearchChunksKnowledgeBaseSearchPostResponse = SearchChunksKnowledgeBaseSearchPostResponses[keyof SearchChunksKnowledgeBaseSearchPostResponses];
+
+export type ListWebsiteSourcesKnowledgeBaseWebsiteSourcesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/knowledge-base/website-sources';
+};
+
+export type ListWebsiteSourcesKnowledgeBaseWebsiteSourcesGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListWebsiteSourcesKnowledgeBaseWebsiteSourcesGetError = ListWebsiteSourcesKnowledgeBaseWebsiteSourcesGetErrors[keyof ListWebsiteSourcesKnowledgeBaseWebsiteSourcesGetErrors];
+
+export type ListWebsiteSourcesKnowledgeBaseWebsiteSourcesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WebsiteSourceList;
+};
+
+export type ListWebsiteSourcesKnowledgeBaseWebsiteSourcesGetResponse = ListWebsiteSourcesKnowledgeBaseWebsiteSourcesGetResponses[keyof ListWebsiteSourcesKnowledgeBaseWebsiteSourcesGetResponses];
+
+export type AddWebsiteSourceKnowledgeBaseWebsiteSourcesPostData = {
+    body: WebsiteSourceCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/knowledge-base/website-sources';
+};
+
+export type AddWebsiteSourceKnowledgeBaseWebsiteSourcesPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AddWebsiteSourceKnowledgeBaseWebsiteSourcesPostError = AddWebsiteSourceKnowledgeBaseWebsiteSourcesPostErrors[keyof AddWebsiteSourceKnowledgeBaseWebsiteSourcesPostErrors];
+
+export type AddWebsiteSourceKnowledgeBaseWebsiteSourcesPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: WebsiteSourceResponse;
+};
+
+export type AddWebsiteSourceKnowledgeBaseWebsiteSourcesPostResponse = AddWebsiteSourceKnowledgeBaseWebsiteSourcesPostResponses[keyof AddWebsiteSourceKnowledgeBaseWebsiteSourcesPostResponses];
+
+export type RefreshWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidRefreshPostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Source Uuid
+         */
+        source_uuid: string;
+    };
+    query?: never;
+    url: '/knowledge-base/website-sources/{source_uuid}/refresh';
+};
+
+export type RefreshWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidRefreshPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RefreshWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidRefreshPostError = RefreshWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidRefreshPostErrors[keyof RefreshWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidRefreshPostErrors];
+
+export type RefreshWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidRefreshPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: WebsiteSourceResponse;
+};
+
+export type RefreshWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidRefreshPostResponse = RefreshWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidRefreshPostResponses[keyof RefreshWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidRefreshPostResponses];
+
+export type PauseWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidPausePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Source Uuid
+         */
+        source_uuid: string;
+    };
+    query?: never;
+    url: '/knowledge-base/website-sources/{source_uuid}/pause';
+};
+
+export type PauseWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidPausePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidPausePostError = PauseWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidPausePostErrors[keyof PauseWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidPausePostErrors];
+
+export type PauseWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidPausePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: WebsiteSourceResponse;
+};
+
+export type PauseWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidPausePostResponse = PauseWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidPausePostResponses[keyof PauseWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidPausePostResponses];
+
+export type ResumeWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidResumePostData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Source Uuid
+         */
+        source_uuid: string;
+    };
+    query?: never;
+    url: '/knowledge-base/website-sources/{source_uuid}/resume';
+};
+
+export type ResumeWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidResumePostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResumeWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidResumePostError = ResumeWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidResumePostErrors[keyof ResumeWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidResumePostErrors];
+
+export type ResumeWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidResumePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: WebsiteSourceResponse;
+};
+
+export type ResumeWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidResumePostResponse = ResumeWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidResumePostResponses[keyof ResumeWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidResumePostResponses];
+
+export type DeleteWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidDeleteData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Source Uuid
+         */
+        source_uuid: string;
+    };
+    query?: never;
+    url: '/knowledge-base/website-sources/{source_uuid}';
+};
+
+export type DeleteWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidDeleteErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidDeleteError = DeleteWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidDeleteErrors[keyof DeleteWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidDeleteErrors];
+
+export type DeleteWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidDeleteResponse = DeleteWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidDeleteResponses[keyof DeleteWebsiteSourceKnowledgeBaseWebsiteSourcesSourceUuidDeleteResponses];
 
 export type GetUploadUrlsWorkflowRecordingsUploadUrlPostData = {
     body: BatchRecordingUploadRequestSchema;
@@ -36732,6 +41034,465 @@ export type GetNodeTypeNodeTypesNameGetResponses = {
 
 export type GetNodeTypeNodeTypesNameGetResponse = GetNodeTypeNodeTypesNameGetResponses[keyof GetNodeTypeNodeTypesNameGetResponses];
 
+export type ClientUsersInstallationUsersGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/installation/users';
+};
+
+export type ClientUsersInstallationUsersGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClientUsersInstallationUsersGetError = ClientUsersInstallationUsersGetErrors[keyof ClientUsersInstallationUsersGetErrors];
+
+export type ClientUsersInstallationUsersGetResponses = {
+    /**
+     * Response Client Users Installation Users Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type ClientUsersInstallationUsersGetResponse = ClientUsersInstallationUsersGetResponses[keyof ClientUsersInstallationUsersGetResponses];
+
+export type CreateClientUserInstallationUsersPostData = {
+    body: ClientUserCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/installation/users';
+};
+
+export type CreateClientUserInstallationUsersPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateClientUserInstallationUsersPostError = CreateClientUserInstallationUsersPostErrors[keyof CreateClientUserInstallationUsersPostErrors];
+
+export type CreateClientUserInstallationUsersPostResponses = {
+    /**
+     * Response Create Client User Installation Users Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type CreateClientUserInstallationUsersPostResponse = CreateClientUserInstallationUsersPostResponses[keyof CreateClientUserInstallationUsersPostResponses];
+
+export type ClientWorkspacesInstallationWorkspacesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/installation/workspaces';
+};
+
+export type ClientWorkspacesInstallationWorkspacesGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClientWorkspacesInstallationWorkspacesGetError = ClientWorkspacesInstallationWorkspacesGetErrors[keyof ClientWorkspacesInstallationWorkspacesGetErrors];
+
+export type ClientWorkspacesInstallationWorkspacesGetResponses = {
+    /**
+     * Response Client Workspaces Installation Workspaces Get
+     *
+     * Successful Response
+     */
+    200: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type ClientWorkspacesInstallationWorkspacesGetResponse = ClientWorkspacesInstallationWorkspacesGetResponses[keyof ClientWorkspacesInstallationWorkspacesGetResponses];
+
+export type CreateClientWorkspaceInstallationWorkspacesPostData = {
+    body: ClientWorkspaceCreate;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/installation/workspaces';
+};
+
+export type CreateClientWorkspaceInstallationWorkspacesPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateClientWorkspaceInstallationWorkspacesPostError = CreateClientWorkspaceInstallationWorkspacesPostErrors[keyof CreateClientWorkspaceInstallationWorkspacesPostErrors];
+
+export type CreateClientWorkspaceInstallationWorkspacesPostResponses = {
+    /**
+     * Response Create Client Workspace Installation Workspaces Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type CreateClientWorkspaceInstallationWorkspacesPostResponse = CreateClientWorkspaceInstallationWorkspacesPostResponses[keyof CreateClientWorkspaceInstallationWorkspacesPostResponses];
+
+export type SelectClientWorkspaceInstallationWorkspacesOrganizationIdSelectPutData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * Organization Id
+         */
+        organization_id: number;
+    };
+    query?: never;
+    url: '/installation/workspaces/{organization_id}/select';
+};
+
+export type SelectClientWorkspaceInstallationWorkspacesOrganizationIdSelectPutErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SelectClientWorkspaceInstallationWorkspacesOrganizationIdSelectPutError = SelectClientWorkspaceInstallationWorkspacesOrganizationIdSelectPutErrors[keyof SelectClientWorkspaceInstallationWorkspacesOrganizationIdSelectPutErrors];
+
+export type SelectClientWorkspaceInstallationWorkspacesOrganizationIdSelectPutResponses = {
+    /**
+     * Response Select Client Workspace Installation Workspaces  Organization Id  Select Put
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type SelectClientWorkspaceInstallationWorkspacesOrganizationIdSelectPutResponse = SelectClientWorkspaceInstallationWorkspacesOrganizationIdSelectPutResponses[keyof SelectClientWorkspaceInstallationWorkspacesOrganizationIdSelectPutResponses];
+
+export type UpdateClientUserStatusInstallationUsersUserIdStatusPutData = {
+    body: ClientUserStatus;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path: {
+        /**
+         * User Id
+         */
+        user_id: number;
+    };
+    query?: never;
+    url: '/installation/users/{user_id}/status';
+};
+
+export type UpdateClientUserStatusInstallationUsersUserIdStatusPutErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateClientUserStatusInstallationUsersUserIdStatusPutError = UpdateClientUserStatusInstallationUsersUserIdStatusPutErrors[keyof UpdateClientUserStatusInstallationUsersUserIdStatusPutErrors];
+
+export type UpdateClientUserStatusInstallationUsersUserIdStatusPutResponses = {
+    /**
+     * Response Update Client User Status Installation Users  User Id  Status Put
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type UpdateClientUserStatusInstallationUsersUserIdStatusPutResponse = UpdateClientUserStatusInstallationUsersUserIdStatusPutResponses[keyof UpdateClientUserStatusInstallationUsersUserIdStatusPutResponses];
+
+export type GetClientBrandingInstallationBrandingGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/installation/branding';
+};
+
+export type GetClientBrandingInstallationBrandingGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+};
+
+export type GetClientBrandingInstallationBrandingGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlatformBranding;
+};
+
+export type GetClientBrandingInstallationBrandingGetResponse = GetClientBrandingInstallationBrandingGetResponses[keyof GetClientBrandingInstallationBrandingGetResponses];
+
+export type UpdateClientBrandingInstallationBrandingPutData = {
+    body: PlatformBranding;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/installation/branding';
+};
+
+export type UpdateClientBrandingInstallationBrandingPutErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateClientBrandingInstallationBrandingPutError = UpdateClientBrandingInstallationBrandingPutErrors[keyof UpdateClientBrandingInstallationBrandingPutErrors];
+
+export type UpdateClientBrandingInstallationBrandingPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlatformBranding;
+};
+
+export type UpdateClientBrandingInstallationBrandingPutResponse = UpdateClientBrandingInstallationBrandingPutResponses[keyof UpdateClientBrandingInstallationBrandingPutResponses];
+
+export type InstallationFeatureStatusInstallationFeaturesGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/installation/features';
+};
+
+export type InstallationFeatureStatusInstallationFeaturesGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type InstallationFeatureStatusInstallationFeaturesGetError = InstallationFeatureStatusInstallationFeaturesGetErrors[keyof InstallationFeatureStatusInstallationFeaturesGetErrors];
+
+export type InstallationFeatureStatusInstallationFeaturesGetResponses = {
+    /**
+     * Response Installation Feature Status Installation Features Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type InstallationFeatureStatusInstallationFeaturesGetResponse = InstallationFeatureStatusInstallationFeaturesGetResponses[keyof InstallationFeatureStatusInstallationFeaturesGetResponses];
+
+export type InstallationLicenseStatusInstallationLicenseGetData = {
+    body?: never;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/installation/license';
+};
+
+export type InstallationLicenseStatusInstallationLicenseGetErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type InstallationLicenseStatusInstallationLicenseGetError = InstallationLicenseStatusInstallationLicenseGetErrors[keyof InstallationLicenseStatusInstallationLicenseGetErrors];
+
+export type InstallationLicenseStatusInstallationLicenseGetResponses = {
+    /**
+     * Response Installation License Status Installation License Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type InstallationLicenseStatusInstallationLicenseGetResponse = InstallationLicenseStatusInstallationLicenseGetResponses[keyof InstallationLicenseStatusInstallationLicenseGetResponses];
+
+export type RequestInstallationBindingChangeInstallationBindingRequestsPostData = {
+    body: ClientBindingChangeRequest;
+    headers?: {
+        /**
+         * Authorization
+         */
+        authorization?: string | null;
+        /**
+         * X-Api-Key
+         */
+        'X-API-Key'?: string | null;
+    };
+    path?: never;
+    query?: never;
+    url: '/installation/binding-requests';
+};
+
+export type RequestInstallationBindingChangeInstallationBindingRequestsPostErrors = {
+    /**
+     * Not found
+     */
+    404: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RequestInstallationBindingChangeInstallationBindingRequestsPostError = RequestInstallationBindingChangeInstallationBindingRequestsPostErrors[keyof RequestInstallationBindingChangeInstallationBindingRequestsPostErrors];
+
+export type RequestInstallationBindingChangeInstallationBindingRequestsPostResponses = {
+    /**
+     * Response Request Installation Binding Change Installation Binding Requests Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type RequestInstallationBindingChangeInstallationBindingRequestsPostResponse = RequestInstallationBindingChangeInstallationBindingRequestsPostResponses[keyof RequestInstallationBindingChangeInstallationBindingRequestsPostResponses];
+
 export type ReadRootGetData = {
     body?: never;
     path?: never;
@@ -36858,199 +41619,3 @@ export type AutoscaleMetricHealthAutoscaleMetricGetResponses = {
 };
 
 export type AutoscaleMetricHealthAutoscaleMetricGetResponse = AutoscaleMetricHealthAutoscaleMetricGetResponses[keyof AutoscaleMetricHealthAutoscaleMetricGetResponses];
-
-export type FallbackProxyToUiApiPathGetData = {
-    body?: never;
-    path: {
-        /**
-         * Path
-         */
-        path: string;
-    };
-    query?: never;
-    url: '/api/{path}';
-};
-
-export type FallbackProxyToUiApiPathGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type FallbackProxyToUiApiPathGetError = FallbackProxyToUiApiPathGetErrors[keyof FallbackProxyToUiApiPathGetErrors];
-
-export type FallbackProxyToUiApiPathGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type FallbackProxyToUiApiPathGet2Data = {
-    body?: never;
-    path: {
-        /**
-         * Path
-         */
-        path: string;
-    };
-    query?: never;
-    url: '/api/{path}';
-};
-
-export type FallbackProxyToUiApiPathGet2Errors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type FallbackProxyToUiApiPathGet2Error = FallbackProxyToUiApiPathGet2Errors[keyof FallbackProxyToUiApiPathGet2Errors];
-
-export type FallbackProxyToUiApiPathGet2Responses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type FallbackProxyToUiApiPathGet3Data = {
-    body?: never;
-    path: {
-        /**
-         * Path
-         */
-        path: string;
-    };
-    query?: never;
-    url: '/api/{path}';
-};
-
-export type FallbackProxyToUiApiPathGet3Errors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type FallbackProxyToUiApiPathGet3Error = FallbackProxyToUiApiPathGet3Errors[keyof FallbackProxyToUiApiPathGet3Errors];
-
-export type FallbackProxyToUiApiPathGet3Responses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type FallbackProxyToUiApiPathGet4Data = {
-    body?: never;
-    path: {
-        /**
-         * Path
-         */
-        path: string;
-    };
-    query?: never;
-    url: '/api/{path}';
-};
-
-export type FallbackProxyToUiApiPathGet4Errors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type FallbackProxyToUiApiPathGet4Error = FallbackProxyToUiApiPathGet4Errors[keyof FallbackProxyToUiApiPathGet4Errors];
-
-export type FallbackProxyToUiApiPathGet4Responses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type FallbackProxyToUiApiPathGet5Data = {
-    body?: never;
-    path: {
-        /**
-         * Path
-         */
-        path: string;
-    };
-    query?: never;
-    url: '/api/{path}';
-};
-
-export type FallbackProxyToUiApiPathGet5Errors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type FallbackProxyToUiApiPathGet5Error = FallbackProxyToUiApiPathGet5Errors[keyof FallbackProxyToUiApiPathGet5Errors];
-
-export type FallbackProxyToUiApiPathGet5Responses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type FallbackProxyToUiApiPathGet6Data = {
-    body?: never;
-    path: {
-        /**
-         * Path
-         */
-        path: string;
-    };
-    query?: never;
-    url: '/api/{path}';
-};
-
-export type FallbackProxyToUiApiPathGet6Errors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type FallbackProxyToUiApiPathGet6Error = FallbackProxyToUiApiPathGet6Errors[keyof FallbackProxyToUiApiPathGet6Errors];
-
-export type FallbackProxyToUiApiPathGet6Responses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type FallbackProxyToUiApiPathGet7Data = {
-    body?: never;
-    path: {
-        /**
-         * Path
-         */
-        path: string;
-    };
-    query?: never;
-    url: '/api/{path}';
-};
-
-export type FallbackProxyToUiApiPathGet7Errors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type FallbackProxyToUiApiPathGet7Error = FallbackProxyToUiApiPathGet7Errors[keyof FallbackProxyToUiApiPathGet7Errors];
-
-export type FallbackProxyToUiApiPathGet7Responses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};

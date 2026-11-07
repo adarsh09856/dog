@@ -729,9 +729,18 @@ def _package_customer_archive(
         release_private_key, {"api": package_images["api"], "ui": package_images["ui"]},
     )
     installer = directory / "customer-installer.tar.gz"
+    silo_source_archive = directory / "silo-source-RELEASE.2026-10-26T00-00-00Z.tar.gz"
+    subprocess.run(
+        [
+            sys.executable, str(root / "owner-tools/fetch_client_silo_source.py"),
+            "--output", str(silo_source_archive),
+        ],
+        cwd=root, check=True, capture_output=True, text=True, timeout=180,
+    )
     package_installer(
         images_env, customer_manifest, release_public_key_file,
         release_private_key, installer, root=root,
+        silo_source_archive=silo_source_archive, allow_test_object_store=True,
     )
     from verify_images import verify_api, verify_startup_rejection, verify_ui
     verify_api(api_image)

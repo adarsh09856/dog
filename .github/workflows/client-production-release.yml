@@ -32,7 +32,7 @@ on:
         required: true
         type: string
       minio_image:
-        description: Approved MinIO image pinned by sha256 digest
+        description: Approved PGSTY Silo image pinned to its verified sha256 digest
         required: true
         type: string
       coturn_image:
@@ -102,6 +102,7 @@ jobs:
           PRIOR_COMMIT: ${{ inputs.prior_commit }}
           COTURN_IMAGE: ${{ inputs.coturn_image }}
           CADDY_IMAGE: ${{ inputs.caddy_image }}
+          MINIO_IMAGE: ${{ inputs.minio_image }}
           CANDIDATE_COMMIT: ${{ github.sha }}
           LIFECYCLE_REPORT: ${{ runner.temp }}/client-production-lifecycle-${{ github.run_id }}.json
         run: |
@@ -112,6 +113,7 @@ jobs:
             --candidate-commit "$CANDIDATE_COMMIT" \
             --coturn-image "$COTURN_IMAGE" \
             --caddy-image "$CADDY_IMAGE" \
+            --minio-image "$MINIO_IMAGE" \
             --report "$LIFECYCLE_REPORT"
           python deploy/client/production_release_preflight.py \
             --report "$LIFECYCLE_REPORT" \
@@ -174,6 +176,8 @@ jobs:
                   os.environ[name],
               ):
                   raise SystemExit(f"{name} must be an immutable sha256 image reference")
+          if os.environ["MINIO_IMAGE"] != "docker.io/pgsty/silo@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7":
+              raise SystemExit("MINIO_IMAGE must use the approved PGSTY Silo release and immutable digest")
           owner = urlsplit(os.environ["OWNER_STATUS_URL"])
           if owner.scheme != "https" or not owner.hostname or owner.username or owner.password or owner.fragment:
               raise SystemExit("owner_status_url must be an HTTPS URL without credentials or fragment")
@@ -291,11 +295,14 @@ jobs:
           )
           PY
 
+          python owner-tools/fetch_client_silo_source.py \
+            --output "$work_dir/silo-source-RELEASE.2026-10-26T00-00-00Z.tar.gz"
           python owner-tools/package_client_installer.py \
             --images-env "$work_dir/customer-images.env" \
             --manifest "$work_dir/client-release-manifest.json" \
             --release-public-key "$key_dir/release-public.key" \
             --release-private-key "$key_dir/release-private.key" \
+            --silo-source-archive "$work_dir/silo-source-RELEASE.2026-10-26T00-00-00Z.tar.gz" \
             --output "$work_dir/kodewaves-client-installer.tar.gz"
           python deploy/client/verify_installer.py \
             --archive "$work_dir/kodewaves-client-installer.tar.gz" \

@@ -48,6 +48,10 @@ async def get_widget(organization_id, widget_id):
 
 
 async def save_widget(organization_id, user_id, values, widget_id=None):
+    # This flag lives on the embed token so the database widget schema remains
+    # backward-compatible. Existing widgets without the flag keep their saved
+    # color as an explicit override.
+    use_installation_branding = values.pop("use_installation_branding", None)
     async with kodewaves_db_client.get_session() as session:
         widget = None
         if widget_id:
@@ -105,7 +109,8 @@ async def save_widget(organization_id, user_id, values, widget_id=None):
         token.workflow_id = workflow_id
         token.is_active = widget.is_active
         token.allowed_domains = widget.allowed_domains or []
-        token.settings = {
+        token_settings = dict(token.settings or {})
+        token_settings.update({
             "websiteWidgetId": str(widget.id),
             "widgetType": "voice",
             "embedMode": "floating",
@@ -113,7 +118,10 @@ async def save_widget(organization_id, user_id, values, widget_id=None):
             "callToActionText": widget.bubble_subtitle or "",
             "buttonColor": widget.primary_color,
             "position": widget.position,
-        }
+        })
+        if use_installation_branding is not None:
+            token_settings["useInstallationBranding"] = bool(use_installation_branding)
+        token.settings = token_settings
         await session.commit()
         await session.refresh(widget)
         await session.refresh(token)

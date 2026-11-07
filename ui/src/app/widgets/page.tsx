@@ -121,6 +121,7 @@ export default function WidgetsPage() {
       const payload = {
         name: editingWidget.name, workflow_id: workflowId,
         primary_color: editingWidget.primary_color || defaultWidgetColor,
+        use_installation_branding: editingWidget.use_installation_branding ?? false,
         welcome_message: editingWidget.welcome_message || "Talk to our AI Agent",
         bubble_subtitle: editingWidget.bubble_subtitle ?? "Click to start voice call",
         position: editingWidget.position || "bottom-right",
@@ -198,6 +199,7 @@ export default function WidgetsPage() {
               setEditingWidget({
                 name: "Homepage Voice Assistant",
                 primary_color: defaultWidgetColor,
+                use_installation_branding: true,
                 position: "bottom-right",
                 welcome_message: "Hi! How can I help you today? Tap to talk with our voice AI.",
                 is_active: true,
@@ -400,15 +402,24 @@ export default function WidgetsPage() {
                   <input
                     type="color"
                     value={editingWidget?.primary_color || defaultWidgetColor}
-                    onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, primary_color: e.target.value } : null)}
+                    disabled={editingWidget?.use_installation_branding ?? false}
+                    onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, primary_color: e.target.value, use_installation_branding: false } : null)}
                     className="h-9 w-10 rounded border border-border cursor-pointer bg-transparent"
                   />
                   <Input
                     value={editingWidget?.primary_color || defaultWidgetColor}
-                    onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, primary_color: e.target.value } : null)}
+                    disabled={editingWidget?.use_installation_branding ?? false}
+                    onChange={(e) => setEditingWidget((prev) => prev ? { ...prev, primary_color: e.target.value, use_installation_branding: false } : null)}
                     className="font-mono text-xs"
                   />
                 </div>
+                <label className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+                  <Switch
+                    checked={editingWidget?.use_installation_branding ?? false}
+                    onCheckedChange={(checked) => setEditingWidget((prev) => prev ? { ...prev, use_installation_branding: checked } : null)}
+                  />
+                  Use installation brand color
+                </label>
               </div>
             </div>
 

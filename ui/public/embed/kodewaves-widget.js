@@ -157,12 +157,13 @@
         // settings. api/schemas/widget_texts.py owns the defaults; this file
         // deliberately carries none so the two can never drift.
         texts: configData.texts || {},
+        branding: configData.branding || {},
         workflowId: configData.workflow_id,
         widgetType: widgetType,
         embedMode: configData.settings?.embedMode || 'floating',
         containerId: configData.settings?.containerId || 'kodewaves-inline-container',
         position: configData.position || DEFAULT_CONFIG.position,
-        buttonColor: configData.settings?.buttonColor || '#10b981',
+        buttonColor: configData.button_color || configData.settings?.buttonColor || '#426b57',
         buttonText: configData.settings?.buttonText || (widgetType === 'chat' ? 'Chat with Agent' : 'Talk to Agent'),
         callToActionText: configData.settings?.callToActionText || (widgetType === 'chat' ? 'Click to start chatting' : 'Click to start voice conversation'),
         autoStart: configData.auto_start || false,
@@ -1338,6 +1339,37 @@
         white-space: nowrap;
       }
 
+      .kodewaves-chat-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .kodewaves-chat-brand-logo {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        object-fit: contain;
+        background: rgba(255, 255, 255, 0.14);
+        flex: 0 0 auto;
+      }
+
+      .kodewaves-chat-brand-copy {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .kodewaves-chat-brand-tagline {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        font-weight: 400;
+        opacity: 0.86;
+      }
+
       .kodewaves-chat-header-actions {
         display: inline-flex;
         align-items: center;
@@ -1619,10 +1651,33 @@
     const header = document.createElement('div');
     header.className = 'kodewaves-chat-header';
     header.style.backgroundColor = state.config.buttonColor;
+    const brand = document.createElement('div');
+    brand.className = 'kodewaves-chat-brand';
+    const logoUrl = state.config.branding?.logo_url;
+    if (logoUrl) {
+      const logo = document.createElement('img');
+      logo.className = 'kodewaves-chat-brand-logo';
+      logo.src = new URL(logoUrl, state.config.apiBaseUrl).toString();
+      logo.alt = '';
+      logo.referrerPolicy = 'no-referrer';
+      brand.appendChild(logo);
+    }
+
+    const brandCopy = document.createElement('div');
+    brandCopy.className = 'kodewaves-chat-brand-copy';
     const title = document.createElement('span');
     title.className = 'kodewaves-chat-header-title';
-    title.textContent = state.config.buttonText || 'Chat with Agent';
-    header.appendChild(title);
+    title.textContent = state.config.branding?.company_name || state.config.buttonText || 'Chat with Agent';
+    brandCopy.appendChild(title);
+    const tagline = state.config.branding?.tagline;
+    if (tagline) {
+      const subtitle = document.createElement('span');
+      subtitle.className = 'kodewaves-chat-brand-tagline';
+      subtitle.textContent = tagline;
+      brandCopy.appendChild(subtitle);
+    }
+    brand.appendChild(brandCopy);
+    header.appendChild(brand);
 
     const headerActions = document.createElement('div');
     headerActions.className = 'kodewaves-chat-header-actions';

@@ -1,11 +1,14 @@
 """Website widget CRUD backed by the standard public embed runtime."""
 
+import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from api.constants import KODEWAVES_EDITION
 from api.db import db_client
+from api.db.kodewaves_client import kodewaves_db_client
 from api.db import widgets as widget_db
 from api.db.models import UserModel
 from api.routes.workflow_embed import generate_embed_script
@@ -22,6 +25,7 @@ class WidgetItem(BaseModel):
     widget_name: str
     name: str | None = None
     primary_color: str = "#4f46e5"
+    use_installation_branding: bool = False
     bubble_title: str = "Talk to our AI Agent"
     welcome_message: str | None = None
     bubble_subtitle: str | None = "Click to start voice call"
@@ -38,7 +42,8 @@ class WidgetCreateRequest(BaseModel):
     agent_id: int | None = Field(default=None, gt=0)
     widget_name: str | None = Field(default=None, min_length=1, max_length=100)
     name: str | None = Field(default=None, min_length=1, max_length=100)
-    primary_color: str = Field(default="#4f46e5", pattern=r"^#[0-9a-fA-F]{6}$")
+    primary_color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    use_installation_branding: bool | None = None
     bubble_title: str | None = Field(default=None, max_length=100)
     welcome_message: str | None = Field(default=None, max_length=100)
     bubble_subtitle: str | None = Field(
@@ -56,15 +61,34 @@ def _organization_id(user):
     return user.selected_organization_id
 
 
-def _widget_item(widget, token):
+async def _installation_brand_color():
+    branding_key = "client_branding" if KODEWAVES_EDITION == "client" else "branding"
+    try:
+        branding = await kodewaves_db_client.get_setting(branding_key) or {}
+        if not branding and branding_key == "client_branding":
+            branding = await kodewaves_db_client.get_setting("branding") or {}
+        color = branding.get("primary_color") if isinstance(branding, dict) else None
+        if isinstance(color, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+            return color
+    except Exception:
+        # Existing widget configuration remains usable while branding storage
+        # is temporarily unavailable.
+        pass
+    return "#426b57"
+
+
+def _widget_item(widget, token, installation_color="#426b57"):
     snippet = generate_embed_script(token) if token else ""
+    token_settings = token.settings if token and isinstance(token.settings, dict) else {}
+    use_installation_branding = bool(token_settings.get("useInstallationBranding", False))
     return WidgetItem(
         id=str(widget.id),
         workflow_id=widget.workflow_id,
         agent_id=widget.workflow_id,
         widget_name=widget.widget_name,
         name=widget.widget_name,
-        primary_color=widget.primary_color,
+        primary_color=installation_color if use_installation_branding else widget.primary_color,
+        use_installation_branding=use_installation_branding,
         bubble_title=widget.bubble_title,
         welcome_message=widget.bubble_title,
         bubble_subtitle=widget.bubble_subtitle,
@@ -90,8 +114,14 @@ def _widget_values(req, creating):
             "workflow_id",
             "widget_name",
             "bubble_title",
+            "use_installation_branding",
         }
     }
+    # PATCH-style updates use ``None`` as the request-model default. An explicit
+    # JSON null must not overwrite the non-null database color column; callers
+    # can switch to installation branding with the dedicated boolean instead.
+    if not creating and "primary_color" in values and values["primary_color"] is None:
+        values.pop("primary_color", None)
     workflow_id = req.workflow_id or req.agent_id
     if workflow_id:
         values["workflow_id"] = workflow_id
@@ -101,6 +131,12 @@ def _widget_values(req, creating):
         values["widget_name"] = name or "Website Voice Widget"
     if title or creating:
         values["bubble_title"] = title or "Talk to our AI Agent"
+    if req.use_installation_branding is not None:
+        values["use_installation_branding"] = req.use_installation_branding
+    elif creating:
+        # Requests that leave the color unset inherit the installation brand;
+        # legacy clients that explicitly send a color keep that override.
+        values["use_installation_branding"] = "primary_color" not in req.model_fields_set
     return values
 
 
@@ -108,8 +144,9 @@ def _widget_values(req, creating):
 async def list_widgets(user: UserModel = Depends(get_user)):
     if not user.selected_organization_id:
         return []
+    installation_color = await _installation_brand_color()
     return [
-        _widget_item(*row)
+        _widget_item(*row, installation_color=installation_color)
         for row in await widget_db.list_widgets(user.selected_organization_id)
     ]
 
@@ -119,7 +156,7 @@ async def get_widget(widget_id: str, user: UserModel = Depends(get_user)):
     row = await widget_db.get_widget(_organization_id(user), widget_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Widget not found")
-    return _widget_item(*row)
+    return _widget_item(*row, installation_color=await _installation_brand_color())
 
 
 async def _save_widget(req, user, widget_id=None):
@@ -131,11 +168,14 @@ async def _save_widget(req, user, widget_id=None):
         workflow_id, organization_id=organization_id
     ):
         raise HTTPException(status_code=404, detail="Agent not found in this workspace")
+    values = _widget_values(req, widget_id is None)
+    if widget_id is None and values.get("primary_color") is None:
+        values["primary_color"] = await _installation_brand_color()
     try:
         widget, token = await widget_db.save_widget(
             organization_id,
             user.id,
-            _widget_values(req, widget_id is None),
+            values,
             widget_id,
         )
     except LookupError as exc:
@@ -182,10 +222,15 @@ async def get_public_widget_config(widget_id: str):
     if widget is None:
         raise HTTPException(status_code=404, detail="Widget not found or disabled")
     await enforce_saas_feature(widget.organization_id, "widgets")
+    installation_color = await _installation_brand_color()
+    row = await widget_db.get_widget(widget.organization_id, str(widget.id))
+    token = row[1] if row else None
+    token_settings = token.settings if token and isinstance(token.settings, dict) else {}
     return {
         "id": str(widget.id),
         "workflow_id": widget.workflow_id,
-        "primary_color": widget.primary_color,
+        "primary_color": installation_color if token_settings.get("useInstallationBranding") else widget.primary_color,
+        "use_installation_branding": bool(token_settings.get("useInstallationBranding", False)),
         "bubble_title": widget.bubble_title,
         "bubble_subtitle": widget.bubble_subtitle,
         "position": widget.position,
