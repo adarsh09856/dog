@@ -1022,6 +1022,7 @@ class CustomToolManager:
                             stop_event=hold_music_stop_event,
                             sample_rate=sample_rate,
                             queue_frame=self._engine._transport_output.queue_frame,
+                            chunk_ms=20,
                         )
                     )
 

@@ -636,6 +636,8 @@ def _explicit_caller_booking_date(
         date_like = any(
             token in _DATE_MONTHS or token in _DATE_SMALL_NUMBERS
             or token in _DATE_COMPOSITE_NUMBERS
+            or token in _DATE_HINDI_NUMBERS
+            or token in _DATE_HINGLISH_NUMBERS
             or (token.isdecimal() and len(token) in (1, 2, 4))
             for token in latest_tokens
         )

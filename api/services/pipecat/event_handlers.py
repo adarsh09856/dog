@@ -168,6 +168,7 @@ def register_event_handlers(
                                 stop_event=stop_ringer,
                                 sample_rate=sample_rate,
                                 queue_frame=transport.output().queue_frame,
+                                chunk_ms=20,
                             )
                         )
                         try:
