@@ -74,11 +74,11 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # word/date guards still prevent unsafe phrase boundaries.
                 first_phrase_characters=24,
                 # Keep the first phrase at 24 characters for quick audible
-                # response, then use longer follow-up phrases. Live Workflow
-                # 22 traces showed 1.58–1.61s PCM gaps when each short phrase
-                # required a new serial CPU synthesis request. Number/date
-                # boundary guards still keep spoken groups intact.
-                streaming_phrase_characters=72,
+                # response. Follow-up synthesis is serialized by the local
+                # CPU service, so larger batches amortize its per-request gap
+                # without delaying the first audio. Number/date guards keep
+                # numeric groups intact at phrase boundaries.
+                streaming_phrase_characters=112,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
