@@ -501,6 +501,12 @@
 .public-pricing section[aria-label="Subscription plans"] > article { box-shadow: 0 8px 24px -20px #142b2c60; border-radius: 12px; }
 /* Authenticated workspace: quieter canvas, stronger navigation, clear selection. */
 .app-surface { background-color: color-mix(in srgb, var(--background) 94%, var(--primary) 6%); }
+/* Keep customer brand color on actions and links; use the product's stable
+   evergreen accent for supporting app icons so they don't compete with the
+   forest/gold panel surfaces when a tenant chooses a contrasting brand hue. */
+.app-surface svg.text-primary { color: var(--brand-forest-accent); }
+.app-surface a svg.text-primary,
+.app-surface button svg.text-primary { color: inherit; }
 .app-sidebar-dock [data-slot="sidebar-inner"] { border-radius: 12px; border: 1px solid var(--sidebar-border); background: var(--sidebar); box-shadow: 0 8px 30px -23px #122b2c70; }
 .dark .app-sidebar-dock [data-slot="sidebar-inner"] { background: #142325; border-color: #314244; box-shadow: none; }
 .app-sidebar-dock [data-slot="sidebar-group-label"] { font-size: 9px; font-weight: 650; letter-spacing: .14em; padding-left: 12px; opacity: .8; }
