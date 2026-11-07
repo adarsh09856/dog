@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
+from api.constants import KODEWAVES_EDITION
 from api.db.kodewaves_client import kodewaves_db_client
 from api.schemas.branding import PlatformBranding
 from api.services.auth.depends import get_superuser
@@ -66,7 +67,10 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
     except SQLAlchemyError as exc:
         raise HTTPException(status_code=503, detail="Platform settings are unavailable. Retry before editing.") from exc
 
-    branding = settings_map.get("branding") or {}
+    branding_key = "client_branding" if KODEWAVES_EDITION == "client" else "branding"
+    # Preserve branding configured by older client builds while making the
+    # edition-scoped record authoritative for all subsequent edits.
+    branding = settings_map.get(branding_key) or settings_map.get("branding") or {}
     normalized_branding = PlatformBranding.model_validate(branding)
     byok = settings_map.get("byok_policy") or {}
     wallet = settings_map.get("wallet_policy") or {}
@@ -120,6 +124,7 @@ async def get_all_platform_settings(_user=Depends(get_superuser)):
 @router.post("")
 async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_superuser)):
     """Update global platform configuration (Branding, BYOK policy, SMTP, Payments, Local AI)."""
+    branding_key = "client_branding" if KODEWAVES_EDITION == "client" else "branding"
     smtp_fields = {"smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from"}
     local_ai_fields = {
         "enable_local_ai_engine", "local_ai_access_policy", "ollama_endpoint",
@@ -138,7 +143,11 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
     if structured_fields.intersection(payload):
         # 1. Branding
         if any(key in payload for key in PlatformBranding.model_fields):
-            existing_branding = await kodewaves_db_client.get_setting("branding") or {}
+            existing_branding = (
+                await kodewaves_db_client.get_setting(branding_key)
+                or (await kodewaves_db_client.get_setting("branding") if branding_key != "branding" else {})
+                or {}
+            )
             try:
                 branding = PlatformBranding.model_validate({
                     **existing_branding,
@@ -146,7 +155,7 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
                 }).model_dump()
             except ValidationError as exc:
                 raise HTTPException(status_code=422, detail="Invalid branding settings: " + str(exc)) from exc
-            await kodewaves_db_client.set_setting(key="branding", value=branding, category="branding")
+            await kodewaves_db_client.set_setting(key=branding_key, value=branding, category=branding_key)
 
         # 2. BYOK Policy
         if "allow_user_byok" in payload:
@@ -216,7 +225,7 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
                 action="settings.update",
                 resource_type="platform_settings",
                 resource_id="global",
-                changes={"categories": ["branding", "policy", "local_ai", "payments"]},
+                changes={"categories": [branding_key, "policy", "local_ai", "payments"]},
             )
         except Exception:
             pass
@@ -229,11 +238,14 @@ async def update_platform_settings(payload: Dict[str, Any], _user=Depends(get_su
     value = payload.get("value")
     category = payload.get("category", "general")
     if key and value is not None:
-        if key == "branding":
+        if key in {"branding", "client_branding"}:
             try:
                 value = PlatformBranding.model_validate(value).model_dump()
             except ValidationError as exc:
                 raise HTTPException(status_code=422, detail="Invalid branding settings") from exc
+            if KODEWAVES_EDITION == "client":
+                key = "client_branding"
+                category = key
         await kodewaves_db_client.set_setting(key=key, value=value, category=category)
         await catalog_service.notify_changed()
         return {"message": f"Successfully updated setting '{key}'"}

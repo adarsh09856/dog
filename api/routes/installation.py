@@ -160,6 +160,10 @@ async def get_client_branding() -> ClientBranding:
     key = "client_branding" if KODEWAVES_EDITION == "client" else "branding"
     try:
         current = await kodewaves_db_client.get_setting(key, raise_on_error=True) or {}
+        # Read the former shared key as a compatibility fallback for client
+        # installations upgraded from builds that stored branding globally.
+        if not current and key == "client_branding":
+            current = await kodewaves_db_client.get_setting("branding", raise_on_error=True) or {}
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Branding is temporarily unavailable") from exc
     return ClientBranding.model_validate(current)
