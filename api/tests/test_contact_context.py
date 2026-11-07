@@ -187,8 +187,10 @@ def test_ambiguous_spoken_time_is_clarified_instead_of_left_for_llm_to_guess():
 
     reply = booking_time_confirmation_question(messages, state)
 
-    assert reply == "Please give the time with AM or PM, for example, 5 PM."
+    assert reply == "You said 10:30. Is that AM or PM?"
     assert state["booking_time_question_date"] == "2026-11-01"
+    assert state["booking_pending_time_hour"] == 10
+    assert state["booking_pending_time_minute"] == 30
     assert "booking_confirmation_slot" not in state
 
 

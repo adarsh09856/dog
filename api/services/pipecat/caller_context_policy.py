@@ -1,14 +1,14 @@
 """Provider-neutral caller context shared by every cascade agent LLM."""
 
-import re
-
 from pipecat.frames.frames import (
     CancelFrame,
     EndFrame,
     ErrorFrame,
     Frame,
     LLMContextFrame,
+    LLMFullResponseStartFrame,
     LLMFullResponseEndFrame,
+    LLMTextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
@@ -55,6 +55,23 @@ class CallerContextPolicyProcessor(FrameProcessor):
         self._llm_service = llm_service
         self._policy_state = policy_state
         self._phone_followup = None
+        self._direct_reply = None
+
+    async def _emit_direct_reply(self, text: str) -> bool:
+        """Push deterministic follow-ups through the normal transcript/TTS path."""
+        push_frame = getattr(self._llm_service, "push_frame", None)
+        if not callable(push_frame):
+            return False
+        speculation_gate = getattr(self._llm_service, "_speculation_gate", None)
+        begin_speculation = getattr(speculation_gate, "begin_speculation", None)
+        if callable(begin_speculation):
+            # This context is the confirmed, non-speculative turn that would
+            # normally reset the provider gate before generation begins.
+            begin_speculation(False)
+        await push_frame(LLMFullResponseStartFrame())
+        await push_frame(LLMTextFrame(text))
+        await push_frame(LLMFullResponseEndFrame())
+        return True
 
     async def _prepare_context(self, frame: LLMContextFrame):
         if frame.speculation:
@@ -68,26 +85,15 @@ class CallerContextPolicyProcessor(FrameProcessor):
 
         context = frame.context
         messages = context.get_messages()
+        self._direct_reply = None
         state = getattr(self._llm_service, "_contact_conversation_state", None)
         if not isinstance(state, dict):
             state = {}
             self._llm_service._contact_conversation_state = state
         remember_recent_caller_statements(messages, state)
-        remember_explicit_caller_name(messages, state)
-
-        # Resolve phone capture and confirmation before calling any provider.
-        # This is the same shared parser used by the local-provider mixin, now
-        # available to native and custom cascade LLM services too.
-        from api.services.workflow.contact_context import caller_phone_fragment_reply
-
-        tools = getattr(getattr(context, "tools", None), "standard_tools", [])
-        booking_available = any(
-            getattr(tool, "name", None) == "book_appointment" for tool in tools
-        )
-        phone_reply = caller_phone_fragment_reply(
-            messages, state, booking_available=booking_available
-        )
-        self._phone_followup = phone_reply
+        name_memory_reply = remember_explicit_caller_name(messages, state)
+        if name_memory_reply:
+            self._direct_reply = name_memory_reply
 
         from api.services.pipecat.caller_language_context import (
             reply_language_switch_capabilities,
@@ -101,6 +107,7 @@ class CallerContextPolicyProcessor(FrameProcessor):
             None,
         )
         latest_text = latest_user.get("content", "") if latest_user else ""
+        explicit_language_selected = False
         if isinstance(latest_text, str):
             source = getattr(self._llm_service, "_caller_language_source", None)
             supported = reply_language_switch_capabilities(
@@ -118,7 +125,49 @@ class CallerContextPolicyProcessor(FrameProcessor):
                         selected = False
                 if selected is not False:
                     state["reply_language"] = requested
-            sync_contact_reply_language(state, source)
+                    explicit_language_selected = True
+                    self._direct_reply = (
+                        "Yes, we can continue in English."
+                        if requested == "English"
+                        else "ज़रूर, हम हिंदी में बात कर सकते हैं।"
+                    )
+            phone_capture_turn = bool(
+                state.get("awaiting_phone")
+                or state.get("caller_phone_confirmation_pending")
+            )
+            if not explicit_language_selected and not phone_capture_turn:
+                sync_contact_reply_language(state, source)
+
+        # Resolve phone capture after language selection so a clear language
+        # request cannot be consumed as an invalid phone answer.
+        from api.services.workflow.contact_context import caller_phone_fragment_reply
+
+        tools = getattr(getattr(context, "tools", None), "standard_tools", [])
+        booking_available = any(
+            getattr(tool, "name", None) == "book_appointment" for tool in tools
+        )
+        phone_reply = None
+        if not self._direct_reply:
+            from api.services.workflow.contact_context import caller_name_followup_reply
+
+            known_phone = (getattr(self._llm_service, "_known_contact", {}) or {}).get(
+                "customer_phone"
+            )
+            name_followup = caller_name_followup_reply(
+                messages,
+                state,
+                booking_available=booking_available,
+                known_phone=known_phone,
+            )
+            if name_followup:
+                self._direct_reply = name_followup
+        if not self._direct_reply:
+            phone_reply = caller_phone_fragment_reply(
+                messages, state, booking_available=booking_available
+            )
+        self._phone_followup = phone_reply
+        if phone_reply:
+            self._direct_reply = phone_reply
 
         detail = caller_state_instruction(state, visible_messages=messages)
         language = state.get("reply_language")
@@ -138,20 +187,22 @@ class CallerContextPolicyProcessor(FrameProcessor):
                 "again. Continue by asking only the next missing detail: "
                 + self._phone_followup
             )
-        if booking_available and not any(
-            base.__name__ == "_BookingToolChoiceMixin"
-            for base in type(self._llm_service).__mro__
-        ):
-            # The local/OpenAI mixin already runs these stateful parsers inside
-            # its provider service. Run them here only for native providers so
-            # the same exact date/time interpretation reaches every cascade
-            # backend without double-consuming a slot on existing services.
-            from api.services.workflow.contact_context import (
-                booking_date_time_question,
-                booking_time_confirmation_question,
-            )
+        if booking_available and not self._direct_reply:
+            # Run the same contact-and-booking state machine before every
+            # cascade provider. If it resolves the next follow-up, emit that
+            # exact reply and skip the provider so a smaller/custom model
+            # cannot repeat a stale question or invent a time.
+            from api.services.workflow.contact_context import booking_contact_question
 
             contact = getattr(self._llm_service, "_known_contact", {})
+            if not isinstance(contact, dict):
+                contact = {}
+            else:
+                contact = dict(contact)
+            if state.get("caller_name"):
+                contact["customer_name"] = state["caller_name"]
+            if state.get("caller_phone"):
+                contact["customer_phone"] = state["caller_phone"]
             recent = state.get("recent_caller_statements")
             visible_user = {
                 " ".join(item["content"].split()).casefold()
@@ -169,33 +220,9 @@ class CallerContextPolicyProcessor(FrameProcessor):
                 *({"role": "user", "content": statement} for statement in hidden_statements),
                 *messages,
             ]
-            latest_user = next(
-                (item.get("content", "") for item in reversed(messages)
-                 if isinstance(item, dict) and item.get("role") == "user"),
-                "",
+            self._direct_reply = booking_contact_question(
+                parser_messages, contact, state
             )
-            has_new_slot = isinstance(latest_user, str) and bool(re.search(
-                r"\b(?:tomorrow|today|kal|aaj|at\s+\d{1,2}|\d{1,2}(?::\d{2})?\s*"
-                r"(?:a\.?m\.?|p\.?m\.?|am|pm)|(?:eight|nine|ten|eleven|twelve)\s*"
-                r"(?:a\.?m\.?|p\.?m\.?|am|pm))\b|कल|आज|बजे|सुबह|दोपहर|शाम|रात",
-                latest_user, re.IGNORECASE,
-            ))
-            if has_new_slot and not re.fullmatch(
-                r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|हाँ|हां|जी|ठीक है)[.!?\s।]*",
-                latest_user, re.IGNORECASE,
-            ):
-                state.pop("booking_slot_candidate", None)
-                state.pop("booking_confirmation_slot", None)
-            date_followup = booking_date_time_question(parser_messages, state, contact)
-            time_followup = booking_time_confirmation_question(parser_messages, state)
-            slot_followup = time_followup or date_followup
-            if slot_followup:
-                policy += (
-                    " The latest caller date/time was parsed by the shared booking "
-                    "rules. Do not reuse an older assistant suggestion or invent a "
-                    "date/time. Continue with this exact follow-up: "
-                    + slot_followup
-                )
 
         message = {"role": "system", "content": policy}
         first_user = next(
@@ -215,6 +242,11 @@ class CallerContextPolicyProcessor(FrameProcessor):
             self._policy_state.remove()
             self._phone_followup = None
             await self._prepare_context(frame)
+            if self._direct_reply and await self._emit_direct_reply(self._direct_reply):
+                self._policy_state.remove()
+                self._direct_reply = None
+                self._phone_followup = None
+                return
 
         await self.push_frame(frame, direction)
 

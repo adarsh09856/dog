@@ -1653,6 +1653,30 @@ def booking_time_confirmation_question(
     latest = users[-1]["content"].strip()
     if not latest:
         return None
+    today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
+    affirmative = re.fullmatch(
+        r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|haan|han|ji|हाँ|हां|जी|ठीक है)[.!?।\s]*",
+        latest,
+        re.IGNORECASE,
+    )
+    has_new_date = bool(re.search(r"\b(?:tomorrow|today|kal|aaj)\b|कल|आज", latest, re.I))
+    if not has_new_date:
+        has_new_date = _explicit_caller_booking_date(
+            [latest], reference_date=today
+        ) is not None
+    has_new_time = bool(re.search(
+        r"\b(?:at\s+)?(?:\d{1,2}|[a-z]+)(?:\s+\w+)?\s*"
+        r"(?:a\.?m\.?|p\.?m\.?|am|pm|morning|afternoon|evening|night)\b"
+        r"|(?:सुबह|दोपहर|शाम|रात)|\b\d{1,2}:\d{2}\b",
+        latest,
+        re.IGNORECASE,
+    ))
+    if (has_new_date or has_new_time) and not affirmative:
+        # A fresh caller slot supersedes an old model-proposed candidate. Clear
+        # it before the readback branch so every provider/mixin parses the new
+        # date or time from this turn instead of repeating the stale proposal.
+        state.pop("booking_slot_candidate", None)
+        state.pop("booking_confirmation_slot", None)
     candidate = state.get("booking_slot_candidate")
     if allow_readback and isinstance(candidate, str) and re.fullmatch(
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", candidate
@@ -1699,7 +1723,6 @@ def booking_time_confirmation_question(
                     f"{candidate_time.minute:02d} बजे भारतीय समय। "
                     "क्या इस समय के लिए बुकिंग कर दूँ?"
                 )
-    today = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
     stated_date = None
     if re.search(r"\b(?:tomorrow|today|kal|aaj)\b|कल|आज", latest, re.I):
         if re.search(r"\b(?:tomorrow|kal)\b|कल", latest, re.I):
