@@ -96,6 +96,8 @@ class CallerContextPolicyProcessor(FrameProcessor):
             self._direct_reply = name_memory_reply
 
         from api.services.pipecat.caller_language_context import (
+            CallerLanguageContext,
+            _requested_language,
             reply_language_switch_capabilities,
             standalone_language_request,
             sync_contact_reply_language,
@@ -114,7 +116,14 @@ class CallerContextPolicyProcessor(FrameProcessor):
                 getattr(self._llm_service, "_caller_language_supported_codes", None),
                 source,
             )
-            requested = standalone_language_request(latest_text, supported)
+            language_context = getattr(
+                self._llm_service, "_caller_language_context", None
+            )
+            if not isinstance(language_context, CallerLanguageContext):
+                language_context = CallerLanguageContext()
+                self._llm_service._caller_language_context = language_context
+            requested = _requested_language(latest_text, supported)
+            standalone_request = standalone_language_request(latest_text, supported)
             select_language = getattr(source, "select_caller_language", None)
             if requested:
                 selected = True
@@ -124,13 +133,31 @@ class CallerContextPolicyProcessor(FrameProcessor):
                     except Exception:
                         selected = False
                 if selected is not False:
+                    language_context.choose_language(
+                        requested, source, text=latest_text
+                    )
+                    # The context owns explicit preference lifetime and the
+                    # recognizer's TTS override. Contact state below then uses
+                    # that same validated route instead of the latest raw LID.
+                    language_context.apply(
+                        messages, source, supported_languages=supported
+                    )
                     state["reply_language"] = requested
                     explicit_language_selected = True
-                    self._direct_reply = (
-                        "Yes, we can continue in English."
-                        if requested == "English"
-                        else "ज़रूर, हम हिंदी में बात कर सकते हैं।"
-                    )
+                    if standalone_request:
+                        self._direct_reply = (
+                            "Yes, we can continue in English."
+                            if requested == "English"
+                            else "ज़रूर, हम हिंदी में बात कर सकते हैं।"
+                        )
+            else:
+                # Keep the same call-scoped language state used by the booking
+                # mixin. It preserves explicit choices across turns and clears
+                # them only when a later, supported caller language resumes
+                # automatic routing.
+                language_context.apply(
+                    messages, source, supported_languages=supported
+                )
             phone_capture_turn = bool(
                 state.get("awaiting_phone")
                 or state.get("caller_phone_confirmation_pending")
