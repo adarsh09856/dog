@@ -8,6 +8,7 @@ Implements OpenTelemetry tracing for observability in Langfuse.
 
 import json
 import re
+import unicodedata
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -23,6 +24,9 @@ MAX_WEBSITE_RETRIEVAL_PASSAGES = 5
 MAX_WEBSITE_RETRIEVAL_CHARS = 4000
 MAX_FULL_TEXT_RETRIEVAL_PASSAGES = 3
 MAX_FULL_TEXT_PASSAGE_CHARS = 1000
+MAX_VECTOR_PASSAGE_CHARS = 1600
+MAX_KB_RETRIEVAL_PASSAGES = 6
+MAX_KB_RETRIEVAL_CHARS = 6000
 
 _RETRIEVAL_STOP_WORDS = {
     "the", "is", "a", "an", "what", "how", "when", "where", "who", "do",
@@ -33,11 +37,35 @@ _RETRIEVAL_STOP_WORDS = {
 }
 
 
+def _unicode_tokens(text: str) -> list[str]:
+    """Tokenize Unicode letters, numbers, and marks without breaking Indic words."""
+    normalized = unicodedata.normalize("NFC", text).casefold()
+    tokens: list[str] = []
+    current: list[str] = []
+    for character in normalized:
+        category = unicodedata.category(character)
+        if category[0] in {"L", "N"} or (category[0] == "M" and current):
+            current.append(character)
+        elif current:
+            tokens.append("".join(current))
+            current = []
+    if current:
+        tokens.append("".join(current))
+    return tokens
+
+
 def _query_terms(query: str) -> set[str]:
     """Return meaningful Unicode words for conservative lexical matching."""
-    tokens = re.findall(r"[\w\u0900-\u097f]+", query.casefold())
-    terms = {token for token in tokens if len(token) > 1 and token not in _RETRIEVAL_STOP_WORDS}
-    return terms
+    return {
+        token for token in _unicode_tokens(query)
+        if token not in _RETRIEVAL_STOP_WORDS
+        and (len(token) > 1 or token.isdecimal())
+    }
+
+
+def _passage_terms(text: str) -> set[str]:
+    """Use the same Unicode-aware tokenization for query and document text."""
+    return set(_unicode_tokens(text))
 
 
 def _text_passages_matching_query(
@@ -68,10 +96,12 @@ def _text_passages_matching_query(
             continue
         parts.extend(part[start : start + max_chars] for start in range(0, len(part), max_chars))
 
-    min_hits = 1 if len(terms) <= 2 else max(2, (len(terms) + 2) // 3)
+    # For two meaningful query terms, require both; otherwise an incidental
+    # one-word overlap can still select an unrelated source passage.
+    min_hits = len(terms) if len(terms) <= 2 else max(2, (len(terms) + 2) // 3)
     candidates: list[dict[str, Any]] = []
     for index, part in enumerate(parts):
-        words = set(re.findall(r"[\w\u0900-\u097f]+", part.casefold()))
+        words = _passage_terms(part)
         hits = terms & words
         coverage = len(hits) / len(terms)
         if len(hits) < min_hits or coverage < 0.34:
@@ -410,9 +440,9 @@ async def _perform_retrieval(
             )
 
             for result in results:
+                result_text = result.get("contextualized_text") or result.get("chunk_text")
                 chunk_info = {
-                    "text": result.get("contextualized_text")
-                    or result.get("chunk_text"),
+                    "text": str(result_text or "")[:MAX_VECTOR_PASSAGE_CHARS],
                     "filename": result.get("filename"),
                     "similarity": round(result.get("similarity", 0), 4),
                     "chunk_index": result.get("chunk_index"),
@@ -431,6 +461,24 @@ async def _perform_retrieval(
             if text:
                 chunks.append({**passage, "text": text})
                 website_budget -= len(text)
+
+        # Bound the complete tool result, including vector text, full documents,
+        # and organization-wide website material, before it reaches any agent.
+        chunks.sort(key=lambda item: item["similarity"], reverse=True)
+        bounded_chunks: list[dict[str, Any]] = []
+        remaining_chars = MAX_KB_RETRIEVAL_CHARS
+        for chunk in chunks:
+            if remaining_chars <= 0 or len(bounded_chunks) >= MAX_KB_RETRIEVAL_PASSAGES:
+                break
+            text = str(chunk.get("text") or "").strip()
+            if not text:
+                continue
+            if len(text) > remaining_chars:
+                text = text[:remaining_chars].rsplit(" ", 1)[0]
+            if text:
+                bounded_chunks.append({**chunk, "text": text})
+                remaining_chars -= len(text)
+        chunks = bounded_chunks
 
         logger.info(
             f"Knowledge base retrieval: query='{query}', "
