@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+from loguru import logger
 from pipecat.bus.bridge_processor import BusBridgeProcessor
 from pipecat.bus.messages import BusFrameMessage, BusMessage
 from pipecat.frames.frames import (
@@ -84,8 +85,39 @@ class AgentBridgeProcessor(BusBridgeProcessor):
             if not isinstance(frame, TEED_FRAMES):
                 return
         target = self._selected_visit()
-        if isinstance(frame, LLMContextFrame) and not self._allow_inference():
-            return
+        if isinstance(frame, LLMContextFrame):
+            allowed = self._allow_inference()
+            user_chars = sum(
+                len(message.get("content", ""))
+                for message in frame.context.messages
+                if isinstance(message, dict)
+                and message.get("role") == "user"
+                and isinstance(message.get("content"), str)
+            )
+            if not allowed:
+                logger.warning(
+                    "voice_dispatch_trace run={} event=context_dropped reason=transfer_in_progress target={} speculative={} user_chars={}",
+                    self._worker_name,
+                    target or "none",
+                    frame.speculation,
+                    user_chars,
+                )
+                return
+            if target is None:
+                logger.error(
+                    "voice_dispatch_trace run={} event=context_dropped reason=no_active_agent speculative={} user_chars={}",
+                    self._worker_name,
+                    frame.speculation,
+                    user_chars,
+                )
+                return
+            logger.info(
+                "voice_dispatch_trace run={} event=context_forwarded visit={} speculative={} user_chars={}",
+                self._worker_name,
+                target,
+                frame.speculation,
+                user_chars,
+            )
         if isinstance(frame, PipelineFlushFrame) and target is None:
             await self.push_frame(frame, direction)
             return

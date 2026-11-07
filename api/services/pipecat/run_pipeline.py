@@ -1333,6 +1333,15 @@ async def _run_pipeline_impl(
         recognition_timeout_seconds=getattr(stt, "recognition_timeout_seconds", None),
     )
 
+    logger.info(
+        "[run {}] Voice turn config start={} stop={} local_segmented_stt={} stop_timeout_s={}",
+        workflow_run_id,
+        ",".join(type(strategy).__name__ for strategy in user_turn_strategies.start or []),
+        ",".join(type(strategy).__name__ for strategy in user_turn_strategies.stop or []),
+        local_segmented_stt,
+        user_turn_stop_timeout,
+    )
+
     user_params = LLMUserAggregatorParams(
         user_turn_strategies=user_turn_strategies,
         should_interrupt=engine.should_interrupt_user_turn,
@@ -1364,6 +1373,58 @@ async def _run_pipeline_impl(
             )
         )
         engine.greeting.bind(user_context_aggregator)
+
+    # Trace the boundaries that decide whether finalized speech reaches the
+    # selected agent. Log only sizes and strategy names; never caller text.
+    def _trace_voice_turn(event, *, strategy=None, chars=None, speculative=None):
+        logger.info(
+            "voice_turn_trace run={} event={} strategy={} chars={} speculative={}",
+            workflow_run_id,
+            event,
+            type(strategy).__name__ if strategy is not None else "none",
+            chars,
+            speculative,
+        )
+
+    def _on_voice_turn_started(_aggregator, strategy, *_args):
+        _trace_voice_turn("started", strategy=strategy)
+
+    def _on_voice_turn_stopped(_aggregator, strategy, message, *_args):
+        content = getattr(message, "content", None)
+        _trace_voice_turn(
+            "stopped",
+            strategy=strategy,
+            chars=len(content) if isinstance(content, str) else 0,
+        )
+
+    def _on_voice_turn_message_added(_aggregator, message, *_args):
+        content = getattr(message, "content", None)
+        _trace_voice_turn(
+            "message_added",
+            chars=len(content) if isinstance(content, str) else 0,
+        )
+
+    def _on_voice_turn_inference(_controller, strategy, speculation, *_args):
+        speculative = speculation is not None
+        _trace_voice_turn(
+            "inference_requested",
+            strategy=strategy,
+            chars=len(getattr(speculation, "text", "")) if speculative else None,
+            speculative=speculative,
+        )
+
+    user_context_aggregator.add_event_handler(
+        "on_user_turn_started", _on_voice_turn_started
+    )
+    user_context_aggregator.add_event_handler(
+        "on_user_turn_stopped", _on_voice_turn_stopped
+    )
+    user_context_aggregator.add_event_handler(
+        "on_user_turn_message_added", _on_voice_turn_message_added
+    )
+    user_context_aggregator.user_turn_controller.add_event_handler(
+        "on_user_turn_inference_triggered", _on_voice_turn_inference
+    )
 
     # Every cascade call runs the split pipeline: everything call-scoped stays
     # here and the generation stage (LLM through TTS) runs in a worker per
