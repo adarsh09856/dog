@@ -88,6 +88,7 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
         assert set(archive.getnames()) == {
             "README.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "docker-compose.recovery.yaml", "Caddyfile", "validate_install.py", "enroll_identity.py",
             "recovery.py", "compose_client.py", "recovery_lock.py", "verify_installer.py", "update_agent.py", "kodewaves-client-update.service", "kodewaves-client-update.timer", ".env.example", "client-release-manifest.json", "release-public-key.txt", "SHA256SUMS",
+            "THIRD_PARTY_NOTICES.txt", "AGPL-3.0-PGSTY-Silo.txt", "PGSTY-Silo-NOTICE.txt", "PGSTY-Silo-CREDITS.txt", packager.SILO_SOURCE_ARCHIVE_NAME,
         }
         contents = {name: archive.extractfile(name).read() for name in archive.getnames()}
         assert archive.getmember(".env.example").mode == 0o600
