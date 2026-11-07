@@ -76,6 +76,9 @@ _PACKAGE_FILES = {
     "verify_installer.py", "update_agent.py", "kodewaves-client-update.service",
     "kodewaves-client-update.timer", ".env.example", "client-release-manifest.json",
     "release-public-key.txt", "SHA256SUMS",
+    "THIRD_PARTY_NOTICES.txt", "AGPL-3.0-PGSTY-Silo.txt",
+    "PGSTY-Silo-NOTICE.txt", "PGSTY-Silo-CREDITS.txt",
+    "silo-source-RELEASE.2026-10-26T00-00-00Z.tar.gz",
 }
 
 

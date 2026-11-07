@@ -40,6 +40,10 @@ _IMAGE_REF = re.compile(
     rf"^(?:[a-z0-9][a-z0-9.-]*(?::[0-9]{{1,5}})?/)?{_IMAGE_PATH}(?:/{_IMAGE_PATH})*@sha256:[0-9a-f]{{64}}$"
 )
 _LOCAL_MINIO_TAG = re.compile(r"^kw-lifecycle-[0-9a-f]{12}-minio:acceptance$")
+_APPROVED_OBJECT_STORAGE_IMAGE = "docker.io/pgsty/silo@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7"
+_SILO_RELEASE = "RELEASE.2026-10-26T00-00-00Z"
+_SILO_SOURCE = "https://github.com/pgsty/silo"
+_SILO_SOURCE_REVISION = "c3ad836aed0d8a7d23c2e44a5eaa3009d08525e3"
 _REVISION = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 _FLOW_ORDER = (
     "prior_release_validated", "synthetic_data_seeded", "backup_created",
@@ -55,6 +59,8 @@ def validate_inputs(args: argparse.Namespace) -> None:
             raise ValueError(f"{label} image must be a full immutable image@sha256 reference")
     if not re.fullmatch(r"[0-9a-f]{40}", args.prior_commit):
         raise ValueError("prior_commit must be a full 40-character Git commit SHA")
+    if getattr(args, "minio_image", None) not in (None, _APPROVED_OBJECT_STORAGE_IMAGE):
+        raise ValueError("minio_image must use the approved PGSTY Silo digest")
 
 
 def validate_flow_order(completed: list[str]) -> None:
@@ -77,7 +83,7 @@ def validate_migration_compatibility(prior_source: Path, candidate_source: Path)
 
 
 def _build_lifecycle_minio(image_tag: str) -> str:
-    """Build the pinned-version MinIO fixture locally and return its immutable image ID."""
+    """Build the pinned Silo storage fixture locally and return its immutable image ID."""
     if not _LOCAL_MINIO_TAG.fullmatch(image_tag):
         raise ValueError("Lifecycle MinIO tag must be scoped to a generated acceptance project")
     dockerfile = ROOT / "deploy/minio/Dockerfile"
@@ -91,12 +97,39 @@ def _build_lifecycle_minio(image_tag: str) -> str:
     return _image_id(image_tag)
 
 
+def _verify_silo_image_provenance(image_ref: str) -> dict[str, str]:
+    """Require the pinned registry image metadata to identify its exact source tag."""
+    if image_ref != _APPROVED_OBJECT_STORAGE_IMAGE:
+        raise ValueError("Object storage image is not the approved PGSTY Silo digest")
+    raw_labels = _run(["docker", "image", "inspect", "--format", "{{json .Config.Labels}}", image_ref])
+    try:
+        labels = json.loads(raw_labels)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ValueError("PGSTY Silo image provenance labels are invalid") from exc
+    if not isinstance(labels, dict):
+        raise ValueError("PGSTY Silo image provenance labels are missing")
+    provenance = {
+        "source": labels.get("org.opencontainers.image.source"),
+        "revision": labels.get("org.opencontainers.image.revision"),
+        "version": labels.get("org.opencontainers.image.version"),
+    }
+    expected = {
+        "source": _SILO_SOURCE,
+        "revision": _SILO_SOURCE_REVISION,
+        "version": _SILO_RELEASE,
+    }
+    if provenance != expected:
+        raise ValueError("PGSTY Silo image digest does not match the approved source tag")
+    return provenance
+
+
 def self_test() -> None:
     """Fast, Docker-free regression checks for pins, data assertions, cleanup, and order."""
     args = argparse.Namespace(
         prior_commit="a" * 40,
         coturn_image="registry.example.invalid/coturn@sha256:" + "b" * 64,
         caddy_image="registry.example.invalid/caddy@sha256:" + "c" * 64,
+        minio_image=None,
     )
     validate_inputs(args)
     for name in ("coturn_image", "caddy_image"):
@@ -109,6 +142,30 @@ def self_test() -> None:
         else:
             raise AssertionError(f"mutable {name} was accepted")
         setattr(args, name, original)
+    args.minio_image = "docker.io/pgsty/silo:latest"
+    try:
+        validate_inputs(args)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("mutable object-storage image was accepted")
+    args.minio_image = _APPROVED_OBJECT_STORAGE_IMAGE
+    validate_inputs(args)
+    provenance_labels = {
+        "org.opencontainers.image.source": _SILO_SOURCE,
+        "org.opencontainers.image.revision": _SILO_SOURCE_REVISION,
+        "org.opencontainers.image.version": _SILO_RELEASE,
+    }
+    with patch(__name__ + "._run", return_value=json.dumps(provenance_labels)) as run:
+        assert _verify_silo_image_provenance(_APPROVED_OBJECT_STORAGE_IMAGE)["revision"] == _SILO_SOURCE_REVISION
+        run.assert_called_once()
+    with patch(__name__ + "._run", return_value="{}"):
+        try:
+            _verify_silo_image_provenance(_APPROVED_OBJECT_STORAGE_IMAGE)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Silo image with missing provenance was accepted")
     validate_flow_order(list(_FLOW_ORDER))
     try:
         validate_flow_order([_FLOW_ORDER[0], _FLOW_ORDER[2], _FLOW_ORDER[1], *_FLOW_ORDER[3:]])
@@ -510,6 +567,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": "failed", "candidate_commit": head, "prior_commit": args.prior_commit,
         "prior_schema_head": prior_head, "candidate_schema_head": candidate_head,
+        "object_storage_image": args.minio_image or "local-minio-fixture",
+        "object_storage_image_provenance": None,
         "production_release": False, "data_is_synthetic": True,
         "rollback_authorization": "ephemeral signed acceptance fixture; not a production release claim",
     }
@@ -540,10 +599,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         )
         shutil.copy2(ROOT / "deploy/client/docker-compose.recovery.yaml", compose_dir)
         shutil.copy2(ROOT / "deploy/client/Caddyfile", compose_dir)
-        minio_tag = project + "-minio:acceptance"
-        images_to_remove.add(minio_tag)
-        active_phase = "build_local_minio_fixture"
-        minio_image_id = _build_lifecycle_minio(minio_tag)
+        if args.minio_image:
+            minio_tag = args.minio_image
+            images_to_remove.add(minio_tag)
+            active_phase = "pull_approved_object_storage"
+            _run(["docker", "pull", minio_tag], timeout=1200)
+            result["object_storage_image_provenance"] = _verify_silo_image_provenance(minio_tag)
+            minio_image_id = _image_id(minio_tag)
+        else:
+            minio_tag = project + "-minio:acceptance"
+            images_to_remove.add(minio_tag)
+            active_phase = "build_local_minio_fixture"
+            minio_image_id = _build_lifecycle_minio(minio_tag)
         result["dependency_image_ids_sha256"] = {
             "postgres": hashlib.sha256(_CI_POSTGRES_IMAGE.encode()).hexdigest(),
             "redis": hashlib.sha256(_CI_REDIS_IMAGE.encode()).hexdigest(),
@@ -879,6 +946,7 @@ def main() -> int:
     parser.add_argument("--candidate-commit")
     parser.add_argument("--coturn-image")
     parser.add_argument("--caddy-image")
+    parser.add_argument("--minio-image", help="Approved PGSTY Silo image digest used for production storage acceptance")
     parser.add_argument("--report")
     args = parser.parse_args()
     try:
@@ -890,6 +958,8 @@ def main() -> int:
         missing = [name for name in required if getattr(args, name) is None]
         if missing:
             parser.error("required unless --self-test: " + ", ".join("--" + name.replace("_", "-") for name in missing))
+        if args.minio_image is None:
+            parser.error("--minio-image is required unless --self-test")
         result = run(args)
         print(json.dumps({"status": result["status"], "report": str(Path(args.report).resolve())}))
         return 0 if result["status"] == "passed" else 1

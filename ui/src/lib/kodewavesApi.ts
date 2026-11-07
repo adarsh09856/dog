@@ -621,6 +621,7 @@ export interface WebsiteWidget {
   agent_id?: number;
   workflow_id?: number;
   primary_color: string;
+  use_installation_branding?: boolean;
   position: 'bottom-right' | 'bottom-left' | string;
   welcome_message?: string;
   bubble_title?: string;

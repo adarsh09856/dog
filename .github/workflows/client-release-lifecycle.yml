@@ -56,6 +56,7 @@ jobs:
           PRIOR_COMMIT: ${{ inputs.prior_commit || github.event.before }}
           COTURN_IMAGE: ${{ inputs.coturn_image || 'coturn/coturn@sha256:bbefd3e1fdfdc0d58770fe01b581fd8b00d9f3a5580d00acb77cf719a6bc78e3' }}
           CADDY_IMAGE: ${{ inputs.caddy_image || 'caddy@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f' }}
+          MINIO_IMAGE: docker.io/pgsty/silo@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7
           CANDIDATE_COMMIT: ${{ github.sha }}
           LIFECYCLE_REPORT: ${{ runner.temp }}/client-release-lifecycle.json
         run: >-
@@ -65,6 +66,7 @@ jobs:
           --candidate-commit "$CANDIDATE_COMMIT"
           --coturn-image "$COTURN_IMAGE"
           --caddy-image "$CADDY_IMAGE"
+          --minio-image "$MINIO_IMAGE"
           --report "$LIFECYCLE_REPORT"
       - name: Preserve sanitized lifecycle report
         if: always()

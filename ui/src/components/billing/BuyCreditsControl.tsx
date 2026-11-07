@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { apiFetch, type PublicCreditPackage } from "@/lib/kodewavesApi";
 import { startConfiguredCheckout } from "@/lib/billing/checkout";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { cn } from "@/lib/utils";
 
 export function BuyCreditsControl({ className }: { className?: string }) {
+  const branding = useClientBranding();
   const [open, setOpen] = useState(false);
   const [packages, setPackages] = useState<PublicCreditPackage[]>([]);
   const [selected, setSelected] = useState<string>("");
@@ -28,7 +30,7 @@ export function BuyCreditsControl({ className }: { className?: string }) {
     if (!selected || busy) return;
     setBusy(true); setError(null);
     try {
-      const result = await startConfiguredCheckout({ package_id: selected });
+      const result = await startConfiguredCheckout({ package_id: selected }, branding.company_name);
       if (!result.redirected) window.location.assign("/billing-sovereign");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Checkout failed. Refresh your wallet before retrying.");

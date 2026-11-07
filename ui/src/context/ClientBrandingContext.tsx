@@ -93,13 +93,22 @@ export function ClientBrandingProvider({
     const expectedTitle = section
       ? `${section} | ${branding.company_name}`
       : branding.company_name;
-    const syncTitle = () => {
+    const syncMetadata = () => {
       // Next can apply server metadata after the client branding refresh.
       if (document.title !== expectedTitle) document.title = expectedTitle;
+      let description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+      if (!description) {
+        description = document.createElement("meta");
+        description.name = "description";
+        document.head.appendChild(description);
+      }
+      if (description.content !== branding.tagline) {
+        description.content = branding.tagline;
+      }
     };
-    syncTitle();
-    const titleObserver = new MutationObserver(syncTitle);
-    titleObserver.observe(document.head, {
+    syncMetadata();
+    const metadataObserver = new MutationObserver(syncMetadata);
+    metadataObserver.observe(document.head, {
       childList: true,
       characterData: true,
       subtree: true,
@@ -120,7 +129,7 @@ export function ClientBrandingProvider({
       root.style.setProperty(key, value);
     }
     if (branding.font !== "system") root.style.removeProperty("--brand-font-family");
-    return () => titleObserver.disconnect();
+    return () => metadataObserver.disconnect();
   }, [branding, pathname, resolvedTheme]);
 
   return (

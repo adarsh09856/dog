@@ -16,11 +16,11 @@
   overflow: hidden;
   min-height: 12rem;
   padding: clamp(1.5rem, 3vw, 2.5rem);
-  border: 1px solid color-mix(in srgb, var(--brand-primary-color, #426b57) 32%, #35504b);
+  border: 1px solid color-mix(in srgb, var(--brand-forest-accent) 32%, #35504b);
   border-radius: 1.5rem;
   color: #f2f7f1;
   background:
-    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--brand-primary-color, #426b57) 27%, transparent), transparent 34%),
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--brand-forest-accent) 27%, transparent), transparent 34%),
     linear-gradient(118deg, #102523 0%, #15322f 58%, #1c4039 100%);
   box-shadow: 0 24px 54px -38px rgba(8, 27, 24, .82);
   animation: admin-hero-in 420ms cubic-bezier(.2,.75,.25,1) both;
@@ -87,7 +87,7 @@
 }
 
 .surface :global([data-slot="card"]) {
-  border-color: color-mix(in oklab, var(--primary) 9%, var(--border));
+  border-color: color-mix(in oklab, var(--brand-forest-accent) 9%, var(--border));
   border-radius: 1.1rem;
   box-shadow: 0 6px 25px -22px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
@@ -101,7 +101,7 @@
 }
 
 .surface :global(table thead) {
-  background: color-mix(in oklab, var(--primary) 4%, var(--background));
+  background: color-mix(in oklab, var(--brand-forest-accent) 4%, var(--background));
 }
 
 .surface :global(table tr) {
@@ -109,7 +109,7 @@
 }
 
 .surface :global(table tbody tr:hover) {
-  background: color-mix(in oklab, var(--primary) 4%, var(--background));
+  background: color-mix(in oklab, var(--brand-forest-accent) 4%, var(--background));
 }
 
 @keyframes admin-hero-in {
@@ -126,7 +126,7 @@
 
 .formSection:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
 .formSection span {
-  color: var(--primary);
+  color: var(--brand-forest-accent);
   font-size: .69rem;
   font-weight: 750;
   letter-spacing: .13em;
@@ -149,9 +149,8 @@
   overflow: hidden;
   padding: 1.25rem 1.5rem;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--primary);
   border-radius: .85rem;
-  background: color-mix(in oklab, var(--primary) 2%, var(--card));
+  background: color-mix(in oklab, var(--brand-forest-accent) 2%, var(--card));
   font-size: .875rem;
 }
 .installationRow + .installationRow { margin-top: .75rem; }
@@ -161,12 +160,12 @@
   align-items: flex-start;
   gap: 1rem;
   padding: 1rem 1.2rem;
-  border: 1px solid color-mix(in oklab, var(--primary) 30%, var(--border));
+  border: 1px solid color-mix(in oklab, var(--brand-forest-accent) 30%, var(--border));
   border-radius: .9rem;
   color: var(--foreground);
-  background: color-mix(in oklab, var(--primary) 5%, var(--background));
+  background: color-mix(in oklab, var(--brand-forest-accent) 5%, var(--background));
 }
-.prerequisite svg { color: var(--primary); }
+.prerequisite svg { color: var(--brand-forest-accent); }
 .prerequisite strong { font-size: .88rem; }
 .prerequisite p { margin-top: .2rem; color: var(--muted-foreground); font-size: .82rem; line-height: 1.5; }
 .setupError {

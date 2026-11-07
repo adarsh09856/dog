@@ -24,6 +24,19 @@ def package_inputs(monkeypatch, tmp_path):
     directory.mkdir(parents=True)
     for name in ("INSTALL.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "docker-compose.recovery.yaml", "Caddyfile", "validate_install.py", "recovery.py", "compose_client.py", "recovery_lock.py", "enroll_identity.py", "verify_installer.py", "update_agent.py", "kodewaves-client-update.service", "kodewaves-client-update.timer", ".env.example"):
         shutil.copy2(repository / "deploy/client" / name, directory / name)
+    third_party = directory / "third-party"
+    third_party.mkdir()
+    for name in ("AGPL-3.0-PGSTY-Silo.txt", "NOTICE", "CREDITS", "THIRD_PARTY_NOTICES.txt"):
+        copied = third_party / name
+        copied.write_bytes((repository / "deploy/client/third-party" / name).read_bytes().replace(bytes([13, 10]), bytes([10])))
+    source_archive = third_party / packager.SILO_SOURCE_ARCHIVE_NAME
+    source_archive.write_bytes(b"test source archive")
+    monkeypatch.setattr(packager, "SILO_SOURCE_SHA256", hashlib.sha256(source_archive.read_bytes()).hexdigest())
+    notice = third_party / "THIRD_PARTY_NOTICES.txt"
+    notice.write_bytes(notice.read_bytes().replace(
+        b"011653445e59b3d9f01ca482a41e1706ba214d5cac4c254b43543b4fe8d209fc",
+        packager.SILO_SOURCE_SHA256.encode("ascii"),
+    ))
     (directory / ".env").write_text("KODEWAVES_LICENSE_TOKEN=customer-secret")
     (root / "owner-tools").mkdir()
     (root / "owner-tools/private.key").write_text("private-key-must-never-ship")
@@ -35,6 +48,7 @@ def package_inputs(monkeypatch, tmp_path):
         key: f"registry.example.com/kodewaves/{key.lower()}@sha256:{'a' * 64}"
         for key in packager.IMAGE_KEYS
     }
+    images["CLIENT_MINIO_IMAGE"] = packager.SILO_IMAGE
     images_env = tmp_path / "images.env"
     images_env.write_text("".join(f"{key}={value}\n" for key, value in sorted(images.items())))
     private = Ed25519PrivateKey.generate()
@@ -74,6 +88,7 @@ def test_customer_archive_contains_only_installation_files_and_matching_images(p
         assert set(archive.getnames()) == {
             "README.md", "docker-compose.client.yaml", "docker-compose.identity.yaml", "docker-compose.recovery.yaml", "Caddyfile", "validate_install.py", "enroll_identity.py",
             "recovery.py", "compose_client.py", "recovery_lock.py", "verify_installer.py", "update_agent.py", "kodewaves-client-update.service", "kodewaves-client-update.timer", ".env.example", "client-release-manifest.json", "release-public-key.txt", "SHA256SUMS",
+            "THIRD_PARTY_NOTICES.txt", "AGPL-3.0-PGSTY-Silo.txt", "PGSTY-Silo-NOTICE.txt", "PGSTY-Silo-CREDITS.txt", packager.SILO_SOURCE_ARCHIVE_NAME,
         }
         contents = {name: archive.extractfile(name).read() for name in archive.getnames()}
         assert archive.getmember(".env.example").mode == 0o600

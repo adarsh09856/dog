@@ -33,6 +33,13 @@ MODEL_IMAGE_COMPONENTS = {
 }
 OLLAMA_MODEL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}")
 OLLAMA_MODEL_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+SILO_RELEASE = "RELEASE.2026-10-26T00-00-00Z"
+SILO_IMAGE = "docker.io/pgsty/silo@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7"
+SILO_SOURCE_ARCHIVE_NAME = f"silo-source-{SILO_RELEASE}.tar.gz"
+SILO_SOURCE_SHA256 = "011653445e59b3d9f01ca482a41e1706ba214d5cac4c254b43543b4fe8d209fc"
+SILO_LICENSE_SHA256 = "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+SILO_NOTICE_SHA256 = "16026398077eccabc3ca66db98af0a295d42ba3fdb8c0c2ad1339f4bdd33099e"
+SILO_CREDITS_SHA256 = "00d51bcb05cc6c2c16c2f0a8866b9113eca7a4dbcce9d0a90893ee932fb5ce39"
 
 
 def package_installer(
@@ -43,6 +50,8 @@ def package_installer(
     output: Path | None = None,
     *,
     root: Path = ROOT,
+    silo_source_archive: Path | None = None,
+    allow_test_object_store: bool = False,
 ) -> None:
     """Ship only allowlisted installation files, never keys or runtime secrets.
 
@@ -83,6 +92,38 @@ def package_installer(
         port = PINNED_IMAGE.fullmatch(value).group("port")
         if port and not 1 <= int(port) <= 65535:
             raise ValueError("Installer image registry port must be between 1 and 65535")
+
+    source_bytes: bytes | None = None
+    if images["CLIENT_MINIO_IMAGE"] == SILO_IMAGE or allow_test_object_store:
+        if silo_source_archive is None:
+            silo_source_archive = root / "deploy/client/third-party" / SILO_SOURCE_ARCHIVE_NAME
+        if (
+            silo_source_archive.is_symlink()
+            or not silo_source_archive.is_file()
+            or silo_source_archive.stat().st_size > MAX_INSTALLER_ARCHIVE_BYTES
+        ):
+            raise ValueError("PGSTY Silo source archive is not a supported regular file")
+        source_bytes = silo_source_archive.read_bytes()
+        if hashlib.sha256(source_bytes).hexdigest() != SILO_SOURCE_SHA256:
+            raise ValueError("PGSTY Silo source archive does not match the approved release checksum")
+        third_party_files = {
+            "AGPL-3.0-PGSTY-Silo.txt": (root / "deploy/client/third-party/AGPL-3.0-PGSTY-Silo.txt").read_bytes(),
+            "PGSTY-Silo-NOTICE.txt": (root / "deploy/client/third-party/NOTICE").read_bytes(),
+            "PGSTY-Silo-CREDITS.txt": (root / "deploy/client/third-party/CREDITS").read_bytes(),
+            "THIRD_PARTY_NOTICES.txt": (root / "deploy/client/third-party/THIRD_PARTY_NOTICES.txt").read_bytes(),
+        }
+        expected_digests = {
+            "AGPL-3.0-PGSTY-Silo.txt": SILO_LICENSE_SHA256,
+            "PGSTY-Silo-NOTICE.txt": SILO_NOTICE_SHA256,
+            "PGSTY-Silo-CREDITS.txt": SILO_CREDITS_SHA256,
+        }
+        if any(hashlib.sha256(third_party_files[name]).hexdigest() != expected for name, expected in expected_digests.items()):
+            raise ValueError("PGSTY Silo license or attribution file does not match the approved release")
+        if SILO_SOURCE_SHA256.encode("ascii") not in third_party_files["THIRD_PARTY_NOTICES.txt"]:
+            raise ValueError("PGSTY Silo third-party notice does not identify the matching source archive")
+        third_party_files[SILO_SOURCE_ARCHIVE_NAME] = source_bytes
+    else:
+        raise ValueError("Customer releases must use the approved PGSTY Silo object-storage image digest")
 
     public_key = read_public_key(public_key_file)
     private_key = None
@@ -255,6 +296,7 @@ def package_installer(
         "client-release-manifest.json": manifest_bytes,
         "release-public-key.txt": (public_key + "\n").encode("ascii"),
     }
+    files.update(third_party_files)
     if MODEL_IMAGE_KEYS <= set(images):
         files.update({
             "docker-compose.models.yaml": (directory / "docker-compose.models.yaml").read_bytes(),
@@ -318,11 +360,16 @@ def main() -> int:
     parser.add_argument("--release-public-key", required=True, type=Path)
     parser.add_argument("--release-private-key", required=True, type=Path,
                         help="Owner-only Ed25519 key that signed the release manifest")
+    parser.add_argument(
+        "--silo-source-archive", type=Path,
+        help="Checksum-verified source archive matching the pinned PGSTY Silo image (defaults to deploy/client/third-party)",
+    )
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     package_installer(
         args.images_env, args.manifest, args.release_public_key,
         args.release_private_key, args.output,
+        silo_source_archive=args.silo_source_archive,
     )
     print(f"Customer installation archive written: {args.output.resolve()}")
     print(f"Detached archive signature written: {args.output.with_name(args.output.name + '.sig').resolve()}")

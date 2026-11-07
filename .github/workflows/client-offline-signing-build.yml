@@ -32,7 +32,7 @@ on:
         required: true
         type: string
       minio_image:
-        description: Official MinIO image, immutable digest
+        description: Approved PGSTY Silo image, exact immutable digest
         required: true
         type: string
       coturn_image:
@@ -119,7 +119,7 @@ jobs:
           approved_images = {
               "POSTGRES_IMAGE": r"(?:pgvector/pgvector|docker\.io/pgvector/pgvector)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
               "REDIS_IMAGE": r"(?:redis|docker\.io/library/redis)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
-              "MINIO_IMAGE": r"(?:minio/minio|docker\.io/minio/minio)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
+              "MINIO_IMAGE": r"docker\.io/pgsty/silo@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7",
               "COTURN_IMAGE": r"(?:coturn/coturn|docker\.io/coturn/coturn)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
               "OLLAMA_IMAGE": r"(?:ollama/ollama|docker\.io/ollama/ollama)(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}",
           }
@@ -424,11 +424,14 @@ jobs:
               "The signer must be run from the checked-out source because it imports the release verifier. "
               "Then assemble and sign the full client package with the same trusted release key:\n\n"
               "```bash\n"
+              "python owner-tools/fetch_client_silo_source.py \\\n"
+              "  --output /secure/releases/silo-source-RELEASE.2026-10-26T00-00-00Z.tar.gz\n"
               "python owner-tools/package_client_installer.py \\\n"
               "  --images-env customer-images.env \\\n"
               "  --manifest client-release-manifest.json \\\n"
               "  --release-public-key release-public.key \\\n"
               "  --release-private-key /secure/offline/release-private.key \\\n"
+              "  --silo-source-archive /secure/releases/silo-source-RELEASE.2026-10-26T00-00-00Z.tar.gz \\\n"
               "  --output customer-installer.tar.gz\n"
               "```\n\n"
               "Run the signed-package lifecycle acceptance before customer distribution.\n",

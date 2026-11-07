@@ -39,7 +39,10 @@ async function loadRazorpay(): Promise<void> {
 export type CheckoutResult = { redirected: true } | { redirected: false; receipt: VerifyPaymentResult };
 
 /** Purchase only a configured item; the server owns its price and entitlement. */
-export async function startConfiguredCheckout(payload: CreateOrderPayload): Promise<CheckoutResult> {
+export async function startConfiguredCheckout(
+  payload: CreateOrderPayload,
+  companyName = "Kodewaves",
+): Promise<CheckoutResult> {
   const config = await paymentsApi.getConfig();
   const gateway = payload.gateway ?? (config.razorpay_enabled ? "razorpay" : "stripe");
   if (!(gateway === "razorpay" ? config.razorpay_enabled : config.stripe_enabled)) {
@@ -60,7 +63,7 @@ export async function startConfiguredCheckout(payload: CreateOrderPayload): Prom
     let verifying = false;
     const checkout = new window.Razorpay!({
       key: razorpayKeyId, order_id: order.order_id, amount: order.amount,
-      currency: order.currency, name: "Kodewaves",
+      currency: order.currency, name: companyName,
       modal: { ondismiss: () => { if (!verifying) reject(new Error("Checkout was cancelled.")); } },
       handler: (response) => {
         if (verifying) return;

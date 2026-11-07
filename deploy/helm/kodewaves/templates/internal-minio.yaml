@@ -86,7 +86,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: minio
-          image: {{ printf "%s/%s:%s" (.Values.minio.image.registry | default "docker.io") .Values.minio.image.repository (.Values.minio.image.tag | toString) | quote }}
+          image: {{ if .Values.minio.image.digest }}{{ printf "%s/%s@%s" (.Values.minio.image.registry | default "docker.io") .Values.minio.image.repository .Values.minio.image.digest | quote }}{{ else }}{{ printf "%s/%s:%s" (.Values.minio.image.registry | default "docker.io") .Values.minio.image.repository (.Values.minio.image.tag | toString) | quote }}{{ end }}
           imagePullPolicy: {{ .Values.minio.image.pullPolicy | default "IfNotPresent" }}
           args:
             - server

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { AudioLines } from "lucide-react";
 
 import { useClientBranding } from "@/context/ClientBrandingContext";
 import { cn } from "@/lib/utils";
@@ -17,10 +18,19 @@ export function BrandLogo({
   mark?: boolean;
 }) {
   const branding = useClientBranding();
+  const isClientEdition = process.env.NEXT_PUBLIC_KODEWAVES_EDITION === "client";
   const icon = branding.logo_url ? (
     // Customer-managed logos may use an approved HTTPS host outside Next image optimization.
     // eslint-disable-next-line @next/next/no-img-element
     <img src={branding.logo_url} alt="" className={cn("h-full w-auto max-w-full object-contain", className)} />
+  ) : isClientEdition ? (
+    <span
+      data-testid="generic-brand-mark"
+      className={cn("inline-flex aspect-square h-full shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground", className)}
+      aria-hidden="true"
+    >
+      <AudioLines className="size-2/3" strokeWidth={2.2} />
+    </span>
   ) : (
     <svg
       viewBox="0 0 32 32"

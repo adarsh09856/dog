@@ -1,0 +1,7 @@
+Kodewaves Client includes PGSTY Silo RELEASE.2026-10-26T00-00-00Z as its S3-compatible object-storage service.
+Silo is distributed under the GNU Affero General Public License, version 3 (AGPL-3.0).
+The customer installer includes the matching source archive, LICENSE, NOTICE, and CREDITS files.
+Source archive: silo-source-RELEASE.2026-10-26T00-00-00Z.tar.gz
+Source archive SHA-256: 011653445e59b3d9f01ca482a41e1706ba214d5cac4c254b43543b4fe8d209fc
+Upstream release: https://github.com/pgsty/silo/releases/tag/RELEASE.2026-10-26T00-00-00Z
+This Kodewaves release does not modify Silo. Preserve the included license and attribution files.

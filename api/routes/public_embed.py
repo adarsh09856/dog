@@ -7,6 +7,7 @@ They handle CORS, domain validation, and session management for embedded workflo
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Optional
+from urllib.parse import urljoin
 
 from fastapi import (
     APIRouter,
@@ -20,8 +21,9 @@ from pydantic import BaseModel
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from api.constants import ENABLE_COTURN, FORCE_TURN_RELAY
+from api.constants import ENABLE_COTURN, FORCE_TURN_RELAY, KODEWAVES_EDITION, UI_APP_URL
 from api.db import db_client
+from api.db.kodewaves_client import kodewaves_db_client
 from api.enums import CallType, WorkflowRunMode
 from api.routes.turn_credentials import (
     TURN_SECRET,
@@ -29,6 +31,7 @@ from api.routes.turn_credentials import (
     generate_turn_credentials,
 )
 from api.schemas.embed_chat import PublicEmbedChatSessionResponse
+from api.schemas.branding import PlatformBranding
 from api.schemas.widget_texts import WidgetTexts
 from api.services.workflow.embed_chat_limiter import allow_embed_chat_init
 from api.services.workflow.embed_context import sanitize_embed_context_variables
@@ -63,6 +66,31 @@ def _turn_credentials_available() -> bool:
     return ENABLE_COTURN and bool(TURN_SECRET)
 
 
+async def _installation_branding() -> PlatformBranding:
+    """Resolve public brand identity for the hosted platform or client install."""
+    key = "client_branding" if KODEWAVES_EDITION == "client" else "branding"
+    try:
+        branding = await kodewaves_db_client.get_setting(key) or {}
+        if not branding and key == "client_branding":
+            branding = await kodewaves_db_client.get_setting("branding") or {}
+        if isinstance(branding, dict):
+            resolved = PlatformBranding.model_validate(branding)
+            if resolved.logo_url.startswith("/"):
+                resolved.logo_url = urljoin(
+                    f"{str(UI_APP_URL).rstrip('/')}/", resolved.logo_url.lstrip("/")
+                )
+            return resolved
+    except Exception:
+        # Do not make a saved explicit widget color depend on branding storage.
+        pass
+    return PlatformBranding()
+
+
+async def _installation_brand_color() -> str:
+    """Resolve the configured installation color for embeds without a color override."""
+    return (await _installation_branding()).primary_color
+
+
 class InitEmbedRequest(BaseModel):
     """Request model for initializing an embed session"""
 
@@ -87,6 +115,7 @@ class EmbedConfigResponse(BaseModel):
 
     workflow_id: int
     settings: dict
+    branding: PlatformBranding
     # Visitor-facing copy, already resolved against the agent owner's overrides.
     # The widget renders these verbatim and holds no defaults of its own.
     texts: WidgetTexts
@@ -488,16 +517,21 @@ async def get_embed_config(token: str, request: Request, response: Response):
         _allow_embed_origin(response, origin)
 
     # Extract settings with defaults
-    settings = embed_token.settings or {}
+    settings = dict(embed_token.settings or {})
+    branding = await _installation_branding()
+    installation_color = branding.primary_color
+    if settings.get("useInstallationBranding") or not settings.get("buttonColor"):
+        settings["buttonColor"] = installation_color
 
     return EmbedConfigResponse(
         workflow_id=embed_token.workflow_id,
         settings=settings,
+        branding=branding,
         texts=WidgetTexts.resolve(settings),
         theme=settings.get("theme", "light"),
         position=settings.get("position", "bottom-right"),
         button_text=settings.get("buttonText", "Start Voice Call"),
-        button_color=settings.get("buttonColor", "#3B82F6"),
+        button_color=settings.get("buttonColor", installation_color),
         size=settings.get("size", "medium"),
         auto_start=settings.get("autoStart", False),
         turn_enabled=_turn_credentials_available(),
