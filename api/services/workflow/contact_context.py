@@ -466,8 +466,17 @@ _HINGLISH_TIME_WORDS = {
 
 
 def _normalize_hinglish_booking_time(text: str) -> str:
-    """Normalize exact Roman Hindi time words for deterministic slot parsing."""
+    """Normalize spoken hour words and dotted meridiem for slot parsing."""
     normalized = unicodedata.normalize("NFC", str(text or ""))
+    # STT commonly ends a final “a.m.”/“p.m.” with sentence punctuation. The
+    # downstream meridiem regex expects a word boundary after m; the final dot
+    # prevents that boundary, so a clear time otherwise falls through to LLM.
+    normalized = re.sub(
+        r"(?<![A-Za-z])([ap])\s*\.?\s*m\.?(?![A-Za-z])",
+        lambda match: match.group(1).lower() + "m",
+        normalized,
+        flags=re.IGNORECASE,
+    )
     for word, replacement in _HINGLISH_TIME_WORDS.items():
         normalized = re.sub(
             rf"(?<![\w]){re.escape(word)}(?![\w])",
@@ -2034,14 +2043,16 @@ def booking_time_confirmation_question(
     )
     hindi = hindi_matches[0] if hindi_matches else None
     english_pattern = (
-        r"(?:\bat\s+)?(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
+        r"(?:\b(?:it['’]?s|it\s+is)\s+)?(?:\bat\s+)?"
+        r"(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
         rf"(?::([0-5]\d)|\s+({_SPOKEN_MINUTE_PATTERN}))?\s*(?:बजे\s*)?"
         r"(am|pm|[ap]\s*\.?\s*m\.?|ए\s*\.?\s*एम\.?|पी\s*\.?\s*एम\.?)\b"
     )
     english_matches = list(re.finditer(english_pattern, normalized, re.I))
     english = english_matches[0] if english_matches else None
     english_daypart_pattern = (
-        r"(?:\bat\s+)?(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
+        r"(?:\b(?:it['’]?s|it\s+is)\s+)?(?:\bat\s+)?"
+        r"(\d{1,2}|[a-z]+|[\u0900-\u097f]+)"
         rf"(?::([0-5]\d)|\s+({_SPOKEN_MINUTE_PATTERN}))?\s*(?:o['’]?clock\s*)?"
         r"(?:(?:in\s+)?the\s+|in\s+|at\s+)?"
         r"(morning|afternoon|evening|night)\b"
