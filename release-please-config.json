@@ -3,7 +3,7 @@
   "packages": {
     ".": {
       "release-type": "simple",
-      "package-name": "kodewaves",
+      "package-name": "dograh",
       "changelog-type": "github",
       "changelog-sections": [
         {
