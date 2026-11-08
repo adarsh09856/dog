@@ -549,12 +549,58 @@ class _BookingToolChoiceMixin:
             if contact_state.get("caller_phone"):
                 known = {**known, "customer_phone": contact_state["caller_phone"]}
         has_booking_tool = any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
+        trace_messages = messages if isinstance(messages, list) else []
+        latest_user = next((
+            message for message in reversed(trace_messages)
+            if isinstance(message, dict) and message.get("role") == "user"
+        ), None)
+        latest_user_text = _message_text(latest_user) if latest_user else ""
+        from api.services.workflow.confirmed_booking import new_booking_requested
+
+        booking_was_requested = any(
+            isinstance(message, dict)
+            and message.get("role") == "user"
+            and new_booking_requested(_message_text(message))
+            for message in trace_messages
+        )
+        latest_is_confirmation = bool(re.fullmatch(
+            r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|haan|han|ha|ji|"
+            r"हाँ|हां|हा|जी|ठीक है|(?:हाँ|हां|हा)\s+(?:ठीक|सही)\s+है)"
+            r"[.!?।\s]*",
+            latest_user_text,
+            re.IGNORECASE,
+        ))
+        staged_slot = (
+            contact_state.get("booking_confirmation_slot")
+            if isinstance(contact_state, dict) else None
+        )
+        if booking_was_requested and (latest_is_confirmation or staged_slot):
+            from api.services.workflow.tools.booking import caller_confirmed_booking
+
+            previous_assistant = next((
+                _message_text(message) for message in reversed(trace_messages)
+                if isinstance(message, dict) and message.get("role") == "assistant"
+            ), "")
+            logger.info(
+                "booking_turn_gate run={} tool_available={} name_available={} phone_available={} phone_confirmation_pending={} slot_staged={} slot_date_staged={} latest_is_confirmation={} assistant_asked_confirmation={} caller_confirmed_booking={} deferred_contact_followup={}",
+                get_current_run_id(),
+                has_booking_tool,
+                bool(known.get("customer_name")),
+                bool(known.get("customer_phone")),
+                bool(isinstance(contact_state, dict) and contact_state.get("caller_phone_confirmation_pending")),
+                bool(staged_slot),
+                bool(isinstance(contact_state, dict) and contact_state.get("booking_time_question_date")),
+                latest_is_confirmation,
+                bool(re.search(r"\b(?:confirmed|correct|right|book the appointment)\b|बुकिंग कर दूँ", previous_assistant, re.I)),
+                caller_confirmed_booking(trace_messages),
+                deferred_contact_followup,
+            )
         if (
             not deferred_contact_followup
             and
             messages and isinstance(messages[-1], dict)
             and messages[-1].get("role") == "user"
-            and any(getattr(tool, "name", None) == "book_appointment" for tool in tools)
+            and has_booking_tool
         ):
             from api.services.workflow.contact_context import confirmed_staged_booking_arguments
             from api.services.workflow.confirmed_booking import room_booking_active
