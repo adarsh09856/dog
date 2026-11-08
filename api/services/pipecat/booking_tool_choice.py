@@ -26,11 +26,14 @@ _LOCAL_CALLER_RESPONSE_GUARD = (
     "Answer in the caller's language. Use their known name and contact details; ask "
     "only for the next missing or corrected detail. Never repeat an earlier reply or "
     "invent service names. Never claim an action succeeded without tool success. "
-    "For bookings, retain every caller-provided service, date, "
+    "Keep spoken replies concise: use one short sentence when possible, and include "
+    "every detail needed to answer safely without repeating information the caller "
+    "already gave."
+)
+_LOCAL_BOOKING_RESPONSE_GUARD = (
+    "For an active appointment booking, retain every caller-provided service, date, "
     "and time. Ask one short clarification only when needed; never guess a date, year, "
-    "or time. After the date is clear, ask only for the time. Keep spoken replies "
-    "concise: use one short sentence when possible, and include every detail needed "
-    "to answer safely without repeating information the caller already gave."
+    "or time. After the date is clear, ask only for the time."
 )
 
 
@@ -989,20 +992,30 @@ class _BookingToolChoiceMixin:
             # Keep this guidance in a fixed system-prefix position. Inserting it
             # before the newest user message on every turn breaks Ollama's shared
             # prompt prefix and forces the CPU model to re-evaluate conversation history.
-            if not any(
+            guards = [_LOCAL_CALLER_RESPONSE_GUARD]
+            # Use the original workflow capability snapshot. Earlier safety
+            # filters may temporarily remove the booking tool for this model
+            # turn until the caller has confirmed, but the active node still
+            # needs its booking-specific guidance.
+            has_booking_tool = "book_appointment" in initial_tool_names
+            if has_booking_tool:
+                guards.append(_LOCAL_BOOKING_RESPONSE_GUARD)
+            missing_guards = [guard for guard in guards if not any(
                 isinstance(message, dict)
                 and message.get("role") == "system"
-                and message.get("content") == _LOCAL_CALLER_RESPONSE_GUARD
+                and message.get("content") == guard
                 for message in messages
-            ):
+            )]
+            if missing_guards:
                 system_index = next((
                     index for index, message in enumerate(messages)
                     if isinstance(message, dict) and message.get("role") == "system"
                 ), None)
-                messages.insert(
-                    system_index + 1 if system_index is not None else 0,
-                    {"role": "system", "content": _LOCAL_CALLER_RESPONSE_GUARD},
-                )
+                insert_at = system_index + 1 if system_index is not None else 0
+                messages[insert_at:insert_at] = [
+                    {"role": "system", "content": guard}
+                    for guard in missing_guards
+                ]
             params["messages"] = messages
         if isinstance(messages, list) and messages:
             latest_user = next((message for message in reversed(messages) if isinstance(message, dict) and message.get("role") == "user"), None)
