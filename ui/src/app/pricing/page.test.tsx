@@ -189,6 +189,39 @@ describe("public pricing", () => {
     expect(reviewLink.getAttribute("href")).toBe("/auth/login?plan=annual_plan&billing_cycle=annual");
   });
 
+  it("makes single-term plans explicit beside the global billing-period selector", async () => {
+    mocks.getPublicPlans.mockResolvedValue([{
+      id: "monthly", name: "Monthly Plan", code: "monthly_plan",
+      monthly_price_cents: 2500, annual_price_cents: 0, currency: "INR",
+      included_minutes: 100, max_agents: 3, max_concurrent_calls: 1,
+      features: [], is_active: true,
+    }, {
+      id: "annual", name: "Annual Plan", code: "annual_plan",
+      monthly_price_cents: 0, annual_price_cents: 24000, currency: "INR",
+      included_minutes: 1200, max_agents: 3, max_concurrent_calls: 1,
+      features: [], is_active: true,
+    }, {
+      id: "flex", name: "Flexible Plan", code: "flex_plan",
+      monthly_price_cents: 3000, annual_price_cents: 30000, currency: "INR",
+      included_minutes: 100, max_agents: 3, max_concurrent_calls: 1,
+      features: [], is_active: true,
+    }]);
+    mocks.getPublicCreditOffers.mockResolvedValue([]);
+
+    render(<PricingPage />);
+
+    expect(await screen.findByText("Monthly Plan")).toBeTruthy();
+    expect(screen.getByText(/Monthly only — this plan has one configured billing term/)).toBeTruthy();
+    expect(screen.getByText(/Annual only — this plan has one configured billing term/)).toBeTruthy();
+    expect(screen.getByText("₹25")).toBeTruthy();
+    expect(screen.getByText("₹240")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Annual" }));
+    expect(screen.getByText("₹300")).toBeTruthy();
+    expect(screen.getByText(/30 days of access/)).toBeTruthy();
+    expect(screen.getAllByText(/365 days of access/)).toHaveLength(2);
+  });
+
   it("labels free-plan minutes as a one-time activation grant rather than a payment credit", async () => {
     mocks.getPublicPlans.mockResolvedValue([{
       id: "free",

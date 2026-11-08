@@ -242,6 +242,11 @@ export default function PricingPage() {
           {plans.map((plan) => {
             const hasMonthlyOffer = plan.monthly_price_cents > 0;
             const hasAnnualOffer = plan.annual_price_cents > 0;
+            const singleTermLabel = hasMonthlyOffer && !hasAnnualOffer
+              ? "Monthly only"
+              : hasAnnualOffer && !hasMonthlyOffer
+                ? "Annual only"
+                : null;
             const billingCycle =
               hasMonthlyOffer && hasAnnualOffer
                 ? annual
@@ -290,6 +295,11 @@ export default function PricingPage() {
                         ? `${plan.currency} · one-time payment for ${billingCycle === "annual" ? "365 days" : "30 days"} of access`
                         : "No payment required for this plan"}
                   </p>
+                  {singleTermLabel && (
+                    <p className="mt-1 text-xs font-medium text-foreground">
+                      {singleTermLabel} — this plan has one configured billing term.
+                    </p>
+                  )}
                 </div>
                 <ul className="mb-8 space-y-3 text-sm">
                   <li className="flex gap-3">
