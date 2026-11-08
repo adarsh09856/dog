@@ -284,7 +284,15 @@ class _BookingToolChoiceMixin:
         await self._push_llm_text(text)
 
     def can_speculate_caller_turn(self, text: str) -> bool:
-        """Keep confirmed-only contact/settings handling out of speculation."""
+        """Keep stateful contact and booking turns out of speculation.
+
+        The booking mixin intentionally skips deterministic state transitions
+        while speculative inference is active. If a booking turn is allowed to
+        speculate, that provisional model answer can be released as the final
+        reply without the confirmed booking gate ever handling the turn. That
+        is how stale replies such as asking for an already-confirmed phone can
+        escape. Let booking turns reach the normal confirmed-context path.
+        """
         from api.services.pipecat.caller_language_context import (
             reply_language_switch_capabilities,
             standalone_language_request,
@@ -307,6 +315,27 @@ class _BookingToolChoiceMixin:
         provider = getattr(self, "_contact_context_messages_provider", None)
         messages = list(provider()) if callable(provider) else []
         messages.append({"role": "user", "content": text})
+        from api.services.workflow.confirmed_booking import new_booking_requested
+
+        if any(
+            isinstance(message, dict)
+            and message.get("role") == "user"
+            and new_booking_requested(_message_text(message))
+            for message in messages
+        ):
+            return False
+        if any(
+            state.get(key)
+            for key in (
+                "booking_time_question_date",
+                "booking_confirmation_slot",
+                "booking_slot_candidate",
+                "booking_time_pending",
+                "booking_pending_time_hour",
+                "booking_pending_time_minute",
+            )
+        ):
+            return False
         if caller_phone_fragment_reply(messages, state) is not None:
             return False
         return caller_name_followup_reply(messages, state) is None
