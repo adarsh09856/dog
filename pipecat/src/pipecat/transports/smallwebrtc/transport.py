@@ -106,6 +106,10 @@ class RawAudioTrack(AudioStreamTrack):
         self._speech_started_at = None
         self._speech_end_pending = False
         self._speech_summary = None
+        self._speech_pcm_bytes_received = 0
+        self._speech_pcm_bytes_played = 0
+        self._speech_pcm_bytes_dropped = 0
+        self._speech_end_reason = None
 
     def add_audio_bytes(self, audio_bytes: bytes):
         """Add audio bytes to the buffer for transmission.
@@ -127,7 +131,12 @@ class RawAudioTrack(AudioStreamTrack):
             self._underrun_streak = 0
             self._max_underrun_streak = 0
             self._speech_started_at = time.monotonic()
+            self._speech_pcm_bytes_received = 0
+            self._speech_pcm_bytes_played = 0
+            self._speech_pcm_bytes_dropped = 0
+            self._speech_end_reason = None
         self._speech_end_pending = False
+        self._speech_pcm_bytes_received += len(audio_bytes)
         future = asyncio.get_running_loop().create_future()
 
         # Break input into 10ms chunks
@@ -148,10 +157,16 @@ class RawAudioTrack(AudioStreamTrack):
         logger.debug(
             f"RawAudioTrack.mark_pending_futures_done: marking futures as done, queue size: {len(self._chunk_queue)}"
         )
+        if self._bot_speaking:
+            self._speech_end_reason = "transport_closed"
+            self._speech_end_pending = True
+            self._speech_pcm_bytes_dropped += sum(len(chunk) for chunk, _ in self._chunk_queue)
         for _, future in self._chunk_queue:
             if future and not future.done():
                 future.set_result(True)
         self._chunk_queue.clear()
+        if self._speech_end_pending:
+            self._finish_speech_metrics()
 
     def discard_pending_audio(self):
         """Drop encoded PCM left in the sender queue after barge-in.
@@ -164,8 +179,10 @@ class RawAudioTrack(AudioStreamTrack):
         for _, future in self._chunk_queue:
             if future and not future.done():
                 future.set_result(True)
+        self._speech_pcm_bytes_dropped += sum(len(chunk) for chunk, _ in self._chunk_queue)
         self._chunk_queue.clear()
         if self._bot_speaking:
+            self._speech_end_reason = "interrupted"
             self._speech_end_pending = True
             self._finish_speech_metrics()
 
@@ -195,10 +212,12 @@ class RawAudioTrack(AudioStreamTrack):
                 while not self._chunk_queue:
                     await asyncio.sleep(0.005)
                 chunk, future = self._chunk_queue.popleft()
+                self._speech_pcm_bytes_played += len(chunk)
                 if future and not future.done():
                     future.set_result(True)
         else:
             chunk, future = self._chunk_queue.popleft()
+            self._speech_pcm_bytes_played += len(chunk)
             self._underrun_streak = 0
             if future and not future.done():
                 future.set_result(True)
@@ -218,6 +237,7 @@ class RawAudioTrack(AudioStreamTrack):
 
     def mark_speech_end(self):
         """Finish metrics only after queued playback audio has drained."""
+        self._speech_end_reason = "tts_stopped"
         self._speech_end_pending = True
         if not self._chunk_queue:
             self._finish_speech_metrics()
@@ -232,7 +252,12 @@ class RawAudioTrack(AudioStreamTrack):
             if self._speech_started_at is not None else 0,
         )
         logger.info(
-            "WebRTC speech queue underruns: silence_frames={} max_consecutive_10ms={} speech_ms={}",
+            "WebRTC speech playback: end_reason={} pcm_bytes_received={} pcm_bytes_played={} "
+            "pcm_bytes_dropped={} silence_frames={} max_consecutive_10ms={} speech_ms={}",
+            self._speech_end_reason or "unknown",
+            self._speech_pcm_bytes_received,
+            self._speech_pcm_bytes_played,
+            self._speech_pcm_bytes_dropped,
             self._underrun_frames,
             self._max_underrun_streak,
             round((time.monotonic() - self._speech_started_at) * 1000)
