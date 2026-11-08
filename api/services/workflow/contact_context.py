@@ -1793,16 +1793,17 @@ def confirmed_staged_booking_arguments(
         return None
     latest = messages[latest_index].get("content")
     if not isinstance(latest, str) or not re.fullmatch(
-        r"\s*(?:yes|okay|ok|haan|han|ji|हाँ|हां|जी|ठीक है)[.!।\s]*", latest, re.I
+        r"\s*(?:yes|okay|ok|haan|han|ha|ji|हाँ|हां|हा|जी|"
+        r"(?:हाँ|हां|हा)\s+(?:ठीक|सही)\s+है|ठीक है)[.!।\s]*", latest, re.I
     ):
         return None
     previous = next((m.get("content") for m in reversed(messages[:latest_index])
                      if isinstance(m, dict) and m.get("role") == "assistant"), None)
-    if not isinstance(previous, str) or not re.search(
-        r"(?:बुकिंग कर दूँ|Should I book the appointment)", previous, re.I
-    ):
+    if not isinstance(previous, str):
         return None
-    if not caller_confirmed_booking(messages):
+    if not caller_confirmed_booking(messages) and not _assistant_confirms_staged_booking_slot(
+        previous, slot
+    ):
         return None
     try:
         ist = timezone(timedelta(hours=5, minutes=30))
@@ -1817,6 +1818,43 @@ def confirmed_staged_booking_arguments(
         "start_time": when.isoformat(),
         "confirmed_by_caller": True,
     }
+
+
+def _assistant_confirms_staged_booking_slot(text: str, slot: str) -> bool:
+    """Accept a model's explicit confirmation question only for the staged slot.
+
+    Small models often ask “Is 10:00 AM on November 9th confirmed?” rather
+    than the deterministic “Should I book?” wording. The caller's short yes is
+    consent only when this preceding assistant question repeats the exact date
+    and time already parsed from caller speech.
+    """
+    if not isinstance(text, str) or not isinstance(slot, str) or "?" not in text:
+        return False
+    if not re.search(r"\b(?:confirmed|correct|right|okay|ok)\b", text, re.I):
+        return False
+    try:
+        staged = datetime.fromisoformat(slot)
+    except ValueError:
+        return False
+
+    month = staged.strftime("%B")
+    abbreviated_month = staged.strftime("%b")
+    day = staged.day
+    date_pattern = (
+        rf"\b(?:{re.escape(month)}|{re.escape(abbreviated_month)})\s+"
+        rf"{day}(?:st|nd|rd|th)?\b|"
+        rf"\b{day}(?:st|nd|rd|th)?\s+"
+        rf"(?:{re.escape(month)}|{re.escape(abbreviated_month)})\b|"
+        rf"\b{staged:%Y-%m-%d}\b"
+    )
+    if not re.search(date_pattern, text, re.I):
+        return False
+
+    hour12 = staged.hour % 12 or 12
+    period = "AM" if staged.hour < 12 else "PM"
+    minute = rf":{staged.minute:02d}" if staged.minute else r"(?::00)?"
+    time_pattern = rf"\b{hour12}{minute}\s*{period}\b"
+    return bool(re.search(time_pattern, text, re.I))
 
 
 def booking_time_confirmation_question(

@@ -75,7 +75,7 @@ def caller_confirmed_booking(messages: list) -> bool:
     ):
         return True
     if not re.fullmatch(
-        r"\s*(?:(?:yes|ok|okay|haan|han|ha|ji|हाँ|हां|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|haan|han|बुक\s+कर\s+दो))?"
+        r"\s*(?:(?:yes|ok|okay|haan|han|ha|ji|हाँ|हां|हा|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|हा|haan|han|ठीक\s+है|सही\s+है|बुक\s+कर\s+दो))?"
         r"|correct|that's right|go ahead|theek hai|ठीक है|(?:confirm|book)\s+kar\s+(?:do|dijiye))[.!।\s]*",
         text, re.I,
     ):
