@@ -317,16 +317,20 @@ class _BookingToolChoiceMixin:
         messages.append({"role": "user", "content": text})
         from api.services.workflow.confirmed_booking import new_booking_requested
 
-        if any(
-            isinstance(message, dict)
-            and message.get("role") == "user"
-            and new_booking_requested(_message_text(message))
-            for message in messages
-        ):
+        latest_user = next(
+            (
+                message for message in reversed(messages)
+                if isinstance(message, dict) and message.get("role") == "user"
+            ),
+            None,
+        )
+        if latest_user and new_booking_requested(_message_text(latest_user)):
             return False
         if any(
             state.get(key)
             for key in (
+                "prior_booking_request",
+                "active_booking_request",
                 "booking_time_question_date",
                 "booking_confirmation_slot",
                 "booking_slot_candidate",
