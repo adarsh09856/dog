@@ -66,6 +66,7 @@ AUTO_DETECT_LANGUAGES = frozenset({
 SCHEDULED_INDIAN_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
 AUTO_ENGLISH_MIN_CONFIDENCE = 0.50
+AUTO_ENGLISH_COMPETITION_MIN_PROBABILITY = 0.02
 # CIIL's Anuvani-LID paper calibrates the released 23-class logits with T=0.674.
 # The ONNX graph returns logits, so calibration must happen before softmax.
 LID_TEMPERATURE = 0.674
@@ -520,7 +521,11 @@ def _detect_language(waveform: np.ndarray, sample_rate: int) -> tuple[str, float
             return "en", english_probability, "whisper_english_rescue"
     # Preserve the calibrated hi/en competition fallback when the independent
     # detector is unavailable or does not confirm English.
-    if detected == "hi" and english_competes:
+    if (
+        detected == "hi"
+        and detector_probability < 0.90
+        and english_probability >= AUTO_ENGLISH_COMPETITION_MIN_PROBABILITY
+    ):
         return "en", english_probability, "competitive_indian_english"
     return detected, float(probabilities[index]), None
 
