@@ -142,12 +142,15 @@ def booking_tool_choice(params: dict) -> dict | None:
     caller_text = _message_text(last)
     if not caller_confirmed_booking(messages) or _NEGATION.search(caller_text):
         return None
-    recent_dialogue = " ".join(
+    # Name, phone and slot collection can put the original booking request
+    # beyond five messages. The consent check above already requires the
+    # caller's affirmative response to the immediately preceding readback.
+    booking_dialogue = " ".join(
         _message_text(message)
-        for message in messages[-5:]
+        for message in messages
         if isinstance(message, dict) and message.get("role") in ("user", "assistant")
     )
-    if not _BOOKING.search(recent_dialogue):
+    if not _BOOKING.search(booking_dialogue):
         return None
     return {"type": "function", "function": {"name": "book_appointment"}}
 
