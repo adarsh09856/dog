@@ -56,13 +56,9 @@ LID_LANGUAGE_CODES = (
     "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai",
     "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 )
-# Product speech support is limited to the languages with a configured voice
-# route. Keep the full 23 labels above for the LID model's output-index mapping,
-# but do not advertise or load decoder routes the product has chosen to omit.
-AUTO_DETECT_LANGUAGES = frozenset({
-    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
-    "ne", "pa", "sa", "ta", "te",
-})
+# Keep every scheduled Indian language available to STT, plus Indian English.
+# TTS capability is checked separately by the workflow voice selector.
+AUTO_DETECT_LANGUAGES = frozenset(LID_LANGUAGE_CODES)
 SCHEDULED_INDIAN_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
 AUTO_ENGLISH_MIN_CONFIDENCE = 0.50
@@ -551,8 +547,6 @@ def _resolve_decode_language(
     supported = enabled
     if detected not in supported:
         threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
-        if detected in LID_LANGUAGE_CODES and fallback in supported:
-            return fallback, "unsupported_language_held_previous"
         if confidence >= threshold:
             raise HTTPException(
                 status_code=422,
@@ -664,14 +658,31 @@ async def transcribe(
                 )
             except ValueError:
                 return {"text": "", "language": "", "duration_ms": 0}
-            lang, language_route = _resolve_decode_language(
-                detected_language,
-                language_confidence,
-                fallback or None,
-                set(installed),
-                detection_route,
-                enabled_languages,
-            )
+            try:
+                lang, language_route = _resolve_decode_language(
+                    detected_language,
+                    language_confidence,
+                    fallback or None,
+                    set(installed),
+                    detection_route,
+                    enabled_languages,
+                )
+            except HTTPException as exc:
+                detail = exc.detail if isinstance(exc.detail, dict) else {}
+                if exc.status_code != 422 or detail.get("code") != "unsupported_detected_language":
+                    raise
+                # Keep a disabled language from being misdecoded as the last
+                # supported language. Return an empty OpenAI-compatible result
+                # so Pipecat ignores this segment without terminating the call.
+                duration_ms = round(len(waveform) * 1000 / sample_rate)
+                return {
+                    "text": "",
+                    "language": "",
+                    "detected_language": detected_language,
+                    "language_confidence": language_confidence,
+                    "language_route": "unsupported_language_rejected",
+                    "duration_ms": duration_ms,
+                }
             if lang not in installed:
                 raise HTTPException(status_code=503, detail="Selected STT language is not installed on this engine")
         lid_ms = round((time.monotonic() - lid_started) * 1000) if auto_detect else 0
