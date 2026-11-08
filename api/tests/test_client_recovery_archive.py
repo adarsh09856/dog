@@ -24,6 +24,16 @@ _RELEASE_PUBLIC_KEY = base64.urlsafe_b64encode(
         format=serialization.PublicFormat.Raw,
     )
 ).rstrip(b"=").decode("ascii")
+_MODEL_IMAGE_REFS = {
+    "ollama": "registry.example.com/kodewaves/ollama@sha256:" + "1" * 64,
+    "indic_stt": "registry.example.com/kodewaves/indic-stt@sha256:" + "2" * 64,
+    "indus_tts": "registry.example.com/kodewaves/indus-tts@sha256:" + "3" * 64,
+    "indic_vits_tts": "registry.example.com/kodewaves/indic-vits-tts@sha256:" + "4" * 64,
+}
+_MODEL_ASSETS = {"ollama": {
+    "name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "a" * 64,
+}}
+_UNSET = object()
 
 
 def _trusted_key_file(directory: Path) -> Path:
@@ -32,7 +42,10 @@ def _trusted_key_file(directory: Path) -> Path:
     return path
 
 
-def _signed_manifest() -> bytes:
+def _signed_manifest(
+    model_images: dict[str, str] | None = None,
+    model_assets: dict[str, dict[str, str]] | None = None,
+) -> bytes:
     payload = {
         "edition": "client",
         "files": {},
@@ -43,12 +56,24 @@ def _signed_manifest() -> bytes:
         },
         "schema_compatibility": {"head": "head1", "upgrade_from": ["head1"], "rollback_to": []},
     }
+    if model_images is not None:
+        payload["model_images"] = model_images
+    if model_assets is not None:
+        payload["model_assets"] = model_assets
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     signature = base64.urlsafe_b64encode(_RELEASE_SIGNING_KEY.sign(canonical)).rstrip(b"=").decode("ascii")
     return json.dumps({"payload": payload, "signature": signature}).encode("utf-8")
 
 
-def _archive(path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str | None = None):
+def _archive(
+    path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str | None = None,
+    model_images: dict[str, str] | None = None,
+    env_model_images: dict[str, str] | None | object = _UNSET,
+    metadata_model_images: dict[str, str] | None | object = _UNSET,
+    model_assets: dict[str, dict[str, str]] | None = None,
+    env_model_asset: dict[str, str] | None | object = _UNSET,
+    metadata_model_assets: dict[str, dict[str, str]] | None | object = _UNSET,
+):
     def volume_snapshot(name: str) -> bytes:
         buffer = io.BytesIO()
         with tarfile.open(fileobj=buffer, mode="w") as volume:
@@ -58,6 +83,14 @@ def _archive(path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str
             volume.addfile(item, io.BytesIO(payload))
         return buffer.getvalue()
 
+    if env_model_images is _UNSET:
+        env_model_images = model_images
+    if metadata_model_images is _UNSET:
+        metadata_model_images = model_images
+    if env_model_asset is _UNSET:
+        env_model_asset = model_assets["ollama"] if model_assets is not None else None
+    if metadata_model_assets is _UNSET:
+        metadata_model_assets = model_assets
     env = (
         b"KODEWAVES_INSTALLATION_ID=customer-123\n"
         b"CLIENT_IDENTITY_KEY_FILE=/secure/identity.key\n"
@@ -68,7 +101,23 @@ def _archive(path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str
         + b"a" * 64 + b"\nCLIENT_UI_IMAGE=registry.example.com/kodewaves/ui@sha256:"
         + b"b" * 64 + b"\n"
     )
-    manifest_bytes = _signed_manifest()
+    env_model_keys = {
+        "ollama": "CLIENT_OLLAMA_IMAGE",
+        "indic_stt": "CLIENT_INDIC_STT_IMAGE",
+        "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
+        "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
+    }
+    if env_model_images is not None:
+        env += "".join(
+            f"{env_model_keys[name]}={reference}\n"
+            for name, reference in env_model_images.items()
+        ).encode("ascii")
+    if env_model_asset is not None:
+        env += (
+            f"CLIENT_OLLAMA_MODEL={env_model_asset['name']}\n"
+            f"CLIENT_OLLAMA_MODEL_DIGEST={env_model_asset['digest']}\n"
+        ).encode("ascii")
+    manifest_bytes = _signed_manifest(model_images, model_assets)
     metadata = {
         "format": "kodewaves-client-recovery-v1",
         "snapshot_mode": "cold",
@@ -83,6 +132,10 @@ def _archive(path: Path, *, extra: tuple[str, bytes] | None = None, corrupt: str
         "identity_uid": 0,
         "identity_mode": 0o640,
     }
+    if metadata_model_images is not None:
+        metadata["model_images"] = metadata_model_images
+    if metadata_model_assets is not None:
+        metadata["model_assets"] = metadata_model_assets
     files = {
         "recovery.json": json.dumps({
             **metadata,
@@ -161,6 +214,116 @@ def test_recovery_archive_validates_without_extracting(tmp_path):
         "restore_performed": False,
     }
     assert set(tmp_path.iterdir()) == {path, trusted_key}
+
+
+def test_recovery_archive_accepts_signed_all_four_model_image_pins(tmp_path):
+    path = tmp_path / "model-backup.tar.gz"
+    _archive(path, model_images=_MODEL_IMAGE_REFS)
+
+    result = recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))
+
+    assert result["status"] == "validated"
+
+
+def test_cloud_recovery_allows_signed_optional_model_inventory_without_model_pins(tmp_path):
+    path = tmp_path / "cloud-backup-with-optional-models.tar.gz"
+    _archive(
+        path,
+        model_images=_MODEL_IMAGE_REFS,
+        env_model_images=None,
+        metadata_model_images=None,
+    )
+
+    result = recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))
+
+    assert result["status"] == "validated"
+
+
+def test_recovery_manifest_rejects_partial_signed_model_image_inventory():
+    partial = {"ollama": _MODEL_IMAGE_REFS["ollama"]}
+
+    with pytest.raises(ValueError, match="manifest is missing or invalid"):
+        recovery._verify_release_manifest(_signed_manifest(partial), _RELEASE_PUBLIC_KEY)
+
+
+@pytest.mark.parametrize(
+    ("env_model_images", "metadata_model_images", "message"),
+    [
+        ({**_MODEL_IMAGE_REFS, "ollama": "registry.example.com/ollama@sha256:" + "9" * 64}, _MODEL_IMAGE_REFS, "Archived .env model image pins"),
+        (_MODEL_IMAGE_REFS, {**_MODEL_IMAGE_REFS, "ollama": "registry.example.com/ollama@sha256:" + "9" * 64}, "Recovery model image metadata"),
+        ({"ollama": _MODEL_IMAGE_REFS["ollama"]}, _MODEL_IMAGE_REFS, "all four model image pins"),
+    ],
+)
+def test_recovery_archive_rejects_model_image_pin_or_metadata_mismatch(
+    tmp_path, env_model_images, metadata_model_images, message,
+):
+    path = tmp_path / "bad-model-backup.tar.gz"
+    _archive(
+        path,
+        model_images=_MODEL_IMAGE_REFS,
+        env_model_images=env_model_images,
+        metadata_model_images=metadata_model_images,
+    )
+
+    with pytest.raises(ValueError, match=message):
+        recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))
+
+
+def test_legacy_cloud_recovery_manifest_without_model_pins_remains_valid(tmp_path):
+    path = tmp_path / "legacy-cloud-backup.tar.gz"
+    _archive(path)
+
+    result = recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))
+
+    assert result["status"] == "validated"
+
+
+def test_recovery_archive_carries_signed_model_asset_descriptor(tmp_path):
+    path = tmp_path / "model-asset-backup.tar.gz"
+    _archive(path, model_assets=_MODEL_ASSETS)
+
+    assert recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))["status"] == "validated"
+
+
+@pytest.mark.parametrize(
+    ("env_model_asset", "metadata_model_assets", "message"),
+    [
+        ({"name": "another-model", "digest": _MODEL_ASSETS["ollama"]["digest"]}, _MODEL_ASSETS, "model asset name"),
+        ({"name": _MODEL_ASSETS["ollama"]["name"], "digest": "sha256:" + "b" * 64}, _MODEL_ASSETS, "model asset digest"),
+        (_MODEL_ASSETS["ollama"], {"ollama": {
+            "name": _MODEL_ASSETS["ollama"]["name"], "digest": "sha256:" + "b" * 64,
+        }}, "model asset metadata"),
+        (_MODEL_ASSETS["ollama"], None, "model asset metadata"),
+    ],
+)
+def test_recovery_rejects_model_asset_name_or_metadata_mismatch(
+    tmp_path, env_model_asset, metadata_model_assets, message,
+):
+    path = tmp_path / "bad-model-asset-backup.tar.gz"
+    _archive(
+        path,
+        model_assets=_MODEL_ASSETS,
+        env_model_asset=env_model_asset,
+        metadata_model_assets=metadata_model_assets,
+    )
+
+    with pytest.raises(ValueError, match=message):
+        recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))
+
+
+def test_legacy_cloud_recovery_without_model_asset_descriptor_remains_valid(tmp_path):
+    path = tmp_path / "legacy-cloud-no-assets.tar.gz"
+    _archive(path)
+
+    assert recovery.validate_archive(path, release_public_key=_trusted_key_file(tmp_path))["status"] == "validated"
+
+
+def test_self_hosted_release_requires_signed_model_asset_descriptor():
+    with pytest.raises(ValueError, match="self-hosted release is missing"):
+        recovery._check_model_assets(
+            {}, lambda key: "self-hosted" if key == "COMPOSE_PROFILES" else "",
+            description="Archived .env",
+        )
 
 
 def test_recovery_archive_rejects_unsigned_release_manifest(tmp_path):

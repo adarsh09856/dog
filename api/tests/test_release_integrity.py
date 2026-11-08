@@ -152,6 +152,105 @@ def test_configured_release_rejects_runtime_image_digest_mismatch(monkeypatch, t
         verify_configured_release(root)
 
 
+def test_configured_release_rejects_runtime_model_image_digest_mismatch(monkeypatch, tmp_path):
+    root, manifest, _ = signed_test_tree(tmp_path)
+    private = Ed25519PrivateKey.generate()
+    public = base64.urlsafe_b64encode(private.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode()
+    model_images = {
+        "ollama": "ghcr.io/kodewaves/ollama@sha256:" + "c" * 64,
+        "indic_stt": "ghcr.io/kodewaves/indic-stt@sha256:" + "d" * 64,
+        "indus_tts": "ghcr.io/kodewaves/indus-tts@sha256:" + "e" * 64,
+        "indic_vits_tts": "ghcr.io/kodewaves/indic-vits-tts@sha256:" + "f" * 64,
+    }
+    payload = {
+        "edition": "client", "files": protected_files(root), "ui_files": {},
+        "images": {
+            "api": {"kind": "registry_digest", "reference": "registry.example/api@sha256:" + "a" * 64},
+            "ui": {"kind": "registry_digest", "reference": "registry.example/ui@sha256:" + "b" * 64},
+        },
+        "model_images": model_images,
+        "schema_compatibility": {"head": "rev1", "upgrade_from": ["rev1"], "rollback_to": []},
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    manifest.write_text(json.dumps({
+        "payload": payload,
+        "signature": base64.urlsafe_b64encode(private.sign(canonical)).rstrip(b"=").decode(),
+    }))
+    monkeypatch.setattr(release_integrity, "trusted_release_public_key", lambda: public)
+    monkeypatch.setattr(release_integrity, "IMAGE_EDITION", "client")
+    monkeypatch.setenv("KODEWAVES_EDITION", "client")
+    monkeypatch.setenv("KODEWAVES_RELEASE_MANIFEST", str(manifest))
+    monkeypatch.setenv("KODEWAVES_API_IMAGE", payload["images"]["api"]["reference"])
+    monkeypatch.setenv("KODEWAVES_UI_IMAGE", payload["images"]["ui"]["reference"])
+    for name, reference in model_images.items():
+        env_name = f"KODEWAVES_CLIENT_{name.upper()}_IMAGE"
+        monkeypatch.setenv(env_name, reference)
+    monkeypatch.setenv("KODEWAVES_CLIENT_OLLAMA_IMAGE", "ghcr.io/kodewaves/ollama@sha256:" + "0" * 64)
+
+    with pytest.raises(ReleaseIntegrityError, match="OLLAMA model image does not match"):
+        verify_configured_release(root)
+
+
+def test_configured_cloud_release_allows_signed_optional_model_inventory(monkeypatch, tmp_path):
+    root, manifest, _ = signed_test_tree(tmp_path)
+    private = Ed25519PrivateKey.generate()
+    public = base64.urlsafe_b64encode(private.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode()
+    payload = {
+        "edition": "client", "files": protected_files(root), "ui_files": {},
+        "images": {
+            "api": {"kind": "registry_digest", "reference": "registry.example/api@sha256:" + "a" * 64},
+            "ui": {"kind": "registry_digest", "reference": "registry.example/ui@sha256:" + "b" * 64},
+        },
+        "model_images": {
+            "ollama": "registry.example/ollama@sha256:" + "c" * 64,
+            "indic_stt": "registry.example/indic-stt@sha256:" + "d" * 64,
+            "indus_tts": "registry.example/indus-tts@sha256:" + "e" * 64,
+            "indic_vits_tts": "registry.example/indic-vits-tts@sha256:" + "f" * 64,
+        },
+        "schema_compatibility": {"head": "rev1", "upgrade_from": ["rev1"], "rollback_to": []},
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    manifest.write_text(json.dumps({
+        "payload": payload,
+        "signature": base64.urlsafe_b64encode(private.sign(canonical)).rstrip(b"=").decode(),
+    }))
+    monkeypatch.setattr(release_integrity, "trusted_release_public_key", lambda: public)
+    monkeypatch.setattr(release_integrity, "IMAGE_EDITION", "client")
+    monkeypatch.setenv("KODEWAVES_EDITION", "client")
+    monkeypatch.setenv("KODEWAVES_RELEASE_MANIFEST", str(manifest))
+    monkeypatch.setenv("KODEWAVES_API_IMAGE", payload["images"]["api"]["reference"])
+    monkeypatch.setenv("KODEWAVES_UI_IMAGE", payload["images"]["ui"]["reference"])
+    monkeypatch.setenv("COMPOSE_PROFILES", "direct-ingress")
+    for variable in release_integrity.MODEL_IMAGE_ENV_KEYS.values():
+        monkeypatch.delenv(variable, raising=False)
+
+    assert verify_configured_release(root)["model_images"] == payload["model_images"]
+
+
+def test_signed_release_rejects_partial_model_image_inventory(tmp_path):
+    root, manifest, public = signed_test_tree(tmp_path)
+    private = Ed25519PrivateKey.generate()
+    public = base64.urlsafe_b64encode(private.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+    )).rstrip(b"=").decode()
+    payload = {
+        "edition": "client", "files": protected_files(root), "ui_files": {},
+        "model_images": {"ollama": "ghcr.io/kodewaves/ollama@sha256:" + "c" * 64},
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    manifest.write_text(json.dumps({
+        "payload": payload,
+        "signature": base64.urlsafe_b64encode(private.sign(canonical)).rstrip(b"=").decode(),
+    }))
+
+    with pytest.raises(ReleaseIntegrityError, match="Invalid client release model image metadata"):
+        verify_release_manifest(root, manifest, public)
+
+
 def test_migration_compatibility_derives_head_and_ancestors(tmp_path):
     from api.services.release_schema import migration_compatibility
 
@@ -237,7 +336,7 @@ def test_client_release_gate_ignores_replacement_environment_key(monkeypatch, tm
         verify_configured_release(root)
 
 
-def test_failed_startup_reports_bounded_finding_to_pinned_owner_endpoint(monkeypatch):
+def test_failed_startup_reports_bounded_finding_to_pinned_owner_endpoint(monkeypatch, tmp_path):
     import httpx
 
     from api.services import release_integrity
@@ -255,6 +354,8 @@ def test_failed_startup_reports_bounded_finding_to_pinned_owner_endpoint(monkeyp
     monkeypatch.setattr(release_integrity, "IMAGE_EDITION", "client")
     monkeypatch.setenv("KODEWAVES_EDITION", "saas")
     monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", "signed-token")
+    monkeypatch.setenv("KODEWAVES_INSTALLATION_ID", "client-1")
+    monkeypatch.setenv("KODEWAVES_INTEGRITY_OUTBOX_DIR", str(tmp_path / "integrity-outbox"))
     monkeypatch.setattr(release_integrity, "trusted_owner_status_url", lambda: "https://owner.example.com/check")
     monkeypatch.setattr(httpx, "post", post)
     report_startup_integrity_failure(ReleaseIntegrityError(
@@ -266,6 +367,98 @@ def test_failed_startup_reports_bounded_finding_to_pinned_owner_endpoint(monkeyp
     assert sent[0][1]["headers"] == {"Authorization": "Bearer signed-token"}
     assert sent[0][1]["json"]["integrity_finding"]["component"] == "api/app.py"
     assert sent[0][1]["timeout"] == 5.0
+
+
+def test_failed_startup_persists_finding_before_best_effort_owner_report(monkeypatch):
+    import httpx
+
+    events = []
+    monkeypatch.setattr(release_integrity, "IMAGE_EDITION", "client")
+    monkeypatch.setenv("KODEWAVES_EDITION", "client")
+    monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", "signed-token")
+    monkeypatch.setenv("KODEWAVES_INSTALLATION_ID", "client-1")
+    monkeypatch.setattr(
+        release_integrity,
+        "trusted_owner_status_url",
+        lambda: "https://owner.example.com/check",
+    )
+
+    def persist(finding, *, installation_id):
+        events.append(("persist", finding, installation_id))
+
+    def post(_url, **_kwargs):
+        events.append(("post",))
+        raise httpx.ConnectError("owner unavailable")
+
+    monkeypatch.setattr(
+        release_integrity,
+        "_persist_startup_integrity_finding",
+        persist,
+        raising=False,
+    )
+    monkeypatch.setattr(httpx, "post", post)
+
+    finding = ReleaseIntegrityError(
+        "modified", reason="modified_file", component="api/app.py"
+    ).finding()
+    report_startup_integrity_failure(
+        ReleaseIntegrityError("modified", reason="modified_file", component="api/app.py")
+    )
+
+    assert events[0] == ("persist", finding, "client-1")
+    assert events[1] == ("post",)
+
+
+def test_startup_integrity_outbox_is_atomic_deduplicated_and_acknowledgeable(monkeypatch, tmp_path):
+    from api.services.client_integrity_outbox import (
+        acknowledge_integrity_finding,
+        pending_integrity_findings,
+    )
+
+    monkeypatch.setenv("KODEWAVES_INTEGRITY_OUTBOX_DIR", str(tmp_path / "integrity-outbox"))
+    finding = {
+        "reason": "modified_file",
+        "component": "api/app.py",
+        "expected_sha256": None,
+        "observed_sha256": None,
+    }
+
+    release_integrity._persist_startup_integrity_finding(finding, installation_id="client-a")
+    release_integrity._persist_startup_integrity_finding(finding, installation_id="client-a")
+
+    assert pending_integrity_findings(installation_id="client-a") == [finding]
+    assert len(list((tmp_path / "integrity-outbox").rglob("*.json"))) == 1
+    acknowledge_integrity_finding(finding, installation_id="client-a")
+    assert pending_integrity_findings(installation_id="client-a") == []
+    installation_directory = next((tmp_path / "integrity-outbox").iterdir())
+    (installation_directory / "malformed.json").write_text(
+        '{"reason":"untrusted","component":"api/app.py"}', encoding="utf-8"
+    )
+    assert pending_integrity_findings(installation_id="client-a") == []
+
+
+def test_startup_integrity_outbox_is_namespaced_per_installation(monkeypatch, tmp_path):
+    from api.services.client_integrity_outbox import (
+        acknowledge_integrity_finding,
+        pending_integrity_findings,
+        persist_integrity_finding,
+    )
+
+    monkeypatch.setenv("KODEWAVES_INTEGRITY_OUTBOX_DIR", str(tmp_path / "integrity-outbox"))
+    finding = {
+        "reason": "modified_file",
+        "component": "api/app.py",
+        "expected_sha256": None,
+        "observed_sha256": None,
+    }
+    persist_integrity_finding(finding, installation_id="client-a")
+    persist_integrity_finding(finding, installation_id="client-b")
+
+    assert pending_integrity_findings(installation_id="client-a") == [finding]
+    assert pending_integrity_findings(installation_id="client-b") == [finding]
+    acknowledge_integrity_finding(finding, installation_id="client-a")
+    assert pending_integrity_findings(installation_id="client-a") == []
+    assert pending_integrity_findings(installation_id="client-b") == [finding]
 
 
 def test_failed_startup_signs_alert_when_installation_key_is_configured(monkeypatch, tmp_path):
@@ -284,6 +477,11 @@ def test_failed_startup_signs_alert_when_installation_key_is_configured(monkeypa
     )).rstrip(b"=").decode("ascii")
     sent = []
     monkeypatch.setattr(release_integrity, "IMAGE_EDITION", "client")
+    monkeypatch.setattr(
+        release_integrity,
+        "_persist_startup_integrity_finding",
+        lambda *_args, **_kwargs: None,
+    )
     monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", "signed-token")
     monkeypatch.setenv("KODEWAVES_INSTALLATION_ID", "client-1")
     monkeypatch.setenv("KODEWAVES_INSTALLATION_KEY_FILE", str(key_path))
@@ -348,6 +546,11 @@ async def test_startup_integrity_alert_reaches_owner_check_endpoint(monkeypatch,
     key_path.write_bytes(private_bytes(installation_key))
 
     monkeypatch.setattr(release_integrity, "IMAGE_EDITION", "client")
+    monkeypatch.setattr(
+        release_integrity,
+        "_persist_startup_integrity_finding",
+        lambda *_args, **_kwargs: None,
+    )
     monkeypatch.setattr(
         release_integrity,
         "trusted_owner_status_url",

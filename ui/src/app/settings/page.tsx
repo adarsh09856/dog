@@ -73,7 +73,11 @@ export default function SettingsPage() {
         <div className={panel.collectionHeader}>
           <div><span className={panel.eyebrow}>WORKSPACE / PREFERENCES</span><h1>Workspace & Account Settings</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your personal profile, active workspace defaults, and integration endpoints.
+            {isClientAdmin
+              ? "Client administrator settings for this installation: manage workspace members, licensed branding, and workspace defaults. CRM records stay scoped to the selected workspace."
+              : isSuper
+                ? "Personal workspace settings are separate from Kodewaves-wide owner controls. Use the Platform Owner Console for customer installations, provider keys, plans, and platform operations."
+                : "Manage your personal profile, active workspace defaults, and integration endpoints."}
           </p></div>
         </div>
 
@@ -92,19 +96,19 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm">Superadmin Access Active</span>
+                    <span className="font-semibold text-sm">Kodewaves platform owner</span>
                     <Badge variant="outline" className="border-primary/40 text-primary text-[10px] uppercase font-bold">
-                      Platform Admin
+                      Global owner
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    You have global privileges to manage platform master keys, user bans, retail margins, and live monitoring.
+                    You have owner access to platform provider keys, customer installations, plans, and global operations. This console is not part of customer installations.
                   </p>
                 </div>
               </div>
               <Link href="/admin" className="shrink-0 w-full sm:w-auto">
                 <Button className="w-full sm:w-auto gap-2 text-xs font-medium shadow-sm">
-                  Open Admin Control Plane <ArrowRight className="h-3.5 w-3.5" />
+                  Open Platform Owner Console <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
               </Link>
             </CardContent>

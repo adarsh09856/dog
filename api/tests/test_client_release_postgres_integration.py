@@ -50,6 +50,7 @@ from api.db.kodewaves_models import (
     ClientReleaseRolloutModel,
     ClientReleaseRolloutTargetModel,
 )
+from api.db.models import CampaignModel
 from api.db.user_client import UserClient
 from api.db.client_user_management import list_workspace_users, set_workspace_user_active
 from api.db import db_client
@@ -78,6 +79,85 @@ def _disposable_database_url() -> str:
     ):
         pytest.fail("Client release tests require a loopback database named kodewaves_client_release_test")
     return database_url
+
+
+@pytest.mark.asyncio
+async def test_campaign_creation_enforces_signed_cap_and_serializes_concurrent_creates(monkeypatch):
+    """Exercise the campaign count and insert under the real PostgreSQL lock."""
+    database_url = _disposable_database_url()
+    schema = f"campaign_cap_{uuid.uuid4().hex}"
+    admin_engine = create_async_engine(database_url)
+    engine = create_async_engine(
+        database_url, connect_args={"server_settings": {"search_path": schema}}
+    )
+    schema_created = False
+    try:
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            schema_created = True
+        async with engine.begin() as conn:
+            for table in (
+                "organizations",
+                "users",
+                "workflows",
+                "telephony_configurations",
+            ):
+                await conn.execute(text(f'CREATE TABLE "{table}" (id INTEGER PRIMARY KEY)'))
+            await conn.run_sync(lambda sync_conn: CampaignModel.__table__.create(sync_conn))
+            await conn.execute(text("INSERT INTO organizations (id) VALUES (1)"))
+            await conn.execute(text("INSERT INTO users (id) VALUES (1)"))
+            await conn.execute(text("INSERT INTO workflows (id) VALUES (1)"))
+
+        monkeypatch.setattr(client_creation_limits, "KODEWAVES_EDITION", "client")
+        license_data = SimpleNamespace(limits={"max_campaigns": 1})
+        monkeypatch.setattr(client_creation_limits, "load_license", lambda: license_data)
+        monkeypatch.setattr(client_creation_limits, "validate_installation_license", lambda _license: None)
+        monkeypatch.setattr(client_creation_limits, "require_current_owner_status", AsyncMock())
+        monkeypatch.setattr(db_client, "async_session", async_sessionmaker(engine, expire_on_commit=False))
+
+        async def create_campaign(name: str):
+            return await db_client.create_campaign(
+                name=name,
+                workflow_id=1,
+                source_type="csv",
+                source_id=f"{name}.csv",
+                user_id=1,
+                organization_id=1,
+            )
+
+        first = await create_campaign("first")
+        assert first.id is not None
+        with pytest.raises(HTTPException, match="max_campaigns") as at_cap:
+            await create_campaign("over-cap")
+        assert at_cap.value.status_code == 403
+
+        async with engine.connect() as conn:
+            assert await conn.scalar(text("SELECT count(*) FROM campaigns")) == 1
+
+        # With one slot left, two independent transactions race the real
+        # advisory-lock/count/insert path. Exactly one may claim that slot.
+        license_data.limits["max_campaigns"] = 2
+        outcomes = await asyncio.wait_for(
+            asyncio.gather(
+                create_campaign("concurrent-a"),
+                create_campaign("concurrent-b"),
+                return_exceptions=True,
+            ),
+            timeout=30,
+        )
+        created = [outcome for outcome in outcomes if isinstance(outcome, CampaignModel)]
+        rejected = [outcome for outcome in outcomes if isinstance(outcome, HTTPException)]
+        assert len(created) == 1
+        assert len(rejected) == 1
+        assert rejected[0].status_code == 403
+        async with engine.connect() as conn:
+            assert await conn.scalar(text("SELECT count(*) FROM campaigns")) == 2
+    finally:
+        await engine.dispose()
+        if schema_created:
+            async with admin_engine.begin() as conn:
+                await conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        await admin_engine.dispose()
 
 
 @pytest.mark.asyncio

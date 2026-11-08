@@ -282,10 +282,17 @@ variable; do not reuse the example output or a secret from another installation.
 
 ### Package the customer installation
 
+Build one signed installer archive per product release and reuse that same
+archive for every customer installation running that release. Do not generate
+an archive per customer. Issue a separate owner-signed license and installation
+ID for each deployment; bind each license to that deployment's approved domain
+and optional observed egress IP ranges. Each installation keeps its own
+branding, users, data, and provider configuration.
+
 After image verification and release approval, prepare a file containing exactly
 the seven approved `CLIENT_*_IMAGE` entries from `.env.example`. Copy the API/UI
 digest values from the published release output; add approved PostgreSQL, Redis,
-MinIO, coturn and Caddy digests. Do not include passwords, license tokens, private
+the approved PGSTY Silo object-storage, coturn and Caddy digests. Do not include passwords, license tokens, private
 keys or other configuration in this image-reference file.
 
 ```bash
@@ -294,7 +301,16 @@ python owner-tools/package_client_installer.py \
   --manifest /secure/releases/client-release-manifest.json \
   --release-public-key /secure/releases/release-public.key \
   --release-private-key /secure/owner-keys/release-private.key \
+  --silo-source-archive /secure/releases/silo-source-RELEASE.2026-10-26T00-00-00Z.tar.gz \
   --output /secure/releases/customer-installer.tar.gz
+```
+
+Fetch the matching source archive before packaging. The fetcher uses the fixed
+upstream release URL and validates its pinned SHA-256:
+
+```bash
+python owner-tools/fetch_client_silo_source.py \
+  --output /secure/releases/silo-source-RELEASE.2026-10-26T00-00-00Z.tar.gz
 ```
 
 Run this owner-side command from the repository root. It verifies the release
@@ -311,6 +327,8 @@ key and file checksums. No
 application checkout, owner build/signing tools, local `.env` or private keys
 are included. The verifier copy inside the archive cannot authenticate the
 archive before extraction; obtain a trusted copy independently.
+The archive also includes PGSTY Silo's AGPL-3.0 license, attribution files and
+matching machine-readable source archive.
 
 Deliver the installation ID and license token separately. Send the archive,
 detached `.sig`, verifier CLI and trusted release public key through an

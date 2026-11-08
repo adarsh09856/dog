@@ -83,7 +83,7 @@ lets through.
 
 ```bash
 KODEWAVES_API_URL=http://localhost:8000   # default
-# (Legacy fallback: DOGRAH_API_URL is also supported)
+# Existing installations may continue using their previously configured environment alias.
 KODEWAVES_API_KEY=sk-...                  # sent as X-API-Key
 ```
 

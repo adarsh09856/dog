@@ -88,7 +88,8 @@ describe("client installation binding change requests", () => {
         reason: "Moving to a new server",
       }),
     });
-    expect(screen.getByRole("status").textContent).toContain("Request #31");
+    expect(screen.getByRole("status").textContent).toContain("Request #31 was sent to the platform owner for review.");
+    expect(screen.getByRole("status").textContent).not.toContain("Kodewaves");
   });
 
   it("describes licensed client usage instead of hosted subscription upgrades", async () => {

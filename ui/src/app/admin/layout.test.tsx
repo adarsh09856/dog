@@ -52,7 +52,8 @@ describe("admin integrity alert notification", () => {
     expect(screen.getByLabelText("2 installation integrity alerts")).toBeTruthy();
     expect(screen.getByText("Access & commercial")).toBeTruthy();
     expect(screen.getByText("Operations")).toBeTruthy();
-    expect(screen.getByText("Platform owner")).toBeTruthy();
+    expect(screen.getByText("Global controls · owner only")).toBeTruthy();
+    expect(screen.getAllByText("Kodewaves Platform Owner")).toHaveLength(2);
     expect(screen.queryByText("Sovereign Control")).toBeNull();
     expect(screen.getByText("admin content")).toBeTruthy();
   });

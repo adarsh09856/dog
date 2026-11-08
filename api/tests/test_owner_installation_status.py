@@ -45,10 +45,21 @@ class FakeRedis:
         if "HEXISTS" in script:
             if acknowledged_key not in self.fields:
                 self.fields[key] = expected_value
-            return
+                return 1
+            return 0
         if self.fields.get(key) == expected_value:
             self.fields[acknowledged_key] = b"1"
             del self.fields[key]
+            return 1
+        return 0
+
+
+@pytest.fixture(autouse=True)
+def isolate_startup_integrity_outbox(monkeypatch, tmp_path):
+    monkeypatch.setenv(
+        "KODEWAVES_INTEGRITY_OUTBOX_DIR",
+        str(tmp_path / "startup-integrity-outbox"),
+    )
 
 
 @pytest.mark.asyncio
@@ -497,3 +508,53 @@ async def test_local_integrity_failure_latches_even_when_owner_unreachable(monke
     await redis.hset("ignored", {"revoked_latched": "1"})
     with pytest.raises(InstallationLicenseError, match="Protected installation files were modified"):
         await owner_status.require_current_owner_status(license_data, redis)
+
+
+@pytest.mark.asyncio
+async def test_startup_outbox_replays_and_clears_only_after_signed_owner_ack(monkeypatch, tmp_path):
+    from api.services import release_integrity
+    from api.services.client_integrity_outbox import pending_integrity_findings
+
+    monkeypatch.setenv("KODEWAVES_INTEGRITY_OUTBOX_DIR", str(tmp_path / "integrity-outbox"))
+    monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", "signed-client-token")
+    monkeypatch.setattr(owner_status, "_trusted_owner_key", lambda: ("trusted-owner-key",))
+    monkeypatch.setattr(
+        owner_status,
+        "load_license",
+        lambda *_args: SimpleNamespace(installation_id="client-1", ip_ranges=()),
+    )
+    monkeypatch.setattr(owner_status, "validate_installation_license", lambda _license: None)
+    monkeypatch.setattr(owner_status, "_status_url", lambda: "https://owner.example.com/check")
+    monkeypatch.setattr(owner_status, "verify_configured_release", lambda: None)
+    monkeypatch.setattr(
+        owner_status,
+        "verify_installation_status_claims",
+        lambda *_args, **_kwargs: {"revoked": False},
+    )
+
+    async def allow_calls(_license, _redis):
+        return None
+
+    monkeypatch.setattr(owner_status, "require_current_owner_status", allow_calls)
+    finding = release_integrity.ReleaseIntegrityError(
+        "modified", reason="modified_file", component="api/app.py"
+    ).finding()
+    release_integrity._persist_startup_integrity_finding(finding, installation_id="client-1")
+
+    sent = []
+
+    class RecoveringHttp:
+        async def post(self, _url, **kwargs):
+            sent.append(kwargs["json"])
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {"signed_status": "verified-owner-response"},
+            )
+
+    assert len(pending_integrity_findings(installation_id="client-1")) == 1
+    assert await owner_status.poll_owner_status_once(
+        FakeRedis(), RecoveringHttp(), integrity_preverified=True
+    ) is False
+    assert sent[0]["integrity_ok"] is False
+    assert sent[0]["integrity_finding"] == finding
+    assert pending_integrity_findings(installation_id="client-1") == []

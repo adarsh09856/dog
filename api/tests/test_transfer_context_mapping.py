@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -129,6 +130,20 @@ async def test_matched_destination_can_be_rendered_from_initial_context():
     )
 
     assert resolved.destination == "+14155550123"
+
+
+@pytest.mark.asyncio
+async def test_transfer_resolution_requires_telephony_grant(monkeypatch):
+    from api.services.installation_license import InstallationFeatureError
+    from api.services.workflow.tools import transfer_resolver
+
+    gate = AsyncMock(side_effect=InstallationFeatureError("telephony not licensed"))
+    monkeypatch.setattr(transfer_resolver, "require_client_worker_features", gate)
+
+    with pytest.raises(InstallationFeatureError, match="telephony not licensed"):
+        await _resolve(rules=[_rule("department", ("support", "+14155550123"))])
+
+    gate.assert_awaited_once_with("telephony")
 
 
 @pytest.mark.asyncio

@@ -147,9 +147,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="flex items-center gap-3 px-5 py-4 border-b border-border/40">
           <BrandLogo mark className="h-9" />
           <div>
-            <div className="text-sm font-bold tracking-tight">{branding.company_name} Admin</div>
+            <div className="text-sm font-bold tracking-tight">{branding.company_name} Platform Owner</div>
             <div className="text-[10px] uppercase font-semibold tracking-[0.14em] text-muted-foreground">
-              Platform owner
+              Global controls · owner only
             </div>
           </div>
         </div>
@@ -230,7 +230,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Button>
           <div className="flex min-w-0 items-center gap-2">
             <BrandLogo mark className="h-7" />
-            <span className="truncate text-sm font-semibold">{branding.company_name} Admin</span>
+            <span className="truncate text-sm font-semibold">{branding.company_name} Platform Owner</span>
           </div>
           <ThemeToggle showLabel={false} />
         </div>

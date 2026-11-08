@@ -70,7 +70,7 @@ through (compound invariants, cross-field rules).
 ```bash
 KODEWAVES_API_URL=http://localhost:8000   # default
 KODEWAVES_API_KEY=sk-...                  # sent as X-API-Key
-# (Legacy fallback: DOGRAH_API_URL and DOGRAH_API_KEY are also supported)
+# Existing installations may continue using their previously configured environment aliases.
 ```
 
 ## License

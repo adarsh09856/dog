@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -330,6 +331,35 @@ async def test_scheduled_refresh_enqueues_org_scoped_work(monkeypatch):
     result = await website_knowledge.sweep_website_knowledge_sources({"redis": redis})
     assert result == {"queued": 1}
     assert redis.jobs[0][1:] == ("source-1", 28)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entrypoint", ["refresh", "sweep"])
+async def test_website_worker_entrypoints_require_knowledge_base_grant_before_io(
+    monkeypatch, entrypoint
+):
+    from api.services.installation_license import InstallationFeatureError
+    from api.tasks import website_knowledge
+
+    gate = AsyncMock(side_effect=InstallationFeatureError("knowledge_base not licensed"))
+    monkeypatch.setattr(website_knowledge, "require_client_worker_features", gate)
+
+    class DB:
+        async def claim_website_source_refresh(self, *_args):
+            pytest.fail("refresh claimed a source before checking its grant")
+
+        async def get_due_website_sources(self, **_kwargs):
+            pytest.fail("sweep read due sources before checking its grant")
+
+    monkeypatch.setattr(website_knowledge, "db_client", DB())
+
+    with pytest.raises(InstallationFeatureError, match="knowledge_base not licensed"):
+        if entrypoint == "refresh":
+            await website_knowledge.refresh_knowledge_base_website({}, "source-1", 28)
+        else:
+            await website_knowledge.sweep_website_knowledge_sources({"redis": object()})
+
+    gate.assert_awaited_once_with("knowledge_base")
 
 
 @pytest.mark.asyncio

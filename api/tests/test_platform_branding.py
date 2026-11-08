@@ -58,6 +58,50 @@ async def test_admin_settings_read_normalizes_only_the_legacy_platform_seed(monk
     assert result.primary_color == "#426b57"
 
 
+@pytest.mark.asyncio
+async def test_client_admin_reads_client_branding_before_legacy_branding(monkeypatch):
+    monkeypatch.setattr(admin_settings, "KODEWAVES_EDITION", "client")
+    monkeypatch.setattr(
+        admin_settings.kodewaves_db_client,
+        "get_settings_map",
+        AsyncMock(
+            return_value={
+                "branding": {"company_name": "Old Brand"},
+                "client_branding": {"company_name": "Customer Brand"},
+            }
+        ),
+    )
+
+    result = await admin_settings.get_all_platform_settings(_user=SimpleNamespace(id=1))
+
+    assert result.company_name == "Customer Brand"
+
+
+@pytest.mark.asyncio
+async def test_client_admin_settings_save_writes_client_branding_namespace(monkeypatch):
+    monkeypatch.setattr(admin_settings, "KODEWAVES_EDITION", "client")
+    get_setting = AsyncMock(side_effect=lambda key: {
+        "client_branding": {},
+        "branding": {"company_name": "Legacy Customer Brand"},
+    }.get(key, {}))
+    save = AsyncMock()
+    monkeypatch.setattr(admin_settings.kodewaves_db_client, "get_setting", get_setting)
+    monkeypatch.setattr(admin_settings.kodewaves_db_client, "set_setting", save)
+    monkeypatch.setattr(admin_settings.kodewaves_db_client, "record_audit_log", AsyncMock())
+    monkeypatch.setattr(admin_settings.catalog_service, "notify_changed", AsyncMock())
+
+    await admin_settings.update_platform_settings(
+        {"company_name": "New Customer Brand"},
+        SimpleNamespace(id=1, email="owner@example.com"),
+    )
+
+    save.assert_awaited_once()
+    assert save.await_args.kwargs["key"] == "client_branding"
+    assert save.await_args.kwargs["category"] == "client_branding"
+    assert save.await_args.kwargs["value"]["company_name"] == "New Customer Brand"
+    assert save.await_args.kwargs["value"]["tagline"] == "Voice agents for web and phone"
+
+
 def test_custom_brand_assets_are_preserved():
     branding = PlatformBranding.model_validate(
         {"logo_url": "https://brand.example/logo.svg", "favicon_url": "/customer-icon.svg"}
@@ -111,6 +155,20 @@ async def test_public_brand_read_uses_matching_edition_namespace(
 
     assert result.company_name == "Acme Voice"
     get_setting.assert_awaited_once_with(setting_key, raise_on_error=True)
+
+
+@pytest.mark.asyncio
+async def test_client_public_brand_read_falls_back_to_legacy_shared_branding(monkeypatch):
+    monkeypatch.setattr(installation, "KODEWAVES_EDITION", "client")
+    get_setting = AsyncMock(side_effect=[{}, {"company_name": "Legacy Customer Brand"}])
+    monkeypatch.setattr(installation.kodewaves_db_client, "get_setting", get_setting)
+
+    result = await installation.get_client_branding()
+
+    assert result.company_name == "Legacy Customer Brand"
+    assert [call.args[0] for call in get_setting.await_args_list] == [
+        "client_branding", "branding",
+    ]
 
 
 @pytest.mark.asyncio

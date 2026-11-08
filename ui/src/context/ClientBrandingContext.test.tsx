@@ -135,14 +135,22 @@ describe("shared platform branding", () => {
     await waitFor(() => expect(document.title).toBe("Admin | Acme Voice"));
     expect(rootStyle.getPropertyValue("--brand-primary-color")).toBe("#123456");
     expect(rootStyle.getPropertyValue("--cta")).toBe("#123456");
+    expect(rootStyle.getPropertyValue("--primary")).toBe("#123456");
+    expect(rootStyle.getPropertyValue("--sidebar-ring")).toBe("#123456");
+    expect(
+      contrastRatio(
+        rootStyle.getPropertyValue("--primary"),
+        rootStyle.getPropertyValue("--primary-foreground"),
+      ),
+    ).toBeGreaterThanOrEqual(4.5);
     expect(
       contrastRatio(
         rootStyle.getPropertyValue("--cta"),
         rootStyle.getPropertyValue("--cta-foreground"),
       ),
     ).toBeGreaterThanOrEqual(4.5);
-    expect(genericThemeVariables.map((name) => rootStyle.getPropertyValue(name))).toEqual(
-      initialGenericTheme,
+    expect(genericThemeVariables.slice(2).map((name) => rootStyle.getPropertyValue(name))).toEqual(
+      initialGenericTheme.slice(2),
     );
     expect(document.documentElement.style.getPropertyValue("--brand-font-family")).toContain("system-ui");
     expect(
@@ -155,6 +163,9 @@ describe("shared platform branding", () => {
         .querySelector<HTMLLinkElement>('link[rel="icon"]')
         ?.getAttribute("href"),
     ).toBe("/acme.png");
+    expect(
+      document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content,
+    ).toBe("Acme conversations");
     mocks.apiFetch.mockResolvedValue({
       ...initial,
       company_name: "New Brand",
@@ -163,6 +174,9 @@ describe("shared platform branding", () => {
     });
     act(() => notifyBrandingChanged());
     await waitFor(() => expect(document.title).toBe("Admin | New Brand"));
+    await waitFor(() => expect(
+      document.querySelector<HTMLMetaElement>('meta[name="description"]')?.content,
+    ).toBe("New conversations, with less busywork."));
     expect(screen.getByRole("heading", {
       name: "New conversations, with less busywork.",
     })).toBeTruthy();
@@ -170,11 +184,12 @@ describe("shared platform branding", () => {
     expect(screen.getAllByText("New Brand").length).toBeGreaterThan(0);
     expect(rootStyle.getPropertyValue("--brand-primary-color")).toBe("#654321");
     expect(rootStyle.getPropertyValue("--cta")).toBe("#654321");
+    expect(rootStyle.getPropertyValue("--primary")).toBe("#654321");
     expect(
       contrastRatio(rootStyle.getPropertyValue("--cta"), rootStyle.getPropertyValue("--cta-foreground")),
     ).toBeGreaterThanOrEqual(4.5);
-    expect(genericThemeVariables.map((name) => rootStyle.getPropertyValue(name))).toEqual(
-      initialGenericTheme,
+    expect(genericThemeVariables.slice(2).map((name) => rootStyle.getPropertyValue(name))).toEqual(
+      initialGenericTheme.slice(2),
     );
   });
 

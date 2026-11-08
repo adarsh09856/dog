@@ -176,3 +176,22 @@ async def test_agent_retrieval_supplies_workspace_to_embedding_policy(monkeypatc
 
     assert result["total_results"] == 0
     assert builder.await_args.kwargs["organization_id"] == 42
+
+
+@pytest.mark.asyncio
+async def test_agent_knowledge_base_tool_checks_license_before_retrieval(monkeypatch):
+    from api.services.installation_license import InstallationFeatureError
+    from api.services.workflow.tools import knowledge_base
+
+    gate = AsyncMock(side_effect=InstallationFeatureError("knowledge_base not licensed"))
+    retrieval = AsyncMock()
+    monkeypatch.setattr(knowledge_base, "require_client_worker_features", gate)
+    monkeypatch.setattr(knowledge_base, "_perform_retrieval", retrieval)
+
+    with pytest.raises(InstallationFeatureError, match="knowledge_base not licensed"):
+        await knowledge_base.retrieve_from_knowledge_base(
+            query="opening hours", organization_id=42
+        )
+
+    gate.assert_awaited_once_with("knowledge_base")
+    retrieval.assert_not_awaited()

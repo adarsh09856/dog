@@ -257,6 +257,68 @@ def test_client_install_preflight_accepts_valid_inputs_and_rejects_common_mistak
         "ui": {"kind": "registry_digest", "reference": ui_ref},
     }}}), encoding="utf-8")
     assert validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")[0].startswith("preflight passed;")
+
+    model_names = {
+        "CLIENT_OLLAMA_IMAGE": "ollama",
+        "CLIENT_INDIC_STT_IMAGE": "indic_stt",
+        "CLIENT_INDUS_TTS_IMAGE": "indus_tts",
+        "CLIENT_INDIC_VITS_TTS_IMAGE": "indic_vits_tts",
+    }
+    model_values = {
+        key: f"registry.example.com/kodewaves/{component}@sha256:{digest * 64}"
+        for (key, component), digest in zip(model_names.items(), "cdef", strict=True)
+    }
+    model_env_lines = [line for line in lines if not line.startswith("COMPOSE_PROFILES=")]
+    model_env_lines.extend(["COMPOSE_PROFILES=direct-ingress,self-hosted", *(
+        f"{key}={value}" for key, value in model_values.items()
+    ), "CLIENT_OLLAMA_MODEL=qwen3.5:2b-q4_K_M", "CLIENT_OLLAMA_MODEL_DIGEST=sha256:" + "9" * 64])
+    env_file.write_text("\n".join(model_env_lines) + "\n", encoding="utf-8")
+    model_manifest = {
+        component: model_values[key]
+        for key, component in model_names.items()
+    }
+    manifest.write_text(json.dumps({"payload": {
+        "images": {
+            "api": {"kind": "registry_digest", "reference": api_ref},
+            "ui": {"kind": "registry_digest", "reference": ui_ref},
+        },
+        "model_images": model_manifest,
+        "model_assets": {"ollama": {"name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "9" * 64}},
+    }}), encoding="utf-8")
+    assert validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")[0].startswith("preflight passed;")
+    model_manifest["ollama"] = "registry.example.com/kodewaves/ollama@sha256:" + "0" * 64
+    manifest.write_text(json.dumps({"payload": {
+        "images": {
+            "api": {"kind": "registry_digest", "reference": api_ref},
+            "ui": {"kind": "registry_digest", "reference": ui_ref},
+        },
+        "model_images": model_manifest,
+        "model_assets": {"ollama": {"name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "9" * 64}},
+    }}), encoding="utf-8")
+    assert any("CLIENT_OLLAMA_IMAGE does not match" in error for error in validate_install.validate(
+        env_file, client_dir / "docker-compose.client.yaml"
+    ))
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    manifest.write_text(json.dumps({"payload": {
+        "images": {
+            "api": {"kind": "registry_digest", "reference": api_ref},
+            "ui": {"kind": "registry_digest", "reference": ui_ref},
+        },
+        "model_images": {"ollama": model_values["CLIENT_OLLAMA_IMAGE"]},
+    }}), encoding="utf-8")
+    assert any("model image entries" in error for error in validate_install.validate(
+        env_file, client_dir / "docker-compose.client.yaml"
+    ))
+    # Return to a cloud-only fixture for the API/UI legacy-manifest checks below.
+    manifest.write_text(json.dumps({"payload": {"images": {
+        "api": {"kind": "registry_digest", "reference": api_ref},
+        "ui": {"kind": "registry_digest", "reference": ui_ref},
+    }, "model_images": model_manifest}}), encoding="utf-8")
+    assert validate_install.validate(env_file, client_dir / "docker-compose.client.yaml")[0].startswith("preflight passed;")
+    manifest.write_text(json.dumps({"payload": {"images": {
+        "api": {"kind": "registry_digest", "reference": api_ref},
+        "ui": {"kind": "registry_digest", "reference": ui_ref},
+    }}}), encoding="utf-8")
     manifest.write_text(json.dumps({"payload": {"images": {
         "api": {"kind": "registry_digest", "reference": api_ref},
     }}}), encoding="utf-8")
@@ -1077,3 +1139,127 @@ def test_release_signer_accepts_exact_built_image_inventory(tmp_path):
     canonical = json.dumps(signed["payload"], sort_keys=True, separators=(",", ":")).encode()
     Ed25519PrivateKey.from_private_bytes(private_bytes).public_key().verify(signature, canonical)
     assert public == private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+
+
+def test_release_signer_binds_exact_optional_model_image_digests(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    private = Ed25519PrivateKey.generate()
+    private_file = tmp_path / "release-private.key"
+    private_file.write_bytes(private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+        serialization.NoEncryption(),
+    ))
+    api_inventory = tmp_path / "api-inventory.json"
+    api_inventory.write_text(json.dumps({"api/app.py": "a" * 64}), encoding="utf-8")
+    ui_inventory = tmp_path / "ui-inventory.json"
+    ui_inventory.write_text(json.dumps({"server.js": "b" * 64}), encoding="utf-8")
+    images = tmp_path / "images.json"
+    images.write_text(json.dumps({
+        "api": {"kind": "registry_digest", "reference": "ghcr.io/example/api@sha256:" + "c" * 64},
+        "ui": {"kind": "registry_digest", "reference": "ghcr.io/example/ui@sha256:" + "d" * 64},
+    }), encoding="utf-8")
+    model_images = {
+        component: "ghcr.io/example/" + component + "@sha256:" + digest * 64
+        for component, digest in (
+            ("ollama", "e"), ("indic_stt", "f"), ("indus_tts", "1"), ("indic_vits_tts", "2"),
+        )
+    }
+    model_images_file = tmp_path / "model-images.json"
+    model_images_file.write_text(json.dumps(model_images), encoding="utf-8")
+    schema = tmp_path / "schema.json"
+    schema.write_text(json.dumps({"head": "rev1", "upgrade_from": ["rev1"], "rollback_to": []}), encoding="utf-8")
+    model_assets = tmp_path / "model-assets.json"
+    model_asset_inventory = {"ollama": {"name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "9" * 64}}
+    model_assets.write_text(json.dumps(model_asset_inventory), encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+
+    subprocess.run([
+        sys.executable, str(root / "owner-tools/sign_client_release.py"),
+        "--files-json", str(api_inventory), "--ui-files-json", str(ui_inventory),
+        "--images-json", str(images), "--schema-compatibility-json", str(schema),
+        "--model-images-json", str(model_images_file),
+        "--model-assets-json", str(model_assets),
+        "--private-key", str(private_file), "--output", str(manifest),
+    ], check=True, capture_output=True, text=True)
+
+    signed = json.loads(manifest.read_text(encoding="utf-8"))
+    assert signed["payload"]["model_images"] == model_images
+    assert signed["payload"]["model_assets"] == model_asset_inventory
+    canonical = json.dumps(signed["payload"], sort_keys=True, separators=(",", ":")).encode("utf-8")
+    private.public_key().verify(
+        base64.urlsafe_b64decode(signed["signature"] + "=="), canonical,
+    )
+
+
+def test_release_signer_rejects_incomplete_model_image_inventory(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    private = Ed25519PrivateKey.generate()
+    private_file = tmp_path / "release-private.key"
+    private_file.write_bytes(private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+        serialization.NoEncryption(),
+    ))
+    api_inventory = tmp_path / "api-inventory.json"
+    api_inventory.write_text(json.dumps({"api/app.py": "a" * 64}), encoding="utf-8")
+    ui_inventory = tmp_path / "ui-inventory.json"
+    ui_inventory.write_text(json.dumps({"server.js": "b" * 64}), encoding="utf-8")
+    images = tmp_path / "images.json"
+    images.write_text(json.dumps({"api": {}, "ui": {}}), encoding="utf-8")
+    schema = tmp_path / "schema.json"
+    schema.write_text(json.dumps({"head": "rev1", "upgrade_from": ["rev1"], "rollback_to": []}), encoding="utf-8")
+    model_images = tmp_path / "model-images.json"
+    model_images.write_text(json.dumps({"ollama": "ghcr.io/example/ollama@sha256:" + "e" * 64}), encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+
+    result = subprocess.run([
+        sys.executable, str(root / "owner-tools/sign_client_release.py"),
+        "--files-json", str(api_inventory), "--ui-files-json", str(ui_inventory),
+        "--images-json", str(images), "--schema-compatibility-json", str(schema),
+        "--model-images-json", str(model_images),
+        "--private-key", str(private_file), "--output", str(manifest),
+    ], check=False, capture_output=True, text=True)
+
+    assert result.returncode != 0
+    assert "exactly ollama, indic_stt, indus_tts, and indic_vits_tts" in result.stderr
+    assert not manifest.exists()
+
+
+def test_release_signer_rejects_invalid_ollama_model_asset_digest(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    private = Ed25519PrivateKey.generate()
+    private_file = tmp_path / "release-private.key"
+    private_file.write_bytes(private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+        serialization.NoEncryption(),
+    ))
+    api_inventory = tmp_path / "api-inventory.json"
+    api_inventory.write_text(json.dumps({"api/app.py": "a" * 64}), encoding="utf-8")
+    ui_inventory = tmp_path / "ui-inventory.json"
+    ui_inventory.write_text(json.dumps({"server.js": "b" * 64}), encoding="utf-8")
+    images = tmp_path / "images.json"
+    images.write_text(json.dumps({
+        "api": {"kind": "registry_digest", "reference": "ghcr.io/example/api@sha256:" + "c" * 64},
+        "ui": {"kind": "registry_digest", "reference": "ghcr.io/example/ui@sha256:" + "d" * 64},
+    }), encoding="utf-8")
+    model_images = tmp_path / "model-images.json"
+    model_images.write_text(json.dumps({
+        component: "ghcr.io/example/" + component + "@sha256:" + digest * 64
+        for component, digest in zip(("ollama", "indic_stt", "indus_tts", "indic_vits_tts"), "ef12", strict=True)
+    }), encoding="utf-8")
+    schema = tmp_path / "schema.json"
+    schema.write_text(json.dumps({"head": "rev1", "upgrade_from": ["rev1"], "rollback_to": []}), encoding="utf-8")
+    model_assets = tmp_path / "model-assets.json"
+    model_assets.write_text(json.dumps({"ollama": {"name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "Z" * 64}}), encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+
+    result = subprocess.run([
+        sys.executable, str(root / "owner-tools/sign_client_release.py"),
+        "--files-json", str(api_inventory), "--ui-files-json", str(ui_inventory),
+        "--images-json", str(images), "--schema-compatibility-json", str(schema),
+        "--model-images-json", str(model_images), "--model-assets-json", str(model_assets),
+        "--private-key", str(private_file), "--output", str(manifest),
+    ], check=False, capture_output=True, text=True)
+
+    assert result.returncode != 0
+    assert "valid name and sha256 digest" in result.stderr
+    assert not manifest.exists()

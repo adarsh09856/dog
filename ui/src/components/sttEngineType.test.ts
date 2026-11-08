@@ -57,22 +57,21 @@ describe("recognitionLanguagesForSttModel", () => {
         "pa-IN", "sa-IN", "sat-IN", "sd-IN", "ta-IN", "te-IN", "ur-IN",
     ];
 
-    it("lists every installed scheduled recognizer plus English and includes auto when supported", () => {
+    it("lists enabled installed decoder routes and includes auto when supported", () => {
         expect(recognitionLanguagesForSttModel(managedLanguages, installedLanguages, true, true)).toEqual([
-            "multi", "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks",
-            "kok", "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat",
-            "sd", "ta", "te", "ur",
+            "multi", "as", "bn", "brx", "doi", "en", "hi", "kn", "mai",
+            "ml", "mr", "ne", "pa", "sa", "ta", "te",
         ]);
     });
 
     it("keeps all installed local languages when auto-detection is unavailable", () => {
         const result = recognitionLanguagesForSttModel(managedLanguages, installedLanguages, true, false);
         expect(result).not.toContain("multi");
-        expect(result).toHaveLength(23);
+        expect(result).toHaveLength(15);
         expect(result).toContain("hi");
         expect(result).toContain("ta");
         for (const code of ["gu", "ks", "kok", "mni", "or", "sat", "sd", "ur"]) {
-            expect(result).toContain(code);
+            expect(result).not.toContain(code);
         }
     });
 
@@ -96,9 +95,9 @@ describe("recognitionLanguagesForSttModel", () => {
         expect(languageForLocalSttSelection("multi", true, [], managedLanguages, "hi")).not.toBe("multi");
     });
 
-    it("restores a scheduled language when its local decoder is installed", () => {
+    it("falls back when an installed language is outside the enabled local routes", () => {
         const selected = languageForLocalSttSelection("ur", true, installedLanguages, managedLanguages, "hi");
-        expect(selected).toBe("ur");
+        expect(selected).toBe("hi");
         expect(recognitionLanguagesForSttModel(managedLanguages, installedLanguages, true, true))
             .toContain(selected);
     });

@@ -14,6 +14,8 @@ describe("public platform page", () => {
   it("sets a page-specific browser title and search description", () => {
     expect(metadata.title).toBe("Platform");
     expect(metadata.description).toContain("voice-agent workflows");
+    expect(metadata.description).toContain("your workspace");
+    expect(metadata.description).not.toContain("Kodewaves");
   });
 
   it("explains the end-to-end voice operations workflow and links into the product", () => {

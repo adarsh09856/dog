@@ -14,6 +14,7 @@ vi.mock("@/context/ClientBrandingContext", () => ({
     tagline: "Acme helps every caller take the next step.",
     logo_url: "",
     primary_color: "#304c73",
+    support_email: "help@acme.example",
   }),
 }));
 
@@ -88,5 +89,9 @@ describe("public home branding", () => {
     expect(screen.getByRole("link", { name: "Deployment details" }).getAttribute("href")).toBe("/deployment");
     expect(screen.getByRole("main").textContent).not.toContain("compare plans");
     expect(screen.getByRole("main").textContent).not.toContain("workspace plan");
+    expect(screen.getByRole("main").textContent).not.toContain("Kodewaves");
+    expect(screen.queryByRole("button", { name: "Talk to our team" })).toBeNull();
+    expect(screen.getAllByRole("link", { name: "Open your workspace" }).every((link) => link.getAttribute("href") === "/auth/login")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Contact support" }).every((link) => link.getAttribute("href") === "mailto:help@acme.example")).toBe(true);
   });
 });

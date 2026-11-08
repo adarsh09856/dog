@@ -14,10 +14,15 @@ vi.mock("@/lib/kodewavesApi", () => ({
 }));
 
 vi.mock("@/components/PublicSiteChrome", () => ({ PublicHeader: () => null, PublicFooter: () => null }));
-vi.mock("@/components/lead-forms/PublicEnterpriseLeadCTA", () => ({
-  PublicEnterpriseLeadCTA: ({ label }: { label: string }) => <button type="button">{label}</button>,
+vi.mock("@/context/ClientBrandingContext", () => ({
+  useClientBranding: () => ({
+    company_name: "Acme Voice",
+    tagline: "Acme helps every caller take the next step.",
+    logo_url: "",
+    primary_color: "#426b57",
+    support_email: "help@acme.example",
+  }),
 }));
-
 import PricingPage from "./page";
 
 describe("public pricing", () => {
@@ -34,7 +39,10 @@ describe("public pricing", () => {
       expect(screen.getByText(/Installation pricing is managed/)).toBeTruthy();
       expect(screen.getByText(/Ask your installation administrator/)).toBeTruthy();
       expect(screen.queryByText("Workspace plans")).toBeNull();
-      expect(screen.getByRole("button", { name: "Discuss this installation" })).toBeTruthy();
+      expect(screen.getByText(/Hosted platform plans and checkout are not available from this installation/)).toBeTruthy();
+      expect(screen.queryByText(/Kodewaves/i)).toBeNull();
+      expect(screen.getByRole("link", { name: "Discuss this installation" }).getAttribute("href")).toBe("mailto:help@acme.example?subject=Installation%20enquiry");
+      expect(screen.queryByRole("button", { name: "Discuss this installation" })).toBeNull();
       expect(screen.getByRole("link", { name: "Deployment details" }).getAttribute("href")).toBe("/deployment");
       expect(mocks.getPublicPlans).not.toHaveBeenCalled();
       expect(mocks.getPublicCreditOffers).not.toHaveBeenCalled();

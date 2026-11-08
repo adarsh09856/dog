@@ -18,11 +18,33 @@ sys.path.insert(0, str(ROOT / "deploy/client"))
 import recovery  # noqa: E402
 
 _RELEASE_SIGNING_KEY = Ed25519PrivateKey.generate()
+_MODEL_IMAGE_ENV_KEYS = {
+    "ollama": "CLIENT_OLLAMA_IMAGE",
+    "indic_stt": "CLIENT_INDIC_STT_IMAGE",
+    "indus_tts": "CLIENT_INDUS_TTS_IMAGE",
+    "indic_vits_tts": "CLIENT_INDIC_VITS_TTS_IMAGE",
+}
+_MODEL_IMAGES_1 = {
+    name: f"registry.example.com/kodewaves/{name}@sha256:{digit * 64}"
+    for name, digit in zip(_MODEL_IMAGE_ENV_KEYS, "1234", strict=True)
+}
+_MODEL_IMAGES_2 = {
+    name: f"registry.example.com/kodewaves/{name}@sha256:{digit * 64}"
+    for name, digit in zip(_MODEL_IMAGE_ENV_KEYS, "5678", strict=True)
+}
+_MODEL_ASSETS_1 = {"ollama": {
+    "name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "a" * 64,
+}}
+_MODEL_ASSETS_2 = {"ollama": {
+    "name": "qwen3.5:4b-q4_K_M", "digest": "sha256:" + "b" * 64,
+}}
 
 
 def _signed_release_manifest(
     *, schema_head: str = "head1", rollback_to: list[str] | None = None,
     api_ref: str | None = None, ui_ref: str | None = None,
+    model_images: dict[str, str] | None = None,
+    model_assets: dict[str, dict[str, str]] | None = None,
 ) -> tuple[dict[str, object], str]:
     public_key = base64.urlsafe_b64encode(_RELEASE_SIGNING_KEY.public_key().public_bytes(
         encoding=serialization.Encoding.Raw,
@@ -42,6 +64,10 @@ def _signed_release_manifest(
             "rollback_to": rollback_to or [],
         },
     }
+    if model_images is not None:
+        payload["model_images"] = model_images
+    if model_assets is not None:
+        payload["model_assets"] = model_assets
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     signature = base64.urlsafe_b64encode(_RELEASE_SIGNING_KEY.sign(canonical)).rstrip(b"=").decode("ascii")
     return {"payload": payload, "signature": signature}, public_key
@@ -66,6 +92,45 @@ def test_recovery_compose_does_not_inherit_omitted_interpolation_values(tmp_path
     assert captured["DOCKER_CONFIG"] == "docker-config"
 
 
+@pytest.mark.parametrize(
+    ("profiles", "include_model_services", "expected"),
+    [
+        ("direct-ingress", True, ["api", "ui"]),
+        ("direct-ingress,self-hosted", False, ["api", "ui"]),
+        (
+            "direct-ingress,self-hosted", True,
+            ["api", "ui", "ollama", "indic-stt", "indus-tts", "indic-vits-tts"],
+        ),
+    ],
+)
+def test_release_compose_switch_respects_self_hosted_profile(
+    tmp_path, monkeypatch, profiles, include_model_services, expected,
+):
+    compose_dir = tmp_path / "client-model-services"
+    compose_dir.mkdir()
+    env_file = compose_dir / ".env"
+    values = {"COMPOSE_PROFILES": profiles}
+    if "self-hosted" in profiles:
+        values.update({
+            key: f"registry.example.com/kodewaves/{name}@sha256:{digit * 64}"
+            for (name, key), digit in zip(recovery.MODEL_IMAGE_ENV_KEYS.items(), "1234", strict=True)
+        })
+    env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8")
+    captured = {}
+
+    monkeypatch.setattr(
+        recovery, "_compose_context",
+        lambda *_args: (["docker", "compose"], {"services": {}}, values),
+    )
+    monkeypatch.setattr(recovery, "_run", lambda command, **_kwargs: captured.update(command=command))
+
+    recovery._switch_compose_up(
+        compose_dir, env_file, ["api", "ui"], include_model_services=include_model_services,
+    )
+
+    assert captured["command"][-len(expected):] == expected
+
+
 def _write_volume_tar(path: Path, name: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(path, "w") as archive:
@@ -75,7 +140,10 @@ def _write_volume_tar(path: Path, name: str) -> None:
         archive.addfile(member, fileobj=__import__("io").BytesIO(payload))
 
 
-def _installation(directory: Path) -> tuple[Path, Path, Path]:
+def _installation(
+    directory: Path, *, model_images: dict[str, str] | None = None,
+    model_assets: dict[str, dict[str, str]] | None = None,
+) -> tuple[Path, Path, Path]:
     inputs_dir = directory / "inputs"
     inputs_dir.mkdir()
     postgres = inputs_dir / "postgres.tar"
@@ -95,13 +163,14 @@ def _installation(directory: Path) -> tuple[Path, Path, Path]:
     env = inputs_dir / ".env"
     identity_value = str(identity.resolve())
     manifest_ref = "./client-release-manifest.json"
-    signed_manifest, public_key = _signed_release_manifest()
+    signed_manifest, public_key = _signed_release_manifest(
+        model_images=model_images, model_assets=model_assets,
+    )
     manifest = directory / "client-release-manifest.json"
     manifest.write_text(json.dumps(signed_manifest), encoding="utf-8")
     release_key = directory / "release-public-key.txt"
     release_key.write_text(public_key + "\n", encoding="ascii")
-    env.write_text(
-        "\n".join([
+    env_values = [
             "KODEWAVES_INSTALLATION_ID=customer-123",
             "KODEWAVES_LICENSE_TOKEN=payload.signature",
             "CLIENT_IDENTITY_KEY_FILE=" + identity_value,
@@ -116,7 +185,19 @@ def _installation(directory: Path) -> tuple[Path, Path, Path]:
             "CLIENT_CADDY_IMAGE=registry.example.com/kodewaves/caddy@sha256:" + "1" * 64,
             "COMPOSE_PROFILES=direct-ingress",
             "COMPOSE_PROJECT_NAME=customer-prod",
-        ]) + "\n",
+        ]
+    if model_images is not None:
+        env_values.extend(
+            f"{_MODEL_IMAGE_ENV_KEYS[name]}={reference}"
+            for name, reference in model_images.items()
+        )
+    if model_assets is not None:
+        env_values.extend([
+            f"CLIENT_OLLAMA_MODEL={model_assets['ollama']['name']}",
+            f"CLIENT_OLLAMA_MODEL_DIGEST={model_assets['ollama']['digest']}",
+        ])
+    env.write_text(
+        "\n".join(env_values) + "\n",
         encoding="utf-8",
     )
     return env, manifest, release_key
@@ -378,19 +459,30 @@ def test_restore_failure_restores_old_selection_and_retains_original_volumes(mon
 def _advance_active_release(
     env_file: Path, manifest_path: Path, *, allow_rollback: bool = True,
     schema_head: str = "head2",
+    model_images: dict[str, str] | None = None,
+    model_assets: dict[str, dict[str, str]] | None = None,
 ) -> tuple[bytes, bytes]:
     api_ref = "registry.example.com/kodewaves/api@sha256:" + "9" * 64
     ui_ref = "registry.example.com/kodewaves/ui@sha256:" + "8" * 64
     signed, _key = _signed_release_manifest(
         schema_head=schema_head, rollback_to=["head1"] if allow_rollback else [],
         api_ref=api_ref, ui_ref=ui_ref,
+        model_images=model_images,
+        model_assets=model_assets,
     )
     manifest_path.write_text(json.dumps(signed), encoding="utf-8")
     values = recovery.parse_env(env_file)
-    lines = [
-        f"{key}={api_ref if key == 'CLIENT_API_IMAGE' else ui_ref if key == 'CLIENT_UI_IMAGE' else value}"
-        for key, value in values.items()
-    ]
+    replacements = {"CLIENT_API_IMAGE": api_ref, "CLIENT_UI_IMAGE": ui_ref}
+    if model_images is not None:
+        replacements.update({_MODEL_IMAGE_ENV_KEYS[name]: value for name, value in model_images.items()})
+    if model_assets is not None:
+        replacements.update({
+            "CLIENT_OLLAMA_MODEL": model_assets["ollama"]["name"],
+            "CLIENT_OLLAMA_MODEL_DIGEST": model_assets["ollama"]["digest"],
+        })
+    lines = [f"{key}={replacements.get(key, value)}" for key, value in values.items()]
+    present = set(values)
+    lines.extend(f"{key}={value}" for key, value in replacements.items() if key not in present)
     env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return env_file.read_bytes(), manifest_path.read_bytes()
 
@@ -457,6 +549,109 @@ def test_signed_release_rollback_switches_config_and_volumes_and_can_reverse(
     assert [event[0] for event in events] == ["stop", "up", "stop", "up"]
     assert events[1][1].endswith("a" * 64)
     assert events[3][1].endswith("9" * 64)
+
+
+def test_signed_release_rollback_restores_all_four_model_image_pins(monkeypatch, tmp_path):
+    compose_dir = tmp_path / "client-models"
+    compose_dir.mkdir()
+    env_file, manifest, release_key = _installation(compose_dir, model_images=_MODEL_IMAGES_1)
+    for name in ("docker-compose.client.yaml", "docker-compose.identity.yaml", recovery.RECOVERY_OVERRIDE):
+        (compose_dir / name).write_text("{}\n", encoding="utf-8")
+    archive = _make_archive(tmp_path, env_file, manifest, release_key, compose_dir / "inputs/installation.key")
+    previous_env, previous_manifest = _advance_active_release(
+        env_file, manifest, model_images=_MODEL_IMAGES_2,
+    )
+    running = ["api", "ui", "postgres", "minio", "redis"]
+    monkeypatch.setattr(recovery, "_compose_context", lambda *_: (["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)))
+    monkeypatch.setattr(recovery, "_running_services", lambda *_: list(running))
+    monkeypatch.setattr(recovery, "_docker_volume_exists", lambda *_: False)
+    monkeypatch.setattr(recovery, "_create_volume", lambda *_: None)
+    monkeypatch.setattr(recovery, "_volume_tar_command", lambda **_kwargs: None)
+    monkeypatch.setattr(recovery, "_run", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(recovery, "_switch_compose_up", lambda *_args, **_kwargs: None)
+
+    recovery.restore_to_docker_volumes(
+        archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+        release_public_key=release_key, confirm_maintenance=True, allow_release_rollback=True,
+    )
+    restored_env = recovery.parse_env(env_file)
+    assert {name: restored_env[key] for name, key in _MODEL_IMAGE_ENV_KEYS.items()} == _MODEL_IMAGES_1
+
+    recovery.rollback_docker_restore(
+        compose_dir=compose_dir, env_file=env_file, confirm_maintenance=True,
+        release_public_key=release_key,
+    )
+    assert env_file.read_bytes() == previous_env
+    assert manifest.read_bytes() == previous_manifest
+    reversed_env = recovery.parse_env(env_file)
+    assert {name: reversed_env[key] for name, key in _MODEL_IMAGE_ENV_KEYS.items()} == _MODEL_IMAGES_2
+
+
+def test_release_rollback_rejects_active_model_pins_not_in_signed_manifest(monkeypatch, tmp_path):
+    compose_dir = tmp_path / "client-model-mismatch"
+    compose_dir.mkdir()
+    env_file, manifest, release_key = _installation(compose_dir, model_images=_MODEL_IMAGES_1)
+    for name in ("docker-compose.client.yaml", "docker-compose.identity.yaml", recovery.RECOVERY_OVERRIDE):
+        (compose_dir / name).write_text("{}\n", encoding="utf-8")
+    archive = _make_archive(tmp_path, env_file, manifest, release_key, compose_dir / "inputs/installation.key")
+    _advance_active_release(env_file, manifest, model_images=_MODEL_IMAGES_2)
+    env_file.write_text(
+        env_file.read_text(encoding="utf-8").replace(
+            _MODEL_IMAGES_2["ollama"], "registry.example.com/kodewaves/ollama@sha256:" + "9" * 64,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(recovery, "_compose_context", lambda *_: (["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)))
+
+    with pytest.raises(ValueError, match="Active release model image pins"):
+        recovery.restore_to_docker_volumes(
+            archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+            release_public_key=release_key, confirm_maintenance=True, allow_release_rollback=True,
+        )
+    assert not (compose_dir / recovery.RECOVERY_STATE_DIR).exists()
+
+
+def test_signed_release_rollback_restores_and_reverses_model_asset_descriptor(
+    monkeypatch, tmp_path,
+):
+    compose_dir = tmp_path / "client-model-assets"
+    compose_dir.mkdir()
+    env_file, manifest, release_key = _installation(compose_dir, model_assets=_MODEL_ASSETS_1)
+    for name in ("docker-compose.client.yaml", "docker-compose.identity.yaml", recovery.RECOVERY_OVERRIDE):
+        (compose_dir / name).write_text("{}\n", encoding="utf-8")
+    archive = _make_archive(tmp_path, env_file, manifest, release_key, compose_dir / "inputs/installation.key")
+    previous_env, previous_manifest = _advance_active_release(
+        env_file, manifest, model_assets=_MODEL_ASSETS_2,
+    )
+    running = ["api", "ui", "postgres", "minio", "redis"]
+    monkeypatch.setattr(recovery, "_compose_context", lambda *_: (["docker", "compose"], _compose_model(compose_dir), recovery.parse_env(env_file)))
+    monkeypatch.setattr(recovery, "_running_services", lambda *_: list(running))
+    monkeypatch.setattr(recovery, "_docker_volume_exists", lambda *_: False)
+    monkeypatch.setattr(recovery, "_create_volume", lambda *_: None)
+    monkeypatch.setattr(recovery, "_volume_tar_command", lambda **_kwargs: None)
+    monkeypatch.setattr(recovery, "_run", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(recovery, "_switch_compose_up", lambda *_args, **_kwargs: None)
+
+    recovery.restore_to_docker_volumes(
+        archive_path=archive, compose_dir=compose_dir, env_file=env_file,
+        release_public_key=release_key, confirm_maintenance=True, allow_release_rollback=True,
+    )
+    restored_values = recovery.parse_env(env_file)
+    assert restored_values["CLIENT_OLLAMA_MODEL"] == _MODEL_ASSETS_1["ollama"]["name"]
+    assert restored_values["CLIENT_OLLAMA_MODEL_DIGEST"] == _MODEL_ASSETS_1["ollama"]["digest"]
+    state = json.loads((compose_dir / recovery.RECOVERY_STATE_DIR / "state.json").read_text())
+    assert state["restored_model_assets"] == _MODEL_ASSETS_1
+    assert state["previous_model_assets"] == _MODEL_ASSETS_2
+
+    recovery.rollback_docker_restore(
+        compose_dir=compose_dir, env_file=env_file, confirm_maintenance=True,
+        release_public_key=release_key,
+    )
+    assert env_file.read_bytes() == previous_env
+    assert manifest.read_bytes() == previous_manifest
+    reversed_values = recovery.parse_env(env_file)
+    assert reversed_values["CLIENT_OLLAMA_MODEL"] == _MODEL_ASSETS_2["ollama"]["name"]
+    assert reversed_values["CLIENT_OLLAMA_MODEL_DIGEST"] == _MODEL_ASSETS_2["ollama"]["digest"]
 
 
 def test_release_rollback_requires_active_manifest_schema_authorization(monkeypatch, tmp_path):

@@ -54,6 +54,11 @@ function createFetchMock(autoStart: boolean) {
                         containerId: 'kodewaves-inline-container',
                     },
                     texts: WIDGET_TEXTS,
+                    branding: {
+                        company_name: 'Acme Health',
+                        tagline: 'Care, made easier',
+                        logo_url: '/brand-mark.svg',
+                    },
                     auto_start: autoStart,
                 }),
             } as Response;
@@ -148,6 +153,10 @@ describe('public embed widget chat lifecycle', () => {
 
         await widget.startChat();
         await flushMicrotasks();
+
+        expect(document.querySelector('.kodewaves-chat-header-title')?.textContent).toBe('Acme Health');
+        expect(document.querySelector('.kodewaves-chat-brand-tagline')?.textContent).toBe('Care, made easier');
+        expect((document.querySelector('.kodewaves-chat-brand-logo') as HTMLImageElement)?.src).toBe('http://widget.test/brand-mark.svg');
 
         expect(countInitCalls(fetchMock)).toBe(1);
         expect(document.querySelector('.kodewaves-chat-inline-cta')).toBeNull();

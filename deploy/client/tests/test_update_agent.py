@@ -181,6 +181,185 @@ def test_manifest_requires_client_edition_and_digest_pinned_images():
         update_agent._manifest_images(manifest)
 
 
+def test_manifest_model_images_require_complete_immutable_component_set():
+    payload = {
+        "model_images": {
+            "ollama": "registry.example/ollama@sha256:" + "a" * 64,
+            "indic_stt": "registry.example/indic-stt@sha256:" + "b" * 64,
+            "indus_tts": "registry.example/indus-tts@sha256:" + "c" * 64,
+            "indic_vits_tts": "registry.example/indic-vits-tts@sha256:" + "d" * 64,
+        },
+    }
+    values = update_agent._manifest_model_images(payload)
+    assert set(values) == update_agent.MODEL_IMAGE_KEYS
+    assert values["CLIENT_INDIC_STT_IMAGE"].endswith("b" * 64)
+
+    payload["model_images"] = {"ollama": "registry.example/ollama@sha256:" + "a" * 64}
+    with pytest.raises(update_agent.UpdateError, match="all four model image digests"):
+        update_agent._manifest_model_images(payload)
+
+
+def test_manifest_model_assets_require_canonical_ollama_descriptor():
+    payload = {"model_assets": {"ollama": {
+        "name": "qwen3.5:2b-q4_K_M",
+        "digest": "sha256:" + "a" * 64,
+    }}}
+    assert update_agent._manifest_model_assets(payload) == payload["model_assets"]
+    assert update_agent._check_model_assets(
+        payload, {
+            "CLIENT_OLLAMA_MODEL": "qwen3.5:2b-q4_K_M",
+            "CLIENT_OLLAMA_MODEL_DIGEST": "sha256:" + "a" * 64,
+        }.get, description="Installed",
+    ) == payload["model_assets"]
+    with pytest.raises(update_agent.UpdateError, match="name does not match"):
+        update_agent._check_model_assets(
+            payload, {
+                "CLIENT_OLLAMA_MODEL": "other-model",
+                "CLIENT_OLLAMA_MODEL_DIGEST": "sha256:" + "a" * 64,
+            }.get, description="Installed",
+        )
+    with pytest.raises(update_agent.UpdateError, match="digest does not match"):
+        update_agent._check_model_assets(
+            payload, {
+                "CLIENT_OLLAMA_MODEL": "qwen3.5:2b-q4_K_M",
+                "CLIENT_OLLAMA_MODEL_DIGEST": "sha256:" + "b" * 64,
+            }.get, description="Installed",
+        )
+    for invalid in (
+        {"ollama": {"name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "A" * 64}},
+        {"ollama": {"name": "../model", "digest": "sha256:" + "a" * 64}},
+        {"ollama": {"name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "a" * 63}},
+        {"extra": {"name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "a" * 64}},
+    ):
+        with pytest.raises(update_agent.UpdateError, match="model assets are invalid"):
+            update_agent._manifest_model_assets({"model_assets": invalid})
+
+
+def test_atomic_env_propagates_model_asset_name_and_digest(tmp_path: Path):
+    values = _env(tmp_path)
+    previous = update_agent._atomic_env(tmp_path, {
+        "CLIENT_API_IMAGE": values["CLIENT_API_IMAGE"],
+        "CLIENT_UI_IMAGE": values["CLIENT_UI_IMAGE"],
+        "CLIENT_RELEASE_MANIFEST_FILE": "./candidate.json",
+        "CLIENT_OLLAMA_MODEL": "qwen3.5:2b-q4_K_M",
+        "CLIENT_OLLAMA_MODEL_DIGEST": "sha256:" + "a" * 64,
+    })
+
+    installed = update_agent.parse_env(tmp_path / ".env")
+    assert installed["CLIENT_OLLAMA_MODEL"] == "qwen3.5:2b-q4_K_M"
+    assert installed["CLIENT_OLLAMA_MODEL_DIGEST"] == "sha256:" + "a" * 64
+    assert update_agent.parse_env(tmp_path / ".env")["CLIENT_RELEASE_MANIFEST_FILE"] == "./candidate.json"
+    update_agent._restore_env(tmp_path, previous)
+
+
+def test_model_update_uses_signed_pins_and_keeps_cloud_profile_optional(tmp_path: Path):
+    model_images = {
+        "ollama": "registry.example/ollama@sha256:" + "a" * 64,
+        "indic_stt": "registry.example/indic-stt@sha256:" + "b" * 64,
+        "indus_tts": "registry.example/indus-tts@sha256:" + "c" * 64,
+        "indic_vits_tts": "registry.example/indic-vits-tts@sha256:" + "d" * 64,
+    }
+    env_values = {
+        "CLIENT_OLLAMA_IMAGE": model_images["ollama"],
+        "CLIENT_INDIC_STT_IMAGE": model_images["indic_stt"],
+        "CLIENT_INDUS_TTS_IMAGE": model_images["indus_tts"],
+        "CLIENT_INDIC_VITS_TTS_IMAGE": model_images["indic_vits_tts"],
+    }
+    model_assets = {"ollama": {
+        "name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "a" * 64,
+    }}
+    env_values.update({
+        "CLIENT_OLLAMA_MODEL": model_assets["ollama"]["name"],
+        "CLIENT_OLLAMA_MODEL_DIGEST": model_assets["ollama"]["digest"],
+    })
+    payload = {"model_images": model_images, "model_assets": model_assets}
+    extracted = tmp_path / "release"
+    extracted.mkdir()
+    (extracted / ".env.example").write_text(
+        "\n".join(f"{key}={value}" for key, value in env_values.items()) + "\n",
+        encoding="utf-8",
+    )
+    for name in update_agent.MODEL_HOST_FILES:
+        (extracted / name).write_text("fixture\n", encoding="utf-8")
+
+    assert update_agent._model_update_values(
+        {"COMPOSE_PROFILES": "direct-ingress"}, extracted, payload,
+    ) == {
+        "CLIENT_OLLAMA_MODEL": model_assets["ollama"]["name"],
+        "CLIENT_OLLAMA_MODEL_DIGEST": model_assets["ollama"]["digest"],
+    }
+    values = update_agent._model_update_values(
+        {"COMPOSE_PROFILES": "direct-ingress,self-hosted", **env_values}, extracted, payload
+    )
+    assert values == env_values
+
+    (extracted / ".env.example").write_text(
+        "\n".join(f"{key}={value[:-1]}0" for key, value in env_values.items()) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(update_agent.UpdateError, match="do not match the installer template"):
+        update_agent._model_update_values(
+            {"COMPOSE_PROFILES": "self-hosted", **env_values}, extracted, payload
+        )
+
+
+def test_model_asset_update_matches_signed_descriptor_in_cloud_package(tmp_path: Path):
+    extracted = tmp_path / "release"
+    extracted.mkdir()
+    (extracted / ".env.example").write_text(
+        "CLIENT_OLLAMA_MODEL=qwen3.5:2b-q4_K_M\n"
+        "CLIENT_OLLAMA_MODEL_DIGEST=sha256:" + "a" * 64 + "\n", encoding="utf-8",
+    )
+    payload = {"model_assets": {"ollama": {
+        "name": "qwen3.5:2b-q4_K_M", "digest": "sha256:" + "a" * 64,
+    }}}
+
+    assert update_agent._model_update_values(
+        {"COMPOSE_PROFILES": "direct-ingress"}, extracted, payload,
+    ) == {
+        "CLIENT_OLLAMA_MODEL": "qwen3.5:2b-q4_K_M",
+        "CLIENT_OLLAMA_MODEL_DIGEST": "sha256:" + "a" * 64,
+    }
+
+    payload["model_assets"]["ollama"]["name"] = "another-model"
+    with pytest.raises(update_agent.UpdateError, match="does not match the installer template"):
+        update_agent._model_update_values(
+            {"COMPOSE_PROFILES": "direct-ingress"}, extracted, payload,
+        )
+
+
+def test_cloud_package_without_signed_model_assets_remains_optional(tmp_path: Path):
+    extracted = tmp_path / "release"
+    extracted.mkdir()
+    (extracted / ".env.example").write_text("", encoding="utf-8")
+    assert update_agent._model_update_values(
+        {"COMPOSE_PROFILES": "direct-ingress"}, extracted, {},
+    ) == {}
+    assert update_agent._model_update_values(
+        {
+            "COMPOSE_PROFILES": "direct-ingress",
+            "CLIENT_OLLAMA_MODEL": "qwen3.5:2b-q4_K_M",
+            "CLIENT_OLLAMA_MODEL_DIGEST": "sha256:" + "a" * 64,
+        }, extracted, {},
+    ) == {"CLIENT_OLLAMA_MODEL": "", "CLIENT_OLLAMA_MODEL_DIGEST": ""}
+
+
+def test_self_hosted_update_requires_signed_model_asset_descriptor(tmp_path: Path):
+    extracted = tmp_path / "release"
+    extracted.mkdir()
+    with pytest.raises(update_agent.UpdateError, match="self-hosted release is missing"):
+        update_agent._model_update_values(
+            {"COMPOSE_PROFILES": "direct-ingress,self-hosted"}, extracted, {},
+        )
+
+
+def test_release_compose_services_adds_models_only_for_self_hosted_profile():
+    assert update_agent._release_compose_services({"COMPOSE_PROFILES": "direct-ingress"}) == ["api", "ui"]
+    assert update_agent._release_compose_services(
+        {"COMPOSE_PROFILES": "direct-ingress,self-hosted"}
+    ) == ["api", "ui", "ollama", "indic-stt", "indus-tts", "indic-vits-tts"]
+
+
 def test_same_version_interrupted_update_rolls_back_when_stack_is_unhealthy(tmp_path, monkeypatch):
     values = _env(tmp_path)
     update = _valid_update()

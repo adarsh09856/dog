@@ -42,6 +42,11 @@ SILO_NOTICE_SHA256 = "16026398077eccabc3ca66db98af0a295d42ba3fdb8c0c2ad1339f4bdd
 SILO_CREDITS_SHA256 = "00d51bcb05cc6c2c16c2f0a8866b9113eca7a4dbcce9d0a90893ee932fb5ce39"
 
 
+def _read_canonical_text(path: Path) -> bytes:
+    """Read tracked attribution text consistently across LF/CRLF checkouts."""
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 def package_installer(
     images_env: Path,
     manifest: Path,
@@ -107,10 +112,10 @@ def package_installer(
         if hashlib.sha256(source_bytes).hexdigest() != SILO_SOURCE_SHA256:
             raise ValueError("PGSTY Silo source archive does not match the approved release checksum")
         third_party_files = {
-            "AGPL-3.0-PGSTY-Silo.txt": (root / "deploy/client/third-party/AGPL-3.0-PGSTY-Silo.txt").read_bytes(),
-            "PGSTY-Silo-NOTICE.txt": (root / "deploy/client/third-party/NOTICE").read_bytes(),
-            "PGSTY-Silo-CREDITS.txt": (root / "deploy/client/third-party/CREDITS").read_bytes(),
-            "THIRD_PARTY_NOTICES.txt": (root / "deploy/client/third-party/THIRD_PARTY_NOTICES.txt").read_bytes(),
+            "AGPL-3.0-PGSTY-Silo.txt": _read_canonical_text(root / "deploy/client/third-party/AGPL-3.0-PGSTY-Silo.txt"),
+            "PGSTY-Silo-NOTICE.txt": _read_canonical_text(root / "deploy/client/third-party/NOTICE"),
+            "PGSTY-Silo-CREDITS.txt": _read_canonical_text(root / "deploy/client/third-party/CREDITS"),
+            "THIRD_PARTY_NOTICES.txt": _read_canonical_text(root / "deploy/client/third-party/THIRD_PARTY_NOTICES.txt"),
         }
         expected_digests = {
             "AGPL-3.0-PGSTY-Silo.txt": SILO_LICENSE_SHA256,

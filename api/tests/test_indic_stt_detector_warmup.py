@@ -98,6 +98,66 @@ def test_detector_preserves_language_argmax_and_uses_its_installed_decoder(monke
     ) == ("hi", "urdu_routed_to_hindi")
 
 
+def test_clear_hindi_prediction_skips_expensive_english_rescue(monkeypatch):
+    logits = [0.0] * len(indic_stt.LID_LANGUAGE_CODES)
+    logits[indic_stt.LID_LANGUAGE_CODES.index("hi")] = 8.0
+
+    class Detector:
+        def run(self, *_args):
+            return [[logits]]
+
+    class EnglishDetector:
+        calls = 0
+
+        def create_stream(self):
+            return self
+
+        def accept_waveform(self, *_args):
+            pass
+
+        def compute(self, _stream):
+            self.calls += 1
+            return "unknown"
+
+    english = EnglishDetector()
+    monkeypatch.setattr(indic_stt, "_lid_session", Detector())
+    monkeypatch.setattr(indic_stt, "_english_lid", english)
+
+    detected, _confidence, route = indic_stt._detect_language([0.01] * 16_000, 16_000)
+
+    assert detected == "hi"
+    assert route is None
+    assert english.calls == 0
+
+
+def test_ambiguous_hindi_english_prediction_still_runs_english_rescue(monkeypatch):
+    logits = [0.0] * len(indic_stt.LID_LANGUAGE_CODES)
+    logits[indic_stt.LID_LANGUAGE_CODES.index("hi")] = 2.0
+    logits[indic_stt.LID_LANGUAGE_CODES.index("en")] = 1.5
+
+    class Detector:
+        def run(self, *_args):
+            return [[logits]]
+
+    class EnglishDetector:
+        def create_stream(self):
+            return self
+
+        def accept_waveform(self, *_args):
+            pass
+
+        def compute(self, _stream):
+            return "en"
+
+    monkeypatch.setattr(indic_stt, "_lid_session", Detector())
+    monkeypatch.setattr(indic_stt, "_english_lid", EnglishDetector())
+
+    detected, _confidence, route = indic_stt._detect_language([0.01] * 16_000, 16_000)
+
+    assert detected == "en"
+    assert route == "whisper_english_rescue"
+
+
 def test_auto_detection_does_not_silently_substitute_a_missing_decoder():
     with pytest.raises(indic_stt.HTTPException) as exc_info:
         indic_stt._resolve_decode_language("gu", 0.99, None, {"hi", "en"})

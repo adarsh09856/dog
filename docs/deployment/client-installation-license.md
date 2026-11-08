@@ -165,8 +165,13 @@ never changed. Each failed check sends a bounded reason, protected-component
 path and expected/observed SHA-256 values where available. The owner stores a
 deduplicated incident with first/last seen times and occurrence count; an
 unacknowledged count appears in the owner sidebar. Acknowledgment does not
-clear the client-side denial. Automated owner email/push alerts are not yet
-connected.
+clear the client-side denial. Integrity incidents are queued for owner email
+delivery and retried with bounded backoff when SMTP delivery fails. Delivery
+requires platform SMTP settings and at least one active superadmin email
+address; the owner panel exposes delivery state and attempts. Push alerts are
+not currently connected. Verify SMTP delivery and retry recovery with a
+disposable PostgreSQL-backed worker before treating notifications as
+operationally accepted.
 If a protected-file check fails before a client service starts, that service
 makes one bounded, best-effort report to the pinned owner endpoint before
 exiting. The failed service still exits if the owner is unreachable; the owner
