@@ -86,12 +86,30 @@ def caller_confirmed_booking(messages: list) -> bool:
     booking_readback = re.search(
         r"\b(appointment|booking|consultation|reservation|book)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति|बुक", previous, re.I,
     )
+    # Small models sometimes ask the exact date/time confirmation without
+    # repeating the word "booking", e.g. "Is 10:00 AM on November 9th
+    # confirmed?". The staged booking parser has already validated the slot
+    # before it can invoke the tool; recognize this explicit readback here as
+    # the same caller consent instead of rejecting it at the persistence gate.
+    month = (
+        r"January|February|March|April|May|June|July|August|September|"
+        r"October|November|December"
+    )
+    explicit_slot_readback = (
+        re.search(
+            rf"\b(?:{month})\s+\d{{1,2}}(?:st|nd|rd|th)?(?:,?\s+\d{{4}})?\b"
+            rf"|\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:{month})\b",
+            previous,
+            re.I,
+        )
+        and re.search(r"\b\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)\b", previous, re.I)
+    )
     confirmation_question = re.search(
-        r"\b(confirm|sahi|theek)\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का"
+        r"\b(?:confirm(?:ed)?|sahi|theek)\b|is (?:this|that|everything) correct|पुष्टि|सही|पक्का"
         r"|\b(?:shall|should|may|can) I\b[^?]*\bbook\b|\bgo ahead and book\b"
         r"|(?:बुक(?:िंग)?|कन्फर्म|कंफर्म)\s+कर\s*(?:दूँ|दूं|दें)|\bbook\s+kar\s+(?:du|doon|dun)\b", previous, re.I,
     )
-    return bool(booking_readback and confirmation_question)
+    return bool((booking_readback or explicit_slot_readback) and confirmation_question)
 
 
 class BookingArguments(BaseModel):
