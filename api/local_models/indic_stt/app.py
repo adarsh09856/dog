@@ -111,11 +111,18 @@ def _should_try_phone_rescue(text: str) -> bool:
     the whole sentence as a phone number.
     """
     digits = _phone_digit_count(text)
+    if _NON_PHONE_CONTEXT_RE.search(text):
+        return False
     if digits > 15:
         return True
+    # The primary Hindi/English decoder can return a clean but truncated
+    # number fragment. Those have no unknown-token signal, but a 3–9 digit
+    # fragment is plausible while the caller is explicitly in phone capture.
+    # Keep this bounded so a complete number doesn't pay for an unnecessary
+    # second decode; _phone_rescue_is_better still decides whether to use it.
+    if 3 <= digits <= 9:
+        return True
     if not _phone_decode_has_unknown_tokens(text):
-        return False
-    if _NON_PHONE_CONTEXT_RE.search(text):
         return False
     if _PHONE_CONTEXT_RE.search(text):
         return True

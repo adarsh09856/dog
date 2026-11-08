@@ -19,7 +19,9 @@ _BASE_POLICY = (
     "or unclear detail, one concise question at a time. Do not restart the flow, "
     "repeat answered questions or greetings, invent details, or claim an action "
     "succeeded without a successful tool result. Follow the active speech-language "
-    "settings and the caller's latest clear language choice."
+    "settings and the caller's latest clear language choice. When the caller mixes "
+    "languages, answer in the same natural mix, including Hinglish; preserve names, "
+    "digits, dates, and times exactly, and do not translate unless asked."
 )
 
 
