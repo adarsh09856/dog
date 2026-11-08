@@ -56,9 +56,13 @@ LID_LANGUAGE_CODES = (
     "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai",
     "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 )
-# Keep every scheduled Indian language available to STT, plus Indian English.
-# TTS capability is checked separately by the workflow voice selector.
-AUTO_DETECT_LANGUAGES = frozenset(LID_LANGUAGE_CODES)
+# Only advertise and automatically route languages with an active product
+# decoder/voice path. Keep the complete LID label order above for classifier
+# output mapping, but disabled or unserved labels must never become routes.
+AUTO_DETECT_LANGUAGES = frozenset({
+    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
+    "ne", "pa", "sa", "ta", "te",
+})
 SCHEDULED_INDIAN_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
 AUTO_ENGLISH_MIN_CONFIDENCE = 0.50
