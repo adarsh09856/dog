@@ -84,13 +84,12 @@ def caller_confirmed_booking(messages: list) -> bool:
         r"|\b(?:shall|should|may|can) I\b[^?]*\bbook\b|\bgo ahead and book\b"
         r"|(?:बुक(?:िंग)?|कन्फर्म|कंफर्म)\s+कर\s*(?:दूँ|दूं|दें)|\bbook\s+kar\s+(?:du|doon|dun)\b", previous, re.I,
     )
-    # An explicit readback of the exact staged date and time, immediately
-    # followed by a caller affirmation, is booking consent on its own. Several
-    # earlier clarification turns (name, phone readback) can otherwise push
-    # the original booking request out of the short lookback window below.
+    # An explicit date/time readback can stand in for booking vocabulary when
+    # earlier clarification turns push the request out of the short lookback
+    # window. A generic "shall I book it?" cannot bypass that window.
     slot_consent_signal = bool((booking_readback or explicit_slot_readback) and confirmation_question)
     recent = " ".join(str(m.get("content", "")) for m in dialogue[max(0, caller_index - 4):caller_index + 1])
-    if not slot_consent_signal and not re.search(
+    if not explicit_slot_readback and not re.search(
         r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", recent, re.I
     ):
         return False
