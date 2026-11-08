@@ -56,33 +56,8 @@ def caller_confirmed_booking(messages: list) -> bool:
         r"|नहीं|मत\s|रद्द|कैंसल|कॅन्सल", text, re.I,
     ):
         return False
-    recent = " ".join(str(m.get("content", "")) for m in dialogue[max(0, caller_index - 4):caller_index + 1])
-    if not re.search(r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", recent, re.I):
-        return False
-    if re.search(r"\b(?:I|we)\s+(?:explicitly\s+)?confirm\b|\bmain\s+confirm\s+kart[ai]\s+(?:hu|hun|hoon)\b|पुष्टि\s+कर(?:ता|ती|ते)|पक्का\s+कर", text, re.I):
-        return True
-    # A caller may repeat the details while confirming in Hinglish. The
-    # short-answer fullmatch below intentionally rejects extra words, so keep
-    # this explicit affirmative + imperative case separate.
-    if (
-        re.search(r"\+\d{10,15}(?!\d)", text)
-        and re.search(r"\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b", text)
-        and re.search(
-        r"\b(?:haan|han|yes|ji)\b[\s\S]*\b(?:confirm\s+hai|(?:confirm|book)\s+kar\s+(?:do|dijiye|dena))\b",
-        text,
-        re.I,
-        )
-    ):
-        return True
-    if not re.fullmatch(
-        r"\s*(?:(?:yes|ok|okay|haan|han|ha|ji|हाँ|हां|हा|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|हा|haan|han|ठीक\s+है|सही\s+है|बुक\s+कर\s+दो))?"
-        r"|correct|that's right|go ahead|theek hai|ठीक है|(?:confirm|book)\s+kar\s+(?:do|dijiye))[.!।\s]*",
-        text, re.I,
-    ):
-        return False
     previous = next((m.get("content", "") for m in reversed(dialogue[:caller_index]) if m.get("role") == "assistant"), "")
-    if not isinstance(previous, str):
-        return False
+    previous = previous if isinstance(previous, str) else ""
     booking_readback = re.search(
         r"\b(appointment|booking|consultation|reservation|book)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति|बुक", previous, re.I,
     )
@@ -109,7 +84,38 @@ def caller_confirmed_booking(messages: list) -> bool:
         r"|\b(?:shall|should|may|can) I\b[^?]*\bbook\b|\bgo ahead and book\b"
         r"|(?:बुक(?:िंग)?|कन्फर्म|कंफर्म)\s+कर\s*(?:दूँ|दूं|दें)|\bbook\s+kar\s+(?:du|doon|dun)\b", previous, re.I,
     )
-    return bool((booking_readback or explicit_slot_readback) and confirmation_question)
+    # An explicit readback of the exact staged date and time, immediately
+    # followed by a caller affirmation, is booking consent on its own. Several
+    # earlier clarification turns (name, phone readback) can otherwise push
+    # the original booking request out of the short lookback window below.
+    slot_consent_signal = bool((booking_readback or explicit_slot_readback) and confirmation_question)
+    recent = " ".join(str(m.get("content", "")) for m in dialogue[max(0, caller_index - 4):caller_index + 1])
+    if not slot_consent_signal and not re.search(
+        r"\b(appointment|booking|consultation|reservation)\b|अपॉइंटमेंट|बुकिंग|नियुक्ति", recent, re.I
+    ):
+        return False
+    if re.search(r"\b(?:I|we)\s+(?:explicitly\s+)?confirm\b|\bmain\s+confirm\s+kart[ai]\s+(?:hu|hun|hoon)\b|पुष्टि\s+कर(?:ता|ती|ते)|पक्का\s+कर", text, re.I):
+        return True
+    # A caller may repeat the details while confirming in Hinglish. The
+    # short-answer fullmatch below intentionally rejects extra words, so keep
+    # this explicit affirmative + imperative case separate.
+    if (
+        re.search(r"\+\d{10,15}(?!\d)", text)
+        and re.search(r"\b\d{1,2}\s+[A-Za-z]+\s+\d{4}\b", text)
+        and re.search(
+        r"\b(?:haan|han|yes|ji)\b[\s\S]*\b(?:confirm\s+hai|(?:confirm|book)\s+kar\s+(?:do|dijiye|dena))\b",
+        text,
+        re.I,
+        )
+    ):
+        return True
+    if not re.fullmatch(
+        r"\s*(?:(?:yes|ok|okay|haan|han|ha|ji|हाँ|हां|हा|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|हा|haan|han|ठीक\s+है|सही\s+है|बुक\s+कर\s+दो))?"
+        r"|correct|that's right|go ahead|theek hai|ठीक है|(?:confirm|book)\s+kar\s+(?:do|dijiye))[.!।\s]*",
+        text, re.I,
+    ):
+        return False
+    return slot_consent_signal
 
 
 class BookingArguments(BaseModel):

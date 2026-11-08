@@ -266,3 +266,123 @@ def test_hindi_confirm_loanword_permission_is_recognized():
         {"role": "assistant", "content": "कल, 16 अक्टूबर 2026 को शाम 4:40 बजे IST पर आपका अपॉइंटमेंट कन्फर्म कर दूँ?"},
         {"role": "user", "content": "ok"},
     ])
+
+
+# Full booking dialogue: name -> phone readback/confirm -> date -> time ->
+# exact slot readback. The clarification turns push the original "mujhe
+# appointment book karna hai" request more than five dialogue messages back
+# from the caller's final "haan theek hai", reproducing the caller-reported
+# stale phone prompt after an exact English date/time readback.
+_FULL_HINDI_BOOKING_DIALOGUE = [
+    {"role": "user", "content": "मुझे अपॉइंटमेंट बुक करना है"},
+    {"role": "assistant", "content": "अपॉइंटमेंट किस नाम से बुक करूँ?"},
+    {"role": "user", "content": "आदर्श"},
+    {"role": "assistant", "content": "मोबाइल नंबर बताइए।"},
+    {"role": "user", "content": "नाइन फाइव थ्री आठ थ्री डबल जीरो नाइन फोर वन"},
+    {"role": "assistant", "content": "मैंने नंबर पढ़ा है। क्या यह सही है?"},
+    {"role": "user", "content": "हाँ सही है"},
+    {"role": "assistant", "content": "किस तारीख और समय के लिए बुक करना चाहेंगे?"},
+    {"role": "user", "content": "कल का"},
+    {"role": "assistant", "content": "कल का समय क्या है?"},
+    {"role": "user", "content": "It's ten a.m."},
+    {"role": "assistant", "content": "Thank you Aradhya ji. Is 10:00 AM on November 9th confirmed?"},
+    {"role": "user", "content": "हाँ ठीक है"},
+]
+_STAGED_STATE = {
+    "caller_name": "आदर्श",
+    "caller_phone": "9538300941",
+    "reply_language": "Hindi",
+    "booking_time_question_date": "2026-11-09",
+    "booking_confirmation_slot": "2026-11-09T10:00",
+}
+_STAGED_CONTACT = {"customer_name": "आदर्श", "customer_phone": "9538300941"}
+
+
+@pytest.mark.asyncio
+async def test_full_dialogue_replay_books_without_reasking_confirmed_phone(monkeypatch):
+    """Replay the full booking exchange through the real consent handler.
+
+    The staged-slot parser already builds valid arguments for this dialogue
+    (see test_affirmative_after_model_worded_slot_confirmation_uses_staged_booking
+    in test_voice_contact_regressions.py). The native handler must not then
+    reject consent and fall back to asking for the already-confirmed phone
+    number again.
+    """
+    from api.services.workflow import contact_context
+    from api.services.workflow.pipecat_engine_custom_tools import CustomToolManager
+
+    staged_arguments = contact_context.confirmed_staged_booking_arguments(
+        _FULL_HINDI_BOOKING_DIALOGUE, dict(_STAGED_STATE), _STAGED_CONTACT,
+    )
+    assert staged_arguments is not None, "staged-slot parser must recognize this exact readback"
+
+    save = AsyncMock(return_value={"id": "appt-1", "status": "confirmed"})
+    monkeypatch.setattr(booking.appointments, "save_appointment", save)
+    engine = NS(
+        active_agent=NS(),
+        _get_organization_id=AsyncMock(return_value=7),
+        context=NS(get_messages=lambda: _FULL_HINDI_BOOKING_DIALOGUE),
+        _contact_conversation_state=dict(_STAGED_STATE),
+    )
+    callback = AsyncMock()
+    await CustomToolManager(engine)._create_booking_handler()(
+        NS(arguments=staged_arguments, result_callback=callback)
+    )
+    result = callback.call_args.args[0]
+    assert result["booked"] is True, result
+    save.assert_awaited_once()
+    saved_phone = save.call_args.args[1]["customer_phone"]
+    assert saved_phone == "9538300941", "must reuse the already-confirmed phone, not re-ask for it"
+
+
+@pytest.mark.asyncio
+async def test_full_dialogue_replay_honors_a_late_refusal(monkeypatch):
+    """A clear refusal at the final turn must never be booked."""
+    from api.services.workflow.pipecat_engine_custom_tools import CustomToolManager
+
+    dialogue = [*_FULL_HINDI_BOOKING_DIALOGUE[:-1], {"role": "user", "content": "नहीं, अभी मत करो।"}]
+    save = AsyncMock()
+    monkeypatch.setattr(booking.appointments, "save_appointment", save)
+    engine = NS(
+        active_agent=NS(),
+        _get_organization_id=AsyncMock(return_value=7),
+        context=NS(get_messages=lambda: dialogue),
+        _contact_conversation_state=dict(_STAGED_STATE),
+    )
+    callback = AsyncMock()
+    # Even if a prior step mistakenly staged confirmed_by_caller=True, the
+    # handler must recompute consent from the actual caller turn and refuse.
+    await CustomToolManager(engine)._create_booking_handler()(NS(
+        arguments=arguments(customer_name="आदर्श", customer_phone="9538300941"),
+        result_callback=callback,
+    ))
+    save.assert_not_awaited()
+    assert callback.call_args.args[0]["booked"] is False
+
+
+def test_full_dialogue_replay_does_not_stage_a_changed_slot():
+    """A changed time at the final turn must not confirm the stale staged slot."""
+    from api.services.workflow import contact_context
+
+    dialogue = [
+        *_FULL_HINDI_BOOKING_DIALOGUE[:-1],
+        {"role": "user", "content": "No wait, make it 11 AM instead."},
+    ]
+    assert contact_context.confirmed_staged_booking_arguments(
+        dialogue, dict(_STAGED_STATE), _STAGED_CONTACT,
+    ) is None
+    assert not booking.caller_confirmed_booking(dialogue)
+
+
+def test_full_dialogue_replay_phone_confirmation_is_not_booking_consent():
+    """A caller's "yes" to the phone readback must not itself grant booking consent."""
+    from api.services.workflow import contact_context
+
+    dialogue = _FULL_HINDI_BOOKING_DIALOGUE[:7]  # ends at "हाँ सही है" (phone confirmation)
+    assert not booking.caller_confirmed_booking(dialogue)
+    state_before_slot = {
+        "caller_name": "आदर्श", "caller_phone": "9538300941", "reply_language": "Hindi",
+    }
+    assert contact_context.confirmed_staged_booking_arguments(
+        dialogue, state_before_slot, _STAGED_CONTACT,
+    ) is None
