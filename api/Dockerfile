@@ -92,7 +92,7 @@ RUN set -eu ; \
              sha256=e97545305043794cdf7b698d713e29291464e0c35bb8e0f3ff1f62e4c56eedd6 ;; \
       *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2 ; exit 1 ;; \
     esac ; \
-    url="https://github.com/BtbN/FFmpeg-Builds/releases/download/${BTBN_TAG}/ffmpeg-${BTBN_REV}-${btbn_arch}-gpl.tar.xz" ; \
+    url="https://github.com/FFmpeg-Builds/FFmpeg-Builds/releases/download/${BTBN_TAG}/ffmpeg-${BTBN_REV}-${btbn_arch}-gpl.tar.xz" ; \
     mkdir -p /tmp/ffmpeg ; cd /tmp/ffmpeg ; \
     echo "Downloading ffmpeg (${BTBN_TAG}) from ${url}" ; \
     curl -fsSL --connect-timeout 20 --speed-limit 1024 --speed-time 30 \
