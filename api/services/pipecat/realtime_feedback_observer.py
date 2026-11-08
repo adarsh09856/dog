@@ -74,8 +74,10 @@ from pipecat.frames.frames import (
     TTSStoppedFrame,
     TTSSpeakFrame,
     TTSTextFrame,
+    UserStartedSpeakingFrame,
     UserMuteStartedFrame,
     UserMuteStoppedFrame,
+    VADUserStartedSpeakingFrame,
 )
 from pipecat.metrics.metrics import TTFATMetricsData, TTFBMetricsData
 from pipecat.observers.base_observer import BaseObserver, FramePushed
@@ -128,8 +130,13 @@ class RealtimeFeedbackObserver(BaseObserver):
         self._phone_pending = phone_pending
         self._trace_turn = 0
         self._trace_turn_active = False
-        self._tts_audio_contexts: dict[str, dict[str, float | int | None]] = {}
+        self._tts_audio_contexts: dict[str, dict[str, object]] = {}
         self._output_audio_trace = self._empty_output_audio_trace()
+        self._interrupted_output_trace: dict[str, object] | None = None
+        self._output_playback_active = False
+        self._last_output_transport: str | None = None
+        self._caller_turn_start: dict[str, object] | None = None
+        self._last_caller_final: dict[str, object] | None = None
         self._frames_seen: set[int] = set()
         self._preview_frames_seen: set[int] = set()
         self._stage_text_seen = False
@@ -156,16 +163,164 @@ class RealtimeFeedbackObserver(BaseObserver):
         frame = data.frame
         now = time.monotonic()
         if isinstance(frame, TranscriptionFrame):
+            # Preserve the reply's output trace before this caller turn resets
+            # the counters. A final transcript may itself trigger the
+            # interruption that cuts that reply short.
+            if self._output_playback_active or self._tts_audio_contexts:
+                self._interrupted_output_trace = {
+                    "turn": self._trace_turn,
+                    "stats": dict(self._output_audio_trace),
+                    "transport": self._last_output_transport,
+                }
+            else:
+                self._interrupted_output_trace = None
             self._trace_turn += 1
             self._trace_turn_active = True
             self._output_audio_trace = self._empty_output_audio_trace()
             self._output_audio_trace["started_at"] = now
+            language = getattr(frame, "language", None)
+            language = getattr(language, "value", language)
+            self._last_caller_final = {
+                "at": now,
+                "turn": self._trace_turn,
+                "chars": len(str(getattr(frame, "text", "") or "").strip()),
+                "language": str(language)[:32] if language is not None else None,
+                "finalized": bool(getattr(frame, "finalized", False)),
+                "source": type(data.source).__name__ if data.source is not None else "none",
+            }
             return
+
+        if isinstance(frame, VADUserStartedSpeakingFrame):
+            self._caller_turn_start = {
+                "at": now,
+                "kind": "vad",
+                "source": type(data.source).__name__ if data.source is not None else "none",
+                "start_secs": round(float(getattr(frame, "start_secs", 0.0) or 0.0), 3),
+                "interruptions_enabled": None,
+            }
+            return
+
+        if isinstance(frame, UserStartedSpeakingFrame):
+            self._caller_turn_start = {
+                "at": now,
+                "kind": "user_turn",
+                "source": type(data.source).__name__ if data.source is not None else "none",
+                "start_secs": None,
+                "interruptions_enabled": bool(getattr(frame, "enable_interruptions", True)),
+            }
+            return
+
+        if isinstance(frame, InterruptionFrame):
+            interrupted = self._interrupted_output_trace
+            stats = (
+                interrupted.get("stats", {})
+                if isinstance(interrupted, dict)
+                else self._output_audio_trace
+            )
+            if not isinstance(stats, dict):
+                stats = self._output_audio_trace
+            started_at = stats["started_at"]
+            last_frame_at = stats["last_frame_at"]
+            source = data.source
+            direction = data.direction
+            source_name = type(source).__name__ if source is not None else "none"
+            direction_name = getattr(direction, "name", str(direction))
+            caller_start = self._caller_turn_start or {}
+            caller_final = self._last_caller_final or {}
+            active_tts = [
+                {key: value for key, value in context.items() if key != "started_at"}
+                for context in self._tts_audio_contexts.values()
+            ]
+            caller_start_at = caller_start.get("at")
+            caller_final_at = caller_final.get("at")
+            transport_name = (
+                interrupted.get("transport")
+                if isinstance(interrupted, dict)
+                else self._last_output_transport
+            )
+            payload = {
+                "stage": "interruption",
+                "turn": self._trace_turn,
+                "interrupted_output_turn": (
+                    interrupted.get("turn") if isinstance(interrupted, dict) else None
+                ),
+                "active_tts_contexts": len(self._tts_audio_contexts),
+                "active_tts": active_tts,
+                "output_transport": transport_name,
+                "output_frames": int(stats["frames"]),
+                "output_audio_ms": round(float(stats["duration_ms"]), 1),
+                "max_output_gap_ms": round(float(stats["max_gap_ms"]), 1),
+                "output_wall_ms": round((now - float(started_at)) * 1000.0, 1)
+                if started_at is not None else None,
+                "ms_since_output_frame": round((now - float(last_frame_at)) * 1000.0, 1)
+                if last_frame_at is not None else None,
+                "source": source_name,
+                "direction": direction_name,
+                "caller_turn_start_kind": caller_start.get("kind"),
+                "caller_turn_start_source": caller_start.get("source"),
+                "caller_turn_start_ms_ago": round((now - float(caller_start_at)) * 1000.0, 1)
+                if caller_start_at is not None else None,
+                "caller_vad_start_secs": caller_start.get("start_secs"),
+                "caller_interruptions_enabled": caller_start.get("interruptions_enabled"),
+                "caller_final_turn": caller_final.get("turn"),
+                "caller_final_chars": caller_final.get("chars"),
+                "caller_final_language": caller_final.get("language"),
+                "caller_finalized": caller_final.get("finalized"),
+                "caller_final_source": caller_final.get("source"),
+                "caller_final_ms_ago": round((now - float(caller_final_at)) * 1000.0, 1)
+                if caller_final_at is not None else None,
+            }
+            logger.info(
+                "voice_interruption_trace run={} workflow={} turn={} "
+                "interrupted_output_turn={} active_tts_contexts={} active_tts={} "
+                "output_transport={} output_frames={} output_audio_ms={} "
+                "max_output_gap_ms={} output_wall_ms={} ms_since_output_frame={} "
+                "source={} direction={} caller_turn_start_kind={} "
+                "caller_turn_start_source={} caller_turn_start_ms_ago={} "
+                "caller_vad_start_secs={} caller_interruptions_enabled={} "
+                "caller_final_turn={} caller_final_chars={} caller_final_language={} "
+                "caller_finalized={} caller_final_source={} caller_final_ms_ago={}",
+                self._workflow_run_id,
+                self._workflow_id,
+                self._trace_turn,
+                payload["interrupted_output_turn"],
+                payload["active_tts_contexts"],
+                active_tts,
+                transport_name,
+                payload["output_frames"],
+                payload["output_audio_ms"],
+                payload["max_output_gap_ms"],
+                payload["output_wall_ms"],
+                payload["ms_since_output_frame"],
+                source_name,
+                direction_name,
+                payload["caller_turn_start_kind"],
+                payload["caller_turn_start_source"],
+                payload["caller_turn_start_ms_ago"],
+                payload["caller_vad_start_secs"],
+                payload["caller_interruptions_enabled"],
+                payload["caller_final_turn"],
+                payload["caller_final_chars"],
+                payload["caller_final_language"],
+                payload["caller_finalized"],
+                payload["caller_final_source"],
+                payload["caller_final_ms_ago"],
+            )
+            self._interrupted_output_trace = None
+            return {"type": "rtf-audio-health", "turn": self._trace_turn, "payload": payload}
 
         if isinstance(frame, TTSStartedFrame):
             context_id = str(getattr(frame, "context_id", None) or frame.id)
             self._tts_audio_contexts[context_id] = {
                 "started_at": now,
+                "provider": type(data.source).__name__ if data.source is not None else "none",
+                "model": self._safe_trace_value(
+                    getattr(getattr(data.source, "_settings", None), "model", None)
+                ),
+                "voice": self._safe_trace_value(
+                    getattr(getattr(data.source, "_settings", None), "voice", None)
+                ),
+                "language": self._tts_language_hint(data.source),
                 "first_audio_at": None,
                 "first_non_silent_audio_at": None,
                 "last_audio_at": None,
@@ -180,6 +335,7 @@ class RealtimeFeedbackObserver(BaseObserver):
         if isinstance(frame, OutputAudioRawFrame) and isinstance(
             data.source, BaseOutputTransport
         ):
+            self._last_output_transport = type(data.source).__name__
             if not self._trace_turn_active:
                 return
             stats = self._output_audio_trace
@@ -336,6 +492,40 @@ class RealtimeFeedbackObserver(BaseObserver):
                 },
             }
 
+        if isinstance(frame, BotStartedSpeakingFrame) and isinstance(
+            data.source, BaseOutputTransport
+        ):
+            self._output_playback_active = True
+
+        if isinstance(frame, BotStoppedSpeakingFrame) and isinstance(
+            data.source, BaseOutputTransport
+        ):
+            self._output_playback_active = False
+
+    @staticmethod
+    def _safe_trace_value(value) -> str | None:
+        value = getattr(value, "value", value)
+        if not isinstance(value, (str, int, float)):
+            return None
+        rendered = str(value).strip()
+        return rendered[:80] if rendered else None
+
+    @classmethod
+    def _tts_language_hint(cls, source) -> str | None:
+        for name in (
+            "_turn_speech_language",
+            "_caller_language_turn_snapshot",
+            "_speech_language",
+        ):
+            value = getattr(source, name, None)
+            result = cls._safe_trace_value(value)
+            if result and result.casefold() not in {
+                "auto", "multi", "multilingual", "unknown", "default", "none",
+            }:
+                return result
+        settings = getattr(source, "_settings", None)
+        return cls._safe_trace_value(getattr(settings, "language", None))
+
     async def log_speech(self, text: str):
         """Persist speech that is intentionally excluded from assistant context."""
         await self._append_to_buffer(build_bot_text_event(text=text))
@@ -414,10 +604,9 @@ class RealtimeFeedbackObserver(BaseObserver):
 
         self._frames_seen.add(frame.id)
 
-        if self._call_event_recorder is None:
-            audio_health_event = self._observe_voice_audio(data)
-            if audio_health_event is not None:
-                await self._append_to_buffer(audio_health_event)
+        audio_health_event = self._observe_voice_audio(data)
+        if audio_health_event is not None and self._call_event_recorder is None:
+            await self._append_to_buffer(audio_health_event)
 
         # Keep basic stage evidence in the normal run log even when the
         # organization has no optional external diagnostics destination.
