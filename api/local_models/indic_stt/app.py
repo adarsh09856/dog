@@ -496,15 +496,17 @@ def _detect_language(waveform: np.ndarray, sample_rate: int) -> tuple[str, float
     # as Hindi and feed the wrong transcript to the workflow.
     index = int(np.argmax(probabilities))
     detected = LID_LANGUAGE_CODES[index]
-    # Anuvani can confuse Indian-accented English with Hindi or Telugu. Avoid
-    # running the second, much heavier Whisper detector for every non-English
-    # utterance: clear Hindi and other regional languages paid that CPU cost on
-    # every turn, which dominated the measured local STT latency. Only invoke
-    # the rescue when the main model is genuinely unsure between Hindi/Telugu
-    # and English. Other regional-language predictions are already decisive.
+    # Anuvani can confidently confuse Indian-accented English with Hindi or
+    # Telugu. A live Indian-English sample was classified as Telugu at 0.8775,
+    # with too little English probability to pass the old competition gate.
+    # Run the warm English verifier for mid-confidence Hindi/Telugu predictions
+    # too; keep high-confidence regional predictions on the single-model path.
     english_probability = float(probabilities[LID_LANGUAGE_CODES.index("en")])
     detector_probability = float(probabilities[index])
-    english_competes = detector_probability < 0.85 and english_probability >= 0.10
+    english_competes = (
+        english_probability >= 0.10
+        or detector_probability < 0.90
+    )
     english_confusable_language = detected in {"hi", "te"}
     if (
         english_confusable_language
