@@ -1119,8 +1119,17 @@ class SmallWebRTCOutputTransport(BaseOutputTransport):
             # separate aiortc track queue afterward so a resumed writer cannot
             # append another frame from the interrupted response.
             track.discard_pending_audio()
-        elif isinstance(frame, TTSStoppedFrame) and track and direction == FrameDirection.DOWNSTREAM:
-            track.mark_speech_end()
+
+    async def write_transport_frame(self, frame: Frame):
+        """Close playback metrics after the media sender drains the TTS turn."""
+        if isinstance(frame, TTSStoppedFrame):
+            track = self._client._audio_output_track
+            if track:
+                # This callback runs in the ordered media-sender worker, after
+                # preceding write_audio_frame calls have completed. Marking the
+                # track in process_frame would race PCM still queued in that
+                # worker and undercount the phrase.
+                track.mark_speech_end()
 
     async def write_video_frame(self, frame: OutputImageRawFrame) -> bool:
         """Write a video frame to the WebRTC connection.

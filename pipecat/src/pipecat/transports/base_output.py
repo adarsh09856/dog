@@ -877,6 +877,10 @@ class BaseOutputTransport(FrameProcessor):
                 if self._tts_audio_received:
                     logger.debug("Bot stopped speaking based on TTSStoppedFrame")
                     await self._bot_stopped_speaking()
+                # Transport subclasses can use this ordered callback for
+                # end-of-stream bookkeeping after all preceding audio writes
+                # have completed.
+                await self._transport.write_transport_frame(frame)
             else:
                 await self._transport.write_transport_frame(frame)
 
