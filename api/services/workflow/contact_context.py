@@ -1176,7 +1176,31 @@ def caller_phone_fragment_reply(
             "NFC", unicodedata.normalize("NFD", assistant_text).replace("\u093c", "")
         )
     ))
+    # Use the same turn identity for every pass through this parser. The shared
+    # policy processor and provider mixin can both inspect one caller turn; a
+    # confirmed phone readback must not be reopened from the still-visible
+    # preceding assistant question on the second pass.
+    user_turn = messages[latest_index]
+    stable_turn_id = next((
+        user_turn[key]
+        for key in ("turn_id", "message_id", "id", "event_id", "timestamp")
+        if user_turn.get(key) is not None
+    ), None)
+    if stable_turn_id is not None:
+        user_turn_key = ("id", str(stable_turn_id))
+    else:
+        preceding_assistant = next((
+            message.get("content", "")
+            for message in reversed(messages[:latest_index])
+            if isinstance(message, dict) and message.get("role") == "assistant"
+        ), "")
+        user_turn_key = ("context", preceding_assistant, text)
     pending_confirmation = state.get("caller_phone_confirmation_pending")
+    if (
+        not isinstance(pending_confirmation, str)
+        and state.get("caller_phone_last_processed_user_turn") == user_turn_key
+    ):
+        return None
     if pending_confirmation:
         state["awaiting_phone"] = True
     elif intro or asked_for_phone:
@@ -1222,6 +1246,7 @@ def caller_phone_fragment_reply(
             state["caller_phone"] = pending_confirmation
             state["phone_just_completed"] = pending_confirmation
             state["awaiting_phone"] = False
+            state["caller_phone_last_processed_user_turn"] = user_turn_key
             deferred_slot_reply = None
             if booking_available and isinstance(deferred_slot_turns, list):
                 deferred_slot_reply = _replay_deferred_booking_slot(
@@ -1315,26 +1340,6 @@ def caller_phone_fragment_reply(
                 return "Please say yes to confirm, no to replace it, or repeat the full number."
             return "कृपया पुष्टि के लिए हाँ, बदलने के लिए नहीं कहें, या पूरा नंबर दोहराएँ।"
 
-    # Prefer an upstream stable ID. The fallback uses the immediately
-    # preceding assistant turn and the utterance itself, so dropping older
-    # history during context compaction does not change the identity of this
-    # utterance. Including the preceding assistant keeps a later repeated
-    # utterance (for example another "zero") eligible for parsing.
-    user_turn = messages[latest_index]
-    stable_turn_id = next((
-        user_turn[key]
-        for key in ("turn_id", "message_id", "id", "event_id", "timestamp")
-        if user_turn.get(key) is not None
-    ), None)
-    if stable_turn_id is not None:
-        user_turn_key = ("id", str(stable_turn_id))
-    else:
-        preceding_assistant = next((
-            message.get("content", "")
-            for message in reversed(messages[:latest_index])
-            if isinstance(message, dict) and message.get("role") == "assistant"
-        ), "")
-        user_turn_key = ("context", preceding_assistant, text)
     if state.get("caller_phone_last_processed_user_turn") == user_turn_key:
         return None
     state["caller_phone_last_processed_user_turn"] = user_turn_key
