@@ -110,8 +110,6 @@ def _resolve_auto_language(
     allowed = _auto_stt_language_allowlist(supported_codes)
     if not code:
         return (previous if previous in allowed else None), "missing_detector_language"
-    if code == "ur" and "hi" in allowed:
-        return "hi", "urdu_routed_to_hindi"
     if code not in allowed:
         if previous in allowed:
             return previous, "disabled_language_held_previous"

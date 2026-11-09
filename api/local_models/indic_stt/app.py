@@ -162,8 +162,34 @@ def _phone_unknown_token_count(text: str) -> int:
     )
 
 
+def _phone_digit_sequence(text: str) -> str:
+    """Extract only exact spoken digit groups for safe candidate comparison."""
+    tokens = (
+        token.strip("()[]{}\"'")
+        for token in re.split(r"[\s,.!?।॥:;\-–—]+", str(text or "").casefold())
+    )
+    digits: list[str] = []
+    repeat_next = False
+    for token in tokens:
+        if not token:
+            continue
+        if token.isdecimal():
+            digits.extend(token)
+            repeat_next = False
+            continue
+        value = _PHONE_DIGIT_WORDS.get(token)
+        if value == "double":
+            repeat_next = True
+        elif value is not None and value.isdecimal():
+            digits.extend(value * (2 if repeat_next else 1))
+            repeat_next = False
+        else:
+            repeat_next = False
+    return "".join(digits)
+
+
 def _phone_rescue_is_better(primary: str, english: str) -> bool:
-    """Prefer a plausible longer phone decode, or a cleaner equal-length one."""
+    """Prefer a plausible longer decode, or a cleaner matching digit sequence."""
     primary_digits = _phone_digit_count(primary)
     candidate_digits = _phone_digit_count(english)
     candidate_plausible = 3 <= candidate_digits <= 15
@@ -174,12 +200,14 @@ def _phone_rescue_is_better(primary: str, english: str) -> bool:
     primary_score = primary_digits if primary_plausible else 0
     if candidate_plausible and candidate_digits > primary_score:
         return True
-    # If both decode the same number of explicit digits, prefer the candidate
-    # only when it contains fewer unknown words. Do not sacrifice recognized
-    # digits for a cleaner but shorter transcript, and never infer unknown words.
+    # Equal-length number candidates must agree digit-for-digit. Otherwise a
+    # cleaner transcript can silently replace one valid phone number with a
+    # different one. Only use the alternate to clean up surrounding words
+    # after the recognized number itself is identical.
     return (
         candidate_plausible
         and candidate_digits == primary_digits
+        and _phone_digit_sequence(english) == _phone_digit_sequence(primary)
         and _phone_unknown_token_count(english) < _phone_unknown_token_count(primary)
     )
 
