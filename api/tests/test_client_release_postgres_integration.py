@@ -424,10 +424,15 @@ async def test_renewal_handover_and_revocation_persist(monkeypatch):
 
         assert await renew_client_installation_record(
             installation_id, old_fingerprint, new_fingerprint, extended_expiry, 1,
+            limits={"max_concurrent_calls": 4, "max_agents": 20},
         )
         assert not await renew_client_installation_record(
             installation_id, old_fingerprint, new_fingerprint, extended_expiry, 1,
+            limits={"max_concurrent_calls": 4, "max_agents": 20},
         )
+        renewed_record = await get_client_installation_record(installation_id)
+        assert renewed_record is not None
+        assert renewed_record["limits"] == {"max_concurrent_calls": 4, "max_agents": 20}
         old_status = await record_client_installation_check(
             installation_id, old_fingerprint, integrity_ok=True,
             expected_public_key="A" * 43,

@@ -28,12 +28,13 @@ app = FastAPI(title="Kodewaves owner license signer", docs_url=None, redoc_url=N
 
 _LICENSE_FIELDS = frozenset({
     "iat", "exp", "installation_id", "customer_id", "edition",
-    "domains", "ip_ranges", "features", "limits",
+    "domains", "ip_ranges", "features", "limits", "feature_version",
 })
-_LICENSE_REQUIRED_FIELDS = _LICENSE_FIELDS - {"ip_ranges"}
+_LICENSE_REQUIRED_FIELDS = _LICENSE_FIELDS - {"ip_ranges", "feature_version"}
 _LICENSE_FEATURES = frozenset({
     "voice", "telephony", "campaigns", "crm", "appointments", "forms",
-    "widgets", "knowledge_base", "billing",
+    "widgets", "knowledge_base", "billing", "models", "tools", "recordings",
+    "prompt_templates", "reports", "integrations",
 })
 _LICENSE_LIMITS = frozenset({
     "max_concurrent_calls", "max_seats", "max_workspaces", "max_agents", "max_campaigns",
@@ -139,11 +140,15 @@ def _validate_license_claim_policy(claims: dict[str, Any]) -> None:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="License IP ranges are invalid") from exc
     features = claims.get("features")
+    feature_version = claims.get("feature_version", 1)
     limits = claims.get("limits")
     if (
         not isinstance(features, list)
         or any(not isinstance(feature, str) for feature in features)
         or set(features) - _LICENSE_FEATURES
+        or isinstance(feature_version, bool)
+        or not isinstance(feature_version, int)
+        or feature_version not in {1, 2}
         or not isinstance(limits, dict)
         or set(limits) - _LICENSE_LIMITS
         or any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in limits.values())

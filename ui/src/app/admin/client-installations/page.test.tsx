@@ -270,7 +270,7 @@ describe("owner integrity alert refresh", () => {
     const expiresAt = 1_900_000_000;
     const installation = {
       installation_id: "client-1", customer_id: "customer-1", domains: ["customer.example"],
-      ip_ranges: [], features: ["voice"], limits: { max_concurrent_calls: 1 },
+      ip_ranges: [], features: ["voice"], limits: { max_concurrent_calls: 1, max_seats: 4, max_agents: 6 },
       expires_at: expiresAt, token_fingerprint: "old-fingerprint", revoked_at: null,
       last_seen_at: null, integrity_failed_at: null,
     };
@@ -289,13 +289,38 @@ describe("owner integrity alert refresh", () => {
     render(<ClientInstallationsPage />);
     await act(async () => { await Promise.resolve(); });
 
+    fireEvent.change(screen.getByLabelText("Features for renewal client-1"), {
+      target: { value: "voice, reports" },
+    });
+    fireEvent.change(screen.getByLabelText("Concurrent calls limit for renewal client-1"), {
+      target: { value: "3" },
+    });
+    fireEvent.change(screen.getByLabelText("Agents limit for renewal client-1"), {
+      target: { value: "9" },
+    });
+    fireEvent.change(screen.getByLabelText("Users limit for renewal client-1"), {
+      target: { value: "" },
+    });
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Renew for 30 days" }));
     });
 
     expect(mocks.apiFetch).toHaveBeenCalledWith(
       "/admin/client-installations/client-1/renew",
-      { method: "POST", body: JSON.stringify({ expires_at: expiresAt + 30 * 86400 }) },
+      {
+        method: "POST",
+        body: JSON.stringify({
+          expires_at: expiresAt + 30 * 86400,
+          limits: {
+            max_concurrent_calls: 3,
+            max_seats: null,
+            max_workspaces: null,
+            max_agents: 9,
+            max_campaigns: null,
+          },
+          features: ["voice", "reports"],
+        }),
+      },
     );
     expect(screen.getByDisplayValue("replacement-token")).toBeTruthy();
   });

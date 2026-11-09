@@ -84,6 +84,7 @@ async def list_client_installation_records() -> list[dict]:
                 "domains": item.domains,
                 "ip_ranges": item.ip_ranges,
                 "features": item.features,
+                "feature_version": item.feature_version,
                 "limits": item.limits,
                 "expires_at": int(item.expires_at.timestamp()),
                 "token_fingerprint": item.token_fingerprint,
@@ -167,6 +168,7 @@ async def get_client_installation_record(installation_id: str) -> dict | None:
             "domains": record.domains,
             "ip_ranges": record.ip_ranges,
             "features": record.features,
+            "feature_version": record.feature_version,
             "limits": record.limits,
             "expires_at": int(record.expires_at.timestamp()),
             "token_fingerprint": record.token_fingerprint,
@@ -179,7 +181,9 @@ async def get_client_installation_record(installation_id: str) -> dict | None:
 
 async def renew_client_installation_record(
     installation_id: str, expected_fingerprint: str, new_fingerprint: str,
-    expires_at: datetime, user_id: int,
+    expires_at: datetime, user_id: int, *,
+    features: list[str] | None = None, feature_version: int | None = None,
+    limits: dict[str, int] | None = None,
 ) -> bool:
     async with kodewaves_db_client.get_session() as session:
         record = await session.get(ClientInstallationModel, installation_id, with_for_update=True)
@@ -194,6 +198,12 @@ async def renew_client_installation_record(
         record.previous_token_valid_until = min(record.expires_at, now + timedelta(hours=48))
         record.token_fingerprint = new_fingerprint
         record.expires_at = expires_at
+        if features is not None:
+            record.features = features
+        if feature_version is not None:
+            record.feature_version = feature_version
+        if limits is not None:
+            record.limits = limits
         record.renewed_at = now
         record.renewed_by_user_id = user_id
         record.updated_at = now

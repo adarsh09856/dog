@@ -143,7 +143,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <div className={`${styles.pageFrame} ${styles.signalStrip}`} aria-label="Voice operations lifecycle">
+        <div className={`${styles.pageFrame} ${styles.signalStrip}`} role="group" aria-label="Voice operations lifecycle">
           {[
             ["01", "Build an agent workflow"],
             ["02", "Route browser and phone calls"],

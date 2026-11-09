@@ -47,6 +47,21 @@ class InstallationLicense:
     features: frozenset[str]
     limits: dict[str, int]
     ip_ranges: tuple[str, ...] = ()
+    # Licenses issued before granular entitlements omitted this claim. Keep
+    # those licenses at v1 semantics; new owner-issued licenses use v2.
+    feature_version: int = 1
+
+
+LEGACY_VOICE_FEATURES = frozenset({
+    "models", "tools", "recordings", "prompt_templates", "reports", "integrations",
+})
+
+
+def effective_features(license_data: InstallationLicense) -> frozenset[str]:
+    """Resolve explicit grants while preserving historical v1 voice licenses."""
+    if getattr(license_data, "feature_version", 1) == 1 and "voice" in license_data.features:
+        return license_data.features | LEGACY_VOICE_FEATURES
+    return license_data.features
 
 
 def _b64url_decode(value: str) -> bytes:
@@ -154,6 +169,7 @@ def load_license(
         raw_domains = claims["domains"]
         raw_ip_ranges = claims.get("ip_ranges", [])
         raw_features = claims["features"]
+        raw_feature_version = claims.get("feature_version", 1)
         raw_limits = claims.get("limits", {})
         if (
             isinstance(issued_at, bool)
@@ -166,6 +182,9 @@ def load_license(
             or not all(isinstance(value, str) for value in raw_ip_ranges)
             or not isinstance(raw_features, list)
             or not all(isinstance(feature, str) for feature in raw_features)
+            or isinstance(raw_feature_version, bool)
+            or not isinstance(raw_feature_version, int)
+            or raw_feature_version not in {1, 2}
             or not isinstance(raw_limits, dict)
             or not all(
                 isinstance(value, int) and not isinstance(value, bool)
@@ -179,6 +198,7 @@ def load_license(
         domains = tuple(sorted({_canonical_domain(d) for d in raw_domains}))
         ip_ranges = tuple(str(ipaddress.ip_network(x, strict=False)) for x in raw_ip_ranges)
         features = frozenset(raw_features)
+        feature_version = raw_feature_version
         limits = {str(k): value for k, value in raw_limits.items()}
     except InstallationLicenseError:
         raise
@@ -203,6 +223,7 @@ def load_license(
         features=features,
         limits=limits,
         ip_ranges=ip_ranges,
+        feature_version=feature_version,
     )
 
 
@@ -243,7 +264,7 @@ def validate_installation_license(
 
 
 def require_feature(license_data: InstallationLicense, feature: str) -> None:
-    if feature not in license_data.features:
+    if feature not in effective_features(license_data):
         raise InstallationFeatureError(f"The installation license does not include '{feature}'")
 
 

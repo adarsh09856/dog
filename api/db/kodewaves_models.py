@@ -31,6 +31,9 @@ class ClientInstallationModel(Base):
     domains = Column(JSON, nullable=False)
     ip_ranges = Column(JSON, nullable=False, default=list)
     features = Column(JSON, nullable=False)
+    # 1 denotes pre-granular licenses (voice historically covered modules).
+    # New licenses use v2 and require explicit module grants.
+    feature_version = Column(Integer, nullable=False, default=1, server_default="1")
     limits = Column(JSON, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     token_fingerprint = Column(String(64), nullable=False)
@@ -442,6 +445,9 @@ class FormModel(Base):
     description = Column(Text, nullable=True)
     fields_schema = Column(JSON, default=list, nullable=False)                     # [{id: 'f1', label: 'Company Size', type: 'select'}]
     is_active = Column(Boolean, default=True, nullable=False)
+    public_submission_enabled = Column(Boolean, default=False, nullable=False)
+    public_token_hash = Column(String(64), nullable=True, unique=True, index=True)
+    public_allowed_origins = Column(JSON, default=list, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     organization = relationship("OrganizationModel")

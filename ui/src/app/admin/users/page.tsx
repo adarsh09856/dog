@@ -291,7 +291,6 @@ export default function AdminUsersPage() {
           localStorage.setItem("kodewaves_impersonated_email", user.email);
         }
         document.cookie = `kodewaves_auth_token=${res.token}; path=/; max-age=86400`;
-        document.cookie = `dograh_auth_token=${res.token}; path=/; max-age=86400`;
         document.cookie = `oss_token=${res.token}; path=/; max-age=86400`;
         window.location.href = res.redirect_url || "/workflow";
       }

@@ -69,7 +69,13 @@
 .handover { color:var(--cta-text); }
 .installationActions { display:flex;flex-wrap:wrap;gap:.45rem;padding-top:.8rem;border-top:1px solid var(--border); }
 .installationActions button { min-height:2.1rem;border-radius:.65rem;font-size:.67rem; }
+.renewalFeatures { display:grid;gap:.3rem;min-width:min(100%,20rem);color:var(--muted-foreground);font-size:.62rem; }
+.renewalFeatures input { min-height:2.1rem;font-size:.65rem; }
+.renewalLimits { display:grid;grid-template-columns:repeat(5,minmax(4.5rem,1fr));gap:.35rem;min-width:min(100%,31rem); }
+.renewalLimitHeading { grid-column:1/-1;color:var(--muted-foreground);font-size:.58rem;line-height:1.4; }
+.renewalLimit { display:grid;gap:.25rem;color:var(--muted-foreground);font-size:.56rem; }
+.renewalLimit input { min-height:2.05rem;padding-inline:.45rem;font-size:.65rem; }
 .empty { padding:1.5rem;text-align:center;color:var(--muted-foreground);font-size:.75rem; }
 @media(max-width:900px) { .portfolio { grid-template-columns:repeat(2,minmax(0,1fr)); } .portfolioItem:nth-child(2) { border-right:0; } .portfolioItem:nth-child(-n+2) { border-bottom:1px solid var(--border); } .dataGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media(max-width:640px) { .portfolioItem { padding:.8rem; } .portfolioIcon { display:none; } .alertMeta { grid-template-columns:1fr; } .requestMeta { grid-template-columns:1fr; } .requestReason,.dataCellFull { grid-column:auto; } .dataGrid { grid-template-columns:1fr; } .issueCard :global([data-slot="card-header"]),.sectionCard :global([data-slot="card-header"]),.secretCard :global([data-slot="card-header"]),.issueCard :global([data-slot="card-content"]),.sectionCard :global([data-slot="card-content"]),.secretCard :global([data-slot="card-content"]) { padding:1rem; } }
+@media(max-width:640px) { .portfolioItem { padding:.8rem; } .portfolioIcon { display:none; } .alertMeta { grid-template-columns:1fr; } .requestMeta { grid-template-columns:1fr; } .requestReason,.dataCellFull { grid-column:auto; } .dataGrid { grid-template-columns:1fr; } .renewalLimits { grid-template-columns:repeat(2,minmax(0,1fr)); } .issueCard :global([data-slot="card-header"]),.sectionCard :global([data-slot="card-header"]),.secretCard :global([data-slot="card-header"]),.issueCard :global([data-slot="card-content"]),.sectionCard :global([data-slot="card-content"]),.secretCard :global([data-slot="card-content"]) { padding:1rem; } }
 @media(prefers-reduced-motion:reduce) { .surface :global(*) { scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important; } }

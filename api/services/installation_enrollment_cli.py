@@ -91,15 +91,32 @@ def execute(request: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("Current version is only accepted for update checks")
             if action == "prepare_update_check" and current_version is None:
                 raise ValueError("Current version is required for update checks")
+            integrity_ok = True
+            integrity_finding = None
+            if action == "prepare_update_check":
+                # The updater runs outside the API container. Recheck the
+                # installed signed manifest here rather than letting the host
+                # updater unconditionally report a clean installation.
+                from api.services.release_integrity import (
+                    ReleaseIntegrityError,
+                    verify_configured_release,
+                )
+
+                try:
+                    verify_configured_release()
+                except ReleaseIntegrityError as exc:
+                    integrity_ok = False
+                    integrity_finding = exc.finding()
             signature = sign_owner_check(
-                seed, integrity_ok=True, integrity_finding=None,
+                seed, integrity_ok=integrity_ok, integrity_finding=integrity_finding,
                 current_version=current_version, **common,
             )
             stage = "owner_status_endpoint"
             return {
                 "owner_status_url": trusted_owner_status_url(), "nonce": nonce,
                 "issued_at": issued_at, "signature": signature,
-                "current_version": current_version,
+                "current_version": current_version, "integrity_ok": integrity_ok,
+                "integrity_finding": integrity_finding,
             }
         if action == "prepare_update_report":
             stage = "update_report_signature"

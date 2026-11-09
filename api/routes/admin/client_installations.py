@@ -56,7 +56,8 @@ router.include_router(client_release_control_router)
 
 SUPPORTED_FEATURES = frozenset({
     "voice", "telephony", "campaigns", "crm", "appointments", "forms",
-    "widgets", "knowledge_base",
+    "widgets", "knowledge_base", "models", "tools", "recordings",
+    "prompt_templates", "reports", "integrations",
 })
 SUPPORTED_LIMITS = frozenset({
     "max_concurrent_calls", "max_seats", "max_workspaces", "max_agents", "max_campaigns",
@@ -156,6 +157,37 @@ class DomainChallengeRequest(BaseModel):
 
 class RenewClientInstallation(BaseModel):
     expires_at: int
+    features: list[str] | None = None
+    limits: dict[str, int | None] | None = None
+
+    @field_validator("features")
+    @classmethod
+    def known_features(cls, values: list[str] | None) -> list[str] | None:
+        if values is None:
+            return None
+        unknown = set(values) - SUPPORTED_FEATURES
+        if unknown:
+            raise ValueError(f"Unknown license features: {', '.join(sorted(unknown))}")
+        return sorted(set(values))
+
+    @field_validator("limits", mode="before")
+    @classmethod
+    def integer_limit_updates_only(cls, value):
+        if value is None:
+            return None
+        if not isinstance(value, dict) or any(
+            item is not None and (isinstance(item, bool) or not isinstance(item, int))
+            for item in value.values()
+        ):
+            raise ValueError("License limit updates must be integer values or null to remove a limit")
+        unknown = set(value) - SUPPORTED_LIMITS
+        if unknown:
+            raise ValueError(f"Unsupported license limits: {', '.join(sorted(unknown))}")
+        if any(item is not None and item < 0 for item in value.values()):
+            raise ValueError("License limits cannot be negative")
+        if any(value.get(name) == 0 for name in ("max_seats", "max_workspaces")):
+            raise ValueError("Seat and workspace limits must be positive or null for unlimited")
+        return value
 
 
 class InstallationEnrollmentTokenResponse(BaseModel):
@@ -284,6 +316,7 @@ async def issue_client_installation(
         "installation_id": request.installation_id,
         "customer_id": request.customer_id,
         "edition": "client",
+        "feature_version": 2,
         "domains": request.domains,
         "ip_ranges": request.ip_ranges,
         "features": request.features,
@@ -305,6 +338,7 @@ async def issue_client_installation(
         "domains": list(license_data.domains),
         "ip_ranges": list(license_data.ip_ranges),
         "features": sorted(license_data.features),
+        "feature_version": license_data.feature_version,
         "limits": license_data.limits,
         "expires_at": datetime.fromtimestamp(license_data.expires_at, UTC),
         "token_fingerprint": hashlib.sha256(token.encode("ascii")).hexdigest(),
@@ -345,21 +379,29 @@ async def renew_client_installation(
     unverified = await unverified_license_domains(existing["customer_id"], existing["domains"])
     if unverified:
         raise HTTPException(status_code=409, detail=f"Verify domain control before renewal: {', '.join(unverified)}")
+    limits = dict(existing["limits"])
+    if request.limits is not None:
+        for name, value in request.limits.items():
+            if value is None:
+                limits.pop(name, None)
+            else:
+                limits[name] = value
     claims = {
         "iat": timestamp,
         "exp": request.expires_at,
         "installation_id": installation_id,
         "customer_id": existing["customer_id"],
         "edition": "client",
+        "feature_version": 2 if request.features is not None else existing.get("feature_version", 1),
         "domains": existing["domains"],
         "ip_ranges": existing["ip_ranges"],
-        "features": existing["features"],
-        "limits": existing["limits"],
+        "features": request.features if request.features is not None else existing["features"],
+        "limits": limits,
     }
     try:
         IssueClientInstallation.model_validate({**claims, "expires_at": request.expires_at})
         token, public_key = await sign_client_license(claims)
-        load_license(token, public_key, now=timestamp)
+        license_data = load_license(token, public_key, now=timestamp)
     except OwnerLicenseSignerPolicyError as exc:
         raise HTTPException(status_code=422, detail="License claims violate owner issuance policy") from exc
     except OwnerLicenseSignerError as exc:
@@ -372,6 +414,9 @@ async def renew_client_installation(
         hashlib.sha256(token.encode("ascii")).hexdigest(),
         datetime.fromtimestamp(request.expires_at, UTC),
         user.id,
+        features=sorted(license_data.features),
+        feature_version=license_data.feature_version,
+        limits=dict(license_data.limits),
     )
     if not updated:
         raise HTTPException(status_code=409, detail="Installation changed while renewing; refresh and try again")
@@ -380,6 +425,9 @@ async def renew_client_installation(
         "token": token,
         "public_key": public_key,
         "expires_at": request.expires_at,
+        "features": sorted(license_data.features),
+        "feature_version": license_data.feature_version,
+        "limits": dict(license_data.limits),
     }
 
 

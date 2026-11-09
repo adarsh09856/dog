@@ -29,6 +29,7 @@ from api.services.installation_license import (
     _canonical_domain,
     get_installation_binding,
     load_license,
+    effective_features,
     validate_installation_license,
 )
 from api.services.owner_installation_status import require_current_owner_status
@@ -194,7 +195,7 @@ async def installation_feature_status(_user: Annotated[UserModel, Depends(get_us
     return {
         "edition": "client",
         "valid": True,
-        "features": sorted(license_data.features),
+        "features": sorted(effective_features(license_data)),
         "limits": license_data.limits,
         "owner_status": "outage_grace" if owner_status.using_outage_grace else "current",
     }
@@ -229,6 +230,7 @@ async def installation_license_status(_user: Annotated[UserModel, Depends(get_us
         "domains": list(license_data.domains),
         "expires_at": license_data.expires_at,
         "features": sorted(license_data.features),
+        "feature_version": license_data.feature_version,
         "limits": license_data.limits,
         "ip_ranges": list(license_data.ip_ranges),
         "binding_request_available": bool(

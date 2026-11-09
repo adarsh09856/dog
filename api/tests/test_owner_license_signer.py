@@ -6,7 +6,7 @@ import time
 
 from fastapi.testclient import TestClient
 
-from api.services.installation_license import issue_license_token, verify_installation_status
+from api.services.installation_license import issue_license_token, load_license, verify_installation_status
 from api.services.owner_license_signer import app
 
 
@@ -69,6 +69,18 @@ def test_signer_issues_license_and_binds_status_to_original_license(monkeypatch,
         token = payload["token"]
         assert payload["public_key"]
         assert "private" not in issued.text.lower()
+
+        granular_claims = {
+            **claims, "features": ["voice", "models", "reports"], "feature_version": 2,
+            "limits": {"max_concurrent_calls": 2},
+        }
+        granular = client.post(
+            "/v1/sign-license", json={"claims": granular_claims}, headers=headers,
+        )
+        assert granular.status_code == 200
+        parsed = load_license(granular.json()["token"], granular.json()["public_key"])
+        assert parsed.feature_version == 2
+        assert parsed.features == {"voice", "models", "reports"}
 
         for invalid_domains in ([], ["*.example.com"], [""]):
             invalid = client.post(

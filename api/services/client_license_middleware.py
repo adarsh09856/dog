@@ -21,17 +21,18 @@ from api.services.owner_installation_status import require_current_owner_status
 ASGIApp = Callable[[dict[str, Any], Callable[..., Awaitable[dict[str, Any]]], Callable[..., Awaitable[None]]], Awaitable[None]]
 
 _FEATURE_PATHS = (
-    ("/catalog", "voice"),
-    ("/credentials", "voice"),
+    ("/catalog", "models"),
+    ("/credentials", "integrations"),
     ("/folder", "voice"),
-    ("/node-types", "voice"),
+    ("/node-types", "tools"),
     ("/organizations/disposition-codes", "voice"),
     ("/organizations/langfuse-credentials", "voice"),
-    ("/organizations/overview/stats", "voice"),
-    ("/organizations/reports", "voice"),
-    ("/organizations/usage", "voice"),
+    ("/organizations/overview/stats", "reports"),
+    ("/organizations/reports", "reports"),
+    ("/organizations/usage", "reports"),
     ("/public/agent", "telephony"),
     ("/public/embed", "widgets"),
+    ("/public/forms", "forms"),
     ("/agent-stream", "telephony"),
     ("/appointments", "appointments"),
     ("/billing-sovereign", "billing"),
@@ -39,31 +40,31 @@ _FEATURE_PATHS = (
     ("/crm", "crm"),
     ("/forms", "forms"),
     ("/knowledge-base", "knowledge_base"),
-    ("/mcp", "voice"),
+    ("/mcp", "integrations"),
     ("/organizations/campaign-defaults", "campaigns"),
-    ("/organizations/call-events", "voice"),
-    ("/organizations/concurrent-calls", "voice"),
-    ("/organizations/model-configurations", "voice"),
+    ("/organizations/call-events", "reports"),
+    ("/organizations/concurrent-calls", "reports"),
+    ("/organizations/model-configurations", "models"),
     ("/organizations/preferences", "voice"),
-    ("/organizations/reports/workflows", "voice"),
+    ("/organizations/reports/workflows", "reports"),
     ("/organizations/telephony-config-warnings", "telephony"),
     ("/organizations/telephony-configs", "telephony"),
     ("/organizations/telephony-providers", "telephony"),
     ("/payments", "billing"),
-    ("/prompt-templates", "voice"),
+    ("/prompt-templates", "prompt_templates"),
     ("/s3/presigned-upload-url", "campaigns"),
     ("/telephony", "telephony"),
-    ("/tools", "voice"),
+    ("/tools", "tools"),
     ("/turn/credentials", "voice"),
-    ("/tts-cache", "voice"),
+    ("/tts-cache", "recordings"),
     ("/user/configurations/voices", "voice"),
     ("/user/configurations", "voice"),
     ("/user/onboarding-state", "voice"),
-    ("/user/api-keys", "voice"),
-    ("/user/service-keys", "voice"),
+    ("/user/api-keys", "integrations"),
+    ("/user/service-keys", "integrations"),
     ("/public/download", "voice"),
     ("/widgets", "widgets"),
-    ("/workflow-recordings", "voice"),
+    ("/workflow-recordings", "recordings"),
     ("/workflow", "voice"),
     ("/ws", "voice"),
 )
@@ -129,6 +130,8 @@ def required_feature_for_request(path: str, query_string: bytes = b"") -> str | 
             return "campaigns"
         if key.startswith("knowledge_base/"):
             return "knowledge_base"
+        if key.startswith(("recordings/", "workflow-recordings/", "tts-cache/")):
+            return "recordings"
         return "voice"
     return required_feature_for_path(path)
 

@@ -614,6 +614,14 @@ export interface FormSubmissionPage {
   has_more: boolean;
 }
 
+export interface PublicFormAccess {
+  enabled: boolean;
+  token_configured: boolean;
+  allowed_origins: string[];
+  /** Returned only when a token is first created or explicitly rotated. */
+  submission_token?: string | null;
+}
+
 export interface WebsiteWidget {
   id: string | number;
   name: string;
@@ -735,6 +743,13 @@ export const formsApi = {
     apiFetch<Array<{ id: number | string; data: Record<string, unknown>; created_at: string }>>(`/forms/${formId}/submissions`),
   getSubmissionsPage: (formId: string | number, offset = 0, limit = 50) =>
     apiFetch<FormSubmissionPage>(`/forms/${formId}/submissions/page?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`),
+  getPublicAccess: (formId: string | number) =>
+    apiFetch<PublicFormAccess>(`/forms/${formId}/public-access`),
+  setPublicAccess: (formId: string | number, data: { enabled: boolean; allowed_origins: string[]; rotate_token?: boolean }) =>
+    apiFetch<PublicFormAccess>(`/forms/${formId}/public-access`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
 
 export const widgetsApi = {

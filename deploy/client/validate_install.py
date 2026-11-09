@@ -37,6 +37,7 @@ MODEL_IMAGE_COMPONENTS = {
 }
 MODEL_ASSET_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}")
 MODEL_ASSET_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+MODEL_ASSET_ENV_KEYS = {"CLIENT_OLLAMA_MODEL", "CLIENT_OLLAMA_MODEL_DIGEST"}
 
 
 def validate_model_images(images: dict[str, str]) -> None:
@@ -94,6 +95,38 @@ PINNED_IMAGE = re.compile(
     r"^[a-z0-9][a-z0-9.-]*(?::(?P<port>[0-9]{1,5}))?"
     r"(?:/[a-z0-9]+(?:[._-][a-z0-9]+)*)+@sha256:[0-9a-f]{64}$"
 )
+
+
+def validate_release_image_inventory(images: dict[str, str]) -> set[str]:
+    """Validate the exact cloud or self-hosted release image profile.
+
+    The signed customer env also carries the selected model name and weights
+    digest. Those values are metadata, not Docker references, so validate them
+    independently from the container image pins.
+    """
+    image_keys = set(images) - MODEL_ASSET_ENV_KEYS
+    validate_model_images(images)
+    cloud_profile = IMAGE_KEYS
+    self_hosted_profile = IMAGE_KEYS | MODEL_IMAGE_KEYS
+    if image_keys not in (cloud_profile, self_hosted_profile):
+        raise ValueError("release image inventory does not match an approved profile")
+
+    metadata_keys = set(images) & MODEL_ASSET_ENV_KEYS
+    if image_keys == self_hosted_profile:
+        if metadata_keys != MODEL_ASSET_ENV_KEYS:
+            raise ValueError("self-hosted release requires complete model asset metadata")
+        if (
+            not MODEL_ASSET_NAME.fullmatch(images["CLIENT_OLLAMA_MODEL"])
+            or not MODEL_ASSET_DIGEST.fullmatch(images["CLIENT_OLLAMA_MODEL_DIGEST"])
+        ):
+            raise ValueError("self-hosted release has invalid model asset metadata")
+    elif metadata_keys:
+        raise ValueError("cloud release must not contain self-hosted model metadata")
+
+    for name in image_keys:
+        if not PINNED_IMAGE.fullmatch(images[name]):
+            raise ValueError(f"{name} is not an immutable sha256 image reference")
+    return image_keys
 
 
 def parse_env(path: Path) -> dict[str, str]:

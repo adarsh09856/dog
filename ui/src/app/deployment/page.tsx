@@ -91,7 +91,7 @@ export default function DeploymentPage() {
                 <Link href="/platform" className={styles.secondaryAction}>Explore the platform</Link>
               </div>
             </div>
-            <div className={`${styles.heroRail} ${styles.productRail}`} aria-label="Deployment planning overview">
+            <div className={`${styles.heroRail} ${styles.productRail}`} role="group" aria-label="Deployment planning overview">
               <div className={styles.railHeading}>
                 <span className={styles.railSignal} aria-hidden="true" />
                 <span>DEPLOYMENT SCOPE</span>
