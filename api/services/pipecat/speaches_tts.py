@@ -73,12 +73,11 @@ class SpeachesLiveTTSService(SpeachesTTSService):
                 # Lower the first-phrase threshold to reduce the gap to speech;
                 # word/date guards still prevent unsafe phrase boundaries.
                 first_phrase_characters=24,
-                # Keep the first phrase at 24 characters for quick audible
-                # response. Follow-up synthesis is serialized by the local
-                # CPU service, so larger batches amortize its per-request gap
-                # without delaying the first audio. Number/date guards keep
-                # numeric groups intact at phrase boundaries.
-                streaming_phrase_characters=112,
+                # Keep follow-up phrases bounded so the next local CPU TTS
+                # request starts before a long LLM continuation has accrued.
+                # The aggregator's numeric/date guards keep those groups
+                # intact even when the general phrase target is 32 characters.
+                streaming_phrase_characters=32,
             )
         # Avoid multiplying a stalled speech request through SDK retries.
         self._client.max_retries = 0
