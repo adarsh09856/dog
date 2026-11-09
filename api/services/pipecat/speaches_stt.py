@@ -36,6 +36,7 @@ _CONFIRMED_LANGUAGE_ROUTES = frozenset({
     "whisper_english_rescue",
     "initial_voice_fallback_low_confidence",
 })
+_AUTO_LANGUAGE_SWITCH_CONFIRMATIONS = 2
 
 
 def _resolve_script_language_conflict(
@@ -129,10 +130,12 @@ def _advance_stable_language(
     pending: str | None,
     pending_count: int,
 ) -> tuple[str | None, str | None, int]:
-    """Use one confident supported-language result for the current call state.
+    """Require repeat evidence before a new detector guess becomes fallback state.
 
-    Confidence thresholds reject weak fragments; a second-turn delay made a
-    clear language switch produce a reply in the previous language.
+    A high-confidence one-off still routes the current reply, but cannot become
+    the language used to override later low-confidence turns. Two consecutive
+    confident turns confirm a persistent call-language change. Explicit rescue
+    routes remain immediate because they use independent evidence.
     """
     stable = str(current or "").strip().lower().replace("_", "-").split("-", 1)[0]
     detected = str(candidate or "").strip().lower().replace("_", "-").split("-", 1)[0]
@@ -155,7 +158,10 @@ def _advance_stable_language(
     if confirmed_route:
         return detected, None, 0
 
-    return detected, None, 0
+    next_count = pending_count + 1 if pending == detected else 1
+    if next_count >= _AUTO_LANGUAGE_SWITCH_CONFIRMATIONS:
+        return detected, None, 0
+    return stable, detected, next_count
 
 
 def _trusted_tts_language(
@@ -165,11 +171,7 @@ def _trusted_tts_language(
     route: str,
     supported_codes: set[str] | frozenset[str] | None = None,
 ) -> str | None:
-    """Route this reply with one confident detector result if its voice exists.
-
-    Weak or unavailable results keep the last stable language. Explicit rescue
-    routes remain immediate because they carry independent evidence.
-    """
+    """Keep low-confidence or unconfirmed detector output on stable fallback."""
     code = str(selected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
     supported = (
@@ -191,8 +193,34 @@ def _trusted_tts_language(
         return previous if previous in supported else None
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
     if confidence is not None and confidence >= threshold:
+        if previous in supported and code != previous:
+            return previous
         return code
     return previous if previous in supported else None
+
+
+def _current_reply_tts_language(
+    selected: str | None,
+    confidence: float | None,
+    previous_stable: str | None,
+    route: str,
+    supported_codes: set[str] | frozenset[str] | None = None,
+) -> str | None:
+    """Use one confident supported detection for this reply, without changing fallback policy."""
+    code = str(selected or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    supported = (
+        LOCAL_REPLY_TTS_LANGUAGES
+        if supported_codes is None
+        else frozenset(supported_codes)
+    )
+    if route in _CONFIRMED_LANGUAGE_ROUTES and code in supported:
+        return code
+    threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
+    if code in supported and confidence is not None and confidence >= threshold:
+        return code
+    return _trusted_tts_language(
+        selected, confidence, previous_stable, route, supported_codes
+    )
 
 
 def _phone_rescue_reply_language(
@@ -593,7 +621,7 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             self.latest_detected_language = selected or None
             self.latest_tts_language = selected or None
         elif text and settings is not None and settings.model == "indicconformer-ctc-int8":
-            self.latest_tts_language = _trusted_tts_language(
+            self.latest_tts_language = _current_reply_tts_language(
                 self.latest_detected_language,
                 self._latest_language_confidence,
                 getattr(self, "_stable_detected_language", None),
