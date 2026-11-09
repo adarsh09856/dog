@@ -288,11 +288,11 @@ def _response_voice(preferred_voice: str, context_language: str | None) -> str |
     The STT/TTS language hint is held constant for one LLM response and sent
     with every phrase request. Honor any installed-language hint so words in
     another script cannot switch the speaker mid-reply.
-    If the target language has no loaded voice, keep the configured speaker as
-    the stable fallback rather than alternating voices or failing a phrase.
+    If a detected target language has no loaded voice, fail explicitly instead
+    of silently synthesizing it with an unrelated configured speaker.
     """
     target = (context_language or "").lower().replace("_", "-").split("-", 1)[0]
-    if not target:
+    if not target or target in {"auto", "multi", "multilingual", "unknown", "default", "none"}:
         return None
 
     active = get_active_speakers()
@@ -310,7 +310,7 @@ def _response_voice(preferred_voice: str, context_language: str | None) -> str |
         if str(spec[1]).lower().replace("_", "-").split("-", 1)[0] == target
     ]
     if not candidates:
-        return preferred_voice
+        raise ValueError(f"No loaded voice supports language '{target}'")
 
     preferred_gender = preferred[3]
     matching = [voice for voice in candidates if active[voice][3] == preferred_gender]
@@ -330,9 +330,9 @@ def speech_segments(text: str, preferred_voice: str, context_language: str | Non
     A local speech request is one phrase of an assistant response, but every
     phrase carries the same call-scoped language hint. When that language has
     a loaded voice, choosing its speaker keeps code-switches stable across
-    phrase boundaries as well as within a phrase. If the language is not in
-    the loaded inventory, the configured voice is the stable fallback. This
-    is voice routing, not translation.
+    phrase boundaries as well as within a phrase. If the detected language is
+    not in the loaded inventory, synthesis fails instead of sending unsupported
+    text to an unrelated voice. This is voice routing, not translation.
     """
     stable_voice = _response_voice(preferred_voice, context_language)
     if stable_voice is None:
