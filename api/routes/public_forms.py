@@ -13,13 +13,10 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
-from sqlalchemy import select
 from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from api.db import forms as forms_db
-from api.db.kodewaves_client import kodewaves_db_client
-from api.db.kodewaves_models import FormModel
 from api.db.models import UserModel
 from api.services.auth.depends import get_user
 from api.services.saas_entitlements import enforce_saas_feature, require_saas_feature
@@ -204,21 +201,10 @@ async def get_public_form_access(
         form_uuid = uuid.UUID(form_id)
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=404, detail="Form not found") from exc
-    async with kodewaves_db_client.get_session() as session:
-        result = await session.execute(
-            select(FormModel).where(
-                FormModel.id == form_uuid,
-                FormModel.organization_id == org_id,
-            )
-        )
-        form = result.scalar_one_or_none()
-    if form is None:
+    settings = await forms_db.get_public_access_settings(org_id, form_uuid)
+    if settings is None:
         raise HTTPException(status_code=404, detail="Form not found")
-    return PublicFormAccessResponse(
-        enabled=form.public_submission_enabled,
-        token_configured=bool(form.public_token_hash),
-        allowed_origins=form.public_allowed_origins or [],
-    )
+    return PublicFormAccessResponse(**settings)
 
 
 @router.put(
@@ -240,43 +226,23 @@ async def set_public_form_access(
         form_uuid = uuid.UUID(form_id)
     except (ValueError, TypeError) as exc:
         raise HTTPException(status_code=404, detail="Form not found") from exc
-    async with kodewaves_db_client.get_session() as session:
-        result = await session.execute(
-            select(FormModel)
-            .where(
-                FormModel.id == form_uuid,
-                FormModel.organization_id == org_id,
-            )
-            .with_for_update()
+    raw_token = secrets.token_urlsafe(32) if req.enabled else None
+    try:
+        settings = await forms_db.set_public_access_settings(
+            org_id,
+            form_uuid,
+            enabled=req.enabled,
+            allowed_origins=req.allowed_origins,
+            rotate_token=req.rotate_token,
+            candidate_token_hash=hash_public_token(raw_token) if raw_token else None,
         )
-        form = result.scalar_one_or_none()
-        if form is None:
-            raise HTTPException(status_code=404, detail="Form not found")
-        if req.enabled and not form.is_active:
-            raise HTTPException(status_code=409, detail="Activate the form before publishing")
-
-        raw_token = None
-        needs_token = req.enabled and (
-            req.rotate_token or not form.public_token_hash
-        )
-        if needs_token:
-            raw_token = secrets.token_urlsafe(32)
-            form.public_token_hash = hash_public_token(raw_token)
-        elif not req.enabled:
-            # Disable revokes the old bearer token, so a later publish cannot
-            # silently re-enable a credential that may already be leaked.
-            form.public_token_hash = None
-        form.public_submission_enabled = req.enabled
-        form.public_allowed_origins = req.allowed_origins
-        await session.commit()
-        enabled = form.public_submission_enabled
-        token_configured = bool(form.public_token_hash)
-        allowed_origins = form.public_allowed_origins or []
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if settings is None:
+        raise HTTPException(status_code=404, detail="Form not found")
     return PublicFormAccessResponse(
-        enabled=enabled,
-        token_configured=token_configured,
-        allowed_origins=allowed_origins,
-        submission_token=raw_token,
+        **{key: value for key, value in settings.items() if key != "token_created"},
+        submission_token=raw_token if settings["token_created"] else None,
     )
 
 

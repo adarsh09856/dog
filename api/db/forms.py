@@ -174,3 +174,65 @@ async def list_submissions(organization_id, form_id, *, limit=50, offset=0):
             select(func.count(FormSubmissionModel.id)).where(*filters)
         )
         return list(result.scalars().all()), int(total or 0)
+
+
+async def get_public_access_settings(organization_id, form_id):
+    """Read public form settings for a form owned by the selected organization."""
+    async with kodewaves_db_client.get_session() as session:
+        result = await session.execute(
+            select(FormModel).where(
+                FormModel.id == form_id,
+                FormModel.organization_id == organization_id,
+            )
+        )
+        form = result.scalar_one_or_none()
+    if form is None:
+        return None
+    return {
+        "enabled": form.public_submission_enabled,
+        "token_configured": bool(form.public_token_hash),
+        "allowed_origins": form.public_allowed_origins or [],
+    }
+
+
+async def set_public_access_settings(
+    organization_id,
+    form_id,
+    *,
+    enabled,
+    allowed_origins,
+    rotate_token,
+    candidate_token_hash,
+):
+    """Update public form settings under an organization-scoped row lock."""
+    async with kodewaves_db_client.get_session() as session:
+        result = await session.execute(
+            select(FormModel)
+            .where(
+                FormModel.id == form_id,
+                FormModel.organization_id == organization_id,
+            )
+            .with_for_update()
+        )
+        form = result.scalar_one_or_none()
+        if form is None:
+            return None
+        if enabled and not form.is_active:
+            raise ValueError("Activate the form before publishing")
+
+        token_created = enabled and (rotate_token or not form.public_token_hash)
+        if token_created:
+            form.public_token_hash = candidate_token_hash
+        elif not enabled:
+            # Disable revokes the old bearer token, so a later publish cannot
+            # silently re-enable a credential that may already be leaked.
+            form.public_token_hash = None
+        form.public_submission_enabled = enabled
+        form.public_allowed_origins = allowed_origins
+        await session.commit()
+        return {
+            "enabled": form.public_submission_enabled,
+            "token_configured": bool(form.public_token_hash),
+            "allowed_origins": form.public_allowed_origins or [],
+            "token_created": bool(token_created),
+        }

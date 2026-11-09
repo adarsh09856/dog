@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi import FastAPI, Response
 
+from api.db import forms as forms_db
 from api.db.kodewaves_models import FormModel
 from api.routes import public_forms
 from api.services import forms as forms_service
@@ -190,7 +191,7 @@ async def test_owner_publish_rotate_and_disable_are_org_scoped_and_token_is_one_
     form = _form(org_id=23)
     session = _Session(form)
     monkeypatch.setattr(
-        public_forms.kodewaves_db_client,
+        forms_db.kodewaves_db_client,
         "get_session",
         _SessionFactory(session),
     )
@@ -210,6 +211,7 @@ async def test_owner_publish_rotate_and_disable_are_org_scoped_and_token_is_one_
     assert form.public_token_hash == public_forms.hash_public_token(first.submission_token)
     assert first.submission_token not in form.public_token_hash
     assert "organization_id" in str(session.statement)
+    assert session.statement._for_update_arg is not None
 
     second = await public_forms.set_public_form_access(
         str(form.id),
@@ -241,7 +243,7 @@ async def test_publish_denies_cross_organization_form_lookup(monkeypatch):
     form = _form(org_id=23)
     session = _Session(form)
     monkeypatch.setattr(
-        public_forms.kodewaves_db_client,
+        forms_db.kodewaves_db_client,
         "get_session",
         _SessionFactory(session),
     )
@@ -355,7 +357,7 @@ async def test_tenant_member_can_read_only_the_selected_organization_form(monkey
     form = _form(org_id=23)
     session = _Session(form)
     monkeypatch.setattr(
-        public_forms.kodewaves_db_client,
+        forms_db.kodewaves_db_client,
         "get_session",
         _SessionFactory(session),
     )
