@@ -1,6 +1,7 @@
 """Extract an explicit, fully specified booking instruction for direct execution."""
 
 import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 
 _CONFIRM = re.compile(r"\bconfirm(?:ed)?\b|पुष्टि\s+करत[ाी]\s+हूँ", re.IGNORECASE)
@@ -59,6 +60,29 @@ _EXISTING_OR_DECLINED_BOOKING = re.compile(
     r"never|stop|nahi|nahin|mat)\b|नहीं|मत\s|रद्द|कैंसल|कॅन्सल|पुनर्निर्धार",
     re.IGNORECASE,
 )
+_AFFIRMATIVE_CONFIRMATION = re.compile(
+    r"^(?:"
+    r"(?:yes|yeah|yep|okay|ok|sure|haan|han|ha|haanji|hanji|ji|हाँ|हां|हा|जी)"
+    r"(?:\s*,?\s*(?:that|it|this)(?:\s+is|'s)\s+(?:correct|right|true)"
+    r"|\s*,?\s*(?:ये|यह)\s+(?:सही|ठीक)\s+है"
+    r"|\s*,?\s*(?:ye|yeh|yah)\s+(?:sahi|theek)\s+(?:hai|he)"
+    r"|\s*,?\s*(?:सही\s+है|ठीक\s+है|sahi\s+hai|theek\s+hai|correct|right|true"
+    r"|please|go\s+ahead|confirm(?:\s+kar\s+(?:do|dijiye))?"
+    r"|book\s+kar\s+(?:do|dijiye)|बुक\s+कर\s+दो|हाँ|हां|हा|haan|han|जी))?"
+    r"|correct|right|that's right|go ahead|ठीक है|theek hai"
+    r"|(?:confirm|book)\s+kar\s+(?:do|dijiye)|बुक\s+कर\s+दो)"
+    r"[.!?।]*$",
+    re.IGNORECASE,
+)
+
+
+def is_affirmative_confirmation(text: str) -> bool:
+    """Recognize a short explicit yes in English, Hindi or Hinglish."""
+    if not isinstance(text, str):
+        return False
+    normalized = unicodedata.normalize("NFC", " ".join(text.split()))
+    normalized = normalized.strip(" \t\r\n.,!?।؛،")
+    return bool(_AFFIRMATIVE_CONFIRMATION.fullmatch(normalized))
 
 
 def first_booking_question(messages: list[dict], known_name: str | None = None) -> str | None:

@@ -594,7 +594,10 @@ class _BookingToolChoiceMixin:
             if isinstance(message, dict) and message.get("role") == "user"
         ), None)
         latest_user_text = _message_text(latest_user) if latest_user else ""
-        from api.services.workflow.confirmed_booking import new_booking_requested
+        from api.services.workflow.confirmed_booking import (
+            is_affirmative_confirmation,
+            new_booking_requested,
+        )
 
         booking_was_requested = any(
             isinstance(message, dict)
@@ -602,13 +605,7 @@ class _BookingToolChoiceMixin:
             and new_booking_requested(_message_text(message))
             for message in trace_messages
         )
-        latest_is_confirmation = bool(re.fullmatch(
-            r"\s*(?:yes|yeah|yep|correct|right|okay|ok|sure|haan|han|ha|ji|"
-            r"हाँ|हां|हा|जी|ठीक है|(?:हाँ|हां|हा)\s+(?:ठीक|सही)\s+है)"
-            r"[.!?।\s]*",
-            latest_user_text,
-            re.IGNORECASE,
-        ))
+        latest_is_confirmation = is_affirmative_confirmation(latest_user_text)
         staged_slot = (
             contact_state.get("booking_confirmation_slot")
             if isinstance(contact_state, dict) else None

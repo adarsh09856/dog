@@ -42,7 +42,10 @@ def caller_phone_matches_booking(phone: str, messages: list) -> bool:
 
 def caller_confirmed_booking(messages: list) -> bool:
     """Read consent from the caller, rather than trusting an LLM boolean."""
-    from api.services.workflow.confirmed_booking import room_booking_active
+    from api.services.workflow.confirmed_booking import (
+        is_affirmative_confirmation,
+        room_booking_active,
+    )
 
     if room_booking_active(messages):
         return False
@@ -108,11 +111,7 @@ def caller_confirmed_booking(messages: list) -> bool:
         )
     ):
         return True
-    if not re.fullmatch(
-        r"\s*(?:(?:yes|ok|okay|haan|han|ha|ji|हाँ|हां|हा|जी)(?:[,.]?\s+(?:please|go ahead|confirm(?:\s+kar\s+(?:do|dijiye))?|book\s+kar\s+(?:do|dijiye)|हाँ|हां|हा|haan|han|ठीक\s+है|सही\s+है|बुक\s+कर\s+दो))?"
-        r"|correct|that's right|go ahead|theek hai|ठीक है|(?:confirm|book)\s+kar\s+(?:do|dijiye))[.!।\s]*",
-        text, re.I,
-    ):
+    if not is_affirmative_confirmation(text):
         return False
     return slot_consent_signal
 

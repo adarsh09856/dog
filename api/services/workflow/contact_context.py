@@ -1852,6 +1852,7 @@ def confirmed_staged_booking_arguments(
 ) -> dict | None:
     """Build the exact read-back booking only after the caller says yes."""
     from api.services.workflow.tools.booking import caller_confirmed_booking
+    from api.services.workflow.confirmed_booking import is_affirmative_confirmation
 
     if not isinstance(messages, list) or not isinstance(state, dict):
         return None
@@ -1874,10 +1875,7 @@ def confirmed_staged_booking_arguments(
     if latest_index is None:
         return None
     latest = messages[latest_index].get("content")
-    if not isinstance(latest, str) or not re.fullmatch(
-        r"\s*(?:yes|okay|ok|haan|han|ha|ji|हाँ|हां|हा|जी|"
-        r"(?:हाँ|हां|हा)\s+(?:ठीक|सही)\s+है|ठीक है)[.!।\s]*", latest, re.I
-    ):
+    if not is_affirmative_confirmation(latest):
         return None
     previous = next((m.get("content") for m in reversed(messages[:latest_index])
                      if isinstance(m, dict) and m.get("role") == "assistant"), None)
