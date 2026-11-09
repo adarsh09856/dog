@@ -93,9 +93,9 @@ def _auto_stt_language_allowlist(
         for value in source
         if isinstance(value, str) and str(value).strip()
     }
-    # Urdu is an auxiliary LID label, not a separately advertised reply voice.
-    # Keep it on the Hindi route until the platform has a verified Urdu TTS path.
-    return frozenset(normalized & LOCAL_INDIC_STT_LANGUAGES - {"ur"})
+    # Product language policy is narrower than the decoder and voice manifests.
+    # A model advertising an excluded language must not enable that route.
+    return frozenset(normalized & LOCAL_INDIC_STT_LANGUAGES & LOCAL_REPLY_TTS_LANGUAGES)
 
 
 def _resolve_auto_language(

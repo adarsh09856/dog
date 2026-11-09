@@ -56,11 +56,13 @@ LID_LANGUAGE_CODES = (
     "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai",
     "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 )
-# The recognizer ships the 22 scheduled Indic decoders plus English. Per-agent
-# requests are narrowed by the API to the selected TTS model's installed
-# capabilities, so an STT-only language is never advertised as a complete
-# voice route until a matching speech voice is installed.
-AUTO_DETECT_LANGUAGES = frozenset(LID_LANGUAGE_CODES)
+# The detector has 23 logits, but product auto-routing is limited to the
+# selected 14 Indic languages plus Indian English. These exclusions are a
+# product capability policy, even if an STT or TTS inventory advertises them.
+AUTO_DETECT_LANGUAGES = frozenset({
+    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
+    "ne", "pa", "sa", "ta", "te",
+})
 SCHEDULED_INDIAN_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
 AUTO_ENGLISH_MIN_CONFIDENCE = 0.50
@@ -119,6 +121,12 @@ def _should_try_phone_rescue(text: str) -> bool:
     if _NON_PHONE_CONTEXT_RE.search(text):
         return False
     if digits > 15:
+        return True
+    # The primary decoder can return a complete-looking but incorrect number.
+    # When it also heard an explicit phone preamble, compare the already-warm
+    # alternate decoder even if the primary produced 10–15 digits; the
+    # candidate selector still prevents replacing a longer/cleaner result.
+    if 3 <= digits <= 15 and _PHONE_CONTEXT_RE.search(text):
         return True
     # The primary Hindi/English decoder can return a clean but truncated
     # number fragment. Those have no unknown-token signal, but a 3–9 digit
@@ -561,14 +569,7 @@ def _resolve_decode_language(
         }
         enabled &= allowed
     supported = enabled
-    # Urdu remains a detector label rather than a separately advertised
-    # product voice. Keep the established Hindi reply route unless the active
-    # voice explicitly enables Urdu.
-    if detected == "ur" and "hi" in supported and (allowed is None or "ur" not in allowed):
-        return "hi", "urdu_routed_to_hindi"
     if detected not in supported:
-        if fallback in supported:
-            return fallback, "unsupported_language_held_previous"
         threshold = AUTO_ENGLISH_MIN_CONFIDENCE if detected == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
         if confidence >= threshold:
             raise HTTPException(
@@ -582,6 +583,8 @@ def _resolve_decode_language(
                     ),
                 },
             )
+        if fallback in supported:
+            return fallback, "unsupported_language_held_previous"
         if "hi" in supported:
             return "hi", "unsupported_language_to_hindi"
         if "en" in supported:

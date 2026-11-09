@@ -1,5 +1,9 @@
 """Provider-neutral caller context shared by every cascade agent LLM."""
 
+from copy import deepcopy
+import inspect
+import re
+
 from pipecat.frames.frames import (
     CancelFrame,
     EndFrame,
@@ -99,6 +103,7 @@ class CallerContextPolicyProcessor(FrameProcessor):
         if not isinstance(state, dict):
             state = {}
             self._llm_service._contact_conversation_state = state
+        state_before = deepcopy(state)
         remember_recent_caller_statements(messages, state)
         name_memory_reply = (
             remember_explicit_caller_name(messages, state)
@@ -267,6 +272,14 @@ class CallerContextPolicyProcessor(FrameProcessor):
                 parser_messages, contact, state
             )
 
+        await self._emit_turn_trace(
+            latest_text=latest_text,
+            state_before=state_before,
+            state_after=state,
+            context=context,
+            direct_reply=bool(self._direct_reply),
+        )
+
         message = {"role": "system", "content": policy}
         first_user = next(
             (index for index, item in enumerate(messages)
@@ -276,6 +289,79 @@ class CallerContextPolicyProcessor(FrameProcessor):
         messages.insert(first_user, message)
         self._policy_state.context = context
         self._policy_state.message = message
+
+    async def _emit_turn_trace(
+        self, *, latest_text, state_before, state_after, context, direct_reply
+    ):
+        """Persist joinable policy metadata without caller text or fact values."""
+        sink = getattr(self._llm_service, "_turn_diagnostic_sink", None)
+        if not callable(sink):
+            sink = getattr(self._llm_service, "_llm_trace_sink", None)
+        if not callable(sink):
+            return
+
+        from api.services.configuration.language_normalizer import normalize_language_code
+
+        def safe_config(value):
+            if not isinstance(value, str) or not value.strip():
+                return None
+            value = value.strip()[:80]
+            return value if all(char.isalnum() or char in "_.:/+-" for char in value) else None
+
+        def safe_language(value):
+            if not value:
+                return None
+            code = normalize_language_code(str(value))
+            return code if code == "caller" or code.isalpha() and len(code) <= 3 else None
+
+        source = getattr(self._llm_service, "_caller_language_source", None)
+        runtime = getattr(self._llm_service, "_agent_runtime_configuration", {})
+        runtime = runtime if isinstance(runtime, dict) else {}
+        tools = getattr(getattr(context, "tools", None), "standard_tools", []) or []
+        tool_names = sorted({
+            name for tool in tools
+            if isinstance((name := getattr(tool, "name", None)), str)
+            and re.fullmatch(r"[A-Za-z][A-Za-z0-9_.:-]{0,63}", name)
+        })[:40]
+        changed_keys = sorted(
+            key for key in set(state_before) | set(state_after)
+            if state_before.get(key) != state_after.get(key)
+            and isinstance(key, str)
+            and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", key)
+        )[:40]
+        detected = getattr(source, "latest_detected_language", None)
+        chosen = getattr(source, "latest_tts_language", None)
+        language = (state_after or {}).get("reply_language")
+        event = {
+            "type": "rtf-caller-context-trace",
+            "payload": {
+                "run_id": getattr(self._llm_service, "_workflow_run_id", None),
+                "agent_visit_id": safe_config(
+                    getattr(self._llm_service, "_agent_visit_id", None)
+                ),
+                "llm_provider": safe_config(runtime.get("llm_provider")),
+                "llm_model": safe_config(runtime.get("llm_model") or getattr(
+                    getattr(self._llm_service, "_settings", None), "model", None
+                )),
+                "stt_final_chars": len(latest_text.strip()) if isinstance(latest_text, str) else 0,
+                "detected_language_code": safe_language(detected),
+                "chosen_tts_language_code": safe_language(chosen),
+                "reply_language_code": safe_language(language),
+                "state_changed_keys": changed_keys,
+                "available_tool_names": tool_names,
+                "available_tool_count": len(tools),
+                "policy_route": "fast_reply" if direct_reply else "llm_provider",
+            },
+        }
+        try:
+            result = sink(event)
+            if inspect.isawaitable(result):
+                await result
+        except Exception as exc:
+            # Diagnostics must never delay or fail a caller's response.
+            from loguru import logger
+
+            logger.debug("Could not persist caller-context trace ({})", type(exc).__name__)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)

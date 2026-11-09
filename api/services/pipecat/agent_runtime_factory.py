@@ -96,6 +96,47 @@ class AgentRuntimeFactory:
         self._caller_language_source = caller_language_source
         self._llm_trace_sink = llm_trace_sink
 
+    @staticmethod
+    def trace_configuration(runtime_configuration: dict | None) -> dict[str, str]:
+        """Return only opaque provider/model labels safe for runtime diagnostics."""
+        if not isinstance(runtime_configuration, dict):
+            return {}
+        allowed = {
+            "llm_provider", "llm_model", "stt_provider", "stt_model",
+            "tts_provider", "tts_model",
+        }
+        safe = {}
+        for key in allowed:
+            value = runtime_configuration.get(key)
+            if (
+                isinstance(value, str)
+                and value.strip()
+                and len(value.strip()) <= 80
+                and all(char.isalnum() or char in "_.:/+-" for char in value.strip())
+            ):
+                safe[key] = value.strip()
+        return safe
+
+    def activate_language_routing(self, runtime: AgentRuntime) -> None:
+        """Move the shared recognizer to a destination only at handoff commit."""
+        if runtime.llm is None or runtime.tts is None:
+            return
+        from api.services.pipecat.caller_language_tts import (
+            refresh_caller_language_tts_capabilities,
+        )
+
+        capabilities = refresh_caller_language_tts_capabilities(
+            runtime.llm, runtime.tts, update_source=True
+        )
+        source = self._caller_language_source
+        if source is not None:
+            fallback_language = _initial_local_stt_language_fallback(
+                runtime.user_config
+            )
+            source._initial_language_fallback = (
+                fallback_language if fallback_language in capabilities else None
+            )
+
     @property
     def organization_id(self) -> int:
         """The organization every agent in this call must belong to."""
@@ -187,18 +228,6 @@ class AgentRuntimeFactory:
             )
 
             llm._caller_language_supported_codes = caller_language_tts_capabilities(tts)
-            if self._caller_language_source is not None:
-                # The shared recognizer must apply this agent's selected TTS
-                # capability allowlist, not the allowlist from the prior agent.
-                self._caller_language_source._caller_language_supported_codes = (
-                    llm._caller_language_supported_codes
-                )
-                fallback_language = _initial_local_stt_language_fallback(user_config)
-                self._caller_language_source._initial_language_fallback = (
-                    fallback_language
-                    if fallback_language in llm._caller_language_supported_codes
-                    else None
-                )
         if self._caller_language_source is not None:
             for service in (llm, tts):
                 if service is not None:
@@ -292,6 +321,18 @@ class AgentRuntimeFactory:
         """
         if runtime.worker is not None:
             return
+
+        # Keep privacy-safe per-turn diagnostics joinable across agent visits.
+        # These values describe the configured runtime only; no caller data is
+        # attached to the model or TTS service.
+        for service in (runtime.llm, runtime.tts):
+            if service is not None:
+                service._agent_visit_id = runtime.visit_id
+                service._agent_runtime_configuration = self.trace_configuration(
+                    runtime.runtime_configuration
+                )
+                if self._llm_trace_sink is not None:
+                    service._turn_diagnostic_sink = self._llm_trace_sink
 
         callbacks = self._callbacks_factory(runtime.visit_id)
         generation_callbacks = AgentGenerationProcessor(

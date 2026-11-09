@@ -112,6 +112,7 @@ class RealtimeFeedbackObserver(BaseObserver):
         workflow_id: int | None = None,
         workflow_run_id: int | None = None,
         phone_pending: Callable[[], bool] | None = None,
+        service_runtime_configuration: dict | None = None,
     ):
         """
         Args:
@@ -128,6 +129,11 @@ class RealtimeFeedbackObserver(BaseObserver):
         self._workflow_id = workflow_id
         self._workflow_run_id = workflow_run_id
         self._phone_pending = phone_pending
+        self._service_runtime_configuration = (
+            service_runtime_configuration
+            if isinstance(service_runtime_configuration, dict)
+            else {}
+        )
         self._trace_turn = 0
         self._trace_turn_active = False
         self._tts_audio_contexts: dict[str, dict[str, object]] = {}
@@ -180,6 +186,11 @@ class RealtimeFeedbackObserver(BaseObserver):
             self._output_audio_trace["started_at"] = now
             language = getattr(frame, "language", None)
             language = getattr(language, "value", language)
+            if language:
+                from api.services.configuration.language_normalizer import normalize_language_code
+
+                language = normalize_language_code(str(language))
+            stt_details = self._runtime_service_details(data.source, "stt")
             self._last_caller_final = {
                 "at": now,
                 "turn": self._trace_turn,
@@ -187,6 +198,9 @@ class RealtimeFeedbackObserver(BaseObserver):
                 "language": str(language)[:32] if language is not None else None,
                 "finalized": bool(getattr(frame, "finalized", False)),
                 "source": type(data.source).__name__ if data.source is not None else "none",
+                "provider": stt_details["provider"],
+                "model": stt_details["model"],
+                "agent_visit_id": self._selected_visit() if self._selected_visit else None,
             }
             return
 
@@ -311,16 +325,13 @@ class RealtimeFeedbackObserver(BaseObserver):
 
         if isinstance(frame, TTSStartedFrame):
             context_id = str(getattr(frame, "context_id", None) or frame.id)
+            tts_details = self._runtime_service_details(data.source, "tts")
             self._tts_audio_contexts[context_id] = {
                 "started_at": now,
-                "provider": type(data.source).__name__ if data.source is not None else "none",
-                "model": self._safe_trace_value(
-                    getattr(getattr(data.source, "_settings", None), "model", None)
-                ),
-                "voice": self._safe_trace_value(
-                    getattr(getattr(data.source, "_settings", None), "voice", None)
-                ),
-                "language": self._tts_language_hint(data.source),
+                "provider": tts_details["provider"],
+                "model": tts_details["model"],
+                "language_code": self._tts_language_hint(data.source),
+                "agent_visit_id": self._visit_for_source(data.source),
                 "first_audio_at": None,
                 "first_non_silent_audio_at": None,
                 "last_audio_at": None,
@@ -414,11 +425,14 @@ class RealtimeFeedbackObserver(BaseObserver):
             first_audio_at = stats["first_audio_at"]
             first_non_silent_audio_at = stats["first_non_silent_audio_at"]
             logger.info(
-                "voice_tts_trace run={} workflow={} turn={} context={} first_pcm_ms={} first_non_silent_pcm_ms={} wall_ms={} pcm_frames={} pcm_bytes={} audio_ms={} max_pcm_gap_ms={} gaps_over_750ms={} no_audio={}",
+                "voice_tts_trace run={} workflow={} turn={} visit={} provider={} model={} language={} first_pcm_ms={} first_non_silent_pcm_ms={} wall_ms={} pcm_frames={} pcm_bytes={} audio_ms={} max_pcm_gap_ms={} gaps_over_750ms={} no_audio={}",
                 self._workflow_run_id,
                 self._workflow_id,
                 self._trace_turn,
-                context_id,
+                stats.get("agent_visit_id"),
+                stats.get("provider"),
+                stats.get("model"),
+                stats.get("language_code"),
                 round((float(first_audio_at) - started_at) * 1000.0, 1)
                 if first_audio_at is not None else None,
                 round((float(first_non_silent_audio_at) - started_at) * 1000.0, 1)
@@ -433,9 +447,14 @@ class RealtimeFeedbackObserver(BaseObserver):
             )
             return {
                 "type": "rtf-audio-health",
-                "turn": self._trace_turn,
                 "payload": {
                     "stage": "tts_pcm",
+                    "run_id": self._workflow_run_id,
+                    "workflow_id": self._workflow_id,
+                    "agent_visit_id": stats.get("agent_visit_id"),
+                    "provider": stats.get("provider"),
+                    "model": stats.get("model"),
+                    "language_code": stats.get("language_code"),
                     "first_audio_ms": round((float(first_audio_at) - started_at) * 1000.0, 1)
                     if first_audio_at is not None else None,
                     "first_non_silent_pcm_ms": round(
@@ -511,6 +530,16 @@ class RealtimeFeedbackObserver(BaseObserver):
         return rendered[:80] if rendered else None
 
     @classmethod
+    def _safe_trace_config_value(cls, value) -> str | None:
+        """Keep provider/model identifiers while excluding arbitrary config text."""
+        rendered = cls._safe_trace_value(value)
+        if not rendered:
+            return None
+        if not all(char.isalnum() or char in "_.:/+-" for char in rendered):
+            return None
+        return rendered
+
+    @classmethod
     def _tts_language_hint(cls, source) -> str | None:
         for name in (
             "_turn_speech_language",
@@ -522,9 +551,45 @@ class RealtimeFeedbackObserver(BaseObserver):
             if result and result.casefold() not in {
                 "auto", "multi", "multilingual", "unknown", "default", "none",
             }:
-                return result
+                from api.services.configuration.language_normalizer import normalize_language_code
+
+                code = normalize_language_code(result)
+                return code if code == "caller" or code.isalpha() and len(code) <= 3 else None
         settings = getattr(source, "_settings", None)
-        return cls._safe_trace_value(getattr(settings, "language", None))
+        value = cls._safe_trace_value(getattr(settings, "language", None))
+        if not value:
+            return None
+        from api.services.configuration.language_normalizer import normalize_language_code
+
+        code = normalize_language_code(value)
+        return code if code == "caller" or code.isalpha() and len(code) <= 3 else None
+
+    def _visit_for_source(self, source) -> str | None:
+        service_visit = self._safe_trace_config_value(
+            getattr(source, "_agent_visit_id", None)
+        )
+        if service_visit:
+            return service_visit
+        worker = getattr(source, "pipeline_worker", None)
+        if isinstance(worker, AgentWorker):
+            return str(worker.name)
+        return self._selected_visit() if self._selected_visit is not None else None
+
+    def _runtime_service_details(self, source, stage: str) -> dict:
+        runtime = getattr(source, "_agent_runtime_configuration", {})
+        runtime = runtime if isinstance(runtime, dict) else {}
+        if stage == "stt" and not runtime:
+            runtime = self._service_runtime_configuration
+        settings = getattr(source, "_settings", None)
+        return {
+            "provider": self._safe_trace_config_value(
+                runtime.get(f"{stage}_provider")
+                or getattr(source, "_kodewaves_provider", None)
+            ) or self._safe_trace_config_value(type(source).__name__),
+            "model": self._safe_trace_config_value(
+                runtime.get(f"{stage}_model") or getattr(settings, "model", None)
+            ),
+        }
 
     async def log_speech(self, text: str):
         """Persist speech that is intentionally excluded from assistant context."""
@@ -605,7 +670,7 @@ class RealtimeFeedbackObserver(BaseObserver):
         self._frames_seen.add(frame.id)
 
         audio_health_event = self._observe_voice_audio(data)
-        if audio_health_event is not None and self._call_event_recorder is None:
+        if audio_health_event is not None:
             await self._append_to_buffer(audio_health_event)
 
         # Keep basic stage evidence in the normal run log even when the
@@ -635,9 +700,49 @@ class RealtimeFeedbackObserver(BaseObserver):
                 stage,
                 host_load_1m,
             )
+            stage_payload = {
+                "stage": stage,
+                "monotonic_seconds": time.monotonic(),
+                "run_id": self._workflow_run_id,
+                "workflow_id": self._workflow_id,
+                "agent_visit_id": self._visit_for_source(source),
+            }
+            if stage == "stt_final":
+                final = self._last_caller_final or {}
+                stage_payload.update({
+                    "text_chars": final.get("chars"),
+                    "language_code": final.get("language"),
+                    "provider": final.get("provider"),
+                    "model": final.get("model"),
+                    "finalized": final.get("finalized"),
+                    "agent_visit_id": final.get("agent_visit_id"),
+                })
+            elif stage == "llm_first_text":
+                runtime = getattr(source, "_agent_runtime_configuration", {})
+                runtime = runtime if isinstance(runtime, dict) else {}
+                caller_final = self._last_caller_final
+                stage_payload.update({
+                    "useful_text_chars": len((frame.text or "").strip()),
+                    "provider": runtime.get("llm_provider"),
+                    "model": runtime.get("llm_model") or self._safe_trace_value(
+                        getattr(getattr(source, "_settings", None), "model", None)
+                    ),
+                    "first_useful_text_ms": round(
+                        max(0.0, (time.monotonic() - float(caller_final["at"])) * 1000.0), 1
+                    ) if caller_final and caller_final.get("at") is not None else None,
+                })
+            elif stage == "tts_first_audio":
+                context_id = str(getattr(frame, "context_id", None) or "")
+                stats = self._tts_audio_contexts.get(context_id, {})
+                stage_payload.update({
+                    "provider": stats.get("provider"),
+                    "model": stats.get("model"),
+                    "language_code": stats.get("language_code"),
+                    "agent_visit_id": stats.get("agent_visit_id") or stage_payload["agent_visit_id"],
+                })
             await self._append_to_buffer({
                 "type": "rtf-speech-stage",
-                "payload": {"stage": stage, "monotonic_seconds": time.monotonic()},
+                "payload": stage_payload,
             })
 
         logger.trace(f"{self} Received Frame: {frame} Direction: {frame_direction}")
@@ -849,7 +954,17 @@ class RealtimeFeedbackObserver(BaseObserver):
         """Append message to logs buffer, handling errors gracefully."""
         if self._logs_buffer:
             try:
-                await self._logs_buffer.append(message)
+                if message.get("type") in {
+                    "rtf-audio-health", "rtf-speech-stage",
+                }:
+                    await self._logs_buffer.append(
+                        message,
+                        node_id=self._logs_buffer.current_node_id,
+                        node_name=None,
+                        use_current_node=False,
+                    )
+                else:
+                    await self._logs_buffer.append(message)
             except Exception as e:
                 logger.error(f"Failed to append to logs buffer: {e}")
 

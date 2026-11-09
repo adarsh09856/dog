@@ -37,6 +37,13 @@ _LOCAL_BOOKING_RESPONSE_GUARD = (
 )
 
 
+def _safe_trace_identifier(value):
+    if not isinstance(value, str) or not value.strip():
+        return None
+    value = value.strip()[:80]
+    return value if all(char.isalnum() or char in "_.:/+-" for char in value) else None
+
+
 _EXPLICIT_END_REQUEST = re.compile(
     r"\b(?:goodbye|bye(?:\s+bye)?|hang\s*up|end\s+(?:the\s+)?call|disconnect|"
     r"that's\s+all|that\s+is\s+all|i(?:'m| am)\s+done|we(?:'re| are)\s+done)\b"
@@ -168,6 +175,7 @@ class _BookingToolChoiceMixin:
         async def traced_stream():
             first_event_ms = None
             first_output_ms = None
+            first_useful_text_ms = None
             chunks = 0
             prompt_tokens = None
             cached_prompt_tokens = None
@@ -220,12 +228,26 @@ class _BookingToolChoiceMixin:
                         tool_calls = getattr(delta, "tool_calls", None) if delta else None
                         if first_output_ms is None and (content or tool_calls):
                             first_output_ms = (now - started) * 1000
+                        if (
+                            first_useful_text_ms is None
+                            and isinstance(content, str)
+                            and content.strip()
+                        ):
+                            first_useful_text_ms = (now - started) * 1000
                         finish_reason = getattr(choice, "finish_reason", None) or finish_reason
                     yield chunk
                 complete = True
             finally:
                 trace_payload = {
-                    "model": getattr(getattr(self, "_settings", None), "model", None),
+                    "model": _safe_trace_identifier(
+                        getattr(getattr(self, "_settings", None), "model", None)
+                    ),
+                    "provider": _safe_trace_identifier(getattr(self, "_agent_runtime_configuration", {}).get(
+                        "llm_provider"
+                    )),
+                    "agent_visit_id": _safe_trace_identifier(
+                        getattr(self, "_agent_visit_id", None)
+                    ),
                     "usage_context": getattr(self, "_usage_context", None)
                     or "conversation_or_shared_inference",
                     "headers_ms": round(headers_ms, 1),
@@ -233,6 +255,8 @@ class _BookingToolChoiceMixin:
                     if first_event_ms is not None else None,
                     "first_output_ms": round(first_output_ms, 1)
                     if first_output_ms is not None else None,
+                    "first_useful_text_ms": round(first_useful_text_ms, 1)
+                    if first_useful_text_ms is not None else None,
                     "total_ms": round((time.perf_counter() - started) * 1000, 1),
                     "chunks": chunks,
                     "prompt_tokens": prompt_tokens,
@@ -246,13 +270,20 @@ class _BookingToolChoiceMixin:
                     "complete": complete,
                 }
                 logger.info(
-                    "llm_stream_trace run={} model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} total_ms={} chunks={} prompt_tokens={} cached_prompt_tokens={} completion_tokens={} history_messages={} history_chars={} system_chars={} tools={} finish_reason={} complete={}",
+                    "llm_stream_trace run={} visit={} provider={} model={} usage_context={} headers_ms={} first_event_ms={} first_output_ms={} first_useful_text_ms={} total_ms={} chunks={} prompt_tokens={} cached_prompt_tokens={} completion_tokens={} history_messages={} history_chars={} system_chars={} tools={} finish_reason={} complete={}",
                     get_current_run_id(),
-                    getattr(getattr(self, "_settings", None), "model", None),
+                    _safe_trace_identifier(getattr(self, "_agent_visit_id", None)),
+                    _safe_trace_identifier(
+                        getattr(self, "_agent_runtime_configuration", {}).get("llm_provider")
+                    ),
+                    _safe_trace_identifier(
+                        getattr(getattr(self, "_settings", None), "model", None)
+                    ),
                     getattr(self, "_usage_context", None) or "conversation_or_shared_inference",
                     round(headers_ms, 1),
                     round(first_event_ms, 1) if first_event_ms is not None else None,
                     round(first_output_ms, 1) if first_output_ms is not None else None,
+                    round(first_useful_text_ms, 1) if first_useful_text_ms is not None else None,
                     round((time.perf_counter() - started) * 1000, 1),
                     chunks,
                     prompt_tokens,

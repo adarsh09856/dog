@@ -1867,14 +1867,8 @@ class PipecatEngine:
         self.context.set_otel_span_name(f"llm-{runtime.current_node.name}")
         runtime.entered_at = time.time()
         self.install_agent(runtime, previous=self.active_agent)
-        if runtime.llm is not None and runtime.tts is not None:
-            from api.services.pipecat.caller_language_tts import (
-                refresh_caller_language_tts_capabilities,
-            )
-
-            refresh_caller_language_tts_capabilities(
-                runtime.llm, runtime.tts, update_source=True
-            )
+        if self._agent_factory is not None:
+            self._agent_factory.activate_language_routing(runtime)
         self._custom_tool_manager = CustomToolManager(self, runtime)
         self._agent_on_hold = False
         nodes = self._gathered_context.setdefault("nodes_visited", [])

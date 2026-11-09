@@ -2,10 +2,16 @@ export type SttEngineType = "cloud" | "local_cpu";
 
 export type SttModelOption = { value: string };
 
-// Expose only languages that have both an enabled product STT route and a
-// supported reply-voice route. The detector retains extra labels internally
-// so it can reject unsupported languages instead of misrouting them.
+// Product routes are deliberately narrower than the installed decoder and TTS
+// manifests. Keep the user-excluded languages out even if a model advertises
+// them; the selected TTS inventory can only narrow this list further.
 const LOCAL_STT_LANGUAGES = new Set([
+    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
+    "ne", "pa", "sa", "ta", "te",
+]);
+
+// Fallback languages while no selected-voice capability snapshot is available.
+const LOCAL_DEFAULT_REPLY_LANGUAGES = new Set([
     "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
     "ne", "pa", "sa", "ta", "te",
 ]);
@@ -56,10 +62,8 @@ export function recognitionLanguagesForSttModel(
     ));
     const replyBases = replyLanguages !== undefined
         ? new Set(replyLanguages.map(baseLanguageCode).filter((language) => LOCAL_STT_LANGUAGES.has(language)))
-        : undefined;
-    const routedBases = replyBases
-        ? installedBases.filter((language) => replyBases.has(language))
-        : installedBases;
+        : LOCAL_DEFAULT_REPLY_LANGUAGES;
+    const routedBases = installedBases.filter((language) => replyBases.has(language));
     return [
         ...(supportsAutoDetect && routedBases.length > 0 ? ["multi"] : []),
         ...routedBases,
@@ -101,10 +105,10 @@ export function languageForLocalSttSelection(
 ): string {
     let installed = Array.from(new Set(installedLanguages.map(baseLanguageCode)
         .filter((language) => LOCAL_STT_LANGUAGES.has(language))));
-    if (replyLanguages !== undefined) {
-        const replyBases = new Set(replyLanguages.map(baseLanguageCode));
-        installed = installed.filter((language) => replyBases.has(language));
-    }
+    const replyBases = replyLanguages !== undefined
+        ? new Set(replyLanguages.map(baseLanguageCode))
+        : LOCAL_DEFAULT_REPLY_LANGUAGES;
+    installed = installed.filter((language) => replyBases.has(language));
     if (currentLanguage === "multi" && supportsAutoDetect && installed.length > 0) return "multi";
     const currentCode = baseLanguageCode(currentLanguage);
     if (installed.includes(currentCode)) return currentCode;

@@ -1118,7 +1118,16 @@ async def _run_pipeline_impl(
 
     async def record_llm_stream_trace(event: dict) -> None:
         """Persist numeric per-request model timing, never prompt or reply text."""
-        await in_memory_logs_buffer.append(event)
+        event = dict(event)
+        payload = dict(event.get("payload") or {})
+        payload.setdefault("run_id", workflow_run_id)
+        event["payload"] = payload
+        await in_memory_logs_buffer.append(
+            event,
+            node_id=in_memory_logs_buffer.current_node_id,
+            node_name=None,
+            use_current_node=False,
+        )
 
     for service in {
         id(value): value
@@ -1583,6 +1592,9 @@ async def _run_pipeline_impl(
         selected_visit=lambda: engine.selected_visit_id,
         workflow_id=workflow_id,
         workflow_run_id=workflow_run_id,
+        service_runtime_configuration=AgentRuntimeFactory.trace_configuration(
+            runtime_configuration
+        ),
         phone_pending=lambda: bool(
             getattr(engine, "_contact_conversation_state", {}).get("awaiting_phone")
         ),
@@ -1634,6 +1646,13 @@ async def _run_pipeline_impl(
         agent.runtime_configuration = runtime_configuration
         agent.is_child = True
         agent.worker = None
+        for service in (agent.llm, agent.tts):
+            if service is not None:
+                service._agent_visit_id = agent.visit_id
+                service._agent_runtime_configuration = AgentRuntimeFactory.trace_configuration(
+                    runtime_configuration
+                )
+                service._turn_diagnostic_sink = record_llm_stream_trace
 
     # Initialize the engine to set the initial context with
     # System Prompt and Tools
