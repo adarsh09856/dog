@@ -50,6 +50,7 @@ _STANDALONE_HINDI_REQUEST = re.compile(
 _LANGUAGE_SWITCH_VERBS = r"(?:speak|talk|reply|answer|continue|switch)"
 _LANGUAGE_REQUEST_WRAPPERS = r"(?:can|could|would)\s+you\s+(?:please\s+)?"
 _LANGUAGE_NAME_ALIASES = {"Odia": ("Odia", "Oriya")}
+HANDOFF_SUMMARY_PREFIX = "Handover note from the previous agent on this same call:"
 
 
 def _supported_language_codes(supported_languages=None) -> frozenset[str]:
@@ -250,6 +251,7 @@ class CallerLanguageContext:
             if isinstance(message, dict)
             and message.get("role") == "user"
             and isinstance(message.get("content"), str)
+            and not message["content"].startswith(HANDOFF_SUMMARY_PREFIX)
         ]
         keys = {(ordinal, text) for ordinal, (_, text) in enumerate(users)}
         self._hints = {key: hint for key, hint in self._hints.items() if key in keys}

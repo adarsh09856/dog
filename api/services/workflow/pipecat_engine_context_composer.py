@@ -31,6 +31,16 @@ NO_ACTION_TOOLS_INSTRUCTION = (
     "only when needed to answer."
 )
 
+NO_EXTERNAL_ACTIONS_WITH_TRANSITIONS_INSTRUCTION = (
+    "No external lookup or record-changing action tools are connected. Use only "
+    "the instructions, conversation, and available knowledge; never claim a live "
+    "lookup or saved change. The workflow transition tools listed below are still "
+    "available: invoke one only when the caller's request satisfies its exact "
+    "condition. A transition changes the conversation step; it does not itself "
+    "complete an external action or transfer. Explain unavailable external actions "
+    "briefly and suggest official support."
+)
+
 NO_ACTION_TOOLS_WITH_KNOWLEDGE_INSTRUCTION = (
     "Knowledge documents or retrieval may be available, but they provide information "
     "only; they cannot book, change records, or transfer. No action tool is connected "
@@ -143,6 +153,7 @@ def compose_system_prompt_for_node(
     formatted_node_prompt = format_prompt(node.prompt)
 
     has_action_tools = bool(getattr(node, "tool_uuids", None))
+    has_transitions = bool(getattr(node, "out_edges", None))
     has_knowledge_sources = bool(
         getattr(node, "document_uuids", None) or has_website_knowledge
     )
@@ -162,7 +173,11 @@ def compose_system_prompt_for_node(
                 else (
                     NO_ACTION_TOOLS_WITH_KNOWLEDGE_INSTRUCTION
                     if has_knowledge_sources
-                    else NO_ACTION_TOOLS_INSTRUCTION
+                    else (
+                        NO_EXTERNAL_ACTIONS_WITH_TRANSITIONS_INSTRUCTION
+                        if has_transitions
+                        else NO_ACTION_TOOLS_INSTRUCTION
+                    )
                 )
             ),
         )

@@ -6,7 +6,10 @@ from datetime import date, datetime, timedelta, timezone
 import unicodedata
 
 from api.utils.spoken_digits import PHONE_SPOKEN_DIGITS
-from api.services.pipecat.caller_language_context import standalone_language_request
+from api.services.pipecat.caller_language_context import (
+    HANDOFF_SUMMARY_PREFIX,
+    standalone_language_request,
+)
 from api.services.configuration.language_normalizer import normalize_language_code
 
 _NAME_REQUEST = re.compile(
@@ -27,16 +30,13 @@ _PHONE_REQUEST = re.compile(
     r"मोबाइल|फोन|संपर्क\s+(?:नंबर|विवरण)|नंबर|नम्बर",
     re.IGNORECASE,
 )
-_HANDOFF_SUMMARY_PREFIX = "Handover note from the previous agent on this same call:"
-
-
 def _is_handoff_summary(message: object) -> bool:
     """Identify assistant-generated handoff notes stored as user messages."""
     return (
         isinstance(message, dict)
         and message.get("role") == "user"
         and isinstance(message.get("content"), str)
-        and message["content"].startswith(_HANDOFF_SUMMARY_PREFIX)
+        and message["content"].startswith(HANDOFF_SUMMARY_PREFIX)
     )
 
 
@@ -299,7 +299,7 @@ def remember_recent_caller_statements(messages: list | None, state: dict | None)
         statements = [
             item for item in statements
             if isinstance(item, str)
-            and not item.startswith(_HANDOFF_SUMMARY_PREFIX)
+            and not item.startswith(HANDOFF_SUMMARY_PREFIX)
         ]
         state["recent_caller_statements"] = statements
     user_messages = [
