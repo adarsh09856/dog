@@ -2,15 +2,16 @@ export type SttEngineType = "cloud" | "local_cpu";
 
 export type SttModelOption = { value: string };
 
-// Product routes are deliberately narrower than the installed decoder and TTS
-// manifests. Keep the user-excluded languages out even if a model advertises
-// them; the selected TTS inventory can only narrow this list further.
+// Include the complete IndicConformer decoder catalog. The selected TTS
+// inventory narrows this to languages the active reply voice can actually use.
 const LOCAL_STT_LANGUAGES = new Set([
-    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
-    "ne", "pa", "sa", "ta", "te",
+    "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok",
+    "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd",
+    "ta", "te", "ur",
 ]);
 
-// Fallback languages while no selected-voice capability snapshot is available.
+// Conservative fallback while no selected-voice capability snapshot exists.
+// Live voice inventory can allow additional installed recognizers.
 const LOCAL_DEFAULT_REPLY_LANGUAGES = new Set([
     "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
     "ne", "pa", "sa", "ta", "te",

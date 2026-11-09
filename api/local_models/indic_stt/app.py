@@ -56,12 +56,13 @@ LID_LANGUAGE_CODES = (
     "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok", "mai",
     "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
 )
-# The detector has 23 logits, but product auto-routing is limited to the
-# selected 14 Indic languages plus Indian English. These exclusions are a
-# product capability policy, even if an STT or TTS inventory advertises them.
+# The detector and pinned per-language CTC bundle cover all 22 Scheduled
+# Indian languages. TTS capability is intersected with this decoder inventory
+# by the shared pipeline before automatic routing is enabled for a call.
 AUTO_DETECT_LANGUAGES = frozenset({
-    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
-    "ne", "pa", "sa", "ta", "te",
+    "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok",
+    "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd",
+    "ta", "te", "ur",
 })
 SCHEDULED_INDIAN_LANGUAGES = AUTO_DETECT_LANGUAGES - {"en"}
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
@@ -671,6 +672,14 @@ async def transcribe(
         raise HTTPException(status_code=400, detail="Selected Indic STT language is not installed")
     if not auto_detect and lang not in AUTO_DETECT_LANGUAGES:
         raise HTTPException(status_code=400, detail="Selected Indic STT language is not enabled")
+    if not auto_detect and enabled_languages is not None and lang not in enabled_languages:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "selected_language_has_no_tts_route",
+                "message": "The selected TTS voice does not support the configured STT language.",
+            },
+        )
     payload = await file.read(5_000_001)
     if len(payload) > 5_000_000:
         raise HTTPException(status_code=413, detail="Audio exceeds 5 MB")
