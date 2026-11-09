@@ -40,7 +40,7 @@ class InstallationFeatureError(InstallationLicenseError):
 
 _OWNER_ENTITLEMENT_FEATURES = frozenset({
     "voice", "telephony", "campaigns", "crm", "appointments", "forms",
-    "widgets", "knowledge_base", "models", "tools", "recordings",
+    "widgets", "knowledge_base", "billing", "models", "tools", "recordings",
     "prompt_templates", "reports", "integrations",
 })
 _OWNER_ENTITLEMENT_LIMITS = frozenset({
