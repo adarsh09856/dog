@@ -849,7 +849,12 @@ class BaseOutputTransport(FrameProcessor):
                 frame: The frame to handle.
             """
             if isinstance(frame, OutputAudioRawFrame):
-                if isinstance(frame, TTSAudioRawFrame) and self._tts_response_active:
+                if isinstance(frame, TTSAudioRawFrame):
+                    # A late phrase can arrive after the bounded idle fallback
+                    # closed a TTS response. Audio is evidence that this output
+                    # stream is active again; re-arm the long TTS idle boundary
+                    # so the short speech VAD timeout does not stop every chunk.
+                    self._tts_response_active = True
                     self._tts_response_last_activity = time.monotonic()
                 await self._handle_bot_speech(frame)
             elif isinstance(frame, TTSStartedFrame):

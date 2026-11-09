@@ -96,8 +96,13 @@ _PHONE_CONTEXT_RE = re.compile(
 )
 _NON_PHONE_CONTEXT_RE = re.compile(
     r"\b(?:appointment|booking|book|schedule|date|time|today|tomorrow|"
-    r"yesterday|morning|afternoon|evening|help|later|after)\b|"
-    r"अपॉइंटमेंट|अप्पॉइंटमेंट|बुकिंग|बुक|तारीख|समय|कल|आज|सुबह|दोपहर|शाम|बजे|मदद|सहायता|बाद",
+    r"yesterday|morning|afternoon|evening|help|later|after|am|pm|"
+    r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+    r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|"
+    r"dec(?:ember)?)\b|"
+    r"अपॉइंटमेंट|अप्पॉइंटमेंट|बुकिंग|बुक|तारीख|समय|कल|आज|सुबह|दोपहर|शाम|बजे|"
+    r"जनवरी|फ़रवरी|फरवरी|मार्च|अप्रैल|मई|जून|जुलाई|अगस्त|सितंबर|अक्टूबर|नवंबर|दिसंबर|"
+    r"ए\s*एम|पी\s*एम|मदद|सहायता|बाद",
     re.IGNORECASE,
 )
 

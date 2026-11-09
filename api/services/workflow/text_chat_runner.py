@@ -764,9 +764,25 @@ async def execute_text_chat_pending_turn(
     trace_span_attributes = {
         "langfuse.trace.name": workflow_run.name or f"text-chat-{workflow_run_id}"
     }
+    from api.services.pipecat.caller_context_policy import (
+        CallerContextPolicyCleanupProcessor,
+        CallerContextPolicyProcessor,
+        CallerContextPolicyState,
+    )
+
+    caller_context_policy_state = CallerContextPolicyState()
     pipeline = Pipeline(
         [
+            CallerContextPolicyProcessor(
+                llm,
+                caller_context_policy_state,
+                # Text-chat turn handling already owns deterministic booking
+                # and contact fallbacks; retain the shared context/language
+                # policy without running that state machine twice.
+                handle_contact_fallbacks=False,
+            ),
             llm,
+            CallerContextPolicyCleanupProcessor(caller_context_policy_state),
             capture_processor,
             assistant_context_aggregator,
             pipeline_metrics_aggregator,

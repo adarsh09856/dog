@@ -52,10 +52,17 @@ class CallerContextPolicyProcessor(FrameProcessor):
     history, keeping provider-specific request formats and tools untouched.
     """
 
-    def __init__(self, llm_service, policy_state: CallerContextPolicyState):
+    def __init__(
+        self,
+        llm_service,
+        policy_state: CallerContextPolicyState,
+        *,
+        handle_contact_fallbacks: bool = True,
+    ):
         super().__init__()
         self._llm_service = llm_service
         self._policy_state = policy_state
+        self._handle_contact_fallbacks = handle_contact_fallbacks
         self._phone_followup = None
         self._direct_reply = None
 
@@ -93,7 +100,10 @@ class CallerContextPolicyProcessor(FrameProcessor):
             state = {}
             self._llm_service._contact_conversation_state = state
         remember_recent_caller_statements(messages, state)
-        name_memory_reply = remember_explicit_caller_name(messages, state)
+        name_memory_reply = (
+            remember_explicit_caller_name(messages, state)
+            if self._handle_contact_fallbacks else None
+        )
         if name_memory_reply:
             self._direct_reply = name_memory_reply
 
@@ -176,7 +186,7 @@ class CallerContextPolicyProcessor(FrameProcessor):
             getattr(tool, "name", None) == "book_appointment" for tool in tools
         )
         phone_reply = None
-        if not self._direct_reply:
+        if self._handle_contact_fallbacks and not self._direct_reply:
             from api.services.workflow.contact_context import caller_name_followup_reply
 
             known_phone = (getattr(self._llm_service, "_known_contact", {}) or {}).get(
@@ -190,7 +200,7 @@ class CallerContextPolicyProcessor(FrameProcessor):
             )
             if name_followup:
                 self._direct_reply = name_followup
-        if not self._direct_reply:
+        if self._handle_contact_fallbacks and not self._direct_reply:
             phone_reply = caller_phone_fragment_reply(
                 messages, state, booking_available=booking_available
             )
@@ -216,7 +226,11 @@ class CallerContextPolicyProcessor(FrameProcessor):
                 "again. Continue by asking only the next missing detail: "
                 + self._phone_followup
             )
-        if booking_available and not self._direct_reply:
+        if (
+            self._handle_contact_fallbacks
+            and booking_available
+            and not self._direct_reply
+        ):
             # Run the same contact-and-booking state machine before every
             # cascade provider. If it resolves the next follow-up, emit that
             # exact reply and skip the provider so a smaller/custom model
