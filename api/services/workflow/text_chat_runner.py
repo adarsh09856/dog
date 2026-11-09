@@ -960,7 +960,10 @@ async def execute_text_chat_pending_turn(
                 generation_marker = capture_processor.activity_count
                 response_window.note_direct_context_request()
                 engine.expect_response()
-                await llm.queue_frame(LLMContextFrame(context))
+                # Enter the task at its pipeline source so the shared caller
+                # context policy runs before the provider LLM and cleanup runs
+                # before assistant history is checkpointed.
+                await task.queue_frame(LLMContextFrame(context))
                 await _wait_for_quiescence(
                     capture_processor=capture_processor,
                     response_window=response_window,
