@@ -19,9 +19,9 @@ from pipecat.frames.frames import ErrorFrame, InterimTranscriptionFrame, Transcr
 
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
 AUTO_ENGLISH_MIN_CONFIDENCE = 0.50
-# Languages exposed by the currently configured local VITS/Rasa voice inventory.
-# STT may recognize more languages than the reply pipeline can currently speak.
-LOCAL_REPLY_TTS_LANGUAGES = frozenset({
+# Conservative fallback used only when no live selected-voice inventory exists.
+# A verified model inventory can widen this to the installed decoder languages.
+LOCAL_DEFAULT_REPLY_TTS_LANGUAGES = frozenset({
     "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
     "ne", "pa", "sa", "ta", "te",
 })
@@ -87,15 +87,17 @@ def _auto_stt_language_allowlist(
     # Live agent creation attaches the selected TTS capability set (including
     # an explicit empty set). Use only the currently configured local voice
     # inventory when this adapter is used without a capability snapshot.
-    source = LOCAL_REPLY_TTS_LANGUAGES if supported_codes is None else supported_codes
+    source = (
+        LOCAL_DEFAULT_REPLY_TTS_LANGUAGES
+        if supported_codes is None
+        else supported_codes
+    )
     normalized = {
         str(value).strip().lower().replace("_", "-").split("-", 1)[0]
         for value in source
         if isinstance(value, str) and str(value).strip()
     }
-    # Product language policy is narrower than the decoder and voice manifests.
-    # A model advertising an excluded language must not enable that route.
-    return frozenset(normalized & LOCAL_INDIC_STT_LANGUAGES & LOCAL_REPLY_TTS_LANGUAGES)
+    return frozenset(normalized & LOCAL_INDIC_STT_LANGUAGES)
 
 
 def _resolve_auto_language(
@@ -173,7 +175,7 @@ def _trusted_tts_language(
     code = str(selected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
     supported = (
-        LOCAL_REPLY_TTS_LANGUAGES
+        LOCAL_DEFAULT_REPLY_TTS_LANGUAGES
         if supported_codes is None
         else frozenset(supported_codes)
     )
@@ -207,7 +209,7 @@ def _current_reply_tts_language(
     """Use one confident supported detection for this reply, without changing fallback policy."""
     code = str(selected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     supported = (
-        LOCAL_REPLY_TTS_LANGUAGES
+        LOCAL_DEFAULT_REPLY_TTS_LANGUAGES
         if supported_codes is None
         else frozenset(supported_codes)
     )
@@ -234,7 +236,7 @@ def _phone_rescue_reply_language(
     """
     stable = str(stable_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
     supported = (
-        LOCAL_REPLY_TTS_LANGUAGES
+        LOCAL_DEFAULT_REPLY_TTS_LANGUAGES
         if supported_codes is None
         else frozenset(supported_codes)
     )
@@ -450,11 +452,12 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                 kwargs["temperature"] = settings.temperature
             extra_body = {}
             stable_detected_language = getattr(self, "_stable_detected_language", None)
-            if local_indic and auto_language:
+            if local_indic:
                 allowed_languages = _auto_stt_language_allowlist(
                     getattr(self, "_caller_language_supported_codes", None)
                 )
                 extra_body["allowed_languages"] = ",".join(sorted(allowed_languages))
+            if local_indic and auto_language:
                 fallback_candidates = (
                     stable_detected_language,
                     getattr(self, "_initial_language_fallback", None),
@@ -512,7 +515,9 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                     if (
                         language_route == "held_previous_low_confidence"
                         and not getattr(self, "_stable_detected_language", None)
-                        and self.latest_decoder_language in LOCAL_REPLY_TTS_LANGUAGES
+                        and self.latest_decoder_language in _auto_stt_language_allowlist(
+                            supported_codes
+                        )
                     ):
                         # On the first turn there is no prior detector state.
                         # If LID is weak, the selected voice's native language
