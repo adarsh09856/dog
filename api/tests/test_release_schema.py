@@ -95,7 +95,11 @@ def test_repository_migration_graph_has_single_head_and_joins_both_release_lines
     config.set_main_option("script_location", str(repo_root / "api" / "alembic"))
     script = ScriptDirectory.from_config(config)
 
-    assert script.get_heads() == ["0a6b9f2e3c41"]
+    assert script.get_heads() == ["e1a7c94d5b62"]
+    client_features = script.get_revision("e1a7c94d5b62")
+    assert client_features.down_revision == "b6e8f9012acd"
+    public_forms = script.get_revision("b6e8f9012acd")
+    assert public_forms.down_revision == "0a6b9f2e3c41"
     website_sources = script.get_revision("0a6b9f2e3c41")
     assert website_sources.down_revision == "c9d84f2a1b70"
     alert_delivery = script.get_revision("c9d84f2a1b70")
