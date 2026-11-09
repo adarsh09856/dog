@@ -31,11 +31,15 @@ async def test_owner_plan_settings_and_installation_routes_deny_tenants_and_api_
     list_plans = AsyncMock(return_value=[])
     get_settings = AsyncMock(return_value={})
     list_installations = AsyncMock(return_value=[])
+    create_installation = AsyncMock()
+    get_installation = AsyncMock()
     monkeypatch.setattr(plans_admin.saas_plan_catalog, "list_plans", list_plans)
     monkeypatch.setattr(settings_admin.kodewaves_db_client, "get_settings_map", get_settings)
     monkeypatch.setattr(
         client_installations_admin, "list_client_installation_records", list_installations,
     )
+    monkeypatch.setattr(client_installations_admin, "create_client_installation_record", create_installation)
+    monkeypatch.setattr(client_installations_admin, "get_client_installation_record", get_installation)
 
     app = FastAPI()
     app.include_router(plans_admin.router, prefix="/admin")
@@ -50,8 +54,21 @@ async def test_owner_plan_settings_and_installation_routes_deny_tenants_and_api_
                 await client.get("/admin/plans", headers=headers),
                 await client.get("/admin/settings", headers=headers),
                 await client.get("/admin/client-installations", headers=headers),
+                await client.post("/admin/client-installations", headers=headers, json={
+                    "installation_id": "other-customer-install",
+                    "customer_id": "other-customer",
+                    "domains": ["other.example"],
+                    "features": ["voice", "models"],
+                    "limits": {"max_concurrent_calls": 1},
+                    "expires_at": 4_102_444_800,
+                }),
+                await client.post(
+                    "/admin/client-installations/other-customer-install/renew",
+                    headers=headers,
+                    json={"expires_at": 4_102_444_800, "features": ["voice", "reports"]},
+                ),
             ]
-            assert [response.status_code for response in responses] == [403, 403, 403]
+            assert [response.status_code for response in responses] == [403, 403, 403, 403, 403]
 
         api_key_responses = [
             await client.get("/admin/plans", headers={"X-API-Key": "organization-key"}),
@@ -59,15 +76,22 @@ async def test_owner_plan_settings_and_installation_routes_deny_tenants_and_api_
             await client.get(
                 "/admin/client-installations", headers={"X-API-Key": "organization-key"},
             ),
+            await client.post("/admin/client-installations", headers={"X-API-Key": "organization-key"}, json={}),
+            await client.post(
+                "/admin/client-installations/other-customer-install/renew",
+                headers={"X-API-Key": "organization-key"}, json={},
+            ),
         ]
-        assert [response.status_code for response in api_key_responses] == [403, 403, 403]
+        assert [response.status_code for response in api_key_responses] == [403, 403, 403, 403, 403]
         assert all("API keys cannot access owner controls" in response.json()["detail"]
                    for response in api_key_responses)
 
     list_plans.assert_not_awaited()
     get_settings.assert_not_awaited()
     list_installations.assert_not_awaited()
-    assert get_user.await_count == 6
+    create_installation.assert_not_awaited()
+    get_installation.assert_not_awaited()
+    assert get_user.await_count == 10
 
 
 @pytest.mark.asyncio

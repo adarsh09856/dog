@@ -239,6 +239,13 @@ async def check_client_installation(
         "observed_ip": observed_ip,
         "issued_at": now,
         "expires_at": min(now + 300, record["expires_at"]),
+        # Use the canonical owner-side row returned under the same lock that
+        # consumes this one-time check nonce. Renewals therefore reach an
+        # installation without replacing its bootstrap license file.
+        "entitlement_version": record["entitlement_version"],
+        "features": record["features"],
+        "feature_version": record["feature_version"],
+        "limits": record["limits"],
     }
     if (
         request.current_version is not None

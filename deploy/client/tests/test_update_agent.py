@@ -62,6 +62,49 @@ def _fake_owner_status(monkeypatch, update: dict) -> list[dict]:
     return calls
 
 
+def test_owner_status_forwards_signed_integrity_failure(monkeypatch):
+    finding = {
+        "reason": "modified_file",
+        "component": "api/app.py",
+        "expected_sha256": "a" * 64,
+        "observed_sha256": "b" * 64,
+    }
+    prepared = {
+        "owner_status_url": "https://owner.example/api/v1/admin/client-installations/check",
+        "nonce": "n" * 43,
+        "issued_at": 1_800_000_000,
+        "signature": "s" * 86,
+        "integrity_ok": False,
+        "integrity_finding": finding,
+    }
+    calls: dict = {}
+    monkeypatch.setattr(update_agent, "_prepare_check", lambda _env, _version: prepared)
+    monkeypatch.setattr(
+        update_agent, "_owner_post",
+        lambda url, token, body: calls.update(url=url, token=token, body=body) or {"signed_status": "signed"},
+    )
+
+    def helper_request(_image, request):
+        if request["action"] == "verify_status":
+            return {"verified": True, "status": {"revoked": False, "binding_valid": True}}
+        raise AssertionError(f"Unexpected API helper action: {request['action']}")
+
+    monkeypatch.setattr(update_agent, "_helper_request", helper_request)
+    env = {
+        "KODEWAVES_LICENSE_TOKEN": "license.payload",
+        "KODEWAVES_INSTALLATION_ID": "client-1",
+        "PUBLIC_HOST": "client.example",
+        "CLIENT_API_IMAGE": "registry.example/api@sha256:" + "a" * 64,
+    }
+
+    status, status_url = update_agent._owner_status(env, "1.2.3")
+
+    assert calls["body"]["integrity_ok"] is False
+    assert calls["body"]["integrity_finding"] == finding
+    assert status_url == "https://owner.example/api/v1/admin/client-installations/update-status"
+    assert status["revoked"] is False
+
+
 def test_status_endpoint_accepts_only_pinned_owner_check_path():
     assert update_agent._status_endpoint(
         "https://owner.example/api/v1/admin/client-installations/check"

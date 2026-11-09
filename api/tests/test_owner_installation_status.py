@@ -38,7 +38,19 @@ class FakeRedis:
     async def hget(self, _key, field):
         return self.fields.get(field.encode() if isinstance(field, str) else field)
 
-    async def eval(self, script, _count, _key, field, expected, acknowledged):
+    async def eval(self, script, _count, _key, *args):
+        if "local current = tonumber" in script:
+            signed_status, nonce, incoming_raw = args
+            current = int(self.fields.get(b"entitlement_version", b"-1"))
+            incoming = int(incoming_raw)
+            if incoming < current:
+                return 0
+            self.fields[b"signed_status"] = signed_status.encode() if isinstance(signed_status, str) else signed_status
+            self.fields[b"nonce"] = nonce.encode() if isinstance(nonce, str) else nonce
+            if incoming >= 0:
+                self.fields[b"entitlement_version"] = str(incoming).encode()
+            return 1
+        field, expected, acknowledged = args
         key = field.encode() if isinstance(field, str) else field
         expected_value = expected.encode() if isinstance(expected, str) else expected
         acknowledged_key = acknowledged.encode() if isinstance(acknowledged, str) else acknowledged
@@ -298,6 +310,44 @@ async def test_owner_poll_saves_verified_response_and_revocation_blocks_new_call
     await redis.hset("ignored", {"signed_status": active, "nonce": "a" * 43})
     with pytest.raises(InstallationLicenseError, match="revoked"):
         await owner_status.require_current_owner_status(license_data, redis)
+
+
+@pytest.mark.asyncio
+async def test_late_owner_poll_cannot_replace_newer_entitlements(monkeypatch):
+    token = "issued-license-token"
+    monkeypatch.setenv("KODEWAVES_LICENSE_TOKEN", token)
+    monkeypatch.setattr(owner_status, "_trusted_owner_key", lambda: ("trusted-key",))
+    monkeypatch.setattr(owner_status, "load_license", lambda *_: SimpleNamespace(
+        installation_id="client-1", ip_ranges=(),
+    ))
+    monkeypatch.setattr(owner_status, "validate_installation_license", lambda _license: None)
+    monkeypatch.setattr(owner_status, "_status_url", lambda: "https://owner.example.com/check")
+    monkeypatch.setattr(owner_status, "verify_configured_release", lambda: None)
+    monkeypatch.setattr(owner_status, "verify_installation_status_claims", lambda *_a, **_kw: {
+        "revoked": False, "entitlement_version": 4,
+    })
+
+    async def allow_status(_license, _redis):
+        return None
+
+    monkeypatch.setattr(owner_status, "require_current_owner_status", allow_status)
+
+    class FakeHttp:
+        async def post(self, *_args, **_kwargs):
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {
+                "signed_status": "older-signed-snapshot",
+            })
+
+    redis = FakeRedis()
+    redis.fields.update({
+        b"entitlement_version": b"5",
+        b"signed_status": b"newer-signed-snapshot",
+        b"nonce": b"newer-nonce",
+    })
+    assert await owner_status.poll_owner_status_once(redis, FakeHttp()) is False
+    assert redis.fields[b"entitlement_version"] == b"5"
+    assert redis.fields[b"signed_status"] == b"newer-signed-snapshot"
+    assert redis.fields[b"nonce"] == b"newer-nonce"
 
 
 @pytest.mark.asyncio

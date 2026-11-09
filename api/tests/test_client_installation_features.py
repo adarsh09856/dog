@@ -10,7 +10,7 @@ def test_regular_client_user_can_read_only_entitlements(monkeypatch):
     monkeypatch.setattr(
         installation,
         "load_license",
-        lambda: SimpleNamespace(features={"voice", "crm"}, limits={"max_agents": 3}),
+        lambda: SimpleNamespace(features={"voice", "crm"}, feature_version=2, limits={"max_agents": 3}),
     )
     monkeypatch.setattr(installation, "validate_installation_license", lambda _license: None)
 

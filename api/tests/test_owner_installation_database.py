@@ -60,10 +60,29 @@ async def test_owner_heartbeat_returns_status_after_real_session_commit(owner_da
     assert result["installation_id"] == "client-test"
     assert result["revoked_at"] is None
     assert result["expires_at"] > 0
+    assert result["entitlement_version"] == 1
+    assert result["features"] == []
     async with owner_database() as session:
         stored = await session.get(ClientInstallationModel, "client-test")
         assert stored.observed_ip == "203.0.113.7"
         assert stored.last_seen_at is not None
+
+
+@pytest.mark.asyncio
+async def test_owner_renewal_increments_entitlement_snapshot_version(owner_database):
+    now = datetime.now(UTC)
+    updated = await client_installations.renew_client_installation_record(
+        "client-test", "a" * 64, "b" * 64,
+        now + timedelta(days=2), 1,
+        features=["voice", "crm"], feature_version=2,
+        limits={"max_concurrent_calls": 3, "max_agents": 10},
+    )
+    assert updated is True
+    async with owner_database() as session:
+        stored = await session.get(ClientInstallationModel, "client-test")
+        assert stored.entitlement_version == 2
+        assert stored.features == ["voice", "crm"]
+        assert stored.limits["max_agents"] == 10
 
 
 @pytest.mark.asyncio

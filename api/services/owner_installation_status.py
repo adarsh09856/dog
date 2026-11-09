@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import json
 import os
@@ -57,6 +56,10 @@ _logged_initial_owner_check = False
 class OwnerStatusSnapshot:
     last_owner_check: int
     using_outage_grace: bool
+    entitlement_version: int | None = None
+    features: frozenset[str] | None = None
+    feature_version: int | None = None
+    limits: dict[str, int] | None = None
 
 
 def _status_key(installation_id: str) -> str:
@@ -223,9 +226,22 @@ async def poll_owner_status_once(
             _status_key(license_data.installation_id),
             mapping={"revoked_latched": "1"},
         )
-    await redis_client.hset(
+    # A delayed poll from another process must not overwrite a newer owner's
+    # feature/limit snapshot. The signature and nonce are still verified on
+    # every use; this Lua guard only makes version ordering atomic in Redis.
+    snapshot_version = status.get("entitlement_version")
+    await redis_client.eval(
+        "local current = tonumber(redis.call('HGET', KEYS[1], 'entitlement_version') or '-1'); "
+        "local incoming = tonumber(ARGV[3]) or -1; "
+        "if incoming < current then return 0 end; "
+        "redis.call('HSET', KEYS[1], 'signed_status', ARGV[1], 'nonce', ARGV[2]); "
+        "if incoming >= 0 then redis.call('HSET', KEYS[1], 'entitlement_version', ARGV[3]) end; "
+        "return 1",
+        1,
         _status_key(license_data.installation_id),
-        mapping={"signed_status": signed_status, "nonce": nonce},
+        signed_status,
+        nonce,
+        str(snapshot_version) if snapshot_version is not None else "-1",
     )
     if not _logged_initial_owner_check:
         try:
@@ -283,13 +299,13 @@ async def require_current_owner_status(
             raise InstallationLicenseError("Installation license was revoked by the owner")
         if license_data.ip_ranges and status.get("binding_valid") is not True:
             raise InstallationLicenseError("Installation source IP is outside the licensed ranges")
-        # The signed payload was just verified, including its timestamps.
-        payload = signed_status.decode("ascii").split(".", 1)[0]
-        padded = payload + "=" * (-len(payload) % 4)
-        status = json.loads(base64.urlsafe_b64decode(padded))
         return OwnerStatusSnapshot(
             last_owner_check=status["issued_at"],
             using_outage_grace=status["expires_at"] <= now,
+            entitlement_version=status.get("entitlement_version"),
+            features=frozenset(status["features"]) if "features" in status else None,
+            feature_version=status.get("feature_version"),
+            limits=dict(status["limits"]) if "limits" in status else None,
         )
     finally:
         if own_client:

@@ -2,6 +2,7 @@
 
 from api.services.deployment_edition import runtime_edition
 from api.services.installation_license import (
+    apply_owner_entitlements,
     load_license,
     require_feature,
     validate_installation_license,
@@ -21,6 +22,7 @@ async def require_client_worker_features(*features: str) -> None:
 
     license_data = load_license()
     validate_installation_license(license_data)
+    owner_status = await require_current_owner_status(license_data)
+    license_data = apply_owner_entitlements(license_data, owner_status)
     for feature in features:
         require_feature(license_data, feature)
-    await require_current_owner_status(license_data)

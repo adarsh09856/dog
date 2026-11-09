@@ -14,6 +14,7 @@ from api.services import client_update_protocol
 from api.services.client_update_protocol import canonical_json, release_signature_payload, verify_update_report
 from api.services.installation_identity import verify_owner_check
 from api.services.installation_license import issue_license_token
+from api.services.release_integrity import ReleaseIntegrityError
 
 
 def _key_text(key: Ed25519PrivateKey) -> str:
@@ -59,6 +60,7 @@ def test_prepare_update_check_signs_current_version_without_returning_key(monkey
     identity_key = Ed25519PrivateKey.generate()
     token = _license(owner_key)
     _trust(monkeypatch, owner_key)
+    monkeypatch.setattr("api.services.release_integrity.verify_configured_release", lambda: None)
     response = helper.execute({
         "action": "prepare_update_check",
         "license_token": token,
@@ -74,9 +76,50 @@ def test_prepare_update_check_signs_current_version_without_returning_key(monkey
         integrity_ok=True, integrity_finding=None, current_version="1.2.3",
     )
     assert response["current_version"] == "1.2.3"
+    assert response["integrity_ok"] is True
+    assert response["integrity_finding"] is None
     assert response["owner_status_url"].endswith("/client-installations/check")
     assert "private_key" not in response
     assert token not in str(response)
+
+
+def test_prepare_update_check_signs_integrity_failure_from_installed_manifest(monkeypatch):
+    owner_key = Ed25519PrivateKey.generate()
+    identity_key = Ed25519PrivateKey.generate()
+    token = _license(owner_key)
+    _trust(monkeypatch, owner_key)
+    monkeypatch.setenv("KODEWAVES_EDITION", "client")
+
+    def modified_release():
+        raise ReleaseIntegrityError(
+            "Client release file changed", reason="modified_file", component="api/app.py",
+            expected_sha256="a" * 64, observed_sha256="b" * 64,
+        )
+
+    monkeypatch.setattr("api.services.release_integrity.verify_configured_release", modified_release)
+    response = helper.execute({
+        "action": "prepare_update_check",
+        "license_token": token,
+        "installation_id": "client-1",
+        "public_host": "customer.example",
+        "private_key": _key_text(identity_key),
+        "current_version": "1.2.3",
+    })
+
+    assert response["integrity_ok"] is False
+    assert response["integrity_finding"] == {
+        "reason": "modified_file",
+        "component": "api/app.py",
+        "expected_sha256": "a" * 64,
+        "observed_sha256": "b" * 64,
+    }
+    verify_owner_check(
+        _public_text(identity_key), response["signature"],
+        installation_id="client-1", license_token=token,
+        nonce=response["nonce"], issued_at=response["issued_at"],
+        integrity_ok=False, integrity_finding=response["integrity_finding"],
+        current_version="1.2.3",
+    )
 
 
 def test_verify_status_returns_only_owner_verified_claims(monkeypatch):

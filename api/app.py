@@ -210,6 +210,15 @@ def _add_public_embed_cors_middleware() -> None:
 
 _add_public_embed_cors_middleware()
 
+
+def _add_public_form_cors_middleware() -> None:
+    from api.routes.public_forms import PublicFormCORSMiddleware
+
+    app.add_middleware(PublicFormCORSMiddleware, api_prefix=API_PREFIX)
+
+
+_add_public_form_cors_middleware()
+
 api_router = APIRouter()
 
 # include subrouters here

@@ -11,14 +11,18 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from api.services.installation_license import (
+    InstallationFeatureError,
     InstallationLicenseError,
     issue_license_token,
     load_license,
+    apply_owner_entitlements,
+    effective_features,
     require_feature,
     require_limit,
     validate_installation_license,
     validate_request_binding,
     verify_installation_status,
+    verify_installation_status_claims,
 )
 
 
@@ -256,6 +260,46 @@ def test_signed_license_is_canonical_and_domain_and_ip_bound():
     )
 
 
+def test_legacy_voice_license_preserves_historical_module_access():
+    private_key, public_key = _key_material()
+    license_data = load_license(issue_license_token(_claims(features=["voice"]), private_key), public_key, now=150)
+
+    assert license_data.feature_version == 1
+    assert {"models", "tools", "recordings", "prompt_templates", "reports", "integrations"}.issubset(
+        effective_features(license_data)
+    )
+    require_feature(license_data, "models")
+
+
+def test_granular_voice_license_denies_ungranted_modules():
+    private_key, public_key = _key_material()
+    token = issue_license_token(
+        _claims(features=["voice", "models"], feature_version=2), private_key,
+    )
+    license_data = load_license(token, public_key, now=150)
+
+    assert license_data.feature_version == 2
+    require_feature(license_data, "models")
+    for feature in ("tools", "recordings", "prompt_templates", "reports", "integrations"):
+        with pytest.raises(InstallationFeatureError, match="does not include"):
+            require_feature(license_data, feature)
+
+
+def test_voice_only_client_license_keeps_browser_turn_credentials():
+    """TURN is part of browser voice transport, not an optional integration."""
+    from api.services.client_license_middleware import required_feature_for_path
+
+    private_key, public_key = _key_material()
+    token = issue_license_token(
+        _claims(features=["voice"], feature_version=2), private_key,
+    )
+    license_data = load_license(token, public_key, now=150)
+
+    feature = required_feature_for_path("/api/v1/turn/credentials")
+    assert feature == "voice"
+    require_feature(license_data, feature)
+
+
 @pytest.mark.parametrize("installation_ip", ["198.51.100.9", None, "not-an-ip"])
 def test_signed_license_rejects_missing_or_out_of_range_installation_ip(installation_ip):
     private_key, public_key = _key_material()
@@ -323,6 +367,71 @@ def test_client_image_accepts_baked_previous_owner_key_during_rotation(monkeypat
         installation_id="install-123", license_token=old_token,
         nonce="nonce-123", now=151,
     ) is False
+
+
+def test_verified_owner_entitlement_snapshot_overrides_bootstrap_license():
+    from api.services.owner_installation_status import OwnerStatusSnapshot
+
+    private, public = _key_material()
+    token = issue_license_token(_claims(features=["voice"], limits={"max_concurrent_calls": 2}), private)
+    now = 200
+    status = issue_license_token({
+        "kind": "installation_status",
+        "installation_id": "install-123",
+        "license_sha256": hashlib.sha256(token.encode("ascii")).hexdigest(),
+        "nonce": "nonce-123",
+        "revoked": False,
+        "issued_at": now,
+        "expires_at": now + 300,
+        "entitlement_version": 8,
+        "features": ["voice", "crm", "appointments"],
+        "feature_version": 2,
+        "limits": {"max_concurrent_calls": 4, "max_agents": 12},
+    }, private)
+    claims = verify_installation_status_claims(
+        status, public_key=public, installation_id="install-123",
+        license_token=token, nonce="nonce-123", now=now + 1,
+    )
+    snapshot = OwnerStatusSnapshot(
+        last_owner_check=claims["issued_at"], using_outage_grace=False,
+        entitlement_version=claims["entitlement_version"],
+        features=frozenset(claims["features"]),
+        feature_version=claims["feature_version"],
+        limits=claims["limits"],
+    )
+    effective = apply_owner_entitlements(load_license(token, public, now=now + 1), snapshot)
+    assert effective.features == frozenset({"voice", "crm", "appointments"})
+    assert effective.limits == {"max_concurrent_calls": 4, "max_agents": 12}
+    assert effective.feature_version == 2
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        {"entitlement_version": 0, "features": [], "feature_version": 2, "limits": {}},
+        {"entitlement_version": 1, "features": ["made_up"], "feature_version": 2, "limits": {}},
+        {"entitlement_version": 1, "features": [], "feature_version": 2, "limits": {"unknown": 1}},
+        {"entitlement_version": 1, "features": [], "feature_version": True, "limits": {}},
+    ],
+)
+def test_owner_status_rejects_invalid_dynamic_entitlement_snapshot(snapshot):
+    private, public = _key_material()
+    token = issue_license_token(_claims(), private)
+    status = issue_license_token({
+        "kind": "installation_status",
+        "installation_id": "install-123",
+        "license_sha256": hashlib.sha256(token.encode("ascii")).hexdigest(),
+        "nonce": "nonce-123",
+        "revoked": False,
+        "issued_at": 200,
+        "expires_at": 500,
+        **snapshot,
+    }, private)
+    with pytest.raises(InstallationLicenseError, match="entitlement snapshot"):
+        verify_installation_status_claims(
+            status, public_key=public, installation_id="install-123",
+            license_token=token, nonce="nonce-123", now=201,
+        )
 
 
 @pytest.mark.parametrize("suffix", ["==", "!", " "])
@@ -681,14 +790,16 @@ def test_client_http_and_websocket_requests_are_gated(monkeypatch):
     assert middleware.required_feature_for_path("/api/v1/workflow/21") == "voice"
     assert middleware.required_feature_for_path("/api/v1/workflow/21/embed-token") == "widgets"
     assert middleware.required_feature_for_path("/api/v1/ws/public/signaling/session") == "widgets"
-    assert middleware.required_feature_for_path("/api/v1/workflow-recordings/21") == "voice"
-    assert middleware.required_feature_for_path("/api/v1/tts-cache/item") == "voice"
+    assert middleware.required_feature_for_path("/api/v1/workflow-recordings/21") == "recordings"
+    assert middleware.required_feature_for_path("/api/v1/tts-cache/item") == "recordings"
     assert middleware.required_feature_for_path("/api/v1/public/agent/call") == "telephony"
-    assert middleware.required_feature_for_path("/api/v1/user/api-keys") == "voice"
-    assert middleware.required_feature_for_path("/api/v1/user/api-keys/17/reactivate") == "voice"
-    assert middleware.required_feature_for_path("/api/v1/mcp/tools/list") == "voice"
+    assert middleware.required_feature_for_path("/api/v1/user/api-keys") == "integrations"
+    assert middleware.required_feature_for_path("/api/v1/user/api-keys/17/reactivate") == "integrations"
+    assert middleware.required_feature_for_path("/api/v1/mcp/tools/list") == "integrations"
     assert middleware.required_feature_for_path("/api/v1/organizations/telephony-configs/1") == "telephony"
-    assert middleware.required_feature_for_path("/api/v1/organizations/overview/stats") == "voice"
+    assert middleware.required_feature_for_path("/api/v1/organizations/overview/stats") == "reports"
+    assert middleware.required_feature_for_path("/api/v1/organizations/model-configurations") == "models"
+    assert middleware.required_feature_for_path("/api/v1/organizations/reports/workflows") == "reports"
     assert middleware.required_feature_for_path("/api/v1/organizations/preferences") == "voice"
     assert middleware.required_feature_for_path("/api/v1/agent-stream/cloudonix/workflow-id") == "telephony"
     assert middleware.required_feature_for_path("/api/v1/organizations/campaign-defaults") == "campaigns"
@@ -696,17 +807,21 @@ def test_client_http_and_websocket_requests_are_gated(monkeypatch):
     assert middleware.required_feature_for_path("/api/v1/s3/presigned-upload-url") == "campaigns"
     assert middleware.required_feature_for_path("/api/v1/campaigner") is None
     for route in (
-        "/api/v1/catalog/available",
-        "/api/v1/credentials/",
         "/api/v1/folder/",
-        "/api/v1/node-types",
-        "/api/v1/prompt-templates",
-        "/api/v1/tools/",
-        "/api/v1/turn/credentials",
-        "/api/v1/organizations/usage/runs",
+        "/api/v1/organizations/preferences",
         "/api/v1/user/onboarding-state",
     ):
         assert middleware.required_feature_for_path(route) == "voice"
+    for route, feature in (
+        ("/api/v1/catalog/available", "models"),
+        ("/api/v1/credentials/", "integrations"),
+        ("/api/v1/node-types", "tools"),
+        ("/api/v1/prompt-templates", "prompt_templates"),
+        ("/api/v1/tools/", "tools"),
+        ("/api/v1/turn/credentials", "voice"),
+        ("/api/v1/organizations/usage/runs", "reports"),
+    ):
+        assert middleware.required_feature_for_path(route) == feature
     assert middleware.required_feature_for_request(
         "/api/v1/s3/signed-url", b"key=campaigns%2F2%2Fcontacts.csv"
     ) == "campaigns"
@@ -715,7 +830,7 @@ def test_client_http_and_websocket_requests_are_gated(monkeypatch):
     ) == "knowledge_base"
     assert middleware.required_feature_for_request(
         "/api/v1/s3/signed-url", b"key=recordings%2F22.wav"
-    ) == "voice"
+    ) == "recordings"
     for path in ("/api/v1/s3/signed-url", "/api/v1/s3/file-metadata"):
         passed, messages = asyncio.run(run(dict(
             base, path=path,

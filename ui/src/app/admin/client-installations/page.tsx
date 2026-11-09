@@ -10,9 +10,9 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/kodewavesApi";
 
-import { ClientReleaseControl } from "./ReleaseControl";
 import admin from "../AdminWorkspace.module.css";
 import styles from "./InstallationsWorkspace.module.css";
+import { ClientReleaseControl } from "./ReleaseControl";
 
 interface InstallationRecord {
   installation_id: string;
@@ -20,6 +20,7 @@ interface InstallationRecord {
   domains: string[];
   ip_ranges: string[];
   features: string[];
+  feature_version?: number;
   limits: Record<string, number>;
   expires_at: number;
   token_fingerprint: string;
@@ -83,7 +84,24 @@ interface BindingRequest {
   created_at: string;
 }
 
-const DEFAULT_FEATURES = "voice, telephony, campaigns, crm, appointments, forms, widgets, knowledge_base";
+type RenewalLimitName = "max_concurrent_calls" | "max_seats" | "max_workspaces" | "max_agents" | "max_campaigns";
+type RenewalLimitValues = Record<RenewalLimitName, string>;
+
+const RENEWAL_LIMIT_FIELDS: Array<{ name: RenewalLimitName; label: string }> = [
+  { name: "max_concurrent_calls", label: "Concurrent calls" },
+  { name: "max_seats", label: "Users" },
+  { name: "max_workspaces", label: "Workspaces" },
+  { name: "max_agents", label: "Agents" },
+  { name: "max_campaigns", label: "Campaigns" },
+];
+
+function renewalLimitValues(limits: Record<string, number>): RenewalLimitValues {
+  return Object.fromEntries(
+    RENEWAL_LIMIT_FIELDS.map(({ name }) => [name, limits[name] == null ? "" : String(limits[name])]),
+  ) as RenewalLimitValues;
+}
+
+const DEFAULT_FEATURES = "voice, telephony, campaigns, crm, appointments, forms, widgets, knowledge_base, models, tools, recordings, prompt_templates, reports, integrations";
 
 export default function ClientInstallationsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -109,6 +127,8 @@ export default function ClientInstallationsPage() {
   const [domain, setDomain] = useState("");
   const [ipRanges, setIpRanges] = useState("");
   const [features, setFeatures] = useState(DEFAULT_FEATURES);
+  const [renewalFeatures, setRenewalFeatures] = useState<Record<string, string>>({});
+  const [renewalLimits, setRenewalLimits] = useState<Record<string, RenewalLimitValues>>({});
   const [maxCalls, setMaxCalls] = useState(2);
   const [maxSeats, setMaxSeats] = useState("");
   const [maxWorkspaces, setMaxWorkspaces] = useState("");
@@ -233,9 +253,29 @@ export default function ClientInstallationsPage() {
     setError("");
     setIssued(null);
     try {
+      const limitValues = renewalLimits[item.installation_id] ?? renewalLimitValues(item.limits);
+      const limits = Object.fromEntries(RENEWAL_LIMIT_FIELDS.map(({ name }) => {
+        const rawValue = limitValues[name].trim();
+        return [name, rawValue === "" ? null : Number(rawValue)];
+      })) as Record<RenewalLimitName, number | null>;
+      if (item.features.includes("voice") && (!limits.max_concurrent_calls || Number(limits.max_concurrent_calls) < 1)) {
+        throw new Error("Voice licenses require at least one concurrent call.");
+      }
+      if (Object.values(limits).some((value) => value !== null && (!Number.isInteger(value) || Number(value) < 0))) {
+        throw new Error("License limits must be whole numbers or blank for unlimited.");
+      }
+      if ([limits.max_seats, limits.max_workspaces].some((value) => value !== null && value < 1)) {
+        throw new Error("User and workspace limits must be at least one or blank for unlimited.");
+      }
       const result = await apiFetch<IssuedLicense>(`/admin/client-installations/${encodeURIComponent(item.installation_id)}/renew`, {
         method: "POST",
-        body: JSON.stringify({ expires_at: Math.max(Math.floor(Date.now() / 1000), item.expires_at) + 30 * 86400 }),
+        body: JSON.stringify({
+          expires_at: Math.max(Math.floor(Date.now() / 1000), item.expires_at) + 30 * 86400,
+          limits,
+          ...((renewalFeatures[item.installation_id] ?? item.features.join(", ")).split(",").map((value) => value.trim()).filter(Boolean).sort().join(",") !== [...item.features].sort().join(",")
+            ? { features: (renewalFeatures[item.installation_id] ?? item.features.join(", ")).split(",").map((value) => value.trim()).filter(Boolean) }
+            : {}),
+        }),
       });
       setIssued(result);
       await refresh();
@@ -398,7 +438,7 @@ export default function ClientInstallationsPage() {
             </div>}
             <div className={`${styles.field} space-y-2`}><Label htmlFor="ip-ranges">Allowed server IP/CIDR, optional</Label><Input id="ip-ranges" placeholder="203.0.113.10" value={ipRanges} onChange={(event) => setIpRanges(event.target.value)} /></div>
             <div className={`${admin.formSection} ${styles.step}`}><span>03 / Entitlements and validity</span><p>Define the features and capacity enforced by this signed license.</p></div>
-            <div className="space-y-2 sm:col-span-2"><Label htmlFor="features">Enabled features, comma separated</Label><Input id="features" value={features} onChange={(event) => setFeatures(event.target.value)} /></div>
+            <div className="space-y-2 sm:col-span-2"><Label htmlFor="features">Enabled features, comma separated</Label><Input id="features" value={features} onChange={(event) => setFeatures(event.target.value)} /><p className="text-sm text-muted-foreground">Modules: voice, models, tools, recordings, prompt_templates, reports, integrations, telephony, campaigns, CRM, appointments, forms, widgets, knowledge_base. Omitted modules are denied.</p></div>
             <div className="space-y-2"><Label htmlFor="max-calls">Maximum concurrent calls</Label><Input id="max-calls" type="number" min={1} required value={maxCalls} onChange={(event) => setMaxCalls(Number(event.target.value))} /></div>
             <div className="space-y-2"><Label htmlFor="max-seats">Maximum provisioned users, optional</Label><Input id="max-seats" type="number" min={1} value={maxSeats} onChange={(event) => setMaxSeats(event.target.value)} /></div>
             <div className="space-y-2"><Label htmlFor="max-workspaces">Maximum workspaces, optional</Label><Input id="max-workspaces" type="number" min={1} value={maxWorkspaces} onChange={(event) => setMaxWorkspaces(event.target.value)} /></div>
@@ -533,6 +573,7 @@ export default function ClientInstallationsPage() {
                     <div className={styles.dataCell}><span className={styles.dataLabel}>Allowed source IP/CIDR</span><span className={styles.dataValue}>{item.ip_ranges.join(", ") || "No IP restriction"}</span></div>
                     <div className={styles.dataCell}><span className={styles.dataLabel}>License expires</span><span className={styles.dataValue}>{new Date(item.expires_at * 1000).toLocaleString()}</span></div>
                     <div className={styles.dataCell}><span className={styles.dataLabel}>Enabled features</span><span className={styles.dataValue}>{item.features.join(", ") || "No features"}</span></div>
+                    <div className={styles.dataCell}><span className={styles.dataLabel}>Entitlement format</span><span className={styles.dataValue}>{item.feature_version === 2 ? "Granular module grants" : "Legacy voice grant compatibility"}</span></div>
                     <div className={styles.dataCell}><span className={styles.dataLabel}>Concurrent call cap</span><span className={styles.dataValue}>{item.limits.max_concurrent_calls ?? 0}</span></div>
                     <div className={styles.dataCell}><span className={styles.dataLabel}>Provisioning caps</span><span className={styles.dataValue}>{item.limits.max_seats ?? "unlimited"} users · {item.limits.max_workspaces ?? "unlimited"} workspaces · {item.limits.max_agents ?? "unlimited"} agents · {item.limits.max_campaigns ?? "unlimited"} campaigns</span></div>
                     <div className={styles.dataCell}><span className={styles.dataLabel}>Owner check</span><span className={styles.dataValue}>{item.last_seen_at ? "Last owner check " + new Date(item.last_seen_at).toLocaleString() : "No client check received"}</span></div>
@@ -547,6 +588,33 @@ export default function ClientInstallationsPage() {
                   ) : (
                     <div className={styles.installationActions}>
                       <Button variant="outline" size="sm" disabled={enrollingId === item.installation_id || Boolean(item.identity_enrolled) || Boolean(item.integrity_failed_at) || expired} onClick={() => void createEnrollment(item.installation_id)}>{enrollingId === item.installation_id ? "Creating…" : "Create enrollment token"}</Button>
+                      <label className={styles.renewalFeatures}>Feature grants for renewal<Input aria-label={`Features for renewal ${item.installation_id}`} value={renewalFeatures[item.installation_id] ?? item.features.join(", ")} onChange={(event) => setRenewalFeatures((current) => ({ ...current, [item.installation_id]: event.target.value }))} /></label>
+                      <div className={styles.renewalLimits} aria-label={`License limits for renewal ${item.installation_id}`}>
+                        <span className={styles.renewalLimitHeading}>Limits · blank means unlimited except calls required for voice</span>
+                        {RENEWAL_LIMIT_FIELDS.map(({ name, label }) => (
+                          <label className={styles.renewalLimit} key={name}>
+                            <span>{label}</span>
+                            <Input
+                              aria-label={`${label} limit for renewal ${item.installation_id}`}
+                              type="number"
+                              min={
+                                name === "max_concurrent_calls" && item.features.includes("voice")
+                                  ? 1
+                                  : name === "max_seats" || name === "max_workspaces" ? 1 : 0
+                              }
+                              step={1}
+                              value={(renewalLimits[item.installation_id] ?? renewalLimitValues(item.limits))[name]}
+                              onChange={(event) => setRenewalLimits((current) => ({
+                                ...current,
+                                [item.installation_id]: {
+                                  ...(current[item.installation_id] ?? renewalLimitValues(item.limits)),
+                                  [name]: event.target.value,
+                                },
+                              }))}
+                            />
+                          </label>
+                        ))}
+                      </div>
                       <Button variant="outline" size="sm" disabled={renewingId === item.installation_id || Boolean(item.integrity_failed_at) || handoverActive} onClick={() => void renew(item)}>{renewingId === item.installation_id ? "Renewing…" : "Renew for 30 days"}</Button>
                       <Button variant="destructive" size="sm" disabled={revokingId === item.installation_id} onClick={() => void revoke(item.installation_id)}><Ban className="mr-2 h-4 w-4" />{revokingId === item.installation_id ? "Recording…" : "Mark revoked"}</Button>
                     </div>

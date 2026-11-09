@@ -9,6 +9,7 @@ from sqlalchemy.sql import Select
 
 from api.constants import KODEWAVES_EDITION
 from api.services.installation_license import (
+    apply_owner_entitlements,
     load_license,
     validate_installation_license,
 )
@@ -29,7 +30,8 @@ async def enforce_client_creation_limit(
 
     license_data = load_license()
     validate_installation_license(license_data)
-    await require_current_owner_status(license_data)
+    owner_status = await require_current_owner_status(license_data)
+    license_data = apply_owner_entitlements(license_data, owner_status)
     limit = license_data.limits.get(limit_name)
     if limit is None:
         return None

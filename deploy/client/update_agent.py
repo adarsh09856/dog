@@ -156,11 +156,17 @@ def _owner_status(env: dict[str, str], current_version: str) -> tuple[dict, str]
     check_url = prepared.get("owner_status_url")
     if not isinstance(check_url, str):
         raise UpdateError("Approved owner status URL is missing")
+    integrity_ok = prepared.get("integrity_ok")
+    integrity_finding = prepared.get("integrity_finding")
+    if not isinstance(integrity_ok, bool) or (integrity_ok and integrity_finding is not None):
+        raise UpdateError("Approved API image returned an invalid integrity result")
+    if not integrity_ok and not isinstance(integrity_finding, dict):
+        raise UpdateError("Approved API image omitted the integrity finding")
     _status_endpoint(check_url)
     request_payload = {
         "nonce": prepared["nonce"],
-        "integrity_ok": True,
-        "integrity_finding": None,
+        "integrity_ok": integrity_ok,
+        "integrity_finding": integrity_finding,
         "proof_issued_at": prepared["issued_at"],
         "proof_signature": prepared["signature"],
         "current_version": current_version,

@@ -263,6 +263,8 @@ def main() -> int:
     parser.add_argument("--release-public-key-file", required=True, type=Path, help="Owner release verification key baked into the API image")
     parser.add_argument("--owner-status-url", required=True, help="Owner HTTPS status endpoint baked into the API image")
     parser.add_argument("--owner-private-key", type=Path, help="Owner-only release signing key file")
+    parser.add_argument("--model-images-json", type=Path, help="Optional complete self-hosted Ollama/STT/TTS image inventory to include in the signed client manifest")
+    parser.add_argument("--model-assets-json", type=Path, help="Optional signed model-weight inventory; required with the self-hosted model image profile")
     parser.add_argument("--manifest-output", type=Path, help="Where to write the signed release manifest")
     parser.add_argument("--public-key-output", type=Path, help="Where to write its public verification key")
     parser.add_argument("--inventory-metrics-output", type=Path, help="Write protected API/UI file counts and inventory scan durations")
@@ -280,6 +282,10 @@ def main() -> int:
         parser.error("--approved-upgrade-from requires a signed release manifest")
     if args.approved_rollback_to and not args.owner_private_key:
         parser.error("--approved-rollback-to requires a signed release manifest")
+    if args.model_images_json and not args.owner_private_key:
+        parser.error("--model-images-json requires an owner-signed release manifest")
+    if args.model_assets_json and not args.model_images_json:
+        parser.error("--model-assets-json requires --model-images-json")
     if not set(args.approved_rollback_to).issubset(args.approved_upgrade_from):
         parser.error("--approved-rollback-to revisions must also be listed by --approved-upgrade-from")
     if args.push != (args.release_env_output is not None):
@@ -426,15 +432,20 @@ def main() -> int:
             ui_files_json.write_text(json.dumps(ui_files), encoding="utf-8")
             images_json.write_text(json.dumps(image_refs), encoding="utf-8")
             schema_json.write_text(json.dumps(schema_compatibility), encoding="utf-8")
+            signer_command = [
+                sys.executable, str(root / "owner-tools" / "sign_client_release.py"),
+                "--files-json", str(files_json), "--private-key", str(args.owner_private_key.resolve()),
+                "--ui-files-json", str(ui_files_json),
+                "--images-json", str(images_json),
+                "--schema-compatibility-json", str(schema_json),
+                "--output", str(manifest), "--public-key-output", str(public_key_file),
+            ]
+            if args.model_images_json:
+                signer_command.extend(("--model-images-json", str(args.model_images_json.resolve())))
+            if args.model_assets_json:
+                signer_command.extend(("--model-assets-json", str(args.model_assets_json.resolve())))
             subprocess.run(
-                [
-                    sys.executable, str(root / "owner-tools" / "sign_client_release.py"),
-                    "--files-json", str(files_json), "--private-key", str(args.owner_private_key.resolve()),
-                    "--ui-files-json", str(ui_files_json),
-                    "--images-json", str(images_json),
-                    "--schema-compatibility-json", str(schema_json),
-                    "--output", str(manifest), "--public-key-output", str(public_key_file),
-                ],
+                signer_command,
                 cwd=root,
                 check=True,
             )

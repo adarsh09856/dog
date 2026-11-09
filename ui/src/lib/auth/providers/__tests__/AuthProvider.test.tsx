@@ -20,7 +20,7 @@ describe("public-page authentication boundary", () => {
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it.each(["/", "/pricing", "/auth/login", "/auth/signup"])("renders %s immediately without an auth-config request", (pathname) => {
+  it.each(["/", "/pricing", "/platform", "/deployment", "/auth/login", "/auth/signup"])("renders %s immediately without an auth-config request", (pathname) => {
     state.pathname = pathname;
     render(<AuthProvider><Probe /></AuthProvider>);
     expect(screen.getByText("public: guest")).toBeTruthy();

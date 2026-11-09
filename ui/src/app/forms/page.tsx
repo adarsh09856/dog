@@ -5,6 +5,7 @@ import {
   Eye,
   FileSpreadsheet,
   FileText,
+  Globe2,
   ListPlus,
   Loader2,
   Plus,
@@ -46,6 +47,8 @@ import {
 import { useAuth } from "@/lib/auth";
 import { DynamicForm, formsApi } from "@/lib/kodewavesApi";
 
+import { FormPublicAccessDialog } from "./components/FormPublicAccessDialog";
+
 export default function FormsPage() {
   const { user, loading: authLoading } = useAuth();
   const [forms, setForms] = useState<DynamicForm[]>([]);
@@ -56,6 +59,7 @@ export default function FormsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingForm, setEditingForm] = useState<Partial<DynamicForm> | null>(null);
   const [saving, setSaving] = useState(false);
+  const [publicAccessForm, setPublicAccessForm] = useState<DynamicForm | null>(null);
 
   // Submissions Modal
   const [submissionsOpen, setSubmissionsOpen] = useState(false);
@@ -325,6 +329,18 @@ export default function FormsPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {user && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              aria-label={`Publish ${f.title} on website`}
+                              title="Website publishing"
+                              onClick={() => setPublicAccessForm(f)}
+                            >
+                              <Globe2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -499,6 +515,14 @@ export default function FormsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {publicAccessForm && (
+        <FormPublicAccessDialog
+          form={publicAccessForm}
+          open={Boolean(publicAccessForm)}
+          onOpenChange={(open) => { if (!open) setPublicAccessForm(null); }}
+        />
+      )}
 
       {/* SUBMISSIONS VIEWER DIALOG */}
       <Dialog open={submissionsOpen} onOpenChange={(open) => {

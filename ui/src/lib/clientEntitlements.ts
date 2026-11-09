@@ -7,25 +7,31 @@ export type ClientFeature =
   | "forms"
   | "widgets"
   | "knowledge_base"
+  | "models"
+  | "tools"
+  | "recordings"
+  | "prompt_templates"
+  | "reports"
+  | "integrations"
   | "billing";
 
 const FEATURED_PATHS: Array<[string, ClientFeature]> = [
   ["/appointments", "appointments"],
-  ["/api-keys", "voice"],
+  ["/api-keys", "integrations"],
   ["/billing", "billing"],
   ["/billing-sovereign", "billing"],
   ["/campaigns", "campaigns"],
   ["/crm", "crm"],
   ["/files", "knowledge_base"],
   ["/forms", "forms"],
-  ["/model-configurations", "voice"],
+  ["/model-configurations", "models"],
   ["/overview", "voice"],
-  ["/prompt-templates", "voice"],
-  ["/recordings", "voice"],
-  ["/reports", "voice"],
+  ["/prompt-templates", "prompt_templates"],
+  ["/recordings", "recordings"],
+  ["/reports", "reports"],
   ["/telephony-configurations", "telephony"],
-  ["/tools", "voice"],
-  ["/usage", "voice"],
+  ["/tools", "tools"],
+  ["/usage", "reports"],
   ["/widgets", "widgets"],
   ["/workflow", "voice"],
 ];

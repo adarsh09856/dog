@@ -21,7 +21,6 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
   UserCheck,
   UserRound,
   Workflow,
@@ -110,13 +109,13 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Models",
         url: "/model-configurations",
         icon: Brain,
-        feature: "voice",
+        feature: "models",
       },
       {
         title: "Tools",
         url: "/tools",
         icon: Wrench,
-        feature: "voice",
+        feature: "tools",
       },
       {
         title: "Files",
@@ -128,13 +127,13 @@ const NAV_SECTIONS: SidebarNavSection[] = [
         title: "Recordings",
         url: "/recordings",
         icon: AudioLines,
-        feature: "voice",
+        feature: "recordings",
       },
       {
         title: "Prompt Templates",
         url: "/prompt-templates",
         icon: Sparkles,
-        feature: "voice",
+        feature: "prompt_templates",
       },
       {
         title: "Telephony",
@@ -184,22 +183,16 @@ const NAV_SECTIONS: SidebarNavSection[] = [
     label: "Manage & Observability",
     items: [
       {
-        title: "Usage & Runs",
-        url: "/usage",
-        icon: TrendingUp,
-        feature: "voice",
-      },
-      {
         title: "Sovereign Wallet",
         url: "/billing-sovereign",
         icon: CircleDollarSign,
         feature: "billing",
       },
       {
-        title: "Reports",
-        url: "/reports",
+        title: "Usage & Reports",
+        url: "/usage",
         icon: FileText,
-        feature: "voice",
+        feature: "reports",
       },
     ],
   },
@@ -248,7 +241,6 @@ export function AppSidebar() {
     const token = localStorage.getItem("kodewaves_impersonator_token");
     if (token) {
       document.cookie = `kodewaves_auth_token=${token}; path=/; max-age=86400`;
-      document.cookie = `dograh_auth_token=${token}; path=/; max-age=86400`;
       document.cookie = `oss_token=${token}; path=/; max-age=86400`;
     }
     localStorage.removeItem("kodewaves_impersonator_token");

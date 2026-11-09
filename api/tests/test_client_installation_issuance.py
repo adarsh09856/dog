@@ -73,6 +73,33 @@ def test_owner_issuance_accepts_enforced_creation_caps():
     assert request.limits["max_campaigns"] == 20
 
 
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"max_monthly_minutes": 100},
+        {"max_agents": True},
+        {"max_agents": 1.5},
+        {"max_agents": -1},
+        {"max_seats": 0},
+        {"max_workspaces": 0},
+    ],
+)
+def test_owner_renewal_rejects_invalid_limit_updates(limits):
+    with pytest.raises(ValidationError):
+        client_installations.RenewClientInstallation.model_validate({
+            "expires_at": int(time.time()) + 3600,
+            "limits": limits,
+        })
+
+
+def test_owner_renewal_allows_null_to_remove_optional_limits():
+    request = client_installations.RenewClientInstallation.model_validate({
+        "expires_at": int(time.time()) + 3600,
+        "limits": {"max_seats": None, "max_agents": 20},
+    })
+    assert request.limits == {"max_seats": None, "max_agents": 20}
+
+
 def test_owner_issuance_canonicalizes_optional_ip_bindings():
     request = client_installations.IssueClientInstallation.model_validate({
         "installation_id": "install-test",
@@ -367,7 +394,7 @@ async def test_owner_issues_signed_installation_without_storing_bearer_token(
             installation_id="install-test",
             customer_id="customer-test",
             domains=["EXAMPLE.COM."],
-            features=["voice", "telephony"],
+            features=["voice", "telephony", "models", "reports"],
             limits={"max_concurrent_calls": 2},
             expires_at=int(time.time()) + 3600,
         ),
@@ -378,6 +405,8 @@ async def test_owner_issues_signed_installation_without_storing_bearer_token(
     assert issued.installation_id == "install-test"
     assert issued.domains == ("example.com",)
     assert issued.limits["max_concurrent_calls"] == 2
+    assert issued.feature_version == 2
+    assert issued.features == {"voice", "telephony", "models", "reports"}
     assert len(captured) == 1
     assert captured[0].installation_id == "install-test"
     assert captured[0].issued_by_user_id == 5
@@ -418,19 +447,76 @@ async def test_owner_renews_existing_license_without_storing_replacement_token(m
     monkeypatch.setattr(client_installations, "get_client_installation_record", AsyncMock(return_value={
         "installation_id": "install-test", "customer_id": "customer-test",
         "domains": ["example.com"], "ip_ranges": [], "features": ["voice"],
-        "limits": {"max_concurrent_calls": 2}, "expires_at": current_expiry,
+        "feature_version": 1,
+        "entitlement_version": 1,
+        "limits": {"max_concurrent_calls": 2, "max_seats": 4}, "expires_at": current_expiry,
         "token_fingerprint": "a" * 64, "revoked_at": None, "integrity_failed_at": None,
     }))
     monkeypatch.setattr(client_installations, "unverified_license_domains", AsyncMock(return_value=[]))
     replacement = AsyncMock(return_value=True)
     monkeypatch.setattr(client_installations, "renew_client_installation_record", replacement)
     renewed = await client_installations.renew_client_installation(
-        "install-test", client_installations.RenewClientInstallation(expires_at=current_expiry + 86400),
+        "install-test", client_installations.RenewClientInstallation(
+            expires_at=current_expiry + 86400, features=["voice", "crm"],
+            limits={"max_concurrent_calls": 5, "max_seats": None, "max_agents": 20},
+        ),
         SimpleNamespace(id=5),
     )
-    assert load_license(renewed["token"], public).expires_at == current_expiry + 86400
+    parsed = load_license(renewed["token"], public)
+    assert parsed.expires_at == current_expiry + 86400
+    assert parsed.features == {"voice", "crm"}
+    assert parsed.limits == {"max_concurrent_calls": 5, "max_agents": 20}
+    assert renewed["features"] == ["crm", "voice"]
+    assert renewed["feature_version"] == 2
+    assert renewed["limits"] == {"max_concurrent_calls": 5, "max_agents": 20}
+    assert renewed["entitlement_version"] == 2
     assert replacement.await_args.args[0:2] == ("install-test", "a" * 64)
     assert replacement.await_args.args[2] == hashlib.sha256(renewed["token"].encode()).hexdigest()
+    assert replacement.await_args.kwargs == {
+        "features": ["crm", "voice"], "feature_version": 2,
+        "limits": {"max_concurrent_calls": 5, "max_agents": 20},
+    }
+
+
+@pytest.mark.asyncio
+async def test_owner_legacy_renewal_preserves_existing_features_and_feature_version(monkeypatch):
+    private = Ed25519PrivateKey.generate()
+    raw = private.private_bytes(
+        serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption()
+    )
+    public = base64.urlsafe_b64encode(private.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw
+    )).rstrip(b"=").decode("ascii")
+    mock_owner_signer(monkeypatch, client_installations, (raw, public))
+    current_expiry = int(time.time()) + 3600
+    monkeypatch.setattr(client_installations, "get_client_installation_record", AsyncMock(return_value={
+        "installation_id": "install-legacy", "customer_id": "customer-test",
+        "domains": ["example.com"], "ip_ranges": [], "features": ["voice"],
+        "feature_version": 1,
+        "entitlement_version": 1,
+        "limits": {"max_concurrent_calls": 2}, "expires_at": current_expiry,
+        "token_fingerprint": "b" * 64, "revoked_at": None, "integrity_failed_at": None,
+    }))
+    monkeypatch.setattr(client_installations, "unverified_license_domains", AsyncMock(return_value=[]))
+    replacement = AsyncMock(return_value=True)
+    monkeypatch.setattr(client_installations, "renew_client_installation_record", replacement)
+
+    renewed = await client_installations.renew_client_installation(
+        "install-legacy",
+        client_installations.RenewClientInstallation(expires_at=current_expiry + 86400),
+        SimpleNamespace(id=8),
+    )
+
+    parsed = load_license(renewed["token"], public)
+    assert parsed.features == {"voice"}
+    assert parsed.feature_version == 1
+    assert renewed["features"] == ["voice"]
+    assert renewed["feature_version"] == 1
+    assert renewed["entitlement_version"] == 2
+    assert replacement.await_args.kwargs == {
+        "features": ["voice"], "feature_version": 1,
+        "limits": {"max_concurrent_calls": 2},
+    }
 
 
 @pytest.mark.asyncio

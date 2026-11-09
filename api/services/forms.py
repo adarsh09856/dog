@@ -87,3 +87,23 @@ async def submit_answers(
         call_id=call_id,
         expected_fields=fields,
     )
+
+
+async def submit_public_answers(form, token_hash, data):
+    """Validate and store a public submission with an atomic token/state check."""
+    fields = form.fields_schema or []
+    allowed_keys = {
+        key
+        for field in fields
+        if (key := field.get("name") or field.get("id") or field.get("label"))
+    }
+    if set(data) - allowed_keys:
+        raise ValueError("Submission contains an unknown field")
+    answers = validate_answers(fields, data)
+    return await form_db.create_public_submission(
+        form.id,
+        token_hash,
+        answers,
+        expected_fields=fields,
+        expected_origins=form.public_allowed_origins or [],
+    )

@@ -52,7 +52,7 @@ interface ResolvedAuthConfig {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const publicPage = ['/', '/pricing', '/auth/login', '/auth/signup'].includes(pathname);
+  const publicPage = ['/', '/pricing', '/platform', '/deployment', '/auth/login', '/auth/signup'].includes(pathname);
   const [config, setConfig] = useState<ResolvedAuthConfig | null>(null);
 
   useEffect(() => {

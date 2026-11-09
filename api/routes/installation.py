@@ -27,8 +27,10 @@ from api.services.client_binding_requests import send_binding_request
 from api.services.installation_license import (
     InstallationLicenseError,
     _canonical_domain,
+    apply_owner_entitlements,
     get_installation_binding,
     load_license,
+    effective_features,
     validate_installation_license,
 )
 from api.services.owner_installation_status import require_current_owner_status
@@ -189,12 +191,13 @@ async def installation_feature_status(_user: Annotated[UserModel, Depends(get_us
         license_data = load_license()
         validate_installation_license(license_data)
         owner_status = await require_current_owner_status(license_data)
+        license_data = apply_owner_entitlements(license_data, owner_status)
     except InstallationLicenseError as exc:
         return {"edition": "client", "valid": False, "features": [], "limits": {}, "message": str(exc)}
     return {
         "edition": "client",
         "valid": True,
-        "features": sorted(license_data.features),
+        "features": sorted(effective_features(license_data)),
         "limits": license_data.limits,
         "owner_status": "outage_grace" if owner_status.using_outage_grace else "current",
     }
@@ -219,6 +222,27 @@ async def installation_license_status(_user: Annotated[UserModel, Depends(get_us
             "message": str(exc),
         }
     try:
+        owner_status = await require_current_owner_status(license_data)
+        license_data = apply_owner_entitlements(license_data, owner_status)
+    except InstallationLicenseError as exc:
+        return {
+            "edition": "client",
+            "installation_id": license_data.installation_id,
+            "customer_id": license_data.customer_id,
+            "domains": list(license_data.domains),
+            "expires_at": license_data.expires_at,
+            "features": sorted(effective_features(license_data)),
+            "feature_version": license_data.feature_version,
+            "limits": license_data.limits,
+            "ip_ranges": list(license_data.ip_ranges),
+            "valid": False,
+            "binding_request_available": bool(
+                os.getenv("KODEWAVES_INSTALLATION_KEY_FILE", "")
+                and Path(os.getenv("KODEWAVES_INSTALLATION_KEY_FILE", "")).is_file()
+            ),
+            "message": str(exc),
+        }
+    try:
         domain_matches = _canonical_domain(get_installation_binding()) in license_data.domains
     except InstallationLicenseError:
         domain_matches = False
@@ -228,7 +252,8 @@ async def installation_license_status(_user: Annotated[UserModel, Depends(get_us
         "customer_id": license_data.customer_id,
         "domains": list(license_data.domains),
         "expires_at": license_data.expires_at,
-        "features": sorted(license_data.features),
+        "features": sorted(effective_features(license_data)),
+        "feature_version": license_data.feature_version,
         "limits": license_data.limits,
         "ip_ranges": list(license_data.ip_ranges),
         "binding_request_available": bool(
@@ -236,10 +261,6 @@ async def installation_license_status(_user: Annotated[UserModel, Depends(get_us
             and Path(os.getenv("KODEWAVES_INSTALLATION_KEY_FILE", "")).is_file()
         ),
     }
-    try:
-        owner_status = await require_current_owner_status(license_data)
-    except InstallationLicenseError as exc:
-        return {**details, "valid": False, "message": str(exc)}
     if not domain_matches:
         return {**details, "valid": False, "message": "The configured public domain is not in this installation license."}
     return {
