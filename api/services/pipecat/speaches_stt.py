@@ -36,7 +36,6 @@ _CONFIRMED_LANGUAGE_ROUTES = frozenset({
     "whisper_english_rescue",
     "initial_voice_fallback_low_confidence",
 })
-_AUTO_LANGUAGE_SWITCH_CONFIRMATIONS = 2
 
 
 def _resolve_script_language_conflict(
@@ -130,12 +129,10 @@ def _advance_stable_language(
     pending: str | None,
     pending_count: int,
 ) -> tuple[str | None, str | None, int]:
-    """Require repeat evidence before a new detector guess becomes fallback state.
+    """Use one confident supported-language result for the current call state.
 
-    A high-confidence one-off still routes the current transcript, but cannot
-    become the language used to override later low-confidence turns. Two
-    consecutive confident turns confirm an ordinary language change. Explicit
-    rescue routes remain immediate because they use independent evidence.
+    Confidence thresholds reject weak fragments; a second-turn delay made a
+    clear language switch produce a reply in the previous language.
     """
     stable = str(current or "").strip().lower().replace("_", "-").split("-", 1)[0]
     detected = str(candidate or "").strip().lower().replace("_", "-").split("-", 1)[0]
@@ -158,10 +155,7 @@ def _advance_stable_language(
     if confirmed_route:
         return detected, None, 0
 
-    next_count = pending_count + 1 if pending == detected else 1
-    if next_count >= _AUTO_LANGUAGE_SWITCH_CONFIRMATIONS:
-        return detected, None, 0
-    return stable, detected, next_count
+    return detected, None, 0
 
 
 def _trusted_tts_language(
@@ -171,13 +165,10 @@ def _trusted_tts_language(
     route: str,
     supported_codes: set[str] | frozenset[str] | None = None,
 ) -> str | None:
-    """Keep reply language aligned with the stable auto-detection state.
+    """Route this reply with one confident detector result if its voice exists.
 
-    A single confident detector result may be a genuine language switch, but
-    `_advance_stable_language` requires a second consistent turn before it
-    changes the stable call language. Routing the LLM/TTS from the raw first
-    guess would bypass that hysteresis and can make one noisy turn change the
-    response language or voice. Independent rescue routes remain immediate.
+    Weak or unavailable results keep the last stable language. Explicit rescue
+    routes remain immediate because they carry independent evidence.
     """
     code = str(selected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
@@ -200,8 +191,6 @@ def _trusted_tts_language(
         return previous if previous in supported else None
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
     if confidence is not None and confidence >= threshold:
-        if previous in supported and code != previous:
-            return previous
         return code
     return previous if previous in supported else None
 
