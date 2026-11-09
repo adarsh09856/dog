@@ -53,6 +53,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         self._speech_language = speech_language
         self._speech_turn_open = False
         self._turn_speech_language = None
+        self._speech_context_id: str | None = None
+        self._nested_speech_context_snapshots = []
         if self._text_aggregation_mode == TextAggregationMode.SENTENCE:
             # Start on a completed short sentence rather than waiting for the
             # full model answer. Larger fixed thresholds delay first audio;
@@ -165,6 +167,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
 
     async def cleanup(self):
         await self._stop_turn_keepalive()
+        self._nested_speech_context_snapshots.clear()
+        self._speech_context_id = None
         await super().cleanup()
 
     async def stop(self, frame: EndFrame):
@@ -327,11 +331,26 @@ class SpeachesLiveTTSService(SpeachesTTSService):
 
     async def on_turn_context_created(self, context_id: str):
         await self._stop_turn_keepalive()
+        if self._speech_turn_open:
+            # TTSSpeakFrame opens a temporary context even inside an LLM turn.
+            # Preserve the outer reply's routing and first-PCM state until it ends.
+            self._nested_speech_context_snapshots.append(
+                (
+                    self._turn_speech_language,
+                    self._speech_context_id,
+                    self._initial_pcm_context_id,
+                    self._initial_pcm_claimed,
+                )
+            )
         self._initial_pcm_context_id = context_id
         self._initial_pcm_claimed = False
+        self._speech_context_id = context_id
         self._turn_speech_language = self._resolve_speech_language()
         self._speech_turn_open = True
         await super().on_turn_context_created(context_id)
+        self._start_turn_keepalive(context_id)
+
+    def _start_turn_keepalive(self, context_id: str):
         async def keep_turn_open():
             while True:
                 await asyncio.sleep(min(1.0, self._stop_frame_timeout_s / 2))
@@ -361,8 +380,20 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         try:
             await super().on_turn_context_completed()
         finally:
-            self._speech_turn_open = False
             await self._stop_turn_keepalive()
+            if self._nested_speech_context_snapshots:
+                (
+                    self._turn_speech_language,
+                    self._speech_context_id,
+                    self._initial_pcm_context_id,
+                    self._initial_pcm_claimed,
+                ) = self._nested_speech_context_snapshots.pop()
+                self._speech_turn_open = True
+                if self._speech_context_id:
+                    self._start_turn_keepalive(self._speech_context_id)
+            else:
+                self._speech_turn_open = False
+                self._speech_context_id = None
 
     async def _handle_interruption(self, frame: InterruptionFrame, direction: FrameDirection):
         context_id = self._turn_context_id
@@ -378,6 +409,8 @@ class SpeachesLiveTTSService(SpeachesTTSService):
         await self._stop_turn_keepalive()
         self._initial_pcm_context_id = None
         self._speech_turn_open = False
+        self._speech_context_id = None
+        self._nested_speech_context_snapshots.clear()
         await super()._handle_interruption(frame, direction)
 
     async def tts_process_generator(self, context_id: str, generator):
