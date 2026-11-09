@@ -8,6 +8,7 @@ with a client image.
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass, replace
 import hashlib
 import ipaddress
 import json
@@ -37,6 +38,16 @@ class InstallationFeatureError(InstallationLicenseError):
     """The signed license does not grant a requested product feature."""
 
 
+_OWNER_ENTITLEMENT_FEATURES = frozenset({
+    "voice", "telephony", "campaigns", "crm", "appointments", "forms",
+    "widgets", "knowledge_base", "models", "tools", "recordings",
+    "prompt_templates", "reports", "integrations",
+})
+_OWNER_ENTITLEMENT_LIMITS = frozenset({
+    "max_concurrent_calls", "max_seats", "max_workspaces", "max_agents", "max_campaigns",
+})
+
+
 @dataclass(frozen=True)
 class InstallationLicense:
     installation_id: str
@@ -62,6 +73,31 @@ def effective_features(license_data: InstallationLicense) -> frozenset[str]:
     if getattr(license_data, "feature_version", 1) == 1 and "voice" in license_data.features:
         return license_data.features | LEGACY_VOICE_FEATURES
     return license_data.features
+
+
+def apply_owner_entitlements(license_data: InstallationLicense, snapshot: Any) -> InstallationLicense:
+    """Use a verified owner snapshot when present; preserve pre-sync licenses."""
+    version = getattr(snapshot, "entitlement_version", None)
+    if version is None or type(version) is not int:
+        # Legacy status implementations return no version. The signature
+        # validator only returns a concrete integer for verified snapshots.
+        return license_data
+    features = getattr(snapshot, "features", None)
+    feature_version = getattr(snapshot, "feature_version", None)
+    limits = getattr(snapshot, "limits", None)
+    if (
+        type(version) is not int or version < 1
+        or not isinstance(features, frozenset)
+        or type(feature_version) is not int or feature_version not in {1, 2}
+        or not isinstance(limits, dict)
+    ):
+        raise InstallationLicenseError("Owner entitlement snapshot is invalid")
+    return replace(
+        license_data,
+        features=features,
+        feature_version=feature_version,
+        limits=dict(limits),
+    )
 
 
 def _b64url_decode(value: str) -> bytes:
@@ -342,6 +378,40 @@ def verify_installation_status_claims(
             or status["expires_at"] - status["issued_at"] > 300
         ):
             raise InstallationLicenseError("Owner installation status is invalid")
+        entitlement_keys = {
+            "entitlement_version", "features", "feature_version", "limits",
+        }
+        present_entitlement_keys = entitlement_keys.intersection(status)
+        if present_entitlement_keys and present_entitlement_keys != entitlement_keys:
+            raise InstallationLicenseError("Owner entitlement snapshot is incomplete")
+        if present_entitlement_keys:
+            features = status["features"]
+            feature_version = status["feature_version"]
+            limits = status["limits"]
+            if (
+                type(status["entitlement_version"]) is not int
+                or status["entitlement_version"] < 1
+                or not isinstance(features, list)
+                or any(not isinstance(feature, str) for feature in features)
+                or len(features) != len(set(features))
+                or set(features) - _OWNER_ENTITLEMENT_FEATURES
+                or type(feature_version) is not int
+                or feature_version not in {1, 2}
+                or not isinstance(limits, dict)
+                or set(limits) - _OWNER_ENTITLEMENT_LIMITS
+                or any(type(value) is not int or value < 0 for value in limits.values())
+                or ("max_seats" in limits and limits["max_seats"] < 1)
+                or ("max_workspaces" in limits and limits["max_workspaces"] < 1)
+                or (
+                    {"telephony", "campaigns", "widgets"}.intersection(features)
+                    and "voice" not in features
+                )
+                or ("campaigns" in features and "telephony" not in features)
+                or ("voice" in features and limits.get("max_concurrent_calls", 0) < 1)
+            ):
+                raise InstallationLicenseError("Owner entitlement snapshot is invalid")
+            status["features"] = sorted(features)
+            status["limits"] = dict(limits)
         if "update" in status:
             from api.services.client_update_protocol import (
                 ClientUpdateProtocolError,

@@ -11,6 +11,7 @@ from api.enums import OrganizationConfigurationKey, PostHogEvent
 from api.services.call_concurrency.rate_limiter import rate_limiter
 from api.services.installation_license import (
     InstallationLicenseError,
+    apply_owner_entitlements,
     load_license,
     require_feature,
     require_limit,
@@ -21,11 +22,11 @@ from api.services.posthog_client import capture_event
 from api.services.saas_entitlements import enforce_saas_feature, get_org_saas_limit
 
 
-def _licensed_call_limit(source: str) -> int | None:
+def _licensed_call_limit(source: str, license_data=None) -> int | None:
     """Load signed client entitlements for every new call admission."""
     if KODEWAVES_EDITION != "client":
         return None
-    license_data = load_license()
+    license_data = license_data or load_license()
     validate_installation_license(license_data)
     require_feature(license_data, "voice")
     if source.startswith("campaign:"):
@@ -60,9 +61,15 @@ async def authorize_call_entitlement(
                     wait_time=0.0, max_concurrent=0,
                 ) from exc
     try:
-        client_max = _licensed_call_limit(source)
-        if client_max is not None:
-            await require_current_owner_status(load_license())
+        if KODEWAVES_EDITION == "client":
+            license_data = load_license()
+            owner_status = await require_current_owner_status(license_data)
+            license_data = apply_owner_entitlements(license_data, owner_status)
+            client_max = _licensed_call_limit(source, license_data)
+        else:
+            client_max = _licensed_call_limit(source)
+            if client_max is not None:
+                await require_current_owner_status(load_license())
     except InstallationLicenseError as exc:
         logger.warning("Client installation license denied new call: {}", exc)
         raise

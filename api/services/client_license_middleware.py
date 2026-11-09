@@ -12,6 +12,7 @@ from api.constants import KODEWAVES_EDITION
 from api.services.installation_license import (
     InstallationFeatureError,
     InstallationLicenseError,
+    apply_owner_entitlements,
     load_license,
     require_feature,
     validate_installation_license,
@@ -246,7 +247,8 @@ class ClientLicenseMiddleware:
                 license_data,
                 request_hostname=_request_hostname(scope),
             )
-            await require_current_owner_status(license_data)
+            owner_status = await require_current_owner_status(license_data)
+            license_data = apply_owner_entitlements(license_data, owner_status)
             feature = required_feature_for_request(path, scope.get("query_string", b""))
             if feature:
                 require_feature(license_data, feature)

@@ -34,6 +34,9 @@ class ClientInstallationModel(Base):
     # 1 denotes pre-granular licenses (voice historically covered modules).
     # New licenses use v2 and require explicit module grants.
     feature_version = Column(Integer, nullable=False, default=1, server_default="1")
+    # Monotonic version for owner-pushed entitlement snapshots. Incremented
+    # whenever a renewal changes the signed feature/limit set.
+    entitlement_version = Column(Integer, nullable=False, default=1, server_default="1")
     limits = Column(JSON, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     token_fingerprint = Column(String(64), nullable=False)

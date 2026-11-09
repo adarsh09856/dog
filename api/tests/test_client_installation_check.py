@@ -180,7 +180,15 @@ async def test_owner_status_is_signed_and_bound_to_token_and_nonce(monkeypatch):
         assert expected_public_key == installation_public
         assert nonce_fingerprint == hashlib.sha256(nonce.encode("ascii")).hexdigest()
         assert nonce_expires_at > datetime.now(UTC)
-        return {"revoked_at": "2026-01-01T00:00:00Z", "integrity_failed_at": None, "expires_at": now + 3600}
+        return {
+            "revoked_at": "2026-01-01T00:00:00Z",
+            "integrity_failed_at": None,
+            "expires_at": now + 3600,
+            "features": ["voice", "crm"],
+            "feature_version": 2,
+            "limits": {"max_concurrent_calls": 3, "max_agents": 12},
+            "entitlement_version": 7,
+        }
     monkeypatch.setattr(client_installation_check, "record_client_installation_check", status)
     nonce = "abc1234567890abc1234567890abc12345"
     proof_issued_at, proof_signature = _owner_check_proof(
@@ -198,6 +206,13 @@ async def test_owner_status_is_signed_and_bound_to_token_and_nonce(monkeypatch):
         response["signed_status"], public_key=public_key,
         installation_id="client-1", license_token=token, nonce=nonce,
     ) is True
+    signed_claims = verify_installation_status_claims(
+        response["signed_status"], public_key=public_key,
+        installation_id="client-1", license_token=token, nonce=nonce,
+    )
+    assert signed_claims["entitlement_version"] == 7
+    assert signed_claims["features"] == ["crm", "voice"]
+    assert signed_claims["limits"]["max_agents"] == 12
     with pytest.raises(InstallationLicenseError):
         verify_installation_status(
             response["signed_status"], public_key=public_key,
@@ -321,6 +336,7 @@ async def test_owner_records_integrity_alert_and_does_not_clear_it(monkeypatch):
         installation_id="client-1", revoked_at=None, integrity_failed_at=None,
         last_seen_at=None, updated_at=None,
         expires_at=datetime.now(UTC), installation_public_key="A" * 43,
+        features=[], feature_version=1, limits={}, entitlement_version=1,
     )
     async def execute(_statement):
         return SimpleNamespace(scalar_one_or_none=lambda: record, rowcount=1)
@@ -429,6 +445,7 @@ async def test_owner_records_bounded_component_finding(monkeypatch):
         "revoked_at": None, "integrity_failed_at": datetime.now(UTC).isoformat(),
         "integrity_alert_notification": True, "integrity_alert_notification_id": 17,
         "expires_at": now + 3600,
+        "features": [], "feature_version": 1, "limits": {}, "entitlement_version": 1,
     })
     monkeypatch.setattr(client_installation_check, "record_client_installation_check", stored)
     enqueue = AsyncMock()
@@ -494,6 +511,7 @@ async def test_owner_signs_ip_binding_failure_without_revoking_license(monkeypat
     )
     stored = AsyncMock(return_value={
         "revoked_at": None, "integrity_failed_at": None, "expires_at": now + 3600,
+        "features": [], "feature_version": 1, "limits": {}, "entitlement_version": 1,
     })
     monkeypatch.setattr(client_installation_check, "record_client_installation_check", stored)
     nonce = "n" * 43

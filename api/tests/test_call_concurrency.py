@@ -93,6 +93,8 @@ async def test_client_call_admission_denies_invalid_license_before_dial():
             side_effect=InstallationLicenseError("expired"),
         ),
         patch("api.services.call_concurrency.service.rate_limiter") as mock_rate_limiter,
+        patch("api.services.call_concurrency.service.load_license", return_value=object()),
+        patch("api.services.call_concurrency.service.require_current_owner_status", new_callable=AsyncMock),
     ):
         with pytest.raises(CallConcurrencyLimitError):
             await service.acquire_org_slot(199, source="ari_inbound")

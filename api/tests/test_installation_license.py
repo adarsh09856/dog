@@ -15,12 +15,14 @@ from api.services.installation_license import (
     InstallationLicenseError,
     issue_license_token,
     load_license,
+    apply_owner_entitlements,
     effective_features,
     require_feature,
     require_limit,
     validate_installation_license,
     validate_request_binding,
     verify_installation_status,
+    verify_installation_status_claims,
 )
 
 
@@ -283,6 +285,21 @@ def test_granular_voice_license_denies_ungranted_modules():
             require_feature(license_data, feature)
 
 
+def test_voice_only_client_license_keeps_browser_turn_credentials():
+    """TURN is part of browser voice transport, not an optional integration."""
+    from api.services.client_license_middleware import required_feature_for_path
+
+    private_key, public_key = _key_material()
+    token = issue_license_token(
+        _claims(features=["voice"], feature_version=2), private_key,
+    )
+    license_data = load_license(token, public_key, now=150)
+
+    feature = required_feature_for_path("/api/v1/turn/credentials")
+    assert feature == "voice"
+    require_feature(license_data, feature)
+
+
 @pytest.mark.parametrize("installation_ip", ["198.51.100.9", None, "not-an-ip"])
 def test_signed_license_rejects_missing_or_out_of_range_installation_ip(installation_ip):
     private_key, public_key = _key_material()
@@ -350,6 +367,71 @@ def test_client_image_accepts_baked_previous_owner_key_during_rotation(monkeypat
         installation_id="install-123", license_token=old_token,
         nonce="nonce-123", now=151,
     ) is False
+
+
+def test_verified_owner_entitlement_snapshot_overrides_bootstrap_license():
+    from api.services.owner_installation_status import OwnerStatusSnapshot
+
+    private, public = _key_material()
+    token = issue_license_token(_claims(features=["voice"], limits={"max_concurrent_calls": 2}), private)
+    now = 200
+    status = issue_license_token({
+        "kind": "installation_status",
+        "installation_id": "install-123",
+        "license_sha256": hashlib.sha256(token.encode("ascii")).hexdigest(),
+        "nonce": "nonce-123",
+        "revoked": False,
+        "issued_at": now,
+        "expires_at": now + 300,
+        "entitlement_version": 8,
+        "features": ["voice", "crm", "appointments"],
+        "feature_version": 2,
+        "limits": {"max_concurrent_calls": 4, "max_agents": 12},
+    }, private)
+    claims = verify_installation_status_claims(
+        status, public_key=public, installation_id="install-123",
+        license_token=token, nonce="nonce-123", now=now + 1,
+    )
+    snapshot = OwnerStatusSnapshot(
+        last_owner_check=claims["issued_at"], using_outage_grace=False,
+        entitlement_version=claims["entitlement_version"],
+        features=frozenset(claims["features"]),
+        feature_version=claims["feature_version"],
+        limits=claims["limits"],
+    )
+    effective = apply_owner_entitlements(load_license(token, public, now=now + 1), snapshot)
+    assert effective.features == frozenset({"voice", "crm", "appointments"})
+    assert effective.limits == {"max_concurrent_calls": 4, "max_agents": 12}
+    assert effective.feature_version == 2
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    [
+        {"entitlement_version": 0, "features": [], "feature_version": 2, "limits": {}},
+        {"entitlement_version": 1, "features": ["made_up"], "feature_version": 2, "limits": {}},
+        {"entitlement_version": 1, "features": [], "feature_version": 2, "limits": {"unknown": 1}},
+        {"entitlement_version": 1, "features": [], "feature_version": True, "limits": {}},
+    ],
+)
+def test_owner_status_rejects_invalid_dynamic_entitlement_snapshot(snapshot):
+    private, public = _key_material()
+    token = issue_license_token(_claims(), private)
+    status = issue_license_token({
+        "kind": "installation_status",
+        "installation_id": "install-123",
+        "license_sha256": hashlib.sha256(token.encode("ascii")).hexdigest(),
+        "nonce": "nonce-123",
+        "revoked": False,
+        "issued_at": 200,
+        "expires_at": 500,
+        **snapshot,
+    }, private)
+    with pytest.raises(InstallationLicenseError, match="entitlement snapshot"):
+        verify_installation_status_claims(
+            status, public_key=public, installation_id="install-123",
+            license_token=token, nonce="nonce-123", now=201,
+        )
 
 
 @pytest.mark.parametrize("suffix", ["==", "!", " "])

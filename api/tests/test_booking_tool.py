@@ -1,4 +1,5 @@
 from types import SimpleNamespace as NS
+from datetime import datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -311,6 +312,14 @@ async def test_full_dialogue_replay_books_without_reasking_confirmed_phone(monke
     from api.services.workflow import contact_context
     from api.services.workflow.pipecat_engine_custom_tools import CustomToolManager
 
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 11, 8, 12, 0, tzinfo=tz)
+
+    monkeypatch.setattr(contact_context, "datetime", FrozenDateTime)
+    monkeypatch.setattr(booking, "datetime", FrozenDateTime)
+
     staged_arguments = contact_context.confirmed_staged_booking_arguments(
         _FULL_HINDI_BOOKING_DIALOGUE, dict(_STAGED_STATE), _STAGED_CONTACT,
     )
@@ -386,3 +395,19 @@ def test_full_dialogue_replay_phone_confirmation_is_not_booking_consent():
     assert contact_context.confirmed_staged_booking_arguments(
         dialogue, state_before_slot, _STAGED_CONTACT,
     ) is None
+
+
+def test_late_generic_booking_question_does_not_confirm_unread_slot():
+    """A generic offer cannot bypass the recent booking guard without a slot readback."""
+    dialogue = [
+        {"role": "user", "content": "I want an appointment"},
+        {"role": "assistant", "content": "What is your name?"},
+        {"role": "user", "content": "Adarsh"},
+        {"role": "assistant", "content": "What is your phone number?"},
+        {"role": "user", "content": "9538300941"},
+        {"role": "assistant", "content": "What time works for you?"},
+        {"role": "user", "content": "Tomorrow at 10 AM"},
+        {"role": "assistant", "content": "I still need to check availability. Should I book it?"},
+        {"role": "user", "content": "Yes"},
+    ]
+    assert not booking.caller_confirmed_booking(dialogue)

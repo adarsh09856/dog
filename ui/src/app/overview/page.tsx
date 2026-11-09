@@ -198,8 +198,8 @@ export default function OverviewPage() {
         }] : []),
         {
           title: "Reports & Analytics",
-          href: "/reports",
-          feature: "voice",
+          href: "/usage",
+          feature: "reports",
           icon: BarChart3,
           desc: "Inspect call disposition breakdowns, duration distributions, and export CSV reports.",
         },
@@ -328,7 +328,7 @@ export default function OverviewPage() {
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>{stats ? `${stats.calls.active_calls} active calls` : ""}</span>
-              <Link href="/reports" className="text-primary hover:underline font-medium flex items-center gap-1">
+              <Link href="/usage" className="text-primary hover:underline font-medium flex items-center gap-1">
                 Analytics <ArrowRight className="h-3 w-3" />
               </Link>
             </div>

@@ -428,6 +428,7 @@ async def renew_client_installation(
         "features": sorted(license_data.features),
         "feature_version": license_data.feature_version,
         "limits": dict(license_data.limits),
+        "entitlement_version": existing.get("entitlement_version", 1) + 1,
     }
 
 

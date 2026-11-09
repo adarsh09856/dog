@@ -21,7 +21,6 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
   UserCheck,
   UserRound,
   Workflow,
@@ -184,20 +183,14 @@ const NAV_SECTIONS: SidebarNavSection[] = [
     label: "Manage & Observability",
     items: [
       {
-        title: "Usage & Runs",
-        url: "/usage",
-        icon: TrendingUp,
-        feature: "reports",
-      },
-      {
         title: "Sovereign Wallet",
         url: "/billing-sovereign",
         icon: CircleDollarSign,
         feature: "billing",
       },
       {
-        title: "Reports",
-        url: "/reports",
+        title: "Usage & Reports",
+        url: "/usage",
         icon: FileText,
         feature: "reports",
       },

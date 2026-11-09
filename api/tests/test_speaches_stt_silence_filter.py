@@ -8,6 +8,7 @@ from api.services.pipecat.speaches_stt import BoundedSpeachesSTTService
 from api.services.pipecat.speaches_stt import (
     _advance_stable_language,
     _auto_stt_language_allowlist,
+    _current_reply_tts_language,
     _normalize_quiet_pcm16_wav,
     _resolve_auto_language,
     _resolve_script_language_conflict,
@@ -63,19 +64,19 @@ def test_detector_language_is_restricted_to_enabled_tts_capabilities():
     assert (detected, route) == ("hi", "disabled_language_held_previous")
     assert _trusted_tts_language(detected, 0.94, "hi", route, {"en", "hi"}) == "hi"
 
-    # A Gujarati decoder/reply route is allowed when the active voice really
-    # advertises it; the allowlist is per selected model, not globally fixed.
+    # A verified selected voice can enable a decoder outside the conservative
+    # fallback set.
     all_indic_tts = frozenset({"en", "gu", "hi"})
     assert _resolve_auto_language(
         "gu", 0.94, "hi", supported_codes=all_indic_tts
     ) == ("gu", "detector")
-    assert _trusted_tts_language(
-        "gu", 0.94, "gu", "detector", supported_codes=all_indic_tts,
+    assert _current_reply_tts_language(
+        "gu", 0.94, "hi", "detector", supported_codes=all_indic_tts,
     ) == "gu"
 
 
-def test_auto_stt_allowlist_tracks_the_active_tts_capabilities():
-    assert _auto_stt_language_allowlist({"hi-IN", "en", "ur"}) == frozenset({"hi", "en"})
+def test_auto_stt_allowlist_tracks_selected_voice_capabilities():
+    assert _auto_stt_language_allowlist({"hi-IN", "en", "ur", "gu", "ks"}) == frozenset({"hi", "en", "ur", "gu", "ks"})
     assert _auto_stt_language_allowlist(frozenset()) == frozenset()
     assert _auto_stt_language_allowlist(None) == frozenset({
         "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
@@ -83,9 +84,14 @@ def test_auto_stt_allowlist_tracks_the_active_tts_capabilities():
     })
 
 
-def test_urdu_detection_keeps_hindi_reply_route_stable():
+def test_selected_multilingual_tts_can_enable_installed_schedule_decoders():
+    advertised = {"as", "bn", "en", "gu", "hi", "ks", "kok", "mni", "or", "pa", "sat", "sd", "ur"}
+    assert _auto_stt_language_allowlist(advertised) == frozenset(advertised)
+
+
+def test_urdu_detection_uses_only_previous_enabled_language():
     detected, route = _resolve_auto_language("ur", 0.91, "hi")
-    assert (detected, route) == ("hi", "urdu_routed_to_hindi")
+    assert (detected, route) == ("hi", "disabled_language_held_previous")
     assert _advance_stable_language("hi", detected, 0.91, route, None, 0) == (
         "hi", None, 0
     )

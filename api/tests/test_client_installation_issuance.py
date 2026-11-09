@@ -448,6 +448,7 @@ async def test_owner_renews_existing_license_without_storing_replacement_token(m
         "installation_id": "install-test", "customer_id": "customer-test",
         "domains": ["example.com"], "ip_ranges": [], "features": ["voice"],
         "feature_version": 1,
+        "entitlement_version": 1,
         "limits": {"max_concurrent_calls": 2, "max_seats": 4}, "expires_at": current_expiry,
         "token_fingerprint": "a" * 64, "revoked_at": None, "integrity_failed_at": None,
     }))
@@ -468,6 +469,7 @@ async def test_owner_renews_existing_license_without_storing_replacement_token(m
     assert renewed["features"] == ["crm", "voice"]
     assert renewed["feature_version"] == 2
     assert renewed["limits"] == {"max_concurrent_calls": 5, "max_agents": 20}
+    assert renewed["entitlement_version"] == 2
     assert replacement.await_args.args[0:2] == ("install-test", "a" * 64)
     assert replacement.await_args.args[2] == hashlib.sha256(renewed["token"].encode()).hexdigest()
     assert replacement.await_args.kwargs == {
@@ -491,6 +493,7 @@ async def test_owner_legacy_renewal_preserves_existing_features_and_feature_vers
         "installation_id": "install-legacy", "customer_id": "customer-test",
         "domains": ["example.com"], "ip_ranges": [], "features": ["voice"],
         "feature_version": 1,
+        "entitlement_version": 1,
         "limits": {"max_concurrent_calls": 2}, "expires_at": current_expiry,
         "token_fingerprint": "b" * 64, "revoked_at": None, "integrity_failed_at": None,
     }))
@@ -509,6 +512,7 @@ async def test_owner_legacy_renewal_preserves_existing_features_and_feature_vers
     assert parsed.feature_version == 1
     assert renewed["features"] == ["voice"]
     assert renewed["feature_version"] == 1
+    assert renewed["entitlement_version"] == 2
     assert replacement.await_args.kwargs == {
         "features": ["voice"], "feature_version": 1,
         "limits": {"max_concurrent_calls": 2},

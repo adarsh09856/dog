@@ -97,6 +97,7 @@ describe("workspace overview", () => {
     expect(within(build).getByRole("link", { name: /Voice Agents/ }).getAttribute("href")).toBe("/workflow");
     expect(within(growth).getByRole("link", { name: /CRM Leads/ }).getAttribute("href")).toBe("/crm");
     expect(within(observability).getByRole("link", { name: /Agent Runs/ }).getAttribute("href")).toBe("/usage");
+    expect(within(observability).getByRole("link", { name: /Reports & Analytics/ }).getAttribute("href")).toBe("/usage");
   });
 
   it("uses the configured brand theme for overview capability and wallet accents", async () => {
@@ -137,5 +138,15 @@ describe("workspace overview", () => {
     expect(screen.getByText("Licensed customer-managed installation")).toBeTruthy();
     expect(screen.queryByText("Platform administration")).toBeNull();
     expect(screen.queryByRole("link", { name: /Open administration/ })).toBeNull();
+  });
+
+  it("shows reports for a reports-only client license and routes to call analytics", async () => {
+    mocks.clientEdition = true;
+    mocks.features = ["reports"];
+    mocks.getStats.mockResolvedValue(emptyStats);
+    render(<OverviewPage />);
+
+    const reportsLink = await screen.findByRole("link", { name: /Reports & Analytics/ });
+    expect(reportsLink.getAttribute("href")).toBe("/usage");
   });
 });

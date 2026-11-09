@@ -32,6 +32,8 @@ export function LocalProviderWrapper({ children }: { children: React.ReactNode }
           const isPublic =
             currentPath === '/' ||
             currentPath === '/pricing' ||
+            currentPath === '/platform' ||
+            currentPath === '/deployment' ||
             currentPath.startsWith('/auth/') ||
             currentPath.startsWith('/embed');
 
