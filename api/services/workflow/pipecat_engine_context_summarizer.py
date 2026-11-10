@@ -31,7 +31,11 @@ class ContextSummarizationManager:
         self._engine = engine
         self._summarization_task: Optional[asyncio.Task] = None
         self._config = LLMContextSummaryConfig(
-            target_context_tokens=4000,
+            # The last eight conversation messages remain verbatim. Keep the
+            # older-history summary compact so a background summarization call
+            # on the shared CPU LLM cannot generate a multi-thousand-token
+            # completion while the next agent response is starting.
+            target_context_tokens=512,
             # Keep several complete caller/assistant turns verbatim. On local
             # CPU models an early summary both costs another inference and can
             # erase booking/contact details needed by the next follow-up.
