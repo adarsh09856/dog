@@ -22,7 +22,14 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "deploy/client"))
 from build_and_verify import read_public_key, validate_owner_private_key_path
-from validate_install import IMAGE_KEYS, MODEL_IMAGE_KEYS, PINNED_IMAGE, parse_env, validate_model_images
+from validate_install import (
+    IMAGE_KEYS,
+    MODEL_IMAGE_KEYS,
+    PINNED_IMAGE,
+    normalize_caddy_image_reference,
+    parse_env,
+    validate_model_images,
+)
 from verify_installer import MAX_INSTALLER_ARCHIVE_BYTES
 
 MODEL_IMAGE_COMPONENTS = {
@@ -78,6 +85,10 @@ def package_installer(
     if private_key_file is not None:
         private_key_file = validate_owner_private_key_path(private_key_file, ROOT)
     input_values = parse_env(images_env)
+    if "CLIENT_CADDY_IMAGE" in input_values:
+        input_values["CLIENT_CADDY_IMAGE"] = normalize_caddy_image_reference(
+            input_values["CLIENT_CADDY_IMAGE"]
+        )
     configured_model_name = input_values.pop("CLIENT_OLLAMA_MODEL", None)
     configured_model_digest = input_values.pop("CLIENT_OLLAMA_MODEL_DIGEST", None)
     if configured_model_name is not None and not OLLAMA_MODEL_NAME.fullmatch(configured_model_name):

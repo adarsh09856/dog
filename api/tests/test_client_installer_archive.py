@@ -132,6 +132,25 @@ def test_signed_local_inference_archive_roundtrips_through_updater(package_input
     assert "CLIENT_OLLAMA_MODEL_DIGEST=sha256:" + "9" * 64 in installer_env
 
 
+def test_signed_package_canonicalizes_official_caddy_shorthand(package_inputs):
+    packager, root, images, images_env, manifest, public_key, private_key, output, _ = package_inputs
+    import verify_installer
+
+    caddy_digest = "d" * 64
+    images["CLIENT_CADDY_IMAGE"] = f"caddy@sha256:{caddy_digest}"
+    images_env.write_text("".join(f"{key}={value}\n" for key, value in sorted(images.items())))
+
+    packager.package_installer(images_env, manifest, public_key, private_key, output, root=root)
+
+    with tarfile.open(output, "r:gz") as archive:
+        env_example = archive.extractfile(".env.example")
+        assert env_example is not None
+        assert f"CLIENT_CADDY_IMAGE=docker.io/library/caddy@sha256:{caddy_digest}" in env_example.read().decode()
+    assert verify_installer.verify_installer_archive(
+        output, output.with_name(output.name + ".sig"), public_key
+    ) == hashlib.sha256(output.read_bytes()).hexdigest()
+
+
 def test_cloud_installer_ignores_blank_optional_model_pins(package_inputs):
     packager, _root, _images, images_env, manifest, public_key, private_key, output, signing_key = package_inputs
     images_env.write_text(

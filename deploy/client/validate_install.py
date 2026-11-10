@@ -97,6 +97,13 @@ PINNED_IMAGE = re.compile(
 )
 
 
+def normalize_caddy_image_reference(reference: str) -> str:
+    """Expand Docker Hub's official-image shorthand to its canonical name."""
+    if re.fullmatch(r"caddy(?::[A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}", reference):
+        return f"docker.io/library/{reference}"
+    return reference
+
+
 def validate_release_image_inventory(images: dict[str, str]) -> set[str]:
     """Validate the exact cloud or self-hosted release image profile.
 
@@ -124,7 +131,10 @@ def validate_release_image_inventory(images: dict[str, str]) -> set[str]:
         raise ValueError("cloud release must not contain self-hosted model metadata")
 
     for name in image_keys:
-        if not PINNED_IMAGE.fullmatch(images[name]):
+        reference = images[name]
+        if name == "CLIENT_CADDY_IMAGE":
+            reference = normalize_caddy_image_reference(reference)
+        if not PINNED_IMAGE.fullmatch(reference):
             raise ValueError(f"{name} is not an immutable sha256 image reference")
     return image_keys
 

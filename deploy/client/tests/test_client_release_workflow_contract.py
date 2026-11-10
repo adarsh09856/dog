@@ -112,6 +112,14 @@ def test_release_image_inventory_accepts_cloud_profile_and_rejects_partial_model
         validate_release_image_inventory(partial)
 
 
+def test_release_image_inventory_accepts_official_caddy_shorthand():
+    digest = "c" * 64
+    images = {name: f"registry.example/{name.lower()}@sha256:{digest}" for name in IMAGE_KEYS}
+    images["CLIENT_CADDY_IMAGE"] = f"caddy@sha256:{digest}"
+
+    assert validate_release_image_inventory(images) == IMAGE_KEYS
+
+
 def test_client_compose_and_helm_chart_use_silo_healthcheck_and_digest():
     compose = (ROOT / "deploy/client/docker-compose.client.yaml").read_text(encoding="utf-8")
     hostinger = (ROOT / "deploy/hostinger/docker-compose.yaml").read_text(encoding="utf-8")
