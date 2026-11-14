@@ -49,7 +49,7 @@ export default function WorkspaceAdminLayout({ children }: { children: React.Rea
   const { user, isAuthenticated, loading, logout } = useAuth();
   const { hasFeature, isClientEdition, loading: entitlementsLoading } = useClientEntitlements();
   const isClientAdmin = isClientEdition && user?.is_superuser === true;
-  const canManage = !isClientEdition || isClientAdmin;
+  const canManage = isClientEdition ? isClientAdmin : user?.is_superuser === true;
 
   useEffect(() => {
     if (!loading && !isAuthenticated) router.replace(`/auth/login?redirect=${encodeURIComponent(pathname || "/admin")}`);
@@ -67,7 +67,9 @@ export default function WorkspaceAdminLayout({ children }: { children: React.Rea
     return <main className="mx-auto flex min-h-screen max-w-xl flex-col items-center justify-center px-6 text-center">
       <ShieldAlert className="mb-4 h-10 w-10 text-destructive" />
       <h1 className="text-2xl font-semibold tracking-tight">Administrator access required</h1>
-      <p className="mt-2 text-sm text-muted-foreground">Ask your installation administrator to grant access to workspace controls.</p>
+      <p className="mt-2 text-sm text-muted-foreground">{isClientEdition
+        ? "Ask your installation administrator to grant access to workspace controls."
+        : "Ask a platform owner to grant access to workspace controls."}</p>
       <Button className="mt-6" variant="outline" onClick={() => router.push("/overview")}>Back to workspace</Button>
     </main>;
   }

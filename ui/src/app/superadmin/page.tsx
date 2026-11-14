@@ -3,20 +3,28 @@
 import {
   AlertTriangle,
   ArrowUpRight,
+  Brain,
   Clock,
   Coins,
   Cpu,
+  CreditCard,
   FileCheck2,
   FileSpreadsheet,
   KeyRound,
+  Mail,
+  Mic,
   PackageCheck,
   Palette,
   Radio,
   RefreshCw,
   ScrollText,
   ShieldAlert,
+  ShieldCheck,
+  SlidersHorizontal,
   TrendingUp,
+  UserRound,
   Users,
+  Volume2,
 } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
@@ -35,6 +43,7 @@ const CONTROL_GROUPS = [
     description: "Manage customer access, entitlements, licensed deployments and usage products.",
     items: [
       { href: "/superadmin/users", title: "Accounts & organizations", detail: "Provision users, assign plans and features, manage access and wallet balances", icon: Users },
+      { href: "/superadmin/access", title: "Customer workspace access", detail: "Open a customer workspace from the owner console", icon: UserRound },
       { href: "/superadmin/plans", title: "SaaS plans", detail: "Set included features, usage limits, pricing and plan availability", icon: FileSpreadsheet },
       { href: "/superadmin/client-installations", title: "Client installations & releases", detail: "Issue licenses, approve bindings, review integrity and control updates", icon: PackageCheck },
       { href: "/superadmin/credit-packages", title: "Credit bundles", detail: "Configure purchasable and grantable usage packages", icon: Coins },
@@ -48,6 +57,26 @@ const CONTROL_GROUPS = [
       { href: "/superadmin/settings", title: "Platform identity & public branding", detail: "Set the platform name, logo, theme, support and public contact details", icon: Palette },
       { href: "/superadmin/settings#settings-local-ai", title: "Self-hosted voice stack", detail: "Configure local LLM, STT and TTS services and concurrency", icon: KeyRound },
       { href: "/superadmin/settings#settings-email", title: "Email & payment connections", detail: "Configure delivery, payment providers and run connection checks", icon: FileCheck2 },
+    ],
+  },
+  {
+    title: "Policies & service controls",
+    description: "Configure platform-wide safeguards and the speech services used by customer agents.",
+    items: [
+      { href: "/superadmin/settings#settings-policies", title: "Access & usage policies", detail: "Set tenant key policy, minute enforcement and usage guardrails", icon: ShieldCheck },
+      { href: "/superadmin/settings#settings-local-ai", title: "Self-hosted model services", detail: "Configure local inference endpoints and service capacity", icon: Brain },
+      { href: "/superadmin/settings#settings-ollama", title: "Local model inventory", detail: "Review and manage models available to the self-hosted runtime", icon: SlidersHorizontal },
+      { href: "/superadmin/settings#settings-stt", title: "Speech recognition (STT)", detail: "Configure the speech-to-text service for agent conversations", icon: Mic },
+      { href: "/superadmin/settings#settings-tts", title: "Speech generation (TTS)", detail: "Configure text-to-speech services and available voices", icon: Volume2 },
+    ],
+  },
+  {
+    title: "Platform identity & connections",
+    description: "Manage the customer-facing platform identity and operational integrations.",
+    items: [
+      { href: "/superadmin/settings#settings-branding", title: "Brand & public identity", detail: "Set the platform name, logo, theme and public contact details", icon: Palette },
+      { href: "/superadmin/settings#settings-email", title: "Email delivery", detail: "Configure SMTP and send a delivery check", icon: Mail },
+      { href: "/superadmin/settings#settings-payments", title: "Payment providers", detail: "Configure subscription and usage-credit payment connections", icon: CreditCard },
     ],
   },
   {
