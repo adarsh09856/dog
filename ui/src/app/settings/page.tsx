@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useClientBranding } from "@/context/ClientBrandingContext";
 import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
 import { useAuth } from "@/lib/auth";
 import { getUserEmail } from "@/lib/auth/userDisplay";
@@ -46,6 +47,7 @@ interface InstallationLicenseStatus {
 
 export default function SettingsPage() {
   const { user, loading: authLoading } = useAuth();
+  const branding = useClientBranding();
   const { hasFeature, isClientEdition } = useClientEntitlements();
   const canUseVoice = !isClientEdition || hasFeature("voice");
   const canUseBilling = !isClientEdition || hasFeature("billing");
@@ -76,7 +78,7 @@ export default function SettingsPage() {
             {isClientAdmin
               ? "Client administrator settings for this installation: manage workspace members, licensed branding, and workspace defaults. CRM records stay scoped to the selected workspace."
               : isSuper
-                ? "Personal workspace settings are separate from Kodewaves-wide owner controls. Use the Platform Owner Console for customer installations, provider keys, plans, and platform operations."
+                ? `Personal workspace settings are separate from the platform owner controls for ${branding.company_name}. Use the Platform Owner Console for customer installations, provider keys, plans, and platform operations.`
                 : "Manage your personal profile, active workspace defaults, and integration endpoints."}
           </p></div>
         </div>
@@ -99,7 +101,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm">Kodewaves platform owner</span>
+                    <span className="font-semibold text-sm">{branding.company_name} platform owner</span>
                     <Badge variant="outline" className="border-primary/40 text-primary text-[10px] uppercase font-bold">
                       Global owner
                     </Badge>

@@ -7,6 +7,7 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -37,6 +38,7 @@ export function ClientBrandingProvider({
   const [branding, setBranding] = useState<ClientBranding>(initialBranding);
   const pathname = usePathname();
   const { resolvedTheme } = useTheme();
+  const lastBrandingTagline = useRef(branding.tagline);
 
   useEffect(() => {
     let active = true;
@@ -72,6 +74,7 @@ export function ClientBrandingProvider({
 
   useEffect(() => {
     const root = document.documentElement;
+    const previousTagline = lastBrandingTagline.current;
     const section =
       pathname === "/"
         ? ""
@@ -102,7 +105,14 @@ export function ClientBrandingProvider({
         description.name = "description";
         document.head.appendChild(description);
       }
-      if (description.content !== branding.tagline) {
+      // The root layout uses the platform tagline as its default description.
+      // Keep that default in sync when branding changes, while preserving
+      // page-specific metadata supplied by Next for public routes.
+      if (
+        !description.content ||
+        description.content === previousTagline ||
+        description.content === branding.tagline
+      ) {
         description.content = branding.tagline;
       }
     };
@@ -125,6 +135,7 @@ export function ClientBrandingProvider({
       branding,
       resolvedTheme === "light" ? "light" : "dark",
     );
+    lastBrandingTagline.current = branding.tagline;
     for (const [key, value] of Object.entries(variables)) {
       root.style.setProperty(key, value);
     }
