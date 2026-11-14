@@ -15,11 +15,12 @@ def test_caller_state_prefix_snapshots_survive_service_reconstruction():
     ]
     result = second.apply(followup, "Caller name is Adarsh.")
 
-    assert result[0] == {
-        "role": "system", "content": "Caller name is Adarsh."
-    }
-    assert result[1:] == followup
-    assert checkpoint["users"] == ["My name is Adarsh.", "I need an appointment."]
+    assert result == [
+        *followup[:2],
+        {"role": "system", "content": "Caller name is Adarsh."},
+        followup[2],
+    ]
+    assert checkpoint["snapshots"] == {"current": "Caller name is Adarsh."}
 
     # Later turns rebuild the service, so the checkpoint must carry prefixes.
     checkpoint = {}
@@ -37,8 +38,8 @@ def test_caller_state_prefix_snapshots_survive_service_reconstruction():
     followup = [*messages, {"role": "assistant", "content": "What is your phone?"},
                 {"role": "user", "content": "Nine five three..."}]
     next_decorated = second.apply(followup, "Caller name: Ravi; phone digits incomplete")
-    assert next_decorated[2] == decorated[2]
-    assert next_decorated[5] == {"role": "system", "content": "Caller name: Ravi; phone digits incomplete"}
+    assert next_decorated[2] == messages[2]
+    assert next_decorated[4] == {"role": "system", "content": "Caller name: Ravi; phone digits incomplete"}
 
 
 def test_caller_state_prefix_discards_snapshots_after_history_edit():
@@ -54,8 +55,7 @@ def test_caller_state_prefix_discards_snapshots_after_history_edit():
         {"role": "system", "content": "Caller name is Rohan."},
         *edited,
     ]
-    assert checkpoint["users"] == ["My name is Rohan."]
-    assert checkpoint["snapshots"] == {"0": "Caller name is Rohan."}
+    assert checkpoint["snapshots"] == {"current": "Caller name is Rohan."}
 
     checkpoint = {}
     first = CallerStateContext(checkpoint)
@@ -66,4 +66,4 @@ def test_caller_state_prefix_discards_snapshots_after_history_edit():
         {"role": "system", "content": "fact two"},
         {"role": "user", "content": "replaced"},
     ]
-    assert checkpoint["users"] == ["replaced"]
+    assert checkpoint["snapshots"] == {"current": "fact two"}

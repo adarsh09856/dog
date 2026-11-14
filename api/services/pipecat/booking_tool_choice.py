@@ -24,7 +24,9 @@ _GREETING_SEPARATORS = " \t\r\n!,.:;?।॥،؛"
 from api.services.workflow.direct_caller_reply import END_CALL_TOOL_NAMES as _END_CALL_TOOLS
 _LOCAL_CALLER_RESPONSE_GUARD = (
     "Answer in the caller's language. Use their known name and contact details; ask "
-    "only for the next missing or corrected detail. Never repeat an earlier reply or "
+    "only for the next missing or corrected detail; retain every caller-provided "
+    "service, date, and time; do not ask for a detail they already gave. "
+    "Never repeat an earlier reply or "
     "invent service names. Never claim an action succeeded without tool success. "
     "Keep spoken replies concise: use one short sentence when possible, and include "
     "every detail needed to answer safely without repeating information the caller "

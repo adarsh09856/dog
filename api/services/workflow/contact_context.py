@@ -2021,20 +2021,6 @@ def booking_time_confirmation_question(
                     reply_language is None
                     and not re.search(r"[\u0900-\u097f]", latest)
                 )
-                caller_name = state.get("caller_name")
-                caller_phone = state.get("caller_phone") or state.get("approved_phone")
-                if (
-                    isinstance(caller_name, str)
-                    and _looks_like_name(caller_name)
-                    and isinstance(caller_phone, str)
-                    and 10 <= len(re.sub(r"\D", "", caller_phone)) <= 15
-                ):
-                    return _booking_details_confirmation_reply(
-                        caller_name,
-                        caller_phone,
-                        candidate_time,
-                        english=use_english,
-                    )
                 if use_english:
                     return (
                         f"I have {candidate_time.day} {candidate_time.strftime('%B')} "
@@ -2442,20 +2428,6 @@ def booking_time_confirmation_question(
         reply_language is None and english is not None
         and not re.search(r"[\u0900-\u097f]", latest)
     )
-    caller_name = state.get("caller_name")
-    caller_phone = state.get("caller_phone") or state.get("approved_phone")
-    if (
-        isinstance(caller_name, str)
-        and _looks_like_name(caller_name)
-        and isinstance(caller_phone, str)
-        and 10 <= len(re.sub(r"\D", "", caller_phone)) <= 15
-    ):
-        appointment = datetime.combine(
-            parsed_date, datetime.min.time().replace(hour=hour24, minute=minute)
-        ).replace(tzinfo=timezone(timedelta(hours=5, minutes=30)))
-        return _booking_details_confirmation_reply(
-            caller_name, caller_phone, appointment, english=use_english
-        )
     if use_english:
         return (f"I have {parsed_date.day} {parsed_date.strftime('%B')} {parsed_date.year} "
                 f"at {hour24 % 12 or 12}:{minute:02d} {'PM' if hour24 >= 12 else 'AM'} IST. "

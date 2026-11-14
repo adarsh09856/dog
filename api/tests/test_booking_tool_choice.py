@@ -58,7 +58,10 @@ def test_detected_whisper_language_is_request_only_and_not_reused_for_idle_text(
 
 def test_local_qwen_keeps_response_guard_in_reusable_prefix_without_mutating_history():
     from copy import deepcopy
-    from api.services.pipecat.booking_tool_choice import _LOCAL_CALLER_RESPONSE_GUARD
+    from api.services.pipecat.booking_tool_choice import (
+        _LOCAL_BOOKING_RESPONSE_GUARD,
+        _LOCAL_CALLER_RESPONSE_GUARD,
+    )
 
     service = BookingOpenAILLMService(
         api_key="test", settings=OpenAILLMSettings(model="qwen3.5:2b")
@@ -89,7 +92,7 @@ def test_local_qwen_keeps_response_guard_in_reusable_prefix_without_mutating_his
     assert "invent service names" in guard
     assert "Never claim an action succeeded without tool success" in guard
     assert "retain every caller-provided service, date, and time" in guard
-    assert "never guess a date, year, or time" in guard
+    assert "never guess a date, year, or time" in _LOCAL_BOOKING_RESPONSE_GUARD
 
     followup = deepcopy(request)
     followup["messages"].extend([
