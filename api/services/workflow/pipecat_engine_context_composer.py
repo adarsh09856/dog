@@ -130,6 +130,7 @@ def compose_system_prompt_for_node(
     has_recordings: bool,
     speech_instructions: str = "",
     has_website_knowledge: bool = False,
+    has_agent_knowledge: bool = False,
 ) -> ComposedNodePrompt:
     """Compose the full system prompt text for a workflow node.
 
@@ -155,7 +156,9 @@ def compose_system_prompt_for_node(
     has_action_tools = bool(getattr(node, "tool_uuids", None))
     has_transitions = bool(getattr(node, "out_edges", None))
     has_knowledge_sources = bool(
-        getattr(node, "document_uuids", None) or has_website_knowledge
+        getattr(node, "document_uuids", None)
+        or has_website_knowledge
+        or has_agent_knowledge
     )
     parts = [
         p for p in (
@@ -164,7 +167,11 @@ def compose_system_prompt_for_node(
             ACTION_GROUNDING_INSTRUCTIONS,
             (
                 KNOWLEDGE_BASE_INSTRUCTIONS
-                if getattr(node, "document_uuids", None) or has_website_knowledge
+                if (
+                    getattr(node, "document_uuids", None)
+                    or has_website_knowledge
+                    or has_agent_knowledge
+                )
                 else None
             ),
             (
