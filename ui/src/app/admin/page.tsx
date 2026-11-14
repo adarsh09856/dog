@@ -16,7 +16,6 @@ import Link from "next/link";
 
 import { useClientBranding } from "@/context/ClientBrandingContext";
 import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
-import { useAuth } from "@/lib/auth";
 import type { ClientFeature } from "@/lib/clientEntitlements";
 
 const GROUPS: Array<{ title: string; summary: string; links: Array<{ title: string; description: string; href: string; icon: typeof Users; feature?: ClientFeature }> }> = [
@@ -45,7 +44,6 @@ const GROUPS: Array<{ title: string; summary: string; links: Array<{ title: stri
 export default function WorkspaceAdminPage() {
   const branding = useClientBranding();
   const { isClientEdition, hasFeature } = useClientEntitlements();
-  const { user } = useAuth();
   const availableGroups = GROUPS.map((group) => ({
     ...group,
     links: group.links.filter((link) => !link.feature || !isClientEdition || hasFeature(link.feature)),
@@ -56,18 +54,13 @@ export default function WorkspaceAdminPage() {
       <div className="max-w-2xl">
         <p className="mb-2 text-xs font-medium uppercase tracking-[.14em] text-muted-foreground">{branding.company_name}</p>
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Workspace admin</h1>
-        <p className="mt-3 max-w-[68ch] text-sm leading-6 text-muted-foreground">Manage your business workflows, customer records, team access and installation settings from one workspace.</p>
+        <p className="mt-3 max-w-[68ch] text-sm leading-6 text-muted-foreground">Manage business workflows, customer records, team access and workspace preferences from one place.</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {(!isClientEdition || hasFeature("crm")) && <Link href="/crm" className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Open CRM<ArrowRight className="h-4 w-4" /></Link>}
         <Link href="/settings" className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Settings className="h-4 w-4" />Workspace settings</Link>
       </div>
     </header>
-
-    {isClientEdition && user?.is_superuser === true && <section id="client-installation-controls" className="flex flex-col gap-3 rounded-lg border border-primary/25 bg-primary/[.035] p-5 sm:flex-row sm:items-center sm:justify-between">
-      <div><h2 className="text-base font-semibold">Client installation controls</h2><p className="mt-1 max-w-[70ch] text-sm leading-5 text-muted-foreground">Manage your own installation branding, workspaces, users and license status. These controls apply only to this client installation.</p></div>
-      <Link href="/admin/settings#client-installation-controls" className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-primary hover:underline underline-offset-4">Manage installation<ArrowRight className="h-4 w-4" /></Link>
-    </section>}
 
     <div className="space-y-10">
       {availableGroups.map((group) => <section key={group.title} aria-labelledby={`admin-group-${group.title.replaceAll(" ", "-")}`}>

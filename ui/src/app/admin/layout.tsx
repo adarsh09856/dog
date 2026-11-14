@@ -93,9 +93,6 @@ export default function WorkspaceAdminLayout({ children }: { children: React.Rea
               <Icon className="h-4 w-4 shrink-0" />{item.title}
             </Link>;
           })}
-          {isClientAdmin && <Link href="/admin/settings#client-installation-controls" className="flex min-h-10 items-center gap-2 rounded-md px-3 text-xs font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <ShieldAlert className="h-4 w-4 shrink-0" />Client installation
-          </Link>}
           {!isClientEdition && user?.is_superuser === true && <Link href="/superadmin" className="flex min-h-10 items-center gap-2 rounded-md px-3 text-xs font-medium text-primary transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <ShieldAlert className="h-4 w-4 shrink-0" />Superadmin
           </Link>}

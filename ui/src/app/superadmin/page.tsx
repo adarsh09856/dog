@@ -6,22 +6,61 @@ import {
   Clock,
   Coins,
   Cpu,
+  FileCheck2,
+  FileSpreadsheet,
+  KeyRound,
+  PackageCheck,
+  Palette,
   Radio,
   RefreshCw,
+  ScrollText,
+  ShieldAlert,
   TrendingUp,
   Users,
 } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 
+import panel from "@/components/layout/PanelWorkspace.module.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { adminApi, MonitoringStats } from "@/lib/kodewavesApi";
 
-import panel from "@/components/layout/PanelWorkspace.module.css";
-
 import admin from "./AdminWorkspace.module.css";
+
+const CONTROL_GROUPS = [
+  {
+    title: "Accounts & commercial",
+    description: "Manage customer access, entitlements, licensed deployments and usage products.",
+    items: [
+      { href: "/superadmin/users", title: "Accounts & organizations", detail: "Provision users, assign plans and features, manage access and wallet balances", icon: Users },
+      { href: "/superadmin/plans", title: "SaaS plans", detail: "Set included features, usage limits, pricing and plan availability", icon: FileSpreadsheet },
+      { href: "/superadmin/client-installations", title: "Client installations & releases", detail: "Issue licenses, approve bindings, review integrity and control updates", icon: PackageCheck },
+      { href: "/superadmin/credit-packages", title: "Credit bundles", detail: "Configure purchasable and grantable usage packages", icon: Coins },
+    ],
+  },
+  {
+    title: "AI & platform configuration",
+    description: "Control the shared model catalog, provider access and Kodewaves platform identity.",
+    items: [
+      { href: "/superadmin/models", title: "Models & provider credentials", detail: "Configure provider keys, model availability and catalog pricing", icon: Cpu },
+      { href: "/superadmin/settings#settings-branding", title: "Brand & public identity", detail: "Set the platform name, logo, theme, support and public contact details", icon: Palette },
+      { href: "/superadmin/settings#settings-local-ai", title: "Self-hosted voice stack", detail: "Configure local LLM, STT and TTS services and concurrency", icon: KeyRound },
+      { href: "/superadmin/settings#settings-email", title: "Email & payment connections", detail: "Configure delivery, payment providers and run connection checks", icon: FileCheck2 },
+    ],
+  },
+  {
+    title: "Operations & trust",
+    description: "Monitor live activity, investigate outcomes and keep a reviewable admin record.",
+    items: [
+      { href: "/superadmin/monitoring", title: "Live operations", detail: "Inspect active calls, process health and terminate a call when required", icon: Radio },
+      { href: "/superadmin/runs", title: "Global call history", detail: "Review workflow runs, outcomes and conversation records", icon: Clock },
+      { href: "/superadmin/moderation", title: "Content moderation", detail: "Review policy violations and manage blocked terms", icon: ShieldAlert },
+      { href: "/superadmin/audit-logs", title: "Audit trail", detail: "Inspect platform owner actions and administrative changes", icon: ScrollText },
+    ],
+  },
+];
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<MonitoringStats | null>(null);
@@ -186,71 +225,34 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Quick Launchpad */}
-      <div className={panel.adminLaunchpad}>
-        <Card className="border-border/60 hover:border-primary/50 transition-colors">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Cpu className="h-5 w-5 text-primary" />
-              Master Credentials & Models
-            </CardTitle>
-            <CardDescription>
-              Configure sovereign OpenAI, Gemini, Sarvam, Anthropic, and Exotel master keys.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/superadmin/models">
-              <Button variant="secondary" className="w-full gap-2">
-                Manage Keys & Margins <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60 hover:border-primary/50 transition-colors">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-5 w-5 text-emerald-500" />
-              Users & Minute Grants
-            </CardTitle>
-            <CardDescription>
-              View all registered organizations, wallet minute balances, and grant promotional credits.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/superadmin/users">
-              <Button variant="secondary" className="w-full gap-2">
-                Manage Users & Wallets <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60 hover:border-primary/50 transition-colors">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Radio className="h-5 w-5 text-destructive" />
-              Live Telemetry & Run Records
-            </CardTitle>
-            <CardDescription>
-              Monitor active voice sessions and review run records. The record action does not disconnect a call.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/superadmin/monitoring">
-              <Button variant="secondary" className="w-full gap-2">
-                Live Monitoring Feed <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-
-      <section className={panel.governance} aria-labelledby="governance-heading">
-        <div><p className={panel.eyebrow}>GOVERNANCE</p><h2 id="governance-heading">Control access. Keep a clear record.</h2><p>Manage the commercial rules and installation boundaries that support your platform.</p></div>
-        <div className={panel.governanceLinks}>
-          {[{href:"/superadmin/client-installations", title:"Client installations", detail:"Licenses, domains and integrity alerts"}, {href:"/superadmin/plans", title:"Plans & entitlements", detail:"Available features and usage limits"}, {href:"/superadmin/audit-logs", title:"Audit trail", detail:"Review administrative actions"}, {href:"/superadmin/settings", title:"Platform identity", detail:"Brand, communications and general settings"}].map(item => <Link key={item.href} href={item.href}><div><strong>{item.title}</strong><small>{item.detail}</small></div><ArrowUpRight size={17} /></Link>)}
+      <section className={admin.controlDirectory} aria-labelledby="owner-controls-heading">
+        <header>
+          <h2 id="owner-controls-heading">Platform controls</h2>
+          <p>One owner-only directory for the hosted platform. Customer workspaces keep their own business admin at <code>/admin</code>.</p>
+        </header>
+        <div className={admin.controlGroups}>
+          {CONTROL_GROUPS.map((group) => (
+            <section key={group.title} aria-label={group.title}>
+              <h3>{group.title}</h3>
+              <p>{group.description}</p>
+              <ul>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <li key={item.href}>
+                      <Link href={item.href}>
+                        <Icon aria-hidden="true" />
+                        <span><strong>{item.title}</strong><small>{item.detail}</small></span>
+                        <ArrowUpRight aria-hidden="true" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ))}
         </div>
-      </section>    </div>
+      </section>
+    </div>
   );
 }

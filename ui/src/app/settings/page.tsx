@@ -1,7 +1,6 @@
 "use client";
-import { ArrowRight, Building, Cpu, Phone, ShieldAlert, ShieldCheck, User, Wallet } from "lucide-react";
+import { ArrowRight, Building, Cpu, Phone, ShieldCheck, User, Wallet } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
 import { CallEventsSection } from "@/components/CallEventsSection";
 import { ClientBrandingSettingsCard } from "@/components/ClientBrandingSettingsCard";
@@ -20,33 +19,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useClientBranding } from "@/context/ClientBrandingContext";
 import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
 import { useAuth } from "@/lib/auth";
 import { getUserEmail } from "@/lib/auth/userDisplay";
-import { apiFetch } from "@/lib/kodewavesApi";
-
-interface InstallationLicenseStatus {
-  edition: string;
-  valid?: boolean;
-  license_required?: boolean;
-  installation_id?: string;
-  customer_id?: string;
-  domains?: string[];
-  expires_at?: number;
-  features?: string[];
-  limits?: Record<string, number>;
-  ip_ranges?: string[];
-  owner_status?: "current" | "outage_grace";
-  last_owner_check?: number;
-  binding_request_available?: boolean;
-  message?: string;
-}
 
 export default function SettingsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const branding = useClientBranding();
   const { hasFeature, isClientEdition } = useClientEntitlements();
   const canUseVoice = !isClientEdition || hasFeature("voice");
@@ -56,19 +35,6 @@ export default function SettingsPage() {
   const isSuper = !isClientEdition && user?.is_superuser === true;
   const organizationId = user && "organizationId" in user ? user.organizationId : undefined;
   const selectedWorkspaceId = organizationId && Number.isInteger(Number(organizationId)) ? Number(organizationId) : undefined;
-  const [installation, setInstallation] = useState<InstallationLicenseStatus | null>(null);
-
-  useEffect(() => {
-    if (authLoading || !user || !isClientAdmin) return;
-    apiFetch<InstallationLicenseStatus>("/installation/license")
-      .then(setInstallation)
-      .catch((error: unknown) => setInstallation({
-        edition: "client",
-        valid: false,
-        message: error instanceof Error ? error.message : "Unable to read installation status.",
-      }));
-  }, [authLoading, user, isClientAdmin]);
-
   return (
     <div className="flex justify-center py-12 px-4">
       <div className="w-full max-w-3xl space-y-6">
@@ -76,16 +42,15 @@ export default function SettingsPage() {
           <div><span className={panel.eyebrow}>WORKSPACE / PREFERENCES</span><h1>Workspace & Account Settings</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {isClientAdmin
-              ? "Client administrator settings for this installation: manage workspace members, licensed branding, and workspace defaults. CRM records stay scoped to the selected workspace."
+              ? "Manage your workspace members, organization branding, defaults, and business workflows. Customer records stay scoped to the selected workspace."
               : isSuper
                 ? `Personal workspace settings are separate from the platform owner controls for ${branding.company_name}. Use the Platform Owner Console for customer installations, provider keys, plans, and platform operations.`
                 : "Manage your personal profile, active workspace defaults, and integration endpoints."}
           </p></div>
         </div>
 
-        {isClientAdmin && <section id="client-installation-controls" className="space-y-4">
-          <h2 className="text-lg font-semibold tracking-tight">Client installation administration</h2>
-          <InstallationLicenseCard installation={installation} />
+        {isClientAdmin && <section id="workspace-administration" className="space-y-4">
+          <h2 className="text-lg font-semibold tracking-tight">Workspace administration</h2>
           <ClientBrandingSettingsCard />
           <ClientWorkspacesSettingsCard selectedOrganizationId={selectedWorkspaceId} />
           <ClientUsersSettingsCard />
@@ -244,135 +209,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>}
       </div>
-    </div>
-  );
-}
-
-function InstallationLicenseCard({
-  installation,
-}: {
-  installation: InstallationLicenseStatus | null;
-}) {
-  const valid = installation?.valid === true;
-  const [domains, setDomains] = useState("");
-  const [ipRanges, setIpRanges] = useState("");
-  const [reason, setReason] = useState("");
-  const [sendingRequest, setSendingRequest] = useState(false);
-  const [requestError, setRequestError] = useState("");
-  const [requestSent, setRequestSent] = useState("");
-
-  useEffect(() => {
-    setDomains(installation?.domains?.join("\n") || "");
-    setIpRanges(installation?.ip_ranges?.join(", ") || "");
-  }, [installation?.installation_id, installation?.domains, installation?.ip_ranges]);
-
-  const submitBindingRequest = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSendingRequest(true);
-    setRequestError("");
-    setRequestSent("");
-    try {
-      const result = await apiFetch<{ request_id: number; submitted_at: string; message: string }>(
-        "/installation/binding-requests",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            domains: domains.split(/[\n,]/).map((value) => value.trim()).filter(Boolean),
-            ip_ranges: ipRanges.split(/[\n,]/).map((value) => value.trim()).filter(Boolean),
-            reason,
-          }),
-        },
-      );
-      setRequestSent("Request #" + result.request_id + " was sent to the platform owner for review.");
-      setReason("");
-    } catch (cause) {
-      setRequestError(cause instanceof Error ? cause.message : "Unable to submit the binding request.");
-    } finally {
-      setSendingRequest(false);
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          {valid ? (
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          ) : (
-            <ShieldAlert className="h-4 w-4 text-destructive" />
-          )}
-          Client Installation License
-        </CardTitle>
-        <CardDescription>
-          License identity and permissions assigned by the platform owner. Your workspace administrator cannot change them.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!installation ? (
-          <p className="text-sm text-muted-foreground">Loading installation status…</p>
-        ) : (
-          <div className="space-y-3">
-            {!valid && <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{installation.message || "This installation does not have an active license. Contact your platform administrator."}</p>}
-            {installation.installation_id && <div className="grid gap-3 sm:grid-cols-2">
-            <LicenseValue label="Status" value={!valid ? "Action required" : installation.owner_status === "outage_grace" ? "Owner connection unavailable · outage grace" : "Active · owner verified"} />
-            <LicenseValue label="Last owner check" value={installation.last_owner_check ? new Date(installation.last_owner_check * 1000).toLocaleString() : "—"} />
-            <LicenseValue label="Installation ID" value={installation.installation_id || "—"} />
-            <LicenseValue label="Licensed domains" value={installation.domains?.join(", ") || "—"} />
-            <LicenseValue
-              label="Valid through"
-              value={installation.expires_at
-                ? new Date(installation.expires_at * 1000).toLocaleDateString()
-                : "—"}
-            />
-            <LicenseValue label="Enabled features" value={installation.features?.join(", ") || "None"} />
-            <LicenseValue
-              label="Limits"
-              value={installation.limits && Object.keys(installation.limits).length
-                ? Object.entries(installation.limits).map(([key, value]) => `${key}: ${value}`).join(" · ")
-                : "No limits listed"}
-            />
-            {Boolean(installation.ip_ranges?.length) && (
-              <LicenseValue label="Approved server IP ranges" value={installation.ip_ranges!.join(", ")} />
-            )}
-            </div>}
-            {installation.installation_id && <form onSubmit={submitBindingRequest} className="space-y-3 border-t border-border/60 pt-4">
-              <div>
-                <h3 className="text-sm font-semibold">Request a domain or server IP change</h3>
-                <p className="mt-1 text-xs text-muted-foreground">The platform owner reviews this request. New domains need DNS verification; approval returns a replacement license token once.</p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="binding-request-domains">Requested public domains</Label>
-                  <textarea id="binding-request-domains" required value={domains} onChange={(event) => setDomains(event.target.value)} placeholder="voice.customer.example" className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="binding-request-ips">Requested source IPs/CIDRs (optional)</Label>
-                  <Input id="binding-request-ips" value={ipRanges} onChange={(event) => setIpRanges(event.target.value)} placeholder="198.51.100.10/32" />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="binding-request-reason">Reason for the change</Label>
-                <Input id="binding-request-reason" required maxLength={1000} value={reason} onChange={(event) => setReason(event.target.value)} />
-              </div>
-              {requestError && <p className="text-sm text-destructive" role="alert">{requestError}</p>}
-              {requestSent && <p className="text-sm text-emerald-700 dark:text-emerald-300" role="status">{requestSent}</p>}
-              <Button type="submit" size="sm" disabled={sendingRequest || !installation.binding_request_available}>
-                {sendingRequest ? "Sending request…" : "Request owner review"}
-              </Button>
-              {!installation.binding_request_available && <p className="text-xs text-muted-foreground">This server has no installation signing key available. Ask the platform owner to check its identity configuration and enrollment.</p>}
-            </form>}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function LicenseValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-border/60 bg-muted/20 p-3">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <p className="mt-0.5 break-words text-sm font-semibold">{value}</p>
     </div>
   );
 }
