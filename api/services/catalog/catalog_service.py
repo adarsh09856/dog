@@ -26,6 +26,7 @@ from api.services.credentials.master_credential_service import master_credential
 from api.services.configuration.registry import GEMINI_TTS_VOICES
 from api.services.configuration.stt_capabilities import stt_model_supports_auto_detect
 from api.services.configuration.options.google import GEMINI_38_INDIC_TTS_LANGUAGES
+from api.services.configuration.options.sarvam import SARVAM_BULBUL_V3_LANGUAGE_CODES
 from api.utils.common import normalize_local_ai_endpoint
 
 
@@ -77,7 +78,7 @@ CURATED_PROVIDER_MODELS: Dict[str, List[Dict[str, Any]]] = {
         {"model_identifier": "sarvam-105b", "display_name": "Sarvam 105B Indic LLM", "layer": "llm", "recommended": True, "supports_tools": True},
         {"model_identifier": "saaras:v3", "display_name": "Sarvam Saaras v3 (High Accuracy Indic STT)", "layer": "stt", "recommended": True, "languages": ["hi-IN", "en-IN"]},
         {"model_identifier": "saarika:v2.5", "display_name": "Sarvam Saarika v2.5 STT", "layer": "stt", "recommended": False, "languages": ["hi-IN", "en-IN"]},
-        {"model_identifier": "bulbul:v3", "display_name": "Sarvam Bulbul v3 (Native Indic Voices)", "layer": "tts", "recommended": True, "languages": ["hi-IN", "en-IN"]},
+        {"model_identifier": "bulbul:v3", "display_name": "Sarvam Bulbul v3 (Native Indic Voices)", "layer": "tts", "recommended": True, "languages": list(SARVAM_BULBUL_V3_LANGUAGE_CODES)},
         {"model_identifier": "bulbul:v2", "display_name": "Sarvam Bulbul v2", "layer": "tts", "recommended": False, "languages": ["hi-IN", "en-IN"]},
     ],
     "azure": [

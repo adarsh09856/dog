@@ -19,12 +19,6 @@ from pipecat.frames.frames import ErrorFrame, InterimTranscriptionFrame, Transcr
 
 AUTO_LANGUAGE_MIN_CONFIDENCE = 0.65
 AUTO_ENGLISH_MIN_CONFIDENCE = 0.50
-# Conservative fallback used only when no live selected-voice inventory exists.
-# A verified model inventory can widen this to the installed decoder languages.
-LOCAL_DEFAULT_REPLY_TTS_LANGUAGES = frozenset({
-    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
-    "ne", "pa", "sa", "ta", "te",
-})
 LOCAL_INDIC_STT_LANGUAGES = frozenset({
     "as", "bn", "brx", "doi", "en", "gu", "hi", "kn", "ks", "kok",
     "mai", "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd",
@@ -87,11 +81,7 @@ def _auto_stt_language_allowlist(
     # Live agent creation attaches the selected TTS capability set (including
     # an explicit empty set). Use only the currently configured local voice
     # inventory when this adapter is used without a capability snapshot.
-    source = (
-        LOCAL_DEFAULT_REPLY_TTS_LANGUAGES
-        if supported_codes is None
-        else supported_codes
-    )
+    source = supported_codes if supported_codes is not None else frozenset()
     normalized = {
         str(value).strip().lower().replace("_", "-").split("-", 1)[0]
         for value in source
@@ -174,11 +164,7 @@ def _trusted_tts_language(
     """Keep low-confidence or unconfirmed detector output on stable fallback."""
     code = str(selected or "").strip().lower().replace("_", "-").split("-", 1)[0]
     previous = str(previous_stable or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    supported = (
-        LOCAL_DEFAULT_REPLY_TTS_LANGUAGES
-        if supported_codes is None
-        else frozenset(supported_codes)
-    )
+    supported = frozenset(supported_codes or ())
     if route in _CONFIRMED_LANGUAGE_ROUTES and code in supported:
         return code
     if not code:
@@ -208,11 +194,7 @@ def _current_reply_tts_language(
 ) -> str | None:
     """Use one confident supported detection for this reply, without changing fallback policy."""
     code = str(selected or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    supported = (
-        LOCAL_DEFAULT_REPLY_TTS_LANGUAGES
-        if supported_codes is None
-        else frozenset(supported_codes)
-    )
+    supported = frozenset(supported_codes or ())
     if route in _CONFIRMED_LANGUAGE_ROUTES and code in supported:
         return code
     threshold = AUTO_ENGLISH_MIN_CONFIDENCE if code == "en" else AUTO_LANGUAGE_MIN_CONFIDENCE
@@ -235,11 +217,7 @@ def _phone_rescue_reply_language(
     path, not the language the caller chose for the conversation.
     """
     stable = str(stable_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
-    supported = (
-        LOCAL_DEFAULT_REPLY_TTS_LANGUAGES
-        if supported_codes is None
-        else frozenset(supported_codes)
-    )
+    supported = frozenset(supported_codes or ())
     if stable in supported:
         return stable
     configured = str(configured_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
@@ -506,6 +484,23 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                         )
                     ):
                         routing_language = self.latest_decoder_language
+                    # IndicConformer sometimes labels Devanagari Hindi as
+                    # Punjabi. Correct this specific script contradiction
+                    # before filtering against the selected TTS inventory;
+                    # otherwise an unsupported raw "pa" label is discarded
+                    # before the transcript can identify the Hindi route.
+                    if (
+                        isinstance(routing_language, str)
+                        and language_route == "detector"
+                        and (getattr(result, "text", None) or "").strip()
+                    ):
+                        routing_language, script_route = _resolve_script_language_conflict(
+                            routing_language,
+                            str(getattr(result, "text", "")),
+                            getattr(self, "_stable_detected_language", None),
+                        )
+                        if script_route != "script_consistent":
+                            language_route = script_route
                     self.latest_detected_language, resolved_route = _resolve_auto_language(
                         routing_language if isinstance(routing_language, str) else None,
                         language_confidence,
@@ -552,12 +547,21 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
                     self.latest_detected_language = self.latest_decoder_language
             else:
                 self.latest_decoder_language = None
-                self.latest_detected_language, language_route = _resolve_auto_language(
-                    detected_language if isinstance(detected_language, str) else None,
+                raw_language = (
+                    str(detected_language).strip().lower().replace("_", "-").split("-", 1)[0]
+                    if isinstance(detected_language, str) and detected_language.strip()
+                    else None
+                )
+                _, language_route = _resolve_auto_language(
+                    raw_language,
                     language_confidence,
                     getattr(self, "_stable_detected_language", None),
                     getattr(self, "_caller_language_supported_codes", None),
                 )
+                # STT metadata remains faithful to what the recognizer heard.
+                # TTS routing is filtered separately below, so an unavailable
+                # voice never becomes an automatic language switch.
+                self.latest_detected_language = raw_language
             self._latest_language_confidence = language_confidence
             if self.latest_detected_language and hasattr(result, "model_copy"):
                 result = result.model_copy(update={"language": self.latest_detected_language})
@@ -567,23 +571,6 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             self._latest_language_confidence = None
             result = await super()._transcribe(normalized)
         text = (getattr(result, "text", None) or "").strip()
-        if (
-            text
-            and local_indic
-            and auto_language
-            and self.latest_detected_language
-            and not phone_capture
-        ):
-            script_language, script_route = _resolve_script_language_conflict(
-                self.latest_detected_language,
-                text,
-                getattr(self, "_stable_detected_language", None),
-            )
-            if script_language != self.latest_detected_language:
-                self.latest_detected_language = script_language
-                language_route = script_route
-                if hasattr(result, "model_copy"):
-                    result = result.model_copy(update={"language": script_language})
         if text and not any(
             unicodedata.category(char)[0] in {"L", "N"} for char in text
         ):
@@ -624,6 +611,17 @@ class BoundedSpeachesSTTService(SpeachesSTTService):
             self.latest_detected_language = selected or None
             self.latest_tts_language = selected or None
         elif text and settings is not None and settings.model == "indicconformer-ctc-int8":
+            self.latest_tts_language = _current_reply_tts_language(
+                self.latest_detected_language,
+                self._latest_language_confidence,
+                getattr(self, "_stable_detected_language", None),
+                language_route,
+                getattr(self, "_caller_language_supported_codes", None),
+            )
+        elif text and settings is not None and _is_auto_language(settings.language):
+            # Preserve the STT detector label for transcript/diagnostic use,
+            # while only selecting a reply voice covered by the configured
+            # per-turn TTS capability inventory.
             self.latest_tts_language = _current_reply_tts_language(
                 self.latest_detected_language,
                 self._latest_language_confidence,

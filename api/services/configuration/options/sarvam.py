@@ -1,4 +1,11 @@
 SARVAM_TTS_MODELS = ("bulbul:v2", "bulbul:v3")
+# Languages supported by the Bulbul v3 per-turn language adapter. Keep this
+# inventory separate from the wider Sarvam STT catalog and single-language
+# Bulbul v2 voices.
+SARVAM_BULBUL_V3_LANGUAGE_CODES = (
+    "bn-IN", "en-IN", "gu-IN", "hi-IN", "kn-IN", "ml-IN",
+    "mr-IN", "or-IN", "pa-IN", "ta-IN", "te-IN",
+)
 SARVAM_V2_VOICES = (
     "anushka",
     "manisha",

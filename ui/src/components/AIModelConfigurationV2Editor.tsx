@@ -32,6 +32,8 @@ import {
     inferSttEngineType,
     languageForLocalSttSelection,
     recognitionLanguagesForSttModel,
+    replyLanguagesForTtsSelection,
+    supportsPerTurnTtsLanguageRouting,
     sttModelValueForSelection,
 } from "./sttEngineType";
 
@@ -535,6 +537,7 @@ export function AIModelConfigurationV2Editor({
     const allowCustomVoice = kodewavesDefaults.allow_custom_input ?? false;
     const kodewavesSpeedRange = kodewavesDefaults.speed_range ?? { min: 0.5, max: 2.0, step: 0.1 };
     const [catalogManifest, setCatalogManifest] = useState<AvailableCatalogResponse | null>(null);
+    const [selectedTtsVoiceLanguages, setSelectedTtsVoiceLanguages] = useState<string[] | undefined>();
     const [catalogError, setCatalogError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -614,17 +617,30 @@ export function AIModelConfigurationV2Editor({
             : catalogManifest?.cloud_tts_models
     )?.find((model) => model.value === kodewaves.tts_model);
     const selectedTtsLanguages = selectedTtsModelCatalog?.languages;
+    const selectedTtsProvider = selectedTtsModelCatalog?.provider;
+    const ttsPerTurnLanguageRouting = supportsPerTurnTtsLanguageRouting(
+        selectedTtsProvider,
+        kodewaves.tts_model,
+    );
+    const selectedTtsReplyLanguages = replyLanguagesForTtsSelection(
+        selectedTtsProvider,
+        kodewaves.tts_model,
+        selectedTtsLanguages,
+        selectedTtsVoiceLanguages,
+    );
     const supportsRecognitionAutoDetect = mode === "realtime"
         || selectedSttModel?.supports_auto_detect === true;
+    const supportsAutomaticLanguageRouting = supportsRecognitionAutoDetect && ttsPerTurnLanguageRouting;
     const recognitionLanguages = useMemo(() => {
         return recognitionLanguagesForSttModel(
             kodewavesDefaults.languages,
             selectedSttModel?.languages || [],
             kodewaves.stt_engine_type === "local_cpu",
             supportsRecognitionAutoDetect,
-            selectedTtsLanguages,
+            selectedTtsReplyLanguages,
+            ttsPerTurnLanguageRouting,
         );
-    }, [kodewavesDefaults.languages, kodewaves.stt_engine_type, selectedSttModel, selectedTtsLanguages, supportsRecognitionAutoDetect]);
+    }, [kodewavesDefaults.languages, kodewaves.stt_engine_type, selectedSttModel, selectedTtsReplyLanguages, supportsRecognitionAutoDetect, ttsPerTurnLanguageRouting]);
     const autoDetectLanguageOptions = recognitionLanguages.filter(
         (language) => language !== MULTILINGUAL_LANGUAGE_CODE,
     );
@@ -659,18 +675,18 @@ export function AIModelConfigurationV2Editor({
         if (kodewaves.stt_engine_type === "local_cpu" && selectedSttModel) {
             const nextLanguage = languageForLocalSttSelection(
                 kodewaves.language,
-                supportsRecognitionAutoDetect,
+                supportsAutomaticLanguageRouting,
                 selectedSttModel.languages || [],
                 kodewavesDefaults.languages,
                 kodewavesDefaults.defaults.language,
-                selectedTtsLanguages,
+                selectedTtsReplyLanguages,
             );
             if (nextLanguage !== kodewaves.language) {
                 setKodewaves((current) => ({ ...current, language: nextLanguage }));
             }
             return;
         }
-        if (kodewaves.language !== MULTILINGUAL_LANGUAGE_CODE || supportsRecognitionAutoDetect) return;
+        if (kodewaves.language !== MULTILINGUAL_LANGUAGE_CODE || supportsAutomaticLanguageRouting) return;
         const installed = selectedSttModel?.languages || [];
         const installedCodes = new Set(installed.map((language) => language.toLowerCase()));
         const fallbackLanguage = kodewavesDefaults.languages.find((language) =>
@@ -689,8 +705,8 @@ export function AIModelConfigurationV2Editor({
         kodewavesDefaults.languages,
         mode,
         selectedSttModel,
-        selectedTtsLanguages,
-        supportsRecognitionAutoDetect,
+        selectedTtsReplyLanguages,
+        supportsAutomaticLanguageRouting,
     ]);
 
     useEffect(() => {
@@ -715,11 +731,11 @@ export function AIModelConfigurationV2Editor({
                 stt_model: selectedSttModel.value,
                 language: languageForLocalSttSelection(
                     current.language,
-                    selectedSttModel.supports_auto_detect === true,
+                    selectedSttModel.supports_auto_detect === true && ttsPerTurnLanguageRouting,
                     selectedSttModel.languages || [],
                     kodewavesDefaults.languages,
                     kodewavesDefaults.defaults.language,
-                    selectedTtsLanguages,
+                    selectedTtsReplyLanguages,
                 ),
             };
         });
@@ -732,12 +748,13 @@ export function AIModelConfigurationV2Editor({
         kodewavesDefaults.languages,
         mode,
         selectedSttModel,
-        selectedTtsLanguages,
+        selectedTtsReplyLanguages,
+        ttsPerTurnLanguageRouting,
     ]);
 
     const setRecognitionLanguage = (language: string) => {
-        if (language === MULTILINGUAL_LANGUAGE_CODE && !supportsRecognitionAutoDetect) {
-            setError("Automatic recognition is not supported by the selected STT model. Choose one of its supported languages or select a model that supports auto-detection.");
+        if (mode !== "realtime" && !recognitionLanguages.includes(language)) {
+            setError("That language is not available for the selected STT model and TTS voice route.");
             return;
         }
         setKodewaves({ ...kodewaves, language });
@@ -771,6 +788,29 @@ export function AIModelConfigurationV2Editor({
         const selectedProvider = effectiveTtsModels.find(model => model.value === kodewaves.tts_model)?.provider;
         return selectedProvider && selectedProvider !== "auto" ? selectedProvider : "all";
     }, [kodewaves.tts_engine_type, kodewaves.tts_model, effectiveTtsModels]);
+
+    useEffect(() => {
+        setSelectedTtsVoiceLanguages(undefined);
+        if (!kodewaves.voice || !selectedTtsModelCatalog || effectiveTtsProvider === "all") return;
+        let active = true;
+        void getVoicesApiV1UserConfigurationsVoicesProviderGet({
+            path: { provider: effectiveTtsProvider },
+            query: {
+                model: kodewaves.tts_model === "auto" ? undefined : kodewaves.tts_model,
+                q: kodewaves.voice,
+            },
+        }).then((response) => {
+            if (!active) return;
+            const voice = response.data?.voices?.find((entry) => entry.voice_id === kodewaves.voice);
+            const languages = voice?.languages?.length
+                ? voice.languages
+                : voice?.language ? [voice.language] : [];
+            setSelectedTtsVoiceLanguages(languages);
+        }).catch(() => {
+            if (active) setSelectedTtsVoiceLanguages([]);
+        });
+        return () => { active = false; };
+    }, [effectiveTtsProvider, kodewaves.tts_model, kodewaves.voice, selectedTtsModelCatalog]);
 
     const effectiveScriptTtsModels = useMemo(() => {
         if (kodewaves.script_tts_engine_type === "local_cpu") {
@@ -884,8 +924,8 @@ export function AIModelConfigurationV2Editor({
                 if (kodewaves.language === MULTILINGUAL_LANGUAGE_CODE && !supportsRecognitionAutoDetect) {
                     throw new Error("The selected STT model does not support automatic language detection. Choose a supported language or select an STT model that supports auto-detection.");
                 }
-                if (kodewaves.stt_engine_type === "local_cpu" && !recognitionLanguages.includes(kodewaves.language)) {
-                    throw new Error("Select a recognition language supported by the installed STT model before saving.");
+                if (!recognitionLanguages.includes(kodewaves.language)) {
+                    throw new Error("The selected language is not shared by the selected STT model and TTS voice route.");
                 }
                 if (!kodewaves.voice.trim()) throw new Error("Select a voice for the selected TTS model before saving.");
                 for (const [label, selected, models] of [

@@ -325,6 +325,8 @@ async def apply_kodewaves_sovereign_resolution(
     - Sets typed resolution metadata onto effective.resolution_info.
     """
     metadata = ResolutionMetadata()
+    resolved_local_stt_manifest = None
+    resolved_local_tts_contract = None
 
     if organization_id is None:
         effective.resolution_info = metadata.to_dict()
@@ -529,6 +531,7 @@ async def apply_kodewaves_sovereign_resolution(
                     except (aiohttp.ClientError, TimeoutError):
                         raise HTTPException(status_code=503, detail="Local Indic STT engine is unavailable")
                     manifest = installed_models.get(model_to_use) or {}
+                    resolved_local_stt_manifest = manifest
                     supported_languages = {str(code).casefold().split("-", 1)[0] for code in manifest.get("languages", [])}
                     if selected_language == "multi" and manifest.get("supports_auto_detect") is not True:
                         raise HTTPException(status_code=400, detail="Self-hosted STT auto detection is not available on the installed engine")
@@ -639,6 +642,7 @@ async def apply_kodewaves_sovereign_resolution(
                     from api.services.catalog.local_inventory import (
                         get_local_tts_models,
                         local_tts_api_base,
+                        local_tts_capability_contract,
                         local_model_voice_ids,
                         local_model_voice_ids_for_language,
                         validate_local_tts_speed,
@@ -651,6 +655,7 @@ async def apply_kodewaves_sovereign_resolution(
                     installed_model = installed_models.get(selected_model)
                     if installed_model is None:
                         raise HTTPException(status_code=400, detail="Selected local TTS model is not installed")
+                    resolved_local_tts_contract = local_tts_capability_contract(installed_model)
                     if str(tts_lang).strip().casefold() in {"auto", "multi", "multilingual", "default"} and not voice_to_use:
                         raise HTTPException(
                             status_code=400,
@@ -790,6 +795,24 @@ async def apply_kodewaves_sovereign_resolution(
     # =========================================================================
     # 6. Overall Source and Balance Enforcement
     # =========================================================================
+    configured_stt_language = str(
+        getattr(getattr(effective.stt, "language", None), "value", getattr(effective.stt, "language", "")) or ""
+    ).strip().casefold()
+    if not effective.is_realtime and configured_stt_language in {"auto", "multi", "multilingual", "unknown"}:
+        from api.services.configuration.stt_capabilities import auto_language_route_error
+
+        error = auto_language_route_error(
+            stt_provider=metadata.stt.provider if metadata.stt else "",
+            stt_model=metadata.stt.model if metadata.stt else "",
+            tts_provider=metadata.tts.provider if metadata.tts else "",
+            tts_model=metadata.tts.model if metadata.tts else "",
+            tts_voice=metadata.tts.voice if metadata.tts else "",
+            local_stt_manifest=resolved_local_stt_manifest,
+            local_tts_contract=resolved_local_tts_contract,
+        )
+        if error:
+            raise HTTPException(status_code=400, detail=error)
+
     sources = set()
     for layer in (metadata.llm, metadata.stt, metadata.tts, metadata.realtime):
         if layer:

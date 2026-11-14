@@ -10,15 +10,53 @@ const LOCAL_STT_LANGUAGES = new Set([
     "ta", "te", "ur",
 ]);
 
-// Conservative fallback while no selected-voice capability snapshot exists.
-// Live voice inventory can allow additional installed recognizers.
-const LOCAL_DEFAULT_REPLY_LANGUAGES = new Set([
-    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
-    "ne", "pa", "sa", "ta", "te",
-]);
-
 const baseLanguageCode = (language: string) =>
     language.trim().toLowerCase().replace(/_/g, "-").split("-")[0];
+
+const normalizedLanguageCodes = (languages: string[] | undefined) =>
+    Array.from(new Set((languages ?? []).map(baseLanguageCode).filter(Boolean)));
+
+/** Mirror only TTS adapters that can change language for each caller turn. */
+export function supportsPerTurnTtsLanguageRouting(
+    provider: string | undefined,
+    model: string | undefined,
+): boolean {
+    const providerCode = (provider ?? "").trim().toLowerCase();
+    const modelCode = (model ?? "").trim().toLowerCase();
+    return (providerCode === "sarvam" && modelCode === "bulbul:v3")
+        || (providerCode === "speaches" && ["indic-vits-rasa-13", "indic-mio-tts"].includes(modelCode));
+}
+
+/**
+ * Return the configured voice's truthful reply inventory. Automatic routers
+ * use their installed model inventory; fixed providers use the selected
+ * voice's own language metadata instead of the broader model catalog.
+ */
+export function replyLanguagesForTtsSelection(
+    provider: string | undefined,
+    model: string | undefined,
+    modelLanguages: string[] | undefined,
+    voiceLanguages: string[] | undefined,
+): string[] {
+    const providerCode = (provider ?? "").trim().toLowerCase();
+    const modelCode = (model ?? "").trim().toLowerCase();
+    const modelCodes = normalizedLanguageCodes(modelLanguages);
+    const voiceCodes = normalizedLanguageCodes(voiceLanguages);
+
+    if (!supportsPerTurnTtsLanguageRouting(providerCode, modelCode)) {
+        // Keep the current model's language choices visible while the
+        // selected voice lookup is pending; the resolved voice inventory
+        // replaces this fallback as soon as it arrives.
+        return voiceLanguages === undefined ? modelCodes : voiceCodes;
+    }
+    // Rasa routes among its installed voices and Sarvam Bulbul v3 changes the
+    // language setting while preserving its verified speaker. MIO may expose
+    // per-voice metadata, which the runtime honors when present.
+    if (providerCode === "speaches" && modelCode === "indic-mio-tts" && voiceCodes.length > 0) {
+        return voiceCodes;
+    }
+    return modelCodes;
+}
 
 /**
  * Resolve a saved STT selection against the models the current engine actually
@@ -49,24 +87,23 @@ export function recognitionLanguagesForSttModel(
     isLocalCpu: boolean,
     supportsAutoDetect: boolean,
     replyLanguages?: string[],
+    supportsPerTurnTtsRouting = false,
 ): string[] {
-    if (!isLocalCpu) {
-        return supportsAutoDetect
-            ? defaultLanguages
-            : defaultLanguages.filter((language) => language !== "multi");
-    }
-
+    const defaultBases = new Set(defaultLanguages
+        .filter((language) => language !== "multi")
+        .map(baseLanguageCode));
     const installedBases = Array.from(new Set(
         installedLanguages
             .map(baseLanguageCode)
-            .filter((language) => LOCAL_STT_LANGUAGES.has(language)),
+            .filter((language) => defaultBases.has(language)
+                && (!isLocalCpu || LOCAL_STT_LANGUAGES.has(language))),
     ));
-    const replyBases = replyLanguages !== undefined
-        ? new Set(replyLanguages.map(baseLanguageCode).filter((language) => LOCAL_STT_LANGUAGES.has(language)))
-        : LOCAL_DEFAULT_REPLY_LANGUAGES;
+    const replyBases = new Set((replyLanguages ?? [])
+        .map(baseLanguageCode)
+        .filter((language) => !isLocalCpu || LOCAL_STT_LANGUAGES.has(language)));
     const routedBases = installedBases.filter((language) => replyBases.has(language));
     return [
-        ...(supportsAutoDetect && routedBases.length > 0 ? ["multi"] : []),
+        ...(supportsAutoDetect && supportsPerTurnTtsRouting && routedBases.length > 0 ? ["multi"] : []),
         ...routedBases,
     ];
 }
@@ -108,7 +145,7 @@ export function languageForLocalSttSelection(
         .filter((language) => LOCAL_STT_LANGUAGES.has(language))));
     const replyBases = replyLanguages !== undefined
         ? new Set(replyLanguages.map(baseLanguageCode))
-        : LOCAL_DEFAULT_REPLY_LANGUAGES;
+        : new Set(installed);
     installed = installed.filter((language) => replyBases.has(language));
     if (currentLanguage === "multi" && supportsAutoDetect && installed.length > 0) return "multi";
     const currentCode = baseLanguageCode(currentLanguage);

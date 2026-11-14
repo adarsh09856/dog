@@ -32,12 +32,6 @@ SARVAM_SUPPORTED_LANGUAGE_ENUMS = {
 
 _NO_ACTIVE_CALLER_LANGUAGE_TURN = object()
 
-# This is the reply-language intersection exposed by the currently configured
-# Rasa 13 local voice router, not the wider Indic STT detector inventory.
-LOCAL_RASA_REPLY_LANGUAGE_CODES = frozenset({
-    "as", "bn", "brx", "doi", "en", "hi", "kn", "mai", "ml", "mr",
-    "ne", "pa", "sa", "ta", "te",
-})
 LOCAL_RASA_VOICE_GENDERS = {
     "asm_f": "female", "asm_m": "male",
     "ben_f": "female", "ben_m": "male",
@@ -161,8 +155,7 @@ def caller_language_tts_capabilities(service: Any) -> frozenset[str]:
                 str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
                 for item in languages
                 if isinstance(item, str)
-                and str(item).strip().casefold().replace("_", "-").split("-", 1)[0]
-                in LOCAL_RASA_REPLY_LANGUAGE_CODES
+                and str(item).strip()
             )
 
         # A cold cache can safely promise only the configured regional voice's

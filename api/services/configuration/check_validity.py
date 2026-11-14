@@ -117,7 +117,128 @@ class UserConfigurationValidator:
         if status_list:
             raise ValueError(status_list)
 
+        if not configuration.is_realtime:
+            await self._validate_automatic_language_route(configuration, organization_id)
+
         return {"status": [{"model": "all", "message": "ok"}]}
+
+    async def _validate_automatic_language_route(
+        self,
+        configuration: EffectiveAIModelConfiguration,
+        organization_id: Optional[int],
+    ) -> None:
+        """Reject auto-STT configs with no installed per-turn TTS route.
+
+        This validation runs for organization and workflow configurations alike.
+        Explicit-language configurations retain their existing behavior.
+        """
+        raw_language = getattr(configuration.stt, "language", None)
+        language = str(getattr(raw_language, "value", raw_language) or "").strip().casefold()
+        if language not in {"auto", "multi", "multilingual", "unknown"}:
+            return
+
+        from api.services.configuration.stt_capabilities import auto_language_route_error
+        from api.services.catalog.normalize import normalize_provider_name, tts_runtime_provider
+
+        stt = configuration.stt
+        tts = configuration.tts
+        stt_provider = str(getattr(getattr(stt, "provider", ""), "value", getattr(stt, "provider", "")))
+        stt_model = str(getattr(stt, "model", "") or "")
+        tts_provider = str(getattr(getattr(tts, "provider", ""), "value", getattr(tts, "provider", "")))
+        tts_model = str(getattr(tts, "model", "") or "")
+        tts_voice = str(getattr(tts, "voice", "") or "")
+        local_stt_manifest = None
+        local_tts_contract = None
+        stt_key = getattr(stt, "api_key", None)
+        tts_key = getattr(tts, "api_key", None)
+        local_stt = stt_provider in {"speaches", "whisper", "local_cpu", "indicconformer"} or stt_key in {
+            "sovereign-local-cpu", "local-cpu-token",
+        }
+        local_tts = tts_provider in {"speaches", "piper", "local_cpu"} or tts_key in {
+            "sovereign-local-cpu", "local-cpu-token",
+        }
+
+        if not local_stt and stt_provider in {"kodewaves", "dograh"}:
+            if stt_model in {"", "auto", "default"}:
+                raise ValueError("Choose a concrete STT model before enabling automatic language routing")
+            from api.db.kodewaves_client import kodewaves_db_client
+            models = await kodewaves_db_client.list_models(enabled_only=True)
+            providers = {
+                normalize_provider_name(entry.provider)
+                for entry in models
+                if (entry.layer or entry.category) == "stt"
+                and entry.model_identifier == stt_model
+                and entry.status not in ("FAIL", "UNAVAILABLE")
+            }
+            if len(providers) != 1:
+                raise ValueError("Selected STT model does not resolve to one verified provider")
+            stt_provider = providers.pop()
+
+        if not local_tts and tts_provider in {"kodewaves", "dograh"}:
+            if tts_model in {"", "auto", "default"}:
+                raise ValueError("Choose a concrete TTS model before enabling automatic language routing")
+            from api.db.kodewaves_client import kodewaves_db_client
+            models = await kodewaves_db_client.list_models(enabled_only=True)
+            providers = {
+                tts_runtime_provider(str(entry.provider), tts_model)
+                for entry in models
+                if (entry.layer or entry.category) == "tts"
+                and entry.model_identifier == tts_model
+                and entry.status not in ("FAIL", "UNAVAILABLE")
+            }
+            if len(providers) != 1:
+                raise ValueError("Selected TTS model does not resolve to one verified provider")
+            tts_provider = providers.pop()
+
+        if local_stt or local_tts:
+            import os
+            import aiohttp
+            from api.services.catalog.local_inventory import (
+                get_local_stt_models,
+                get_local_tts_models,
+                local_tts_api_base,
+                local_tts_capability_contract,
+                whisper_api_base,
+            )
+            from api.utils.common import normalize_local_ai_endpoint
+
+            from api.db.kodewaves_client import kodewaves_db_client
+            local_ai = await kodewaves_db_client.get_setting("local_ai") or {}
+            if local_stt:
+                endpoint = local_ai.get("indic_stt_endpoint") or os.environ.get(
+                    "INDIC_STT_ENDPOINT", "http://indic-stt:8000/v1",
+                )
+                try:
+                    stt_models = await get_local_stt_models(
+                        whisper_api_base(normalize_local_ai_endpoint(endpoint))
+                    )
+                except (aiohttp.ClientError, TimeoutError) as exc:
+                    raise ValueError("Local STT model inventory is unavailable") from exc
+                selected_stt = stt_model if stt_model not in {"", "auto", "default"} else "indicconformer-ctc-int8"
+                local_stt_manifest = stt_models.get(selected_stt) or {}
+                stt_model = selected_stt
+                stt_provider = "speaches"
+            if local_tts and tts_model in {"indic-vits-rasa-13", "indic-mio-tts"}:
+                try:
+                    tts_models = await get_local_tts_models(local_tts_api_base(local_ai, tts_model))
+                except (aiohttp.ClientError, TimeoutError) as exc:
+                    raise ValueError("Local TTS model inventory is unavailable") from exc
+                inventory = tts_models.get(tts_model)
+                if inventory is not None:
+                    local_tts_contract = local_tts_capability_contract(inventory)
+                tts_provider = "speaches"
+
+        error = auto_language_route_error(
+            stt_provider=stt_provider,
+            stt_model=stt_model,
+            tts_provider=tts_provider,
+            tts_model=tts_model,
+            tts_voice=tts_voice,
+            local_stt_manifest=local_stt_manifest,
+            local_tts_contract=local_tts_contract,
+        )
+        if error:
+            raise ValueError(error)
 
     def _validate_service(
         self,
