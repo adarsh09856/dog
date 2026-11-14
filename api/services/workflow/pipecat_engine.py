@@ -959,6 +959,7 @@ class PipecatEngine:
             has_recordings=self._has_recordings,
             speech_instructions="\n\n".join(speech_instructions),
             has_website_knowledge=bool(self._website_knowledge_document_uuids),
+            has_agent_knowledge=bool(knowledge_document_uuids),
         )
         system_prompt = prompt.text
         agent.tools = ToolsSchema(standard_tools=functions)
