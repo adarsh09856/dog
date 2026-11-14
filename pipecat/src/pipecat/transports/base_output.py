@@ -55,7 +55,10 @@ from pipecat.utils.frame_queue import FrameQueue
 from pipecat.utils.time import nanoseconds_to_seconds
 
 BOT_VAD_STOP_SECS = 0.35
-TTS_RESPONSE_IDLE_TIMEOUT_SECS = 5.0
+# Local CPU TTS can take longer than the generic idle window to synthesize its
+# next phrase. Keep the missing-stop watchdog bounded, but do not report an
+# active TTS response as finished during a normal multi-second synthesis gap.
+TTS_RESPONSE_IDLE_TIMEOUT_SECS = 30.0
 
 
 class BaseOutputTransport(FrameProcessor):

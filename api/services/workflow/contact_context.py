@@ -1109,16 +1109,34 @@ def _is_booking_slot_utterance(text: str, state: dict) -> bool:
     return normalized in _SPOKEN_DIGITS or normalized in _DATE_SMALL_NUMBERS
 
 
-def _booking_was_requested(messages: list) -> bool:
-    from api.services.workflow.confirmed_booking import new_booking_requested
+def _booking_was_requested(messages: list, state: dict | None = None) -> bool:
+    from api.services.workflow.confirmed_booking import (
+        new_booking_requested,
+        room_booking_active,
+    )
 
-    return any(
+    if any(
         isinstance(message, dict)
         and message.get("role") == "user"
         and isinstance(message.get("content"), str)
-        and new_booking_requested(message["content"])
+        and (
+            new_booking_requested(message["content"])
+            or room_booking_active([message])
+        )
         for message in messages
-    )
+    ):
+        return True
+
+    # The LLM history is a rolling window; a caller can still be answering
+    # booking follow-ups after the original request has been compacted away.
+    # Reuse the call-scoped explicit request anchor for deterministic capture
+    # and deferred-slot replay, rather than interpreting a time word as a
+    # phone digit. The anchor is cleared when a booking is persisted.
+    prior_request = state.get("prior_booking_request") if isinstance(state, dict) else None
+    if not isinstance(prior_request, str) or not prior_request.strip():
+        return False
+    prior_message = {"role": "user", "content": prior_request}
+    return new_booking_requested(prior_request) or room_booking_active([prior_message])
 
 
 def caller_phone_fragment_reply(
@@ -1256,15 +1274,8 @@ def caller_phone_fragment_reply(
                 )
             if deferred_slot_reply:
                 return deferred_slot_reply
-            booking_requested = False
-            from api.services.workflow.confirmed_booking import new_booking_requested
-
-            booking_requested = booking_available and any(
-                isinstance(message, dict)
-                and message.get("role") == "user"
-                and isinstance(message.get("content"), str)
-                and new_booking_requested(message["content"])
-                for message in messages[:latest_index]
+            booking_requested = booking_available and _booking_was_requested(
+                messages[:latest_index], state
             )
             # The reply below already advances the booking to its next detail.
             # Clear this one-shot marker so the next caller turn is parsed as
@@ -1297,7 +1308,7 @@ def caller_phone_fragment_reply(
                 return "Please repeat the full phone number, one digit at a time."
             return "कृपया पूरा फ़ोन नंबर फिर से, एक-एक अंक करके बताइए।"
         booking_requested_before = booking_available and _booking_was_requested(
-            messages[:latest_index + 1]
+            messages[:latest_index + 1], state
         )
         if booking_requested_before and _is_booking_slot_utterance(phone_text, state):
             deferred = state.setdefault("booking_phone_deferred_slot_turns", [])
@@ -1347,7 +1358,7 @@ def caller_phone_fragment_reply(
     if (
         state.get("awaiting_phone")
         and booking_available
-        and _booking_was_requested(messages[:latest_index + 1])
+        and _booking_was_requested(messages[:latest_index + 1], state)
         and _is_booking_slot_utterance(phone_text, state)
     ):
         deferred = state.setdefault("booking_phone_deferred_slot_turns", [])
@@ -1527,7 +1538,7 @@ def caller_phone_fragment_reply(
         accumulated = previous_digits + current_digits
     if 10 <= len(accumulated) <= 15 and not unknown and not trailing_double:
         uncertain_one = state.pop("caller_phone_uncertain_one", False)
-        booking_requested = _booking_was_requested(messages[:latest_index])
+        booking_requested = _booking_was_requested(messages[:latest_index], state)
         if uncertain_one or booking_requested:
             # Every booking number needs an explicit digit-by-digit readback:
             # ASR can produce a plausible but wrong number with no unknown
@@ -2034,7 +2045,7 @@ def booking_time_confirmation_question(
     if allow_readback and isinstance(candidate, str) and re.fullmatch(
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", candidate
     ):
-        has_booking_request = any(new_booking_requested(m["content"]) for m in users)
+        has_booking_request = _booking_was_requested(users, state)
         try:
             candidate_time = datetime.fromisoformat(candidate).replace(
                 tzinfo=timezone(timedelta(hours=5, minutes=30))
@@ -2123,9 +2134,7 @@ def booking_time_confirmation_question(
         re.fullmatch(r"\d{4}-\d{2}-\d{2}", staged_date)
     )
     initial_booking_with_date = new_booking_requested(latest) and date_was_in_latest
-    has_prior_booking = len(users) >= 2 and any(
-        new_booking_requested(m["content"]) for m in users[:-1]
-    )
+    has_prior_booking = _booking_was_requested(users[:-1], state)
     if not (has_prior_booking or staged_date_is_valid or initial_booking_with_date):
         return None
     normalized = _normalize_hinglish_booking_time(latest).translate(

@@ -907,7 +907,7 @@ class PipecatEngine:
         functions = await compose_functions_for_node(
             node=node,
             custom_tool_manager=manager,
-            additional_document_uuids=self._website_knowledge_document_uuids or [],
+            additional_document_uuids=knowledge_document_uuids,
         )
         booking_available = any(
             getattr(function, "name", None) == "book_appointment"
