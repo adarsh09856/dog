@@ -1,113 +1,70 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  apiFetch: vi.fn(),
-  authLoading: false,
   billingFeature: true,
+  isClientEdition: true,
+  companyName: "Acme Voice",
   user: { id: 9, email: "client-admin@example.test", is_superuser: true, organizationId: 1 },
 }));
 
-vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: mocks.user, loading: mocks.authLoading }) }));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: mocks.user, loading: false }) }));
 vi.mock("@/context/ClientEntitlementsContext", () => ({
-  useClientEntitlements: () => ({ hasFeature: (feature: string) => feature !== "billing" || mocks.billingFeature, isClientEdition: true }),
+  useClientEntitlements: () => ({
+    hasFeature: (feature: string) => feature !== "billing" || mocks.billingFeature,
+    isClientEdition: mocks.isClientEdition,
+  }),
 }));
-vi.mock("@/lib/kodewavesApi", () => ({ apiFetch: mocks.apiFetch }));
+vi.mock("@/context/ClientBrandingContext", () => ({
+  useClientBranding: () => ({ company_name: mocks.companyName }),
+}));
 vi.mock("@/components/CallEventsSection", () => ({ CallEventsSection: () => null }));
-vi.mock("@/components/ClientBrandingSettingsCard", () => ({ ClientBrandingSettingsCard: () => null }));
-vi.mock("@/components/ClientUsersSettingsCard", () => ({ ClientUsersSettingsCard: () => null }));
-vi.mock("@/components/ClientWorkspacesSettingsCard", () => ({ ClientWorkspacesSettingsCard: () => null }));
+vi.mock("@/components/ClientBrandingSettingsCard", () => ({ ClientBrandingSettingsCard: () => <div>Business branding controls</div> }));
+vi.mock("@/components/ClientUsersSettingsCard", () => ({ ClientUsersSettingsCard: () => <div>Workspace user controls</div> }));
+vi.mock("@/components/ClientWorkspacesSettingsCard", () => ({ ClientWorkspacesSettingsCard: () => <div>Workspace settings controls</div> }));
 vi.mock("@/components/MCPSection", () => ({ MCPSection: () => null }));
 vi.mock("@/components/OrganizationPreferencesSection", () => ({ OrganizationPreferencesSection: () => null }));
 vi.mock("@/components/TelemetrySection", () => ({ TelemetrySection: () => null }));
 
 import SettingsPage from "./page";
 
-describe("client installation binding change requests", () => {
+describe("workspace settings role boundaries", () => {
   beforeEach(() => {
-    mocks.authLoading = false;
     mocks.billingFeature = true;
-    mocks.apiFetch.mockReset();
-    mocks.apiFetch.mockImplementation((endpoint: string) => {
-      if (endpoint === "/installation/license") {
-        return Promise.resolve({
-          edition: "client",
-          valid: false,
-          binding_request_available: true,
-          installation_id: "client-9",
-          domains: ["old.customer.example"],
-          ip_ranges: ["203.0.113.7/32"],
-          message: "The configured public domain is not in this installation license.",
-        });
-      }
-      return Promise.resolve({
-        request_id: 31,
-        submitted_at: "2026-10-29T10:00:00Z",
-        message: "Your binding change request was sent to Kodewaves for owner review.",
-      });
-    });
+    mocks.isClientEdition = true;
+    mocks.companyName = "Acme Voice";
+    mocks.user = { id: 9, email: "client-admin@example.test", is_superuser: true, organizationId: 1 };
   });
 
-  it("waits for authentication before loading installation status", async () => {
-    mocks.authLoading = true;
-    const { rerender } = render(<SettingsPage />);
-    await act(async () => { await Promise.resolve(); });
-    expect(mocks.apiFetch).not.toHaveBeenCalled();
-    mocks.authLoading = false;
-    rerender(<SettingsPage />);
-    await act(async () => { await Promise.resolve(); });
-    expect(mocks.apiFetch).toHaveBeenCalledWith("/installation/license");
-  });
-
-  it("lets a client admin request a binding update even when the configured domain is stale", async () => {
+  it("shows client business administration without installation or owner controls", () => {
     render(<SettingsPage />);
-    await act(async () => { await Promise.resolve(); });
 
-    expect(screen.getByText("The configured public domain is not in this installation license.")).toBeTruthy();
-    expect(screen.getByDisplayValue("old.customer.example")).toBeTruthy();
-    expect(screen.getByDisplayValue("203.0.113.7/32")).toBeTruthy();
-
-    fireEvent.change(screen.getByLabelText("Requested public domains"), {
-      target: { value: "voice.new-customer.example" },
-    });
-    fireEvent.change(screen.getByLabelText("Requested source IPs/CIDRs (optional)"), {
-      target: { value: "198.51.100.10/32" },
-    });
-    fireEvent.change(screen.getByLabelText("Reason for the change"), {
-      target: { value: "Moving to a new server" },
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Request owner review" }));
-    });
-
-    expect(mocks.apiFetch).toHaveBeenCalledWith("/installation/binding-requests", {
-      method: "POST",
-      body: JSON.stringify({
-        domains: ["voice.new-customer.example"],
-        ip_ranges: ["198.51.100.10/32"],
-        reason: "Moving to a new server",
-      }),
-    });
-    expect(screen.getByRole("status").textContent).toContain("Request #31 was sent to the platform owner for review.");
-    expect(screen.getByRole("status").textContent).not.toContain("Kodewaves");
+    expect(screen.getByRole("heading", { name: "Workspace administration" })).toBeTruthy();
+    expect(screen.getByText("Business branding controls")).toBeTruthy();
+    expect(screen.getByText("Workspace user controls")).toBeTruthy();
+    expect(screen.getByText("Workspace settings controls")).toBeTruthy();
+    expect(screen.queryByText(/Client installation administration|Client Installation License/i)).toBeNull();
+    expect(screen.queryByText(/Request a domain or server IP change/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Platform Owner Console/i })).toBeNull();
   });
 
-  it("describes licensed client usage instead of hosted subscription upgrades", async () => {
+  it("keeps the platform owner console separate in the hosted edition", () => {
+    mocks.isClientEdition = false;
+    render(<SettingsPage />);
+
+    expect(screen.getByText("Acme Voice platform owner")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open Platform Owner Console/i })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Workspace administration" })).toBeNull();
+  });
+
+  it("shows the licensed usage wallet only when the client plan includes billing", () => {
     mocks.billingFeature = false;
-    render(<SettingsPage />);
-    await act(async () => { await Promise.resolve(); });
+    const { rerender } = render(<SettingsPage />);
+    expect(screen.queryByRole("link", { name: /Open licensed usage wallet/i })).toBeNull();
 
-    expect(screen.getByText("Review your licensed usage allowance and configure the provider keys enabled for this installation.")).toBeTruthy();
-    expect(screen.queryByText(/upgrade subscription plans/i)).toBeNull();
-    expect(screen.queryByRole("link", { name: /wallet/i })).toBeNull();
-  });
-
-  it("uses licensed usage wording when billing is included in the client license", async () => {
-    render(<SettingsPage />);
-    await act(async () => { await Promise.resolve(); });
-
-    expect(screen.getByText("Review your licensed usage allowance and configure the provider keys enabled for this installation.")).toBeTruthy();
+    mocks.billingFeature = true;
+    rerender(<SettingsPage />);
     expect(screen.getByRole("link", { name: /Open licensed usage wallet/i })).toBeTruthy();
-    expect(screen.queryByText(/subscription plans/i)).toBeNull();
+    expect(screen.queryByText(/upgrade subscription plans/i)).toBeNull();
   });
 });
