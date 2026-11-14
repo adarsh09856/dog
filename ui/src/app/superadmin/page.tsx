@@ -45,7 +45,7 @@ const CONTROL_GROUPS = [
     description: "Control the shared model catalog, provider access and Kodewaves platform identity.",
     items: [
       { href: "/superadmin/models", title: "Models & provider credentials", detail: "Configure provider keys, model availability and catalog pricing", icon: Cpu },
-      { href: "/superadmin/settings#settings-branding", title: "Brand & public identity", detail: "Set the platform name, logo, theme, support and public contact details", icon: Palette },
+      { href: "/superadmin/settings", title: "Platform identity & public branding", detail: "Set the platform name, logo, theme, support and public contact details", icon: Palette },
       { href: "/superadmin/settings#settings-local-ai", title: "Self-hosted voice stack", detail: "Configure local LLM, STT and TTS services and concurrency", icon: KeyRound },
       { href: "/superadmin/settings#settings-email", title: "Email & payment connections", detail: "Configure delivery, payment providers and run connection checks", icon: FileCheck2 },
     ],
