@@ -1340,6 +1340,39 @@ def caller_phone_fragment_reply(
                 return "Please say yes to confirm, no to replace it, or repeat the full number."
             return "कृपया पुष्टि के लिए हाँ, बदलने के लिए नहीं कहें, या पूरा नंबर दोहराएँ।"
 
+    # A caller can answer with a preferred date/time while contact collection
+    # is still waiting for their phone number. Keep that utterance for the
+    # shared booking parser after phone collection; otherwise words such as
+    # "eight AM" are tokenized as phone digits and the slot is lost.
+    if (
+        state.get("awaiting_phone")
+        and booking_available
+        and _booking_was_requested(messages[:latest_index + 1])
+        and _is_booking_slot_utterance(phone_text, state)
+    ):
+        deferred = state.setdefault("booking_phone_deferred_slot_turns", [])
+        if not isinstance(deferred, list):
+            deferred = state["booking_phone_deferred_slot_turns"] = []
+        deferred.append(text)
+        del deferred[:-4]
+        state["caller_phone_last_processed_user_turn"] = user_turn_key
+        raw_reply_language = state.get("reply_language")
+        language_code = (
+            normalize_language_code(str(raw_reply_language))
+            if raw_reply_language
+            else ""
+        )
+        reply_in_english = language_code == "en" or (
+            not language_code
+            and not re.search(r"[\u0900-\u097f]", text + str(assistant_text))
+        )
+        if reply_in_english:
+            return (
+                "I saved your preferred date and time. Please provide your phone "
+                "number so I can continue."
+            )
+        return "आपकी तारीख और समय नोट कर लिया है। आगे बढ़ने के लिए कृपया अपना फ़ोन नंबर बताइए।"
+
     if state.get("caller_phone_last_processed_user_turn") == user_turn_key:
         return None
     state["caller_phone_last_processed_user_turn"] = user_turn_key
