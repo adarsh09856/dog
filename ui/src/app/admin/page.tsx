@@ -58,6 +58,7 @@ export default function WorkspaceAdminPage() {
       </div>
       <div className="flex flex-wrap gap-2">
         {(!isClientEdition || hasFeature("crm")) && <Link href="/crm" className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Open CRM<ArrowRight className="h-4 w-4" /></Link>}
+        <Link href="/settings#workspace-administration" className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Users className="h-4 w-4" />Team access</Link>
         <Link href="/settings" className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Settings className="h-4 w-4" />Workspace settings</Link>
       </div>
     </header>
