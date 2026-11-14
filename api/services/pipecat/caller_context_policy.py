@@ -281,12 +281,17 @@ class CallerContextPolicyProcessor(FrameProcessor):
         )
 
         message = {"role": "system", "content": policy}
-        first_user = next(
-            (index for index, item in enumerate(messages)
-             if isinstance(item, dict) and item.get("role") == "user"),
+        # The policy contains changing caller facts and language preferences.
+        # Inserting it before the first user invalidates the cached conversation
+        # on every update. Preserve earlier history and put the current facts
+        # beside the latest turn, without persisting them into caller history.
+        latest_user = next(
+            (index for index in range(len(messages) - 1, -1, -1)
+             if isinstance(messages[index], dict)
+             and messages[index].get("role") == "user"),
             len(messages),
         )
-        messages.insert(first_user, message)
+        messages.insert(latest_user, message)
         self._policy_state.context = context
         self._policy_state.message = message
 

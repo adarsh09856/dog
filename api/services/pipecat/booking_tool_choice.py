@@ -238,6 +238,14 @@ class _BookingToolChoiceMixin:
                     yield chunk
                 complete = True
             finally:
+                # Release inference before awaiting optional diagnostics. A
+                # cancelled or stalled sink must not leave the provider socket
+                # open and occupy the CPU model's only generation slot.
+                close = getattr(stream, "close", None)
+                if not callable(close):
+                    close = getattr(stream, "aclose", None)
+                if callable(close):
+                    await close()
                 trace_payload = {
                     "model": _safe_trace_identifier(
                         getattr(getattr(self, "_settings", None), "model", None)
@@ -308,9 +316,6 @@ class _BookingToolChoiceMixin:
                             "Could not persist numeric LLM stream diagnostics ({})",
                             type(exc).__name__,
                         )
-                close = getattr(stream, "close", None)
-                if callable(close):
-                    await close()
 
         return traced_stream()
 
