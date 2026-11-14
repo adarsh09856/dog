@@ -1,254 +1,85 @@
 "use client";
 
 import {
-  AlertTriangle,
-  ArrowUpRight,
-  Clock,
-  Coins,
-  Cpu,
-  Radio,
-  RefreshCw,
-  TrendingUp,
+  ArrowRight,
+  AudioLines,
+  CalendarDays,
+  FileText,
+  Megaphone,
+  Settings,
+  Sparkles,
   Users,
+  Workflow,
+  Wrench,
 } from "lucide-react";
 import Link from "next/link";
-import React, { useEffect, useState } from "react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { adminApi, MonitoringStats } from "@/lib/kodewavesApi";
+import { useClientBranding } from "@/context/ClientBrandingContext";
+import { useClientEntitlements } from "@/context/ClientEntitlementsContext";
+import { useAuth } from "@/lib/auth";
+import type { ClientFeature } from "@/lib/clientEntitlements";
 
-import panel from "@/components/layout/PanelWorkspace.module.css";
+const GROUPS: Array<{ title: string; summary: string; links: Array<{ title: string; description: string; href: string; icon: typeof Users; feature?: ClientFeature }> }> = [
+  {
+    title: "Customers and growth",
+    summary: "Manage the full customer journey, from inbound leads to booked appointments.",
+    links: [
+      { title: "CRM", description: "Track contacts, lead stages, notes and follow-up activity.", href: "/crm", icon: Users, feature: "crm" },
+      { title: "Campaigns", description: "Schedule outbound campaigns and review their outcomes.", href: "/campaigns", icon: Megaphone, feature: "campaigns" },
+      { title: "Appointments", description: "Manage booking calendars, callbacks and reminders.", href: "/appointments", icon: CalendarDays, feature: "appointments" },
+      { title: "Voice forms", description: "Collect structured information through conversational forms.", href: "/forms", icon: FileText, feature: "forms" },
+    ],
+  },
+  {
+    title: "Voice operations",
+    summary: "Configure the agents, models and tools that run your business conversations.",
+    links: [
+      { title: "Voice agents", description: "Build, test and publish your conversation workflows.", href: "/workflow", icon: Workflow, feature: "voice" },
+      { title: "AI models", description: "Configure the language, speech and voice providers for this workspace.", href: "/model-configurations", icon: Sparkles, feature: "models" },
+      { title: "Tools and integrations", description: "Connect business data and actions to your agents.", href: "/tools", icon: Wrench, feature: "tools" },
+      { title: "Recordings", description: "Review call recordings and speech assets.", href: "/recordings", icon: AudioLines, feature: "recordings" },
+    ],
+  },
+];
 
-export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<MonitoringStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function WorkspaceAdminPage() {
+  const branding = useClientBranding();
+  const { isClientEdition, hasFeature } = useClientEntitlements();
+  const { user } = useAuth();
+  const availableGroups = GROUPS.map((group) => ({
+    ...group,
+    links: group.links.filter((link) => !link.feature || !isClientEdition || hasFeature(link.feature)),
+  })).filter((group) => group.links.length > 0);
 
-  const fetchStats = async () => {
-    setLoading(true);
-    try {
-      const data = await adminApi.getStats();
-      setStats(data);
-      setError(null);
-    } catch (err: unknown) {
-      console.error("Failed to load admin stats:", err);
-      setError(err instanceof Error ? err.message : "Failed to load live metrics from database");
-      // ZERO fake/demo numbers - stats remain null if error, genuine zero-states if empty
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchStats();
-    const interval = setInterval(fetchStats, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const connectionLabel = loading
-    ? "Checking database"
-    : error
-      ? "Database unavailable"
-      : stats
-        ? "Database connected"
-        : "No telemetry available";
-  const connectionClass = error
-    ? "bg-destructive/10 text-destructive border-destructive/20"
-    : loading
-      ? "bg-muted text-muted-foreground border-border"
-      : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
-
-  return (
-    <div className={`${panel.adminDashboard} space-y-8`}>
-      {/* Header */}
-      <div className={panel.adminHero}>
-        <div>
-          <p className={panel.eyebrow}>PLATFORM OWNER / OPERATIONS</p><h1 className="text-2xl font-bold tracking-tight">Sovereign Control Plane</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Real-time platform overview, master provider telemetry, and margin tracking.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className={`px-3 py-1 text-xs gap-1.5 ${connectionClass}`}>
-            <span className={`h-2 w-2 rounded-full ${error ? "bg-destructive" : loading ? "bg-muted-foreground" : "bg-emerald-500 animate-pulse"}`} />
-            {connectionLabel}
-          </Badge>
-          <Button variant="outline" size="sm" onClick={fetchStats} disabled={loading} className="gap-2">
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
+  return <div className="space-y-9">
+    <header className="flex flex-col gap-6 border-b border-border/70 pb-7 md:flex-row md:items-end md:justify-between">
+      <div className="max-w-2xl">
+        <p className="mb-2 text-xs font-medium uppercase tracking-[.14em] text-muted-foreground">{branding.company_name}</p>
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Workspace admin</h1>
+        <p className="mt-3 max-w-[68ch] text-sm leading-6 text-muted-foreground">Manage your business workflows, customer records, team access and installation settings from one workspace.</p>
       </div>
-
-      {/* Error Alert if DB/API connection fails */}
-      {error && (
-        <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span>Telemetry Error: {error}</span>
-          </div>
-          <Button variant="outline" size="sm" onClick={fetchStats} className="text-xs h-7">
-            Retry
-          </Button>
-        </div>
-      )}
-
-      {/* Provider Verification & Catalog Alerts */}
-      {((stats?.failed_verifications?.length ?? 0) > 0 || (stats?.retired_model_alerts?.length ?? 0) > 0 || (stats?.disk_usage_percent ?? 0) > 85) && (
-        <div className="space-y-2">
-          {stats?.failed_verifications && stats.failed_verifications.length > 0 && (
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
-                <span><strong>Provider Verification Alerts:</strong> The following master keys need attention: {stats.failed_verifications.join(", ")}</span>
-              </div>
-              <Link href="/admin/models" className="underline font-semibold shrink-0 ml-2">Resolve in Master Keys</Link>
-            </div>
-          )}
-          {stats?.retired_model_alerts && stats.retired_model_alerts.length > 0 && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 text-xs flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
-                <span><strong>Unavailable Model Alerts:</strong> {stats.retired_model_alerts.length} models marked unavailable or retired in catalog ({stats.retired_model_alerts.slice(0, 3).join(", ")})</span>
-              </div>
-              <Link href="/admin/models" className="underline font-semibold shrink-0 ml-2">Review Catalog</Link>
-            </div>
-          )}
-          {(stats?.disk_usage_percent ?? 0) > 85 && (
-            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span><strong>Storage Warning:</strong> Disk usage at {stats?.disk_usage_percent}% ({stats?.disk_free_gb} GB remaining). Clean recordings or expand VPS volume.</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Real KPI Cards */}
-      <div className={panel.metricRail}>
-        <Card className="border-border/60">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Active Live Calls</CardTitle>
-            <Radio className="h-4 w-4 text-emerald-500 animate-pulse" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold">{stats?.active_calls ?? 0}</div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <span className="text-emerald-500 font-medium">In-flight pipelines</span> across carriers
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Total Minutes Delivered</CardTitle>
-            <Clock className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold">{stats?.total_minutes?.toLocaleString() ?? 0}</div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              From {stats?.total_calls ?? 0} total calls ({stats?.completed_calls ?? 0} completed)
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Configured Model Margin</CardTitle>
-            <TrendingUp className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-primary">
-              {stats?.gross_margin_percent?.toFixed(1) ?? "—"}%
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Ratio from active catalog unit prices; excludes usage and operating costs
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Platform Revenue (INR)</CardTitle>
-            <Coins className="h-4 w-4 text-amber-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-extrabold text-amber-500">
-              {stats?.total_revenue_inr == null ? "Unavailable" : `₹${stats.total_revenue_inr.toLocaleString()}`}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Payment amount reporting is not configured
-            </p>
-          </CardContent>
-        </Card>
+      <div className="flex flex-wrap gap-2">
+        {(!isClientEdition || hasFeature("crm")) && <Link href="/crm" className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Open CRM<ArrowRight className="h-4 w-4" /></Link>}
+        <Link href="/settings" className="inline-flex min-h-10 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Settings className="h-4 w-4" />Workspace settings</Link>
       </div>
+    </header>
 
-      {/* Quick Launchpad */}
-      <div className={panel.adminLaunchpad}>
-        <Card className="border-border/60 hover:border-primary/50 transition-colors">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Cpu className="h-5 w-5 text-primary" />
-              Master Credentials & Models
-            </CardTitle>
-            <CardDescription>
-              Configure sovereign OpenAI, Gemini, Sarvam, Anthropic, and Exotel master keys.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/admin/models">
-              <Button variant="secondary" className="w-full gap-2">
-                Manage Keys & Margins <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+    {isClientEdition && user?.is_superuser === true && <section id="client-installation-controls" className="flex flex-col gap-3 rounded-lg border border-primary/25 bg-primary/[.035] p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div><h2 className="text-base font-semibold">Client installation controls</h2><p className="mt-1 max-w-[70ch] text-sm leading-5 text-muted-foreground">Manage your own installation branding, workspaces, users and license status. These controls apply only to this client installation.</p></div>
+      <Link href="/admin/settings#client-installation-controls" className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-primary hover:underline underline-offset-4">Manage installation<ArrowRight className="h-4 w-4" /></Link>
+    </section>}
 
-        <Card className="border-border/60 hover:border-primary/50 transition-colors">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Users className="h-5 w-5 text-emerald-500" />
-              Users & Minute Grants
-            </CardTitle>
-            <CardDescription>
-              View all registered organizations, wallet minute balances, and grant promotional credits.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/admin/users">
-              <Button variant="secondary" className="w-full gap-2">
-                Manage Users & Wallets <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60 hover:border-primary/50 transition-colors">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Radio className="h-5 w-5 text-destructive" />
-              Live Telemetry & Run Records
-            </CardTitle>
-            <CardDescription>
-              Monitor active voice sessions and review run records. The record action does not disconnect a call.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link href="/admin/monitoring">
-              <Button variant="secondary" className="w-full gap-2">
-                Live Monitoring Feed <ArrowUpRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-
-      <section className={panel.governance} aria-labelledby="governance-heading">
-        <div><p className={panel.eyebrow}>GOVERNANCE</p><h2 id="governance-heading">Control access. Keep a clear record.</h2><p>Manage the commercial rules and installation boundaries that support your platform.</p></div>
-        <div className={panel.governanceLinks}>
-          {[{href:"/admin/client-installations", title:"Client installations", detail:"Licenses, domains and integrity alerts"}, {href:"/admin/plans", title:"Plans & entitlements", detail:"Available features and usage limits"}, {href:"/admin/audit-logs", title:"Audit trail", detail:"Review administrative actions"}, {href:"/admin/settings", title:"Platform identity", detail:"Brand, communications and general settings"}].map(item => <Link key={item.href} href={item.href}><div><strong>{item.title}</strong><small>{item.detail}</small></div><ArrowUpRight size={17} /></Link>)}
+    <div className="space-y-10">
+      {availableGroups.map((group) => <section key={group.title} aria-labelledby={`admin-group-${group.title.replaceAll(" ", "-")}`}>
+        <div className="mb-4 flex flex-col gap-1 border-b border-border/60 pb-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 id={`admin-group-${group.title.replaceAll(" ", "-")}`} className="text-lg font-semibold tracking-tight">{group.title}</h2><p className="mt-1 text-sm text-muted-foreground">{group.summary}</p></div></div>
+        <div className="divide-y divide-border/60">
+          {group.links.map((link) => { const Icon = link.icon; return <Link key={link.href} href={link.href} className="group flex min-h-[76px] items-center gap-4 py-4 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-primary"><Icon className="h-5 w-5" /></span>
+            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{link.title}</span><span className="mt-1 block text-xs leading-5 text-muted-foreground">{link.description}</span></span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
+          </Link>; })}
         </div>
-      </section>    </div>
-  );
+      </section>)}
+    </div>
+  </div>;
 }

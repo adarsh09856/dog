@@ -81,10 +81,13 @@ export default function SettingsPage() {
           </p></div>
         </div>
 
-        {isClientAdmin && <InstallationLicenseCard installation={installation} />}
-        {isClientAdmin && <ClientBrandingSettingsCard />}
-        {isClientAdmin && <ClientWorkspacesSettingsCard selectedOrganizationId={selectedWorkspaceId} />}
-        {isClientAdmin && <ClientUsersSettingsCard />}
+        {isClientAdmin && <section id="client-installation-controls" className="space-y-4">
+          <h2 className="text-lg font-semibold tracking-tight">Client installation administration</h2>
+          <InstallationLicenseCard installation={installation} />
+          <ClientBrandingSettingsCard />
+          <ClientWorkspacesSettingsCard selectedOrganizationId={selectedWorkspaceId} />
+          <ClientUsersSettingsCard />
+        </section>}
 
         {/* Superadmin Quick Access Banner (Only rendered for Superadmins) */}
         {isSuper && (
@@ -106,7 +109,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
               </div>
-              <Link href="/admin" className="shrink-0 w-full sm:w-auto">
+              <Link href="/superadmin" className="shrink-0 w-full sm:w-auto">
                 <Button className="w-full sm:w-auto gap-2 text-xs font-medium shadow-sm">
                   Open Platform Owner Console <ArrowRight className="h-3.5 w-3.5" />
                 </Button>

@@ -205,7 +205,8 @@ export function AppSidebar() {
   const { provider, logout, user } = useAuth();
   const { hasFeature, isClientEdition } = useClientEntitlements();
   const { config } = useAppConfig();
-  const canAccessAdmin = !isClientEdition && user?.is_superuser === true;
+  const canAccessSuperadmin = !isClientEdition && user?.is_superuser === true;
+  const canAccessWorkspaceAdmin = isClientEdition && user?.is_superuser === true;
   const { openHireExpert } = useLeadForms();
   const {
     telnyxMissingWebhookPublicKeyCount,
@@ -222,7 +223,7 @@ export function AppSidebar() {
   // Check for updates only on self-hosted (OSS) deployments — cloud is managed for the user.
   const { latest: latestRelease, isBehind, isLatest } = useLatestReleaseVersion(
     versionInfo?.ui,
-    { enabled: config?.deploymentMode === "oss" && canAccessAdmin },
+    { enabled: config?.deploymentMode === "oss" && canAccessSuperadmin },
   );
 
   const isActive = (path: string) => pathname.startsWith(path);
@@ -245,7 +246,7 @@ export function AppSidebar() {
     }
     localStorage.removeItem("kodewaves_impersonator_token");
     localStorage.removeItem("kodewaves_impersonated_email");
-    window.location.href = "/admin/users";
+      window.location.href = "/superadmin/users";
   };
 
   const handleMobileNavClick = () => {
@@ -406,7 +407,7 @@ export function AppSidebar() {
                 </span>
               )}
             </Link>
-            {canAccessAdmin && isBehind && latestRelease && (
+            {canAccessSuperadmin && isBehind && latestRelease && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Link
@@ -514,7 +515,7 @@ export function AppSidebar() {
           </SidebarGroup>
         ))}
 
-        {canAccessAdmin && (
+        {(canAccessSuperadmin || canAccessWorkspaceAdmin) && (
           <SidebarGroup className="mt-6">
             <SidebarGroupLabel
               className={cn(
@@ -529,8 +530,8 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarLink
                   item={{
-                    title: "Sovereign Admin",
-                    url: "/admin",
+                    title: canAccessSuperadmin ? "Superadmin" : "Workspace Admin",
+                    url: canAccessSuperadmin ? "/superadmin" : "/admin",
                     icon: ShieldCheck,
                   }}
                 />
@@ -565,10 +566,10 @@ export function AppSidebar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {canAccessAdmin && (
-                    <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-primary font-medium">
+                  {(canAccessSuperadmin || canAccessWorkspaceAdmin) && (
+                    <DropdownMenuItem onClick={() => router.push(canAccessSuperadmin ? "/superadmin" : "/admin")} className="cursor-pointer text-primary font-medium">
                       <ShieldCheck className="mr-2 h-4 w-4" />
-                      Sovereign Admin
+                      {canAccessSuperadmin ? "Superadmin" : "Workspace Admin"}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={() => router.push("/settings")} className="cursor-pointer">
@@ -608,10 +609,10 @@ export function AppSidebar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {canAccessAdmin && (
-                    <DropdownMenuItem onClick={() => router.push("/admin")} className="cursor-pointer text-primary font-medium">
+                  {(canAccessSuperadmin || canAccessWorkspaceAdmin) && (
+                    <DropdownMenuItem onClick={() => router.push(canAccessSuperadmin ? "/superadmin" : "/admin")} className="cursor-pointer text-primary font-medium">
                       <ShieldCheck className="mr-2 h-4 w-4" />
-                      Sovereign Admin
+                      {canAccessSuperadmin ? "Superadmin" : "Workspace Admin"}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={() => router.push("/handler/account-settings")} className="cursor-pointer">

@@ -397,7 +397,7 @@ export default function CreateWorkflowPage() {
                                 <Link href="/model-configurations">Configure BYOK</Link>
                             </Button>
                             <Button size="sm" asChild className="bg-red-600 hover:bg-red-700 text-white">
-                                <Link href="/admin/models">Admin Settings</Link>
+                                <Link href="/superadmin/models">Admin Settings</Link>
                             </Button>
                         </div>
                     </div>

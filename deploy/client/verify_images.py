@@ -119,12 +119,12 @@ for (const required of ['/app/verify-client-release.mjs', '/app/client-release-p
   if (!fs.existsSync(required)) throw new Error(`Client UI integrity runtime file missing: ${required}`);
 }
 const routes = Object.keys(JSON.parse(fs.readFileSync(path, 'utf8')));
-const owner = routes.filter(route => route === '/admin/page' || route.startsWith('/admin/')
-  || route === '/superadmin/page' || route.startsWith('/superadmin/'));
+const owner = routes.filter(route => route === '/superadmin/page' || route.startsWith('/superadmin/'));
 const privileged = routes.filter(route => route === '/impersonate/route' || route.startsWith('/impersonate/'));
 if (owner.length || privileged.length) {
   throw new Error(`Owner-only UI routes shipped: ${[...owner, ...privileged].join(', ')}`);
 }
+if (!routes.includes('/admin/page')) throw new Error('Client workspace admin is missing from client UI');
 if (!routes.includes('/page')) throw new Error('Public page missing from client UI');
 if (!routes.includes('/pricing/page')) throw new Error('Client installation pricing guidance is missing');
 const routing = JSON.parse(fs.readFileSync('/app/.next/routes-manifest.json', 'utf8'));

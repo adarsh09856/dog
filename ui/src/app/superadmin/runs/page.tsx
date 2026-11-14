@@ -30,7 +30,7 @@ import { decodeFiltersFromURL, encodeFiltersToURL } from '@/lib/filters';
 import { impersonateAsSuperadmin } from '@/lib/utils';
 import { ActiveFilter } from '@/types/filters';
 
-import admin from "../../admin/AdminWorkspace.module.css";
+import admin from "../AdminWorkspace.module.css";
 
 interface WorkflowRun {
     id: number;
@@ -545,7 +545,7 @@ export default function RunsPage() {
                                                                     window.open(
                                                                         process.env.NEXT_PUBLIC_AXIOM_URL
                                                                             ? `${process.env.NEXT_PUBLIC_AXIOM_URL}?q=${query}`
-                                                                            : `/admin/monitoring`,
+                                                                            : `/superadmin/monitoring`,
                                                                         '_blank',
                                                                     );
                                                                 }}

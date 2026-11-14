@@ -1,234 +1,254 @@
 "use client";
 
-import admin from "../admin/AdminWorkspace.module.css";
-
-import { ArrowRight, List, Loader2, ShieldAlert } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Clock,
+  Coins,
+  Cpu,
+  Radio,
+  RefreshCw,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useAuth } from '@/lib/auth';
-import { getUserEmail } from "@/lib/auth/userDisplay";
-import { impersonateAsSuperadmin } from "@/lib/utils";
+import { adminApi, MonitoringStats } from "@/lib/kodewavesApi";
 
-type ImpersonationTarget = "provider" | "email";
+import panel from "@/components/layout/PanelWorkspace.module.css";
 
-export default function SuperadminPage() {
-    const [providerUserId, setProviderUserId] = useState("");
-    const [email, setEmail] = useState("");
-    const [error, setError] = useState<{ target: ImpersonationTarget; message: string } | null>(null);
-    const [loadingTarget, setLoadingTarget] = useState<ImpersonationTarget | null>(null);
-    const { user, getAccessToken } = useAuth();
+export default function AdminDashboardPage() {
+  const [stats, setStats] = useState<MonitoringStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-    const handleImpersonate = async (target: ImpersonationTarget, value: string) => {
-        const trimmedValue = value.trim();
-        setError(null);
-
-        if (!trimmedValue) {
-            setError({
-                target,
-                message: target === "provider" ? "Enter a provider user ID." : "Enter an email address.",
-            });
-            return;
-        }
-
-        setLoadingTarget(target);
-
-        try {
-            if (!user) {
-                setError({
-                    target,
-                    message: "User not authenticated. Please log in and try again.",
-                });
-                return;
-            }
-
-            const accessToken = await getAccessToken();
-            if (!accessToken) {
-                throw new Error('Missing admin access token');
-            }
-
-            await impersonateAsSuperadmin({
-                accessToken: accessToken,
-                ...(target === "provider"
-                    ? { providerUserId: trimmedValue }
-                    : { email: trimmedValue }),
-                redirectPath: '/workflow',
-                openInNewTab: true,
-            });
-        } catch (err) {
-            setError({
-                target,
-                message: err instanceof Error ? err.message : "Failed to impersonate user. Please try again.",
-            });
-            console.error("Impersonation error:", err);
-        } finally {
-            setLoadingTarget(null);
-        }
-    };
-
-    const handleProviderImpersonate = async (e: React.FormEvent) => {
-        e.preventDefault();
-        await handleImpersonate("provider", providerUserId);
-    };
-
-    const handleEmailImpersonate = async (e: React.FormEvent) => {
-        e.preventDefault();
-        await handleImpersonate("email", email);
-    };
-
-    const isSuper = user?.is_superuser === true;
-
-    if (!isSuper) {
-        return (
-            <div className="flex h-[70vh] flex-col items-center justify-center p-6 text-center">
-                <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
-                <h1 className="text-2xl font-bold tracking-tight">Superadmin Access Required</h1>
-                <p className="mt-2 text-sm text-muted-foreground max-w-md">
-                    Your account ({getUserEmail(user)}) does not have administrative privileges to access this area.
-                </p>
-                <div className="mt-6 flex gap-4">
-                    <Link href="/workflow">
-                        <Button variant="outline">Back to Workflows</Button>
-                    </Link>
-                </div>
-            </div>
-        );
+  const fetchStats = async () => {
+    setLoading(true);
+    try {
+      const data = await adminApi.getStats();
+      setStats(data);
+      setError(null);
+    } catch (err: unknown) {
+      console.error("Failed to load admin stats:", err);
+      setError(err instanceof Error ? err.message : "Failed to load live metrics from database");
+      // ZERO fake/demo numbers - stats remain null if error, genuine zero-states if empty
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return (
-        <>
-            <main className={`${admin.surface} mx-auto w-full max-w-6xl`}>
-                <div className={admin.hero}>
-                    <span className={admin.kicker}>Owner control / access</span>
-                    <h1 className={admin.title}>Superadmin Dashboard</h1>
-                    <p>Manage access across customers and inspect platform-wide activity.</p>
-                </div>
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
-                <div className="flex flex-col gap-4 rounded-2xl border border-primary/30 bg-primary/[0.04] p-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <div className="font-bold text-sm text-primary">Platform administration</div>
-                        <div className="text-xs text-muted-foreground">Manage master provider keys, retail margins, credit bundles, live calls, and content moderation.</div>
-                    </div>
-                    <Link href="/admin">
-                        <Button className="gap-2 text-xs">
-                            Open Sovereign Admin <ArrowRight className="h-3.5 w-3.5" />
-                        </Button>
-                    </Link>
-                </div>
+  const connectionLabel = loading
+    ? "Checking database"
+    : error
+      ? "Database unavailable"
+      : stats
+        ? "Database connected"
+        : "No telemetry available";
+  const connectionClass = error
+    ? "bg-destructive/10 text-destructive border-destructive/20"
+    : loading
+      ? "bg-muted text-muted-foreground border-border"
+      : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
 
-                <div className="grid gap-5 lg:grid-cols-2">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Provider User ID</CardTitle>
-                                <CardDescription>
-                                    Impersonate with the Stack provider user ID
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <form onSubmit={handleProviderImpersonate} className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="providerUserId">Provider User ID</Label>
-                                        <Input
-                                            id="providerUserId"
-                                            value={providerUserId}
-                                            onChange={(e) => setProviderUserId(e.target.value)}
-                                            placeholder="Provider user ID"
-                                            required
-                                        />
-                                    </div>
+  return (
+    <div className={`${panel.adminDashboard} space-y-8`}>
+      {/* Header */}
+      <div className={panel.adminHero}>
+        <div>
+          <p className={panel.eyebrow}>PLATFORM OWNER / OPERATIONS</p><h1 className="text-2xl font-bold tracking-tight">Sovereign Control Plane</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Real-time platform overview, master provider telemetry, and margin tracking.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className={`px-3 py-1 text-xs gap-1.5 ${connectionClass}`}>
+            <span className={`h-2 w-2 rounded-full ${error ? "bg-destructive" : loading ? "bg-muted-foreground" : "bg-emerald-500 animate-pulse"}`} />
+            {connectionLabel}
+          </Badge>
+          <Button variant="outline" size="sm" onClick={fetchStats} disabled={loading} className="gap-2">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
+      </div>
 
-                                    {error?.target === "provider" && (
-                                        <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg text-sm">
-                                            {error.message}
-                                        </div>
-                                    )}
+      {/* Error Alert if DB/API connection fails */}
+      {error && (
+        <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Telemetry Error: {error}</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchStats} className="text-xs h-7">
+            Retry
+          </Button>
+        </div>
+      )}
 
-                                    <Button
-                                        type="submit"
-                                        disabled={loadingTarget !== null}
-                                        className="w-full"
-                                    >
-                                        {loadingTarget === "provider" ? (
-                                            <>
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                Processing...
-                                            </>
-                                        ) : (
-                                            'Impersonate by Provider ID'
-                                        )}
-                                    </Button>
-                                </form>
-                            </CardContent>
-                        </Card>
+      {/* Provider Verification & Catalog Alerts */}
+      {((stats?.failed_verifications?.length ?? 0) > 0 || (stats?.retired_model_alerts?.length ?? 0) > 0 || (stats?.disk_usage_percent ?? 0) > 85) && (
+        <div className="space-y-2">
+          {stats?.failed_verifications && stats.failed_verifications.length > 0 && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+                <span><strong>Provider Verification Alerts:</strong> The following master keys need attention: {stats.failed_verifications.join(", ")}</span>
+              </div>
+              <Link href="/superadmin/models" className="underline font-semibold shrink-0 ml-2">Resolve in Master Keys</Link>
+            </div>
+          )}
+          {stats?.retired_model_alerts && stats.retired_model_alerts.length > 0 && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500" />
+                <span><strong>Unavailable Model Alerts:</strong> {stats.retired_model_alerts.length} models marked unavailable or retired in catalog ({stats.retired_model_alerts.slice(0, 3).join(", ")})</span>
+              </div>
+              <Link href="/superadmin/models" className="underline font-semibold shrink-0 ml-2">Review Catalog</Link>
+            </div>
+          )}
+          {(stats?.disk_usage_percent ?? 0) > 85 && (
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-xs flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span><strong>Storage Warning:</strong> Disk usage at {stats?.disk_usage_percent}% ({stats?.disk_free_gb} GB remaining). Clean recordings or expand VPS volume.</span>
+            </div>
+          )}
+        </div>
+      )}
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Email</CardTitle>
-                                <CardDescription>
-                                    Impersonate with a primary email address
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <form onSubmit={handleEmailImpersonate} className="space-y-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="email">Email Address</Label>
-                                        <Input
-                                            id="email"
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            placeholder="user@example.com"
-                                            required
-                                        />
-                                    </div>
+      {/* Real KPI Cards */}
+      <div className={panel.metricRail}>
+        <Card className="border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Active Live Calls</CardTitle>
+            <Radio className="h-4 w-4 text-emerald-500 animate-pulse" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-extrabold">{stats?.active_calls ?? 0}</div>
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              <span className="text-emerald-500 font-medium">In-flight pipelines</span> across carriers
+            </p>
+          </CardContent>
+        </Card>
 
-                                    {error?.target === "email" && (
-                                        <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg text-sm">
-                                            {error.message}
-                                        </div>
-                                    )}
+        <Card className="border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Total Minutes Delivered</CardTitle>
+            <Clock className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-extrabold">{stats?.total_minutes?.toLocaleString() ?? 0}</div>
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+              From {stats?.total_calls ?? 0} total calls ({stats?.completed_calls ?? 0} completed)
+            </p>
+          </CardContent>
+        </Card>
 
-                                    <Button
-                                        type="submit"
-                                        disabled={loadingTarget !== null}
-                                        className="w-full"
-                                    >
-                                        {loadingTarget === "email" ? (
-                                            <>
-                                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                Processing...
-                                            </>
-                                        ) : (
-                                            'Impersonate by Email'
-                                        )}
-                                    </Button>
-                                </form>
-                            </CardContent>
-                        </Card>
+        <Card className="border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Configured Model Margin</CardTitle>
+            <TrendingUp className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-extrabold text-primary">
+              {stats?.gross_margin_percent?.toFixed(1) ?? "—"}%
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Ratio from active catalog unit prices; excludes usage and operating costs
+            </p>
+          </CardContent>
+        </Card>
 
-                        <Card className="md:col-span-2">
-                            <CardHeader>
-                                <CardTitle>Workflow Runs</CardTitle>
-                                <CardDescription>
-                                    View and manage all workflow runs across organizations
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <Link href="/superadmin/runs">
-                                    <Button className="w-full md:w-auto">
-                                        <List className="mr-2 h-4 w-4" />
-                                        View All Runs
-                                        <ArrowRight className="ml-2 h-4 w-4" />
-                                    </Button>
-                                </Link>
-                            </CardContent>
-                        </Card>
-                </div>
-            </main>
-        </>
-    );
+        <Card className="border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">Platform Revenue (INR)</CardTitle>
+            <Coins className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-extrabold text-amber-500">
+              {stats?.total_revenue_inr == null ? "Unavailable" : `₹${stats.total_revenue_inr.toLocaleString()}`}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Payment amount reporting is not configured
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Launchpad */}
+      <div className={panel.adminLaunchpad}>
+        <Card className="border-border/60 hover:border-primary/50 transition-colors">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Cpu className="h-5 w-5 text-primary" />
+              Master Credentials & Models
+            </CardTitle>
+            <CardDescription>
+              Configure sovereign OpenAI, Gemini, Sarvam, Anthropic, and Exotel master keys.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/superadmin/models">
+              <Button variant="secondary" className="w-full gap-2">
+                Manage Keys & Margins <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 hover:border-primary/50 transition-colors">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-5 w-5 text-emerald-500" />
+              Users & Minute Grants
+            </CardTitle>
+            <CardDescription>
+              View all registered organizations, wallet minute balances, and grant promotional credits.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/superadmin/users">
+              <Button variant="secondary" className="w-full gap-2">
+                Manage Users & Wallets <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 hover:border-primary/50 transition-colors">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Radio className="h-5 w-5 text-destructive" />
+              Live Telemetry & Run Records
+            </CardTitle>
+            <CardDescription>
+              Monitor active voice sessions and review run records. The record action does not disconnect a call.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/superadmin/monitoring">
+              <Button variant="secondary" className="w-full gap-2">
+                Live Monitoring Feed <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+
+      <section className={panel.governance} aria-labelledby="governance-heading">
+        <div><p className={panel.eyebrow}>GOVERNANCE</p><h2 id="governance-heading">Control access. Keep a clear record.</h2><p>Manage the commercial rules and installation boundaries that support your platform.</p></div>
+        <div className={panel.governanceLinks}>
+          {[{href:"/superadmin/client-installations", title:"Client installations", detail:"Licenses, domains and integrity alerts"}, {href:"/superadmin/plans", title:"Plans & entitlements", detail:"Available features and usage limits"}, {href:"/superadmin/audit-logs", title:"Audit trail", detail:"Review administrative actions"}, {href:"/superadmin/settings", title:"Platform identity", detail:"Brand, communications and general settings"}].map(item => <Link key={item.href} href={item.href}><div><strong>{item.title}</strong><small>{item.detail}</small></div><ArrowUpRight size={17} /></Link>)}
+        </div>
+      </section>    </div>
+  );
 }

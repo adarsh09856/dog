@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { isHiddenInClientEdition } from './deploymentEdition';
 
 describe('client edition route visibility', () => {
-  it('hides owner control-plane routes', () => {
-    expect(isHiddenInClientEdition('/admin', 'client')).toBe(true);
-    expect(isHiddenInClientEdition('/admin/models', 'client')).toBe(true);
+  it('keeps customer admin routes in client installations and hides the owner console', () => {
+    expect(isHiddenInClientEdition('/admin', 'client')).toBe(false);
+    expect(isHiddenInClientEdition('/admin/settings', 'client')).toBe(false);
+    expect(isHiddenInClientEdition('/superadmin', 'client')).toBe(true);
+    expect(isHiddenInClientEdition('/superadmin/models', 'client')).toBe(true);
     expect(isHiddenInClientEdition('/superadmin/runs', 'client')).toBe(true);
   });
 
@@ -21,5 +23,6 @@ describe('client edition route visibility', () => {
     expect(isHiddenInClientEdition('/settings', 'client')).toBe(false);
     expect(isHiddenInClientEdition('/pricing', 'saas')).toBe(false);
     expect(isHiddenInClientEdition('/admin', 'saas')).toBe(false);
+    expect(isHiddenInClientEdition('/superadmin', 'saas')).toBe(false);
   });
 });

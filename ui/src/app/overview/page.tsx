@@ -485,12 +485,12 @@ export default function OverviewPage() {
           <CardContent>
             <div className="flex flex-wrap gap-3">
               <Button asChild size="sm">
-                <Link href="/admin">
+                <Link href="/superadmin">
                   Open administration <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">
-                <Link href="/admin/settings">
+                <Link href="/superadmin/settings">
                   Platform Settings
                 </Link>
               </Button>

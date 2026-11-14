@@ -453,7 +453,7 @@ export default function MasterKeysAndModelsPage() {
                   <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
                     <span className="font-mono text-muted-foreground">Port: 11434</span>
                     <Button variant="outline" size="sm" asChild className="h-7 text-xs">
-                      <a href="/admin/settings">Manage Models</a>
+                      <a href="/superadmin/settings">Manage Models</a>
                     </Button>
                   </div>
                 </div>
