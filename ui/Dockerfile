@@ -46,7 +46,7 @@ COPY ui/public ./public
 COPY ui/src ./src
 
 RUN if [ "$KODEWAVES_EDITION" = "client" ]; then \
-      rm -rf ./src/app/admin ./src/app/superadmin ./src/app/impersonate; \
+      rm -rf ./src/app/superadmin ./src/app/impersonate; \
     elif [ "$KODEWAVES_EDITION" != "saas" ]; then \
       echo "KODEWAVES_EDITION must be saas or client" >&2; exit 1; \
     fi
