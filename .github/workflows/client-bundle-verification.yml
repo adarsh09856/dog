@@ -197,11 +197,11 @@ jobs:
         run: >-
           npm test -- --config vitest.panel-check.mts --run
           'src/app/handler/[...stack]/stack-theme.test.ts'
-          src/app/admin/client-installations/page.test.tsx
-          src/app/admin/moderation/page.test.tsx
-          src/app/admin/plans/page.test.tsx
-          src/app/admin/credit-packages/page.test.tsx
-          src/app/admin/settings/page.test.tsx
+          src/app/superadmin/client-installations/page.test.tsx
+          src/app/superadmin/moderation/page.test.tsx
+          src/app/superadmin/plans/page.test.tsx
+          src/app/superadmin/credit-packages/page.test.tsx
+          src/app/superadmin/settings/page.test.tsx
           src/app/settings/page.test.tsx
           src/app/workflow/AgentLibraryActions.test.tsx
           src/app/page.test.tsx
