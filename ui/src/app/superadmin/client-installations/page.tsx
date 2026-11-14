@@ -397,7 +397,7 @@ export default function ClientInstallationsPage() {
         </Button>
       </div>
 
-      <section className={styles.portfolio} aria-label="Installation control summary">
+      <section id="installation-integrity-overview" className={styles.portfolio} aria-label="Installation license and integrity summary">
         {[
           { label: "Protected installations", value: loading ? "—" : protectedCount, icon: ShieldCheck, risk: false },
           { label: "Binding approvals pending", value: loading ? "—" : pendingBindingCount, icon: Activity, risk: pendingBindingCount > 0 },
@@ -417,7 +417,7 @@ export default function ClientInstallationsPage() {
       </div>
       {signerUnavailable && <div className={admin.setupError} role="alert">Owner signing is unavailable. Configure <code>KODEWAVES_OWNER_LICENSE_SIGNING_KEY_FILE</code> on the owner API server, mount the private key readable by that service, then retry issuance. Keep the private key out of client bundles.</div>}
 
-      <Card className={styles.issueCard}>
+      <Card id="installation-license-controls" className={`${styles.issueCard} scroll-mt-6`}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base"><Plus className="h-4 w-4" />Issue installation license</CardTitle>
           <CardDescription>Verify DNS control for the licensed domain before issuance. The signing key stays on the owner server; the license token is shown only once.</CardDescription>

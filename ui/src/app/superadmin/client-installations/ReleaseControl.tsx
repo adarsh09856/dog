@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Activity, CirclePause, CirclePlay, PackageCheck, RefreshCw, ShieldAlert, Square, Upload } from "lucide-react";
+import { type FormEvent,useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth";
@@ -159,6 +158,14 @@ export function ClientReleaseControl({ installations }: { installations: Release
     if (isOwner && expanded) void refresh();
   }, [expanded, isOwner, refresh]);
 
+  useEffect(() => {
+    if (window.location.hash !== "#release-management") return;
+    setExpanded(true);
+    window.requestAnimationFrame(() => {
+      document.getElementById("release-management")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+
   const createRelease = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy("create-release");
@@ -250,7 +257,7 @@ export function ClientReleaseControl({ installations }: { installations: Release
   if (authLoading || !isOwner) return null;
 
   return (
-    <section className="grid gap-5" aria-labelledby="client-release-control-title">
+    <section id="release-management" className="scroll-mt-6 grid gap-5" aria-labelledby="client-release-control-title">
       <Card className={styles.sectionCard}>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">

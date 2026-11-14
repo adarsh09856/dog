@@ -219,6 +219,18 @@ export interface SystemResources {
   disk_usage_percent: number;
 }
 
+export interface ProcessHealthItem {
+  name: string;
+  status: 'healthy' | 'degraded' | 'offline' | 'disabled';
+  latency_ms?: number | null;
+}
+
+export interface ProcessHealthResponse {
+  status: 'healthy' | 'degraded' | 'offline';
+  timestamp: string;
+  services: Record<string, ProcessHealthItem>;
+}
+
 export interface LiveCallItem {
   run_id: number;
   call_sid?: string;
@@ -426,6 +438,7 @@ export const adminApi = {
   getStats: () => apiFetch<MonitoringStats>('/admin/monitoring/stats'),
   getLiveCalls: () => apiFetch<LiveCallItem[]>('/admin/monitoring/live-calls'),
   getSystemResources: () => apiFetch<SystemResources>('/admin/monitoring/system-resources'),
+  getProcessHealth: () => apiFetch<ProcessHealthResponse>('/admin/monitoring/process-health'),
   killCall: (runId: number, reason?: string) =>
     apiFetch<{ message: string }>('/admin/monitoring/kill-call', {
       method: 'POST',

@@ -1,9 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ calls: vi.fn(), resources: vi.fn(), kill: vi.fn() }));
+const mocks = vi.hoisted(() => ({ calls: vi.fn(), resources: vi.fn(), processHealth: vi.fn(), kill: vi.fn() }));
 vi.mock('@/lib/kodewavesApi', () => ({ adminApi: {
-    getLiveCalls: mocks.calls, getSystemResources: mocks.resources, killCall: mocks.kill,
+    getLiveCalls: mocks.calls, getSystemResources: mocks.resources, getProcessHealth: mocks.processHealth, killCall: mocks.kill,
 } }));
 import Page from './page';
 
@@ -12,6 +12,20 @@ beforeEach(() => {
     vi.clearAllMocks();
     mocks.calls.mockResolvedValue([]);
     mocks.resources.mockRejectedValue(new Error('Resource probe failed'));
+    mocks.processHealth.mockResolvedValue({ status: 'healthy', timestamp: '2026-11-14T12:00:00Z', services: {
+        database: { name: 'PostgreSQL', status: 'healthy', latency_ms: 2.3 },
+        api_worker: { name: 'FastAPI Worker', status: 'healthy' },
+    } });
+});
+
+it('checks platform process health only when requested and displays returned services', async () => {
+    render(<Page />);
+    expect(mocks.processHealth).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Check service health' }));
+    expect(await screen.findByText('PostgreSQL')).toBeTruthy();
+    expect(screen.getByText('2.3 ms')).toBeTruthy();
+    expect(screen.getByText('FastAPI Worker')).toBeTruthy();
+    expect(mocks.processHealth).toHaveBeenCalledTimes(1);
 });
 
 it('reports unavailable measurements and recovers with genuine zero values', async () => {

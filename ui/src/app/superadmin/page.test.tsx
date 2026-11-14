@@ -50,8 +50,8 @@ describe("superadmin dashboard database status", () => {
     expect(await screen.findByText("Database connected")).toBeTruthy();
     expect(screen.getByRole("link", { name: /Client installations & releases/ }).getAttribute("href"))
       .toBe("/superadmin/client-installations");
-    expect(screen.getByRole("link", { name: /Platform identity & public branding/ }).getAttribute("href"))
-      .toBe("/superadmin/settings");
+    expect(screen.getByRole("link", { name: /Brand & public identity/ }).getAttribute("href"))
+      .toBe("/superadmin/settings#settings-branding");
     expect(screen.getByRole("link", { name: /Self-hosted voice stack/ }).getAttribute("href"))
       .toBe("/superadmin/settings#settings-local-ai");
     expect(screen.getByRole("link", { name: /Customer workspace access/ }).getAttribute("href"))
@@ -70,6 +70,12 @@ describe("superadmin dashboard database status", () => {
       .toBe("/superadmin/settings#settings-email");
     expect(screen.getByRole("link", { name: /Payment providers/ }).getAttribute("href"))
       .toBe("/superadmin/settings#settings-payments");
+    expect(screen.getByRole("link", { name: /Installation licenses & domain policy/ }).getAttribute("href"))
+      .toBe("/superadmin/client-installations#installation-license-controls");
+    expect(screen.getByRole("link", { name: /Signed releases & staged rollouts/ }).getAttribute("href"))
+      .toBe("/superadmin/client-installations#release-management");
+    expect(screen.getByRole("link", { name: /Service health & capacity/ }).getAttribute("href"))
+      .toBe("/superadmin/monitoring#service-health");
     expect(screen.getByRole("link", { name: /Content moderation/ }).getAttribute("href"))
       .toBe("/superadmin/moderation");
     expect(screen.getByText(/Customer workspaces keep their own business admin at/)).toBeTruthy();

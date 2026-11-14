@@ -1,9 +1,9 @@
 "use client";
 
-import admin from "../AdminWorkspace.module.css";
-
 import {
+  Activity,
   CheckCircle2,
+  CircleAlert,
   Clock,
   Cpu,
   HardDrive,
@@ -26,11 +26,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { adminApi, LiveCallItem, SystemResources } from "@/lib/kodewavesApi";
+import { adminApi, type LiveCallItem, type ProcessHealthResponse, type SystemResources } from "@/lib/kodewavesApi";
+
+import admin from "../AdminWorkspace.module.css";
 
 export default function AdminMonitoringPage() {
   const [calls, setCalls] = useState<LiveCallItem[]>([]);
   const [resources, setResources] = useState<SystemResources | null>(null);
+  const [processHealth, setProcessHealth] = useState<ProcessHealthResponse | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
   const [killingId, setKillingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
@@ -53,6 +58,22 @@ export default function AdminMonitoringPage() {
       setError(failures.join(' ') || null);
     } finally {
       inFlight.current = false;
+    }
+  }, []);
+
+  const checkProcessHealth = useCallback(async () => {
+    setHealthLoading(true);
+    setHealthError(null);
+    try {
+      const result = await adminApi.getProcessHealth();
+      if (mounted.current) setProcessHealth(result);
+    } catch (cause: unknown) {
+      if (mounted.current) {
+        setProcessHealth(null);
+        setHealthError(cause instanceof Error ? cause.message : "Service health could not be loaded.");
+      }
+    } finally {
+      if (mounted.current) setHealthLoading(false);
     }
   }, []);
 
@@ -169,6 +190,61 @@ export default function AdminMonitoringPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card id="service-health" className="scroll-mt-6 border-border/60">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Activity className="h-4 w-4 text-primary" />
+              Platform service health
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Check database, cache, storage, API worker and configured local AI services on demand.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-3">
+            {processHealth && <Badge variant="outline" className={processHealth.status === "healthy" ? "border-emerald-500/30 text-emerald-700" : "border-amber-500/30 text-amber-700"}>{processHealth.status}</Badge>}
+            <Button type="button" variant="outline" size="sm" onClick={() => void checkProcessHealth()} disabled={healthLoading} className="gap-2">
+              <RefreshCw className={`h-3.5 w-3.5 ${healthLoading ? "animate-spin" : ""}`} />
+              {healthLoading ? "Checking services…" : "Check service health"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {healthError ? (
+            <div role="alert" className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              <CircleAlert className="h-4 w-4 shrink-0" />
+              <span>{healthError}</span>
+            </div>
+          ) : processHealth ? (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {Object.entries(processHealth.services).sort(([left], [right]) => left.localeCompare(right)).map(([key, service]) => {
+                  const tone = service.status === "healthy"
+                    ? "border-emerald-500/25 bg-emerald-500/5 text-emerald-700"
+                    : service.status === "disabled"
+                      ? "border-border bg-muted/40 text-muted-foreground"
+                      : service.status === "degraded"
+                        ? "border-amber-500/30 bg-amber-500/5 text-amber-700"
+                        : "border-destructive/30 bg-destructive/5 text-destructive";
+                  return (
+                    <div key={key} className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2.5">
+                      <span className="truncate text-sm font-medium">{service.name}</span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        {service.latency_ms != null && <span className="text-xs tabular-nums text-muted-foreground">{service.latency_ms} ms</span>}
+                        <Badge variant="outline" className={tone}>{service.status}</Badge>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs text-muted-foreground">Checked {new Date(processHealth.timestamp).toLocaleString()}</p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Run a check to see live status for the platform services.</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-border/60">
         <CardHeader>

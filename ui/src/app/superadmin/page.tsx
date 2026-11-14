@@ -1,15 +1,16 @@
 "use client";
 
 import {
+  Activity,
   AlertTriangle,
   ArrowUpRight,
-  Brain,
   Clock,
   Coins,
   Cpu,
   CreditCard,
-  FileCheck2,
   FileSpreadsheet,
+  Fingerprint,
+  GitBranch,
   KeyRound,
   Mail,
   Mic,
@@ -50,31 +51,31 @@ const CONTROL_GROUPS = [
     ],
   },
   {
-    title: "AI & platform configuration",
-    description: "Control the shared model catalog, provider access and Kodewaves platform identity.",
+    title: "Client delivery & trust",
+    description: "Control customer licenses, domain and IP bindings, integrity reviews, and signed software updates.",
     items: [
-      { href: "/superadmin/models", title: "Models & provider credentials", detail: "Configure provider keys, model availability and catalog pricing", icon: Cpu },
-      { href: "/superadmin/settings", title: "Platform identity & public branding", detail: "Set the platform name, logo, theme, support and public contact details", icon: Palette },
-      { href: "/superadmin/settings#settings-local-ai", title: "Self-hosted voice stack", detail: "Configure local LLM, STT and TTS services and concurrency", icon: KeyRound },
-      { href: "/superadmin/settings#settings-email", title: "Email & payment connections", detail: "Configure delivery, payment providers and run connection checks", icon: FileCheck2 },
+      { href: "/superadmin/client-installations#installation-license-controls", title: "Installation licenses & domain policy", detail: "Issue domain-verified licenses, set IP restrictions, features and capacity limits", icon: Fingerprint },
+      { href: "/superadmin/client-installations#installation-integrity-overview", title: "Integrity alerts & binding reviews", detail: "Review blocked installations, integrity incidents and customer domain/IP change requests", icon: ShieldCheck },
+      { href: "/superadmin/client-installations#release-management", title: "Signed releases & staged rollouts", detail: "Publish signed client builds, stage updates and pause or stop a rollout", icon: GitBranch },
     ],
   },
   {
-    title: "Policies & service controls",
-    description: "Configure platform-wide safeguards and the speech services used by customer agents.",
+    title: "AI & voice services",
+    description: "Manage provider access, model availability and the local LLM, STT and TTS stack.",
     items: [
-      { href: "/superadmin/settings#settings-policies", title: "Access & usage policies", detail: "Set tenant key policy, minute enforcement and usage guardrails", icon: ShieldCheck },
-      { href: "/superadmin/settings#settings-local-ai", title: "Self-hosted model services", detail: "Configure local inference endpoints and service capacity", icon: Brain },
+      { href: "/superadmin/models", title: "Models & provider credentials", detail: "Configure provider keys, model availability and catalog pricing", icon: Cpu },
+      { href: "/superadmin/settings#settings-local-ai", title: "Self-hosted voice stack", detail: "Configure local LLM, STT and TTS services and concurrency", icon: KeyRound },
       { href: "/superadmin/settings#settings-ollama", title: "Local model inventory", detail: "Review and manage models available to the self-hosted runtime", icon: SlidersHorizontal },
       { href: "/superadmin/settings#settings-stt", title: "Speech recognition (STT)", detail: "Configure the speech-to-text service for agent conversations", icon: Mic },
       { href: "/superadmin/settings#settings-tts", title: "Speech generation (TTS)", detail: "Configure text-to-speech services and available voices", icon: Volume2 },
     ],
   },
   {
-    title: "Platform identity & connections",
-    description: "Manage the customer-facing platform identity and operational integrations.",
+    title: "Platform identity, policy & commerce",
+    description: "Set the public brand, tenant safeguards, email delivery and payment connections.",
     items: [
       { href: "/superadmin/settings#settings-branding", title: "Brand & public identity", detail: "Set the platform name, logo, theme and public contact details", icon: Palette },
+      { href: "/superadmin/settings#settings-policies", title: "Access & usage policies", detail: "Set tenant key policy, minute enforcement and usage guardrails", icon: ShieldCheck },
       { href: "/superadmin/settings#settings-email", title: "Email delivery", detail: "Configure SMTP and send a delivery check", icon: Mail },
       { href: "/superadmin/settings#settings-payments", title: "Payment providers", detail: "Configure subscription and usage-credit payment connections", icon: CreditCard },
     ],
@@ -84,6 +85,7 @@ const CONTROL_GROUPS = [
     description: "Monitor live activity, investigate outcomes and keep a reviewable admin record.",
     items: [
       { href: "/superadmin/monitoring", title: "Live operations", detail: "Inspect active calls, process health and terminate a call when required", icon: Radio },
+      { href: "/superadmin/monitoring#service-health", title: "Service health & capacity", detail: "Check database, cache, storage, API and configured local voice services", icon: Activity },
       { href: "/superadmin/runs", title: "Global call history", detail: "Review workflow runs, outcomes and conversation records", icon: Clock },
       { href: "/superadmin/moderation", title: "Content moderation", detail: "Review policy violations and manage blocked terms", icon: ShieldAlert },
       { href: "/superadmin/audit-logs", title: "Audit trail", detail: "Inspect platform owner actions and administrative changes", icon: ScrollText },
@@ -268,7 +270,7 @@ export default function AdminDashboardPage() {
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   return (
-                    <li key={item.href}>
+                    <li key={`${item.href}:${item.title}`}>
                       <Link href={item.href}>
                         <Icon aria-hidden="true" />
                         <span><strong>{item.title}</strong><small>{item.detail}</small></span>
