@@ -189,7 +189,10 @@ class ContextSummarizationManager:
             recent_messages = current_messages[last_index + 1 :]
 
             summary_message = {
-                "role": "user",
+                # This is an assistant-authored recap, not a new caller turn.
+                # Keeping it under the user role can make the model answer the
+                # recap as though the caller just said it, losing turn intent.
+                "role": "assistant",
                 "content": config.summary_message_template.format(summary=summary_text),
             }
 

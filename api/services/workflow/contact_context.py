@@ -31,10 +31,10 @@ _PHONE_REQUEST = re.compile(
     re.IGNORECASE,
 )
 def _is_handoff_summary(message: object) -> bool:
-    """Identify assistant-generated handoff notes stored as user messages."""
+    """Identify generated handoff notes, including legacy user-role notes."""
     return (
         isinstance(message, dict)
-        and message.get("role") == "user"
+        and message.get("role") in {"user", "assistant"}
         and isinstance(message.get("content"), str)
         and message["content"].startswith(HANDOFF_SUMMARY_PREFIX)
     )
@@ -137,6 +137,8 @@ def remember_explicit_caller_name(messages: list, state: dict) -> str | None:
             previous_assistant = content if isinstance(content, str) else ""
             continue
         if message.get("role") != "user":
+            continue
+        if _is_handoff_summary(message):
             continue
         text = message.get("content")
         if not isinstance(text, str):
