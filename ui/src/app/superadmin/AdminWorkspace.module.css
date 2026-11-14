@@ -26,20 +26,18 @@
   animation: admin-hero-in 420ms cubic-bezier(.2,.75,.25,1) both;
 }
 
-.hero::after {
-  position: absolute;
-  z-index: -1;
-  inset: 0;
-  content: "";
-  opacity: .2;
-  background: repeating-linear-gradient(108deg, transparent 0, transparent 32px, rgba(205,233,212,.16) 33px, transparent 34px);
-  mask-image: linear-gradient(to left, #000, transparent 65%);
-  pointer-events: none;
-}
-
 .hero > div:first-child {
   max-width: 48rem;
 }
+
+.heroActions { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.connectionBadge { border-color: rgba(235,245,238,.25) !important; background: rgba(255,255,255,.07) !important; }
+.connectionReady { color: #d8efdc !important; border-color: rgba(143,205,158,.45) !important; background: rgba(73,147,92,.18) !important; }
+.connectionLoading { color: #e5eee8 !important; border-color: rgba(211,226,216,.3) !important; background: rgba(255,255,255,.07) !important; }
+.connectionError { color: #ffe2dc !important; border-color: rgba(248,137,120,.5) !important; background: rgba(172,66,52,.2) !important; }
+.refreshButton { color: #f2f7f1 !important; border-color: rgba(255,255,255,.28) !important; background: rgba(255,255,255,.07) !important; }
+.refreshButton:hover { background: rgba(255,255,255,.14) !important; }
+.refreshButton:disabled { opacity: .65; }
 
 .kicker {
   display: block;

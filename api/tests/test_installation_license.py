@@ -384,7 +384,7 @@ def test_verified_owner_entitlement_snapshot_overrides_bootstrap_license():
         "issued_at": now,
         "expires_at": now + 300,
         "entitlement_version": 8,
-        "features": ["voice", "crm", "appointments"],
+        "features": ["voice", "crm", "appointments", "billing"],
         "feature_version": 2,
         "limits": {"max_concurrent_calls": 4, "max_agents": 12},
     }, private)
@@ -400,7 +400,7 @@ def test_verified_owner_entitlement_snapshot_overrides_bootstrap_license():
         limits=claims["limits"],
     )
     effective = apply_owner_entitlements(load_license(token, public, now=now + 1), snapshot)
-    assert effective.features == frozenset({"voice", "crm", "appointments"})
+    assert effective.features == frozenset({"voice", "crm", "appointments", "billing"})
     assert effective.limits == {"max_concurrent_calls": 4, "max_agents": 12}
     assert effective.feature_version == 2
 

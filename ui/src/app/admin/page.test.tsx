@@ -1,46 +1,53 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getStats: vi.fn() }));
-
-vi.mock("@/lib/kodewavesApi", () => ({
-  adminApi: { getStats: mocks.getStats },
+const mocks = vi.hoisted(() => ({
+  isClientEdition: false,
+  hasFeature: vi.fn(() => true),
+  user: { is_superuser: false },
 }));
 
-import AdminDashboardPage from "./page";
+vi.mock("@/context/ClientBrandingContext", () => ({
+  useClientBranding: () => ({ company_name: "Acme Voice" }),
+}));
+vi.mock("@/context/ClientEntitlementsContext", () => ({
+  useClientEntitlements: () => ({
+    isClientEdition: mocks.isClientEdition,
+    hasFeature: mocks.hasFeature,
+  }),
+}));
+vi.mock("@/lib/auth", () => ({ useAuth: () => ({ user: mocks.user }) }));
 
-describe("owner dashboard database status", () => {
+import WorkspaceAdminPage from "./page";
+
+describe("workspace admin landing page", () => {
   beforeEach(() => {
-    mocks.getStats.mockReset();
+    mocks.isClientEdition = false;
+    mocks.hasFeature.mockReset().mockReturnValue(true);
+    mocks.user = { is_superuser: false };
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.unstubAllEnvs());
 
-  it("reports connected only after live telemetry loads", async () => {
-    mocks.getStats.mockResolvedValue({
-      total_calls: 0,
-      active_calls: 0,
-      completed_calls: 0,
-      total_minutes: 0,
-      total_revenue_inr: null,
-      gross_margin_percent: null,
-      system_health: "healthy",
-    });
+  it("shows workspace operations and routes without platform-owner telemetry", () => {
+    render(<WorkspaceAdminPage />);
 
-    const view = render(<AdminDashboardPage />);
-
-    expect(await screen.findByText("Database connected")).toBeTruthy();
-    view.unmount();
+    expect(screen.getByRole("heading", { name: "Workspace admin" })).toBeTruthy();
+    expect(screen.getAllByRole("link").some((link) => link.getAttribute("href") === "/crm")).toBe(true);
+    expect(screen.getAllByRole("link").some((link) => link.getAttribute("href") === "/workflow")).toBe(true);
+    expect(screen.getAllByRole("link").some((link) => link.getAttribute("href") === "/settings")).toBe(true);
+    expect(screen.queryByText("Sovereign Control Plane")).toBeNull();
+    expect(screen.queryByText("Active Live Calls")).toBeNull();
   });
 
-  it("does not claim a live database connection when telemetry fails", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    mocks.getStats.mockRejectedValue(new Error("database unavailable"));
+  it("filters workspace tools by client entitlements", () => {
+    mocks.isClientEdition = true;
+    mocks.hasFeature.mockImplementation((feature: string) => feature !== "campaigns");
 
-    const view = render(<AdminDashboardPage />);
+    render(<WorkspaceAdminPage />);
 
-    expect(await screen.findByText("Database unavailable")).toBeTruthy();
-    expect(screen.getByText("Telemetry Error: database unavailable")).toBeTruthy();
-    view.unmount();
+    expect(screen.getAllByRole("link").some((link) => link.getAttribute("href") === "/crm")).toBe(true);
+    expect(screen.queryByRole("link", { name: /Campaigns/ })).toBeNull();
+    expect(screen.getAllByRole("link").some((link) => link.getAttribute("href") === "/workflow")).toBe(true);
   });
 });

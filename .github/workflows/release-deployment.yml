@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   deploy:
+    # Customer installer releases are not SaaS website releases.
+    if: ${{ !startsWith(github.event.release.tag_name, 'kodewaves-client-') }}
     runs-on: ubuntu-latest
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

@@ -30,6 +30,9 @@ env:
 
 jobs:
   prepare:
+    # Client installer releases publish their own pinned customer images.
+    # Do not also publish those tags to the shared SaaS image set or move :latest.
+    if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'kodewaves-client-')
     runs-on: ubuntu-latest
     outputs:
       short_sha: ${{ steps.tags.outputs.short_sha }}
@@ -295,7 +298,7 @@ jobs:
     needs:
       - prepare
       - merge
-    if: always()
+    if: always() && (github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'kodewaves-client-'))
     runs-on: ubuntu-latest
     env:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

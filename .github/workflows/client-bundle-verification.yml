@@ -202,6 +202,8 @@ jobs:
           src/app/superadmin/plans/page.test.tsx
           src/app/superadmin/credit-packages/page.test.tsx
           src/app/superadmin/settings/page.test.tsx
+          src/app/admin/page.test.tsx
+          src/app/superadmin/page.test.tsx
           src/app/settings/page.test.tsx
           src/app/workflow/AgentLibraryActions.test.tsx
           src/app/page.test.tsx

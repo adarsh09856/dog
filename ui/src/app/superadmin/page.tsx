@@ -21,6 +21,8 @@ import { adminApi, MonitoringStats } from "@/lib/kodewavesApi";
 
 import panel from "@/components/layout/PanelWorkspace.module.css";
 
+import admin from "./AdminWorkspace.module.css";
+
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<MonitoringStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,33 +56,33 @@ export default function AdminDashboardPage() {
       : stats
         ? "Database connected"
         : "No telemetry available";
-  const connectionClass = error
-    ? "bg-destructive/10 text-destructive border-destructive/20"
+  const connectionTone = error
+    ? admin.connectionError
     : loading
-      ? "bg-muted text-muted-foreground border-border"
-      : "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+      ? admin.connectionLoading
+      : admin.connectionReady;
 
   return (
-    <div className={`${panel.adminDashboard} space-y-8`}>
-      {/* Header */}
-      <div className={panel.adminHero}>
+    <div className={`${admin.surface} ${panel.adminDashboard}`}>
+      <header className={admin.hero}>
         <div>
-          <p className={panel.eyebrow}>PLATFORM OWNER / OPERATIONS</p><h1 className="text-2xl font-bold tracking-tight">Sovereign Control Plane</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <span className={admin.kicker}>PLATFORM OWNER / OPERATIONS</span>
+          <h1 className={admin.title}>Sovereign Control Plane</h1>
+          <p>
             Real-time platform overview, master provider telemetry, and margin tracking.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className={`px-3 py-1 text-xs gap-1.5 ${connectionClass}`}>
+        <div className={admin.heroActions}>
+          <Badge variant="outline" className={`px-3 py-1 text-xs gap-1.5 ${admin.connectionBadge} ${connectionTone}`}>
             <span className={`h-2 w-2 rounded-full ${error ? "bg-destructive" : loading ? "bg-muted-foreground" : "bg-emerald-500 animate-pulse"}`} />
             {connectionLabel}
           </Badge>
-          <Button variant="outline" size="sm" onClick={fetchStats} disabled={loading} className="gap-2">
+          <Button variant="outline" size="sm" onClick={fetchStats} disabled={loading} className={`${admin.refreshButton} gap-2`}>
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>
-      </div>
+      </header>
 
       {/* Error Alert if DB/API connection fails */}
       {error && (
